@@ -2,7 +2,7 @@
 
 ## Observed on the affected television
 
-The reporter's [2026-11-03 reply and attached traces](https://github.com/GLinnik21/plx-native/issues/1166#issuecomment-6604709736)
+The reporter's [2026-11-03 reply and attached traces](https://github.com/Shibeon/MultiPlex-LGTV/issues/1166#issuecomment-6604709736)
 identify webOS 5.5.0-19 on o20. The commercial file cannot be shared; the public samples
 they tried did not reproduce the failure. A manual seek reproduced the hang within the
 diagnostic recorder's time window.

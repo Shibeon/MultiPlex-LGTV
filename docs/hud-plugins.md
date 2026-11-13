@@ -6,8 +6,8 @@ Users want player HUDs that look different from the built-in one. The owner want
 to write a HUD design, share it, install one from a registry, and install one that is not in the
 registry (sideload), on every install mode: a Homebrew Channel install (`/media/cryptofs/apps`,
 `jail_native.conf`), an LG Developer Mode install (`/media/developer/apps`,
-`jail_native_devmode.conf`), a rooted set, and both flavours (`com.beb.plxnative`,
-`com.beb.plxnative.debug`).
+`jail_native_devmode.conf`), a rooted set, and both flavours (`app.multiplex.native`,
+`app.multiplex.native.debug`).
 
 Two acceptance tests bind the format: a user must be able to build the reference HUD (one image,
 three stacked crops of ONE HUD: compact; chapters expanded; chapters plus info expanded) in format

@@ -24,7 +24,7 @@ displayed its URI fixture on the 4.5 dev set, as recorded below.
 |---|---|---|
 | webOS 4.10.0 / 4.4.2 | unpacked images + this project's 4.5 set | No `AVProxy` or `SDL_webOS*ExportedWindow`; the window option is ignored. Earlier probe loads decoded without a visible picture, and earlier ACB attempts returned `ERROR_06`. The controlled 2026-11-02 ACB pair later displayed moving SDR720p24 H.264/AAC URI video on the 4.5 dev set, both with and without `connectDass`; this does not establish other 4.x sets or formats. |
 | webOS 5.4.2 | LG 65UN80006LA (issue #1064) | `windowId` in `load` → picture, moving, with sound. `late` (`setWindowId` after `loadCompleted`) and `none` → `error code=104 "fail to create AVProxy"`. Both a `plex.direct` HTTPS direct play and an HLS transcode played. Where the picture sat and its aspect were not reported (the tester's report names picture and sound only), and the registration ladder ended on the named client (`shape=named`). |
-| webOS 5.6.2 (build 5.6.2-21) | LG OLED CX (issue #1064: [the first run](https://github.com/GLinnik21/plx-native/issues/1064#issuecomment-6758688148), [the single-audio product run and drive probe](https://github.com/GLinnik21/plx-native/issues/1064#issuecomment-6844822550)) | **Admitted: major 5 is in `EXPORTED_STRATA`.** (a) The 5.5.0 and 5.6.2 images read `option.windowId` at load (decompile, below). (b) The PRODUCT run, on the CI build of run 43017142892 (main at `e8442d5e`, which carries #1314) installed over the existing debug app, Playback engine Experimental, quality Original, `plxnative-uriexported` armed at the jail's persistent path: a 1080p HEVC (1920x1040) MKV with ONE AAC 2.0 track and no subtitle streams, direct play. Every boot: `uri: product binding=Unbound mode=2 handle=false ptype=10 initialized=false major=5 evidence=none`, then `uri: product binding=Exported { canvas: (1920, 1080) } mode=2 evidence=override`. Play: `ls2uri: register shape=named ok after 6ms`, `uri: exported window placed src=1920x1040 rv=1`, `uri: audio index=0 is already selected (audioInfo); no selectTrack sent`, `uri: service playing`. The picture moved, full width with thin bars for 1.85:1, not stretched. Back: `ls2uri: released`. (c) The drive probe on the same build printed `load=ok playing=yes ... currentTime_advanced=yes videoInfo=seen audioInfo=seen window=exported ... shape=named end=script audio_at_load=0 clock_period_ms=200 pause=froze pause_delta=- resume=sent seek=hit seek_delta=-3898 text=sent audio=sent subs=ok eos=no pause_basis=paused_event_and_resume pause_samples=0 ... paused_event=yes seekdone=yes resume_from=2568`. `pause=froze` is printed by the current grader (#1314), so no amendment is used for it. The tester gives no paused position for the probe (no `drive pause pos=` line), so `resume_from=2568` is not compared here against rule (c)'s paused position minus 1000 ms; `pause_basis=paused_event_and_resume` is the grader's own check of the resume against the position it recorded. The audio token is `audio=sent` with `audio_at_load=0`, the rule's `audio_at_load=` alternative. Product controls: pause logged `ev=paused` and two service screenshots 2 s apart were identical (mean pixel difference 0.007 of 255); Play resumed at 39383 ms, where it paused (`timeline paused t=39s`); seek: `uri: control Seek(ContentTime(65606)) landed on the service's seekDone (its reply acknowledged first: yes)`, first `currentTime` after it 62692; a listener in the room confirmed sound in a second play: throughout, silent during a 5 s pause, back on resume and after a seek. Extra datapoint: a 4K HEVC Dolby Vision profile 8.6 MKV (3840x1604, one AC3 5.1 track) showed the TV's Dolby Vision badge, letterboxed for 2.39:1, with the same pause, seek and sound. The multi-audio film now starts in Standard and logs `uri: original declined (several audio tracks on the exported window)`; `exported_uri_leaves_multi_audio_originals_on_standard` (`rust-modules/media/src/route/uri_preflight.rs`) pins that route. History: the first run (a debug build of `main` at 5011614a, before #1314) printed `pause=unconfirmed` from its drive probe (no `currentTime` while paused, so no samples to grade), and its product run of that four-track file (AAC 5.1, AAC 5.1, Vorbis 5.1, Vorbis 5.1) failed the audio-track switch: the service lists the tracks as AAC, Vorbis, AAC, Vorbis, so `uri: selectTrack sent kind=audio index=1 stream=364534` selected Vorbis, the bus answered `{"error":{"errorCode":200,"errorText":"Audio Codec Not Supported"}}` and the play fell back to Standard. That is rule (c)'s amendment (2) case: such a file now starts in Standard, and the admission covers only the route as it now stands (audio switching on the URI path is avoided, not admitted). Not checked: subtitles on the URI path, HLS. |
+| webOS 5.6.2 (build 5.6.2-21) | LG OLED CX (issue #1064: [the first run](https://github.com/Shibeon/MultiPlex-LGTV/issues/1064#issuecomment-6758688148), [the single-audio product run and drive probe](https://github.com/Shibeon/MultiPlex-LGTV/issues/1064#issuecomment-6844822550)) | **Admitted: major 5 is in `EXPORTED_STRATA`.** (a) The 5.5.0 and 5.6.2 images read `option.windowId` at load (decompile, below). (b) The PRODUCT run, on the CI build of run 43017142892 (main at `e8442d5e`, which carries #1314) installed over the existing debug app, Playback engine Experimental, quality Original, `plxnative-uriexported` armed at the jail's persistent path: a 1080p HEVC (1920x1040) MKV with ONE AAC 2.0 track and no subtitle streams, direct play. Every boot: `uri: product binding=Unbound mode=2 handle=false ptype=10 initialized=false major=5 evidence=none`, then `uri: product binding=Exported { canvas: (1920, 1080) } mode=2 evidence=override`. Play: `ls2uri: register shape=named ok after 6ms`, `uri: exported window placed src=1920x1040 rv=1`, `uri: audio index=0 is already selected (audioInfo); no selectTrack sent`, `uri: service playing`. The picture moved, full width with thin bars for 1.85:1, not stretched. Back: `ls2uri: released`. (c) The drive probe on the same build printed `load=ok playing=yes ... currentTime_advanced=yes videoInfo=seen audioInfo=seen window=exported ... shape=named end=script audio_at_load=0 clock_period_ms=200 pause=froze pause_delta=- resume=sent seek=hit seek_delta=-3898 text=sent audio=sent subs=ok eos=no pause_basis=paused_event_and_resume pause_samples=0 ... paused_event=yes seekdone=yes resume_from=2568`. `pause=froze` is printed by the current grader (#1314), so no amendment is used for it. The tester gives no paused position for the probe (no `drive pause pos=` line), so `resume_from=2568` is not compared here against rule (c)'s paused position minus 1000 ms; `pause_basis=paused_event_and_resume` is the grader's own check of the resume against the position it recorded. The audio token is `audio=sent` with `audio_at_load=0`, the rule's `audio_at_load=` alternative. Product controls: pause logged `ev=paused` and two service screenshots 2 s apart were identical (mean pixel difference 0.007 of 255); Play resumed at 39383 ms, where it paused (`timeline paused t=39s`); seek: `uri: control Seek(ContentTime(65606)) landed on the service's seekDone (its reply acknowledged first: yes)`, first `currentTime` after it 62692; a listener in the room confirmed sound in a second play: throughout, silent during a 5 s pause, back on resume and after a seek. Extra datapoint: a 4K HEVC Dolby Vision profile 8.6 MKV (3840x1604, one AC3 5.1 track) showed the TV's Dolby Vision badge, letterboxed for 2.39:1, with the same pause, seek and sound. The multi-audio film now starts in Standard and logs `uri: original declined (several audio tracks on the exported window)`; `exported_uri_leaves_multi_audio_originals_on_standard` (`rust-modules/media/src/route/uri_preflight.rs`) pins that route. History: the first run (a debug build of `main` at 5011614a, before #1314) printed `pause=unconfirmed` from its drive probe (no `currentTime` while paused, so no samples to grade), and its product run of that four-track file (AAC 5.1, AAC 5.1, Vorbis 5.1, Vorbis 5.1) failed the audio-track switch: the service lists the tracks as AAC, Vorbis, AAC, Vorbis, so `uri: selectTrack sent kind=audio index=1 stream=364534` selected Vorbis, the bus answered `{"error":{"errorCode":200,"errorText":"Audio Codec Not Supported"}}` and the play fell back to Standard. That is rule (c)'s amendment (2) case: such a file now starts in Standard, and the admission covers only the route as it now stands (audio switching on the URI path is avoided, not admitted). Not checked: subtitles on the URI path, HLS. |
 | webOS 9.2.4 / 10.3.1 (33.31.68) | unpacked images; LG C2 on webOS 25 (10.x, 33.31.68; issue #1064) | The images show the same mechanism as 5.5 and later (below). The C2 ran the drive probe on an older build (the earlier grader), not the product backend, so **no major 10 entry**: millisecond `currentTime` clock with about a 1 s period; a `paused` event with no positions while paused; resume from 2729 after a pause at 2410; seek target 24937 landed on `seekDone` at 24195; audio `trackSelected` index 1 ok; subtitles rendered by the firmware. |
 | webOS 26: set on 11.1.0-3701, mechanism read on the 11.2.0 image | LG G4 (issue #1064) | `windowId` in `load` → 4K picture, Dolby Vision and Atmos through the TV's pipeline, our overlays composited over it, correct size and place. The set runs 11.1.0-3701; 11.2.0 is the unpacked image the mechanism above was read from, not the set. |
 | webOS 3.x | unpacked images | no `libSDL2` at all; out of scope. |
@@ -78,7 +78,7 @@ pipeline fetches the file and decodes it — `videoInfo 1918x802` at 24 fps, aud
 advances — and nothing appears on screen. Nothing errors anywhere.
 
 ```
-uriprobe: t=0 armed variant=at-load scheme=http kind=direct window=none app=com.beb.plxnative.debug
+uriprobe: t=0 armed variant=at-load scheme=http kind=direct window=none app=app.multiplex.native.debug
 uriprobe: t=16 register shape=named ok
 uriprobe: t=69 call load ok
 uriprobe: t=1148 ev=videoInfo width=1918 height=802 frameRate=24
@@ -228,7 +228,7 @@ an entry plays Standard, with no handoff.
 
 1. Deploy a debug build carrying the probe (devtriggers; no `RELEASE=1` package contains it).
 2. Arm a variant in the install's runtime root:
-   `echo load > /tmp/com.beb.plxnative.debug/plxnative-uriprobe` (empty, `load`, `late`, `none`, or
+   `echo load > /tmp/app.multiplex.native.debug/plxnative-uriprobe` (empty, `load`, `late`, `none`, or
    `drive`). The separate controlled `acb-control` and `acb-dass` arms need no `ptype` trigger since the
    boot gave the URI engine its own ACB handle (player type 0, created beside Feed's player type 10;
    the boot log names both: `acb handle=uri ptype=0 create=.. initialized=true`, and `uri: product
@@ -242,7 +242,7 @@ an entry plays Standard, with no handoff.
    To test the TV's own adaptive controller (R-ABR-2), add native bit-rate rates after the
    variant, space separated and in any order: `bpsstart=N` seeds it, `bpsmax=N` caps it and
    `bpsmin=N` floors it, each in bit/s from 1 to 1000000000 and given at most once, for example
-   `echo 'load bpsmax=720000' > /tmp/com.beb.plxnative.debug/plxnative-uriprobe`. They become
+   `echo 'load bpsmax=720000' > /tmp/app.multiplex.native.debug/plxnative-uriprobe`. They become
    `"adaptiveStreaming":{"bps":{"start":N,"maximum":N,"minimum":N}}` inside the `load` option
    (only the rates given) and the `armed` line ends with the same tokens (` bpsmax=720000`). A bare
    `bpsmax=720000` arms the default variant. Any other token, a repeated or non-numeric rate, or a
@@ -255,7 +255,7 @@ an entry plays Standard, with no handoff.
    master (`tests/README.md`).
 3. Play a title the route chooses to direct-play (`kind=direct` on the `armed` line), watch, press
    Back.
-4. Read `grep 'uriprobe:' /tmp/com.beb.plxnative.debug/plxnative-events.log`: `window=`,
+4. Read `grep 'uriprobe:' /tmp/app.multiplex.native.debug/plxnative-events.log`: `window=`,
    `playing`, `currentTime`, and the closing `summary` are the fields that matter.
 5. Capture with the service screenshot — the app's own stream and any GL readback cannot see the
    hardware video plane, so a black rectangle there proves nothing either way.
@@ -263,7 +263,7 @@ an entry plays Standard, with no handoff.
 
 On firmware where the app's `/tmp` is jailed separately from a root shell's (reported on webOS 26),
 arm the trigger through the app's own view:
-`echo drive > /proc/$(pidof plxnative)/root/tmp/com.beb.plxnative.debug/plxnative-uriprobe`.
+`echo drive > /proc/$(pidof plxnative)/root/tmp/app.multiplex.native.debug/plxnative-uriprobe`.
 
 ## webOS 5+ tester run
 
@@ -276,17 +276,17 @@ script seeks 20 s ahead and runs about 18 s from `playing`).
 
 ### Arming the trigger
 
-The trigger is a file named `plxnative-uriprobe` in the app's runtime root, `/tmp/com.beb.plxnative.debug/` for
+The trigger is a file named `plxnative-uriprobe` in the app's runtime root, `/tmp/app.multiplex.native.debug/` for
 the debug install (`<app id>` below). Most dev triggers are read once at boot; this one is read **at each Play**,
 so it can be armed while the app runs. Pick the route that matches the set:
 
 1. **Plain `/tmp`** (the app's `/tmp` is the one a root shell sees):
-   `echo drive > /tmp/com.beb.plxnative.debug/plxnative-uriprobe`
+   `echo drive > /tmp/app.multiplex.native.debug/plxnative-uriprobe`
 2. **Jailed `/tmp`, app running** (reported on webOS 26): through the running process's own root,
-   `echo drive > /proc/$(pidof plxnative)/root/tmp/com.beb.plxnative.debug/plxnative-uriprobe`.
+   `echo drive > /proc/$(pidof plxnative)/root/tmp/app.multiplex.native.debug/plxnative-uriprobe`.
    This needs the process, so launch the app first.
-3. **The jail's persistent path.** `find /var/palm/jail -type d -path '*/tmp/com.beb.plxnative.debug' 2>/dev/null`
-   prints the directory when the set keeps one, `/var/palm/jail/<jail>/tmp/com.beb.plxnative.debug/`; write
+3. **The jail's persistent path.** `find /var/palm/jail -type d -path '*/tmp/app.multiplex.native.debug' 2>/dev/null`
+   prints the directory when the set keeps one, `/var/palm/jail/<jail>/tmp/app.multiplex.native.debug/`; write
    `plxnative-uriprobe` there. Not established: whether that directory exists before the app's first launch, and
    whether it survives the app exiting.
 
@@ -304,7 +304,7 @@ launch, so copy it before relaunching, and on a jailed set copy it **while the a
 `/proc/<pid>/root` route disappears with the process):
 
 ```
-grep 'uriprobe:' /proc/$(pidof plxnative)/root/tmp/com.beb.plxnative.debug/plxnative-events.log > /tmp/uriprobe-run.txt
+grep 'uriprobe:' /proc/$(pidof plxnative)/root/tmp/app.multiplex.native.debug/plxnative-events.log > /tmp/uriprobe-run.txt
 ```
 
 (on an unjailed set, or through the jail's persistent path, read `plxnative-events.log` from that directory

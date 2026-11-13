@@ -1,6 +1,6 @@
 ptype=0
 acb initialize playerType=0 rv=1 callback_installed=1
-uriprobe: t=0 armed variant=acb-control scheme=http kind=direct window=none app=com.beb.plxnative.debug
+uriprobe: t=0 armed variant=acb-control scheme=http kind=direct window=none app=app.multiplex.native.debug
 uriprobe: t=0 acb request=1 step=Check
 uriprobe: ACB experiment requires known SDR H264720p24 fixture; fallback is explicit fixture data, not content detection
 uriprobe: t=0 acb gate mode=1 boot_handle=true actual_ptype=0 dass_available=true initialized=true

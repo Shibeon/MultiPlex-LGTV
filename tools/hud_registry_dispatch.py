@@ -18,7 +18,7 @@ def dispatch(pin=None, tag="", probe=""):
             or tag != "v" + pin["app_version"]):
             raise ValueError("release dispatch requires a stable app simulator and matching tag")
         simulator = dict(pin)
-        simulator["url"] = ("https://github.com/GLinnik21/plx-native/releases/download/" + tag
+        simulator["url"] = ("https://github.com/Shibeon/MultiPlex-LGTV/releases/download/" + tag
                             + "/plxnative-hud-simulator-linux-x86_64.tar.gz")
         body = {"event_type": "app-release", "client_payload": {"simulator": simulator}}
     # GH_TOKEN is supplied by the workflow environment; it is never read or logged here.

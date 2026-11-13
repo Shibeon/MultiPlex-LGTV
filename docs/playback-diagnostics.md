@@ -11,8 +11,8 @@ The saved local file is `plxnative-playback.log` in the install’s runtime dire
 | Install | Saved log |
 |---|---|
 | Stable | `/tmp/plxnative-playback.log` |
-| Nightly | `/tmp/com.beb.plxnative.nightly/plxnative-playback.log` |
-| Debug | `/tmp/com.beb.plxnative.debug/plxnative-playback.log` |
+| Nightly | `/tmp/app.multiplex.native.nightly/plxnative-playback.log` |
+| Debug | `/tmp/app.multiplex.native.debug/plxnative-playback.log` |
 
 The underlying trace is `plxnative-gst.log` beside it. The saved combined log survives a relaunch, but runtime storage is not guaranteed to survive TV standby or reboot. Copy it before powering off. A new recording replaces only the trace; **Save diagnostic log** replaces the combined log.
 

@@ -261,16 +261,16 @@ mod tests {
 
     #[test]
     fn nightly_app_identity() {
-        assert_eq!(app_identity(Path::new("/media/developer/apps/usr/palm/services/com.beb.plxnative.nightly.storage/plxnative-storage")), Ok("com.beb.plxnative.nightly"));
+        assert_eq!(app_identity(Path::new("/media/developer/apps/usr/palm/services/app.multiplex.native.nightly.storage/plxnative-storage")), Ok("app.multiplex.native.nightly"));
     }
 
     #[test]
     fn rejects_foreign_or_malformed_install_paths() {
         for path in [
-            "/usr/palm/services/com.beb.plxnative.typo.storage/plxnative-storage",
-            "/usr/palm/services/com.beb.plxnative.nightly/plxnative-storage",
-            "/usr/palm/applications/com.beb.plxnative.nightly.storage/plxnative-storage",
-            "/usr/palm/services/com.beb.plxnative.nightly.storage/other",
+            "/usr/palm/services/app.multiplex.native.typo.storage/plxnative-storage",
+            "/usr/palm/services/app.multiplex.native.nightly/plxnative-storage",
+            "/usr/palm/applications/app.multiplex.native.nightly.storage/plxnative-storage",
+            "/usr/palm/services/app.multiplex.native.nightly.storage/other",
             "plxnative-storage",
         ] {
             assert_eq!(app_identity(Path::new(path)), Err(ErrorCode::Invalid));

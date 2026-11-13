@@ -52,7 +52,7 @@ TAG_PREFIX = "nightly/v"
 SITE_ORIGIN = "https://plxnative.com"
 REPO_JSON_URL = f"{SITE_ORIGIN}/nightly/repo.json"
 GUIDE_URL = f"{SITE_ORIGIN}/nightly/"
-PACKAGE_ID = "com.beb.plxnative.nightly"
+PACKAGE_ID = "app.multiplex.native.nightly"
 #: The manifest `build-package.yml` generates for the nightly package and `publish` attaches to the
 #: release under this name; also what is served beside `repo.json`.
 MANIFEST_NAME = f"{PACKAGE_ID}.manifest.json"
@@ -591,7 +591,7 @@ def _selftest() -> int:
     fake_release = {
         "tag_name": "nightly/v0.7.0-nightly-20260919",
         "target_commitish": "abc1234def5678900000000000000000000000",
-        "html_url": "https://github.com/GLinnik21/plx-native/releases/tag/nightly%2Fv0.7.0-nightly-20260919",
+        "html_url": "https://github.com/Shibeon/MultiPlex-LGTV/releases/tag/nightly%2Fv0.7.0-nightly-20260919",
         "assets": [
             {"name": "plxnative-v0.7.0-nightly-20260919.ipk",
              "browser_download_url": "https://example.invalid/ipk"},
@@ -633,7 +633,7 @@ def _selftest() -> int:
         "ipkHash": {"sha256": "ab" * 32}, "iconUri": "https://example.invalid/i.png",
     }
     ipk_name = "plxnative-v0.8.0-nightly-20261006.ipk"
-    ipk_url = "https://github.com/GLinnik21/plx-native/releases/download/x/plxnative-v0.8.0.ipk"
+    ipk_url = "https://github.com/Shibeon/MultiPlex-LGTV/releases/download/x/plxnative-v0.8.0.ipk"
     out = repo_manifest(good_manifest, ipk_url=ipk_url, ipk_name=ipk_name,
                         sha256=("ab" * 32) + "  file.ipk\n", label=label)
     check(out["ipkUrl"] == ipk_url and out["version"] == "0.8.20261006",
@@ -645,7 +645,7 @@ def _selftest() -> int:
         except SystemExit:
             return True
         return False
-    check(refuses({**good_manifest, "id": "com.beb.plxnative"}),
+    check(refuses({**good_manifest, "id": "app.multiplex.native"}),
           "a manifest for the STABLE id is refused (it would install over the wrong app)")
     check(refuses(good_manifest, sha="cd" * 32), "a manifest whose sha256 differs from nightly.sha256 is refused")
     check(refuses(good_manifest, sha=""), "an empty published checksum is refused, not matched against")
@@ -676,7 +676,7 @@ def _selftest() -> int:
     check(pkg["fullDescriptionUrl"].startswith("https://") and pkg["iconUri"].startswith("https://"),
           "repo.json's description and icon URLs are absolute https")
 
-    rel = {**fake_release, "html_url": "https://github.com/GLinnik21/plx-native/releases/tag/x",
+    rel = {**fake_release, "html_url": "https://github.com/Shibeon/MultiPlex-LGTV/releases/tag/x",
            "assets": fake_release["assets"] + [{"name": MANIFEST_NAME,
                                                 "browser_download_url": "https://example.invalid/m"}]}
     rel["assets"][0] = {"name": "plxnative-v0.8.0-nightly-20261006.ipk", "browser_download_url": ipk_url}

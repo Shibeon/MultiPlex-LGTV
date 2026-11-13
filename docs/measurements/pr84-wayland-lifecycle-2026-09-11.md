@@ -2,7 +2,7 @@
 
 ## Scope and evidence
 
-[PR #84](https://github.com/GLinnik21/plx-native/pull/84) proposes clearing borrowed Wayland
+[PR #84](https://github.com/Shibeon/MultiPlex-LGTV/pull/84) proposes clearing borrowed Wayland
 handles on background and reacquiring them on DID foreground.
 
 The Sentry issue PLX-NATIVE-K contains one event from `plxnative@0.6.3` on webOS 4.10.0,
