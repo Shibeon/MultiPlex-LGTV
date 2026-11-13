@@ -6,7 +6,7 @@
       "code": "HUD-E0402",
       "file": "manifest.json",
       "hint": "this app supports 1.1 for this document",
-      "message": "Made for a newer PlxNative",
+      "message": "Made for a newer MultiPlex",
       "nearest": [],
       "path": "/hud/format",
       "rule": "format-newer-minor",

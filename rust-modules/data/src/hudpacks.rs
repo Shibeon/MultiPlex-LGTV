@@ -245,7 +245,7 @@ pub struct Meta {
 /// listed and marked; a new install with one is refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Unloadable {
-    /// "Made for a newer PlxNative": an unsupported major, or a minor above the app's.
+    /// "Made for a newer MultiPlex": an unsupported major, or a minor above the app's.
     NewerFormat,
     /// "Uses an older HUD format": a major the app no longer compiles.
     OlderFormat,

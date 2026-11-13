@@ -805,7 +805,7 @@ schema ids and per-profile `limits`. Registry selection verifies these against t
 and SDK manifest. Package and HUD versions remain independent without duplicate capability flags.
 
 Decided at install and at selection, never per frame: an unsupported major, or a minor above the app's, is
-rejected ("Made for a newer PlxNative" / "Uses an older HUD format"). Strict parsing makes that mandatory: an
+rejected ("Made for a newer MultiPlex" / "Uses an older HUD format"). Strict parsing makes that mandatory: an
 older app cannot know whether an unknown key is cosmetic. An app update that drops a major keeps the files
 and marks them unloadable; a selected HUD that becomes unloadable falls back to `builtin:classic` with one
 `hud: fallback` event-log line. Playback never fails because of a HUD. A package that does not fit the TV's current
