@@ -137,8 +137,8 @@ pub const VENDOR: &str = "LG";
 pub fn device_name() -> &'static str {
     static NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     NAME.get_or_init(|| match plx_base::paths::flavour() {
-        None => "PlxNative (LG TV)".to_string(),
-        Some(f) => format!("PlxNative {f} (LG TV)"),
+        None => "MultiPlex (LG TV)".to_string(),
+        Some(f) => format!("MultiPlex {f} (LG TV)"),
     })
 }
 
@@ -213,10 +213,10 @@ mod tests {
     fn only_a_flavoured_install_renames_the_device() {
         let name = super::device_name();
         match plx_base::paths::flavour() {
-            None => assert_eq!(name, "PlxNative (LG TV)"),
+            None => assert_eq!(name, "MultiPlex (LG TV)"),
             Some(f) => assert!(name.contains(f), "{name:?} does not name the {f} install"),
         }
-        assert!(name.starts_with("PlxNative"));
+        assert!(name.starts_with("MultiPlex"));
     }
 
     /// On the host there is no `/var/run/nyx/os_info.json`, so this exercises exactly the
