@@ -1,15 +1,36 @@
-# PlxNative
+# MultiPlex for LG webOS
 
-A fast, unofficial [Plex](https://www.plex.tv/) client for LG webOS televisions. Native, not a web
-page — the interface is drawn straight on the GPU at 60 fps, and video plays on the TV's own decoder.
+The native LG webOS television app of **MultiPlex**, an unofficial [Plex](https://www.plex.tv/)
+client. The interface is drawn straight on the GPU and video plays on the television's own
+decoder: no web view, no Chromium.
 
-**Website: [plxnative.com](https://plxnative.com/)** · [Install guide](https://plxnative.com/install/) ·
-[Troubleshooting](https://plxnative.com/troubleshooting/)
+This repository is a fork of [PlxNative](https://github.com/GLinnik21/plx-native) by Gleb Linnik,
+distributed under the same licence (GPL-3.0-or-later, see [LICENSE](LICENSE)). The copyright
+notices of the original work are kept. MultiPlex is an independent project: it is not affiliated
+with, endorsed by or supported by the PlxNative project, Plex, Inc. or LG. Please report problems
+with this app here, not to the original project.
 
-<a href="https://trendshift.io/repositories/244171?utm_source=repository-badge&utm_medium=badge&utm_campaign=badge-repository-244171" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/244171" alt="GLinnik21/plx-native | Trendshift" width="250" height="55"/></a>
+### What is different from PlxNative
 
-*In daily use on a 2019 LG set. PlxNative is an independent project and is not affiliated with Plex, Inc.
-or LG. The same install steps are in the repo: [installation guide](docs/install-and-verify.md).*
+- The app's identity: name, application id (`app.multiplex.native`), icons and splash screen. It
+  installs beside PlxNative rather than replacing it.
+- The device name Plex sees: "MultiPlex (LG TV)".
+- No optional reporting: this fork's builds carry no crash-report or analytics destination, so
+  nothing is sent and the first-run question about reports is not asked.
+
+MultiPlex features (themes, My list, Watch together, ...) are being brought over step by step.
+
+### Installing
+
+The television must be rooted, with Homebrew Channel. Every push to `main` builds a debug
+package (`.ipk`) in this repository's GitHub Actions (CI run, artifact `plxnative-<commit>`).
+Install it with Homebrew Channel or `ares-install`. The detailed steps are in
+[docs/install-and-verify.md](docs/install-and-verify.md).
+
+---
+
+*The rest of this document is the original PlxNative README, kept for its technical content. Where it
+speaks in the first person, or points to plxnative.com, it describes the original project.*
 
 ## Why this exists
 
