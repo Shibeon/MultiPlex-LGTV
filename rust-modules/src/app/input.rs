@@ -1496,6 +1496,12 @@ pub(crate) fn maybe_ask_consent(pages: &mut plx_ui::dispatch::Dispatcher<super::
         super::bridge::open_first_run_consent_at(pages, stage);
         return;
     }
+    // MultiPlex: a build with no reporting destination compiled in (every build of this fork
+    // today: the keys are repository variables it does not have) has nothing to ask about, so
+    // the question would offer a choice that changes nothing.
+    if !plx_telemetry::telemetry::sender::configured() {
+        return;
+    }
     if plx_screens::consent::should_show(&c, crate::dev::any_trigger_present()) {
         super::bridge::open_first_run_consent(pages);
     }

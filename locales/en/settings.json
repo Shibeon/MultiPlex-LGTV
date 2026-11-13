@@ -435,11 +435,11 @@
     "description": "Settings, account, onboarding or privacy UI: settings.about.subtitle"
   },
   "settings.legal.privacy.responsible": {
-    "value": "RESPONSIBLE FOR PLXNATIVE DATA",
+    "value": "RESPONSIBLE FOR MULTIPLEX DATA",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.responsible"
   },
   "settings.legal.privacy.responsible_body": {
-    "value": "Gleb Linnik is responsible only for data MultiPlex stores locally and for optional reports you choose to share.",
+    "value": "The MultiPlex project is responsible only for data MultiPlex stores locally and for optional reports you choose to share.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.responsible_body"
   },
   "settings.legal.privacy.plex": {
@@ -543,7 +543,7 @@
     "description": "Settings, account, onboarding or privacy UI: settings.legal.trademarks.body"
   },
   "settings.legal.contact.body": {
-    "value": "Privacy questions may be sent to support@plxnative.com.\n\nSecurity vulnerabilities may be reported privately through GitHub Security Advisories for GLinnik21/plx-native. Please do not include Plex tokens, server addresses or personal media information in a report.",
+    "value": "Privacy questions may be sent to support@plxnative.com.\n\nSecurity vulnerabilities may be reported privately through GitHub Security Advisories for Shibeon/MultiPlex-LGTV. Please do not include Plex tokens, server addresses or personal media information in a report.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.contact.body"
   },
   "settings.legal.opensource.body": {
@@ -558,7 +558,7 @@
     }
   },
   "settings.about.body": {
-    "value": "Version {version}\nBuild {build}\n\nDeveloped by Gleb Linnik\n© 2026 Gleb Linnik\n\nOpen source under GPL-3.0-or-later\ngithub.com/Shibeon/MultiPlex-LGTV\n\nMultiPlex is an independent, unofficial application. It is not produced by, endorsed by, or affiliated with Plex, Inc. or LG Electronics Inc.",
+    "value": "Version {version}\nBuild {build}\n\nBased on PlxNative by Gleb Linnik\n© 2026 Gleb Linnik and contributors\n\nOpen source under GPL-3.0-or-later\ngithub.com/Shibeon/MultiPlex-LGTV\n\nMultiPlex is an independent, unofficial application. It is not produced by, endorsed by, or affiliated with Plex, Inc. or LG Electronics Inc.",
     "description": "Settings, account, onboarding or privacy UI: settings.about.body",
     "args": {
       "build": "str",
