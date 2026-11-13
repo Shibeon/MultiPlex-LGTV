@@ -1,0 +1,9 @@
+{"updated":"2026-11-13T22:26:33Z",
+"ci":[],
+"sim":[
+{"id":43517997347,"at":"2026-11-13T22:17:04Z","sha":"3f4899126","title":"Texte visible : \u00ab Made for a newer MultiPlex \u00bb","pr":null,"conclusion":"failure","attempt":1,"jobs":{"Linux simulator build + launch":507,"Windows launcher syntax":17,"macOS tests against bundled FFmpeg and ASS":536},"failed":["macOS simulator build + launch"]}
+],
+"nightly":[],
+"cancelled":{},
+"daily":[],
+"flaky":[]}
