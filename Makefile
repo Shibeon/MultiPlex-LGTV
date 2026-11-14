@@ -2489,8 +2489,7 @@ check-replay: sim-macos
 # **`make screenshots` — the documentation screenshots, regenerated.** Boots the simulator once per
 # scene in `tests/screenshots/scenes.json` against the mock server's DEMO LIBRARY (openly licensed
 # films, `tests/demo_library/`), waits for each scene's settled frame, and writes the JPEGs, and
-# the CREDITS.md that goes with them, into `docs/screenshots/` (or `SHOT_OUT=dir`), then the website's
-# `site/credits.html` from the same manifests. No Plex account, no
+# the CREDITS.md that goes with them, into `docs/screenshots/` (or `SHOT_OUT=dir`). No Plex account, no
 # television, no gitignored file.
 #   make screenshots                         # every scene
 #   make screenshots SHOT_SCENES=home,ux-detail            # some
@@ -2523,7 +2522,6 @@ screenshots: screenshots-sim demo-library
 	python3 tools/screenshots.py --bin $(SHOT_BIN) $(if $(SHOT_OUT),--out $(SHOT_OUT),) \
 	  $(if $(SHOT_SCENES),--only $(SHOT_SCENES),) $(if $(SHOT_CHECK),--check-determinism,) $(if $(SHOT_HERO),--hero $(SHOT_HERO),) \
 	  $(if $(SHOT_HERO_VARIANTS),--hero-variants,)
-	python3 tools/demo_library.py site-credits
 
 # Optimized Linux UI/Plex simulator with no host FFmpeg prerequisite. It runs natively on Linux;
 # Windows/WSLg uses the same binary through `tools/sim.ps1`. Play intentionally reaches the host
@@ -2533,15 +2531,15 @@ sim-linux: $(LIBASS_HOST_STAGED)
 	  cargo +$(RUST_TOOLCHAIN) build --release --manifest-path rust-modules/Cargo.toml --target-dir "$$SIM_LINUX_TDIR_ENV" \
 	  --features hostsim --bin plxnative-sim
 
-# The demo video's frame-dump simulator (`rust-modules/src/dev/framedump.rs`; `tools/site_video.py render`
-# drives it). Release, because a dump is a render of thousands of 1080p frames; its own target dir,
+# The frame-dump simulator (`rust-modules/src/dev/framedump.rs`), which `.github/workflows/hud-simulator.yml`
+# builds for the HUD authoring artifact (`tools/hud_bundle.py`); the target keeps the name of the upstream's
+# site demo video, its first user. Release, because a dump is a render of thousands of 1080p frames; its own target dir,
 # because the feature set differs from every other simulator build; `--no-default-features` because
 # `devtools` draws a frame counter into the picture, `play-feed` because that also drops the Feed
 # backend the simulator's sink belongs to (`ci/test_sim_backend.py`), and `placeholder-sentinel` because the second
 # oracle is the sentinel colour. Like `sim-linux` it needs only libass: the storyboard plays no
 # video, so no host FFmpeg (whose staged names are `.dylib`s, which is what keeps
-# `screenshots-sim` macOS-only). It builds on macOS (previews) and on Linux, where
-# `.github/workflows/site-video.yml` builds and runs it: that render is the canonical one.
+# `screenshots-sim` macOS-only). It builds on macOS and on Linux.
 SITE_VIDEO_TDIR ?= $(SIM_TDIR)-video
 SITE_VIDEO_BIN   = $(SITE_VIDEO_TDIR)/release/plxnative-sim
 site-video-sim: $(LIBASS_HOST_STAGED)

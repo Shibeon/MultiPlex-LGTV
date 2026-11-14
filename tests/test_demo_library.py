@@ -822,12 +822,6 @@ class People(unittest.TestCase):
         self.assertNotEqual(path, tool.derived_file(self.assets, "/cache", "person-derek-de-lint", moved, "photo"),
                             "the box is part of the recipe")
 
-    def test_the_credits_list_every_portrait(self):
-        works = {w["title"]: w for w in tool.site_works(self.assets, self.catalog) if w["kind"] == "person"}
-        self.assertEqual(list(works), list(self.catalog["people"]))
-        self.assertIn("face", works["Jody Bhe"]["entries"][0]["changes"][0])
-        self.assertEqual(works["Derek de Lint"]["entries"][0]["licence"], "CC BY 3.0")
-
 
 class TitleFlags(unittest.TestCase):
     """The per-title flags and approval lists the module docstring describes: `not_hero`,
@@ -1021,9 +1015,6 @@ class TitleFlags(unittest.TestCase):
             tool.credits(assets, cat, dst=pathlib.Path(d) / "CREDITS.md")
             text = (pathlib.Path(d) / "CREDITS.md").read_text()
             self.assertIn("clear logo, the film's own title card", text)
-            works = tool.site_works(assets, cat)
-        entry = next(w for w in works if w["id"] == "the-general")["entries"]
-        self.assertTrue(any("title card" in " ".join(e["changes"]) for e in entry))
 
     @unittest.skipUnless(importlib.util.find_spec("PIL"), "Pillow absent")
     def test_a_title_card_on_a_transparent_ground_is_trimmed_to_its_ink(self):
@@ -1215,30 +1206,6 @@ class Credits(unittest.TestCase):
             self.assertEqual(dst.read_text(), tool.CREDITS.read_text(),
                              "docs/screenshots/CREDITS.md is stale: run `make screenshots`")
 
-    def test_the_committed_site_credits_page_is_what_the_manifests_say(self):
-        assets, catalog = tool.load()
-        with tempfile.TemporaryDirectory() as d:
-            dst = pathlib.Path(d) / "credits.html"
-            tool.site_credits(assets, catalog, dst)
-            self.assertEqual(dst.read_text(), tool.SITE_CREDITS.read_text(),
-                             "site/credits.html is stale: run `python3 tools/demo_library.py site-credits`")
-
-    def test_the_site_credits_page_credits_every_asset_and_links_its_licence(self):
-        assets, catalog = tool.load()
-        page = tool.SITE_CREDITS.read_text()
-        for aid, a in assets.items():
-            self.assertIn(f'href="{a["source_page"]}"', page, f"{aid}: no source link on the credits page")
-        for name, url in tool.LICENCE_TEXTS.items():
-            if any(a["licence"] == name for a in assets.values()):
-                self.assertIn(f'<a href="{url}" rel="license">{name}</a>', page)
-        for m in catalog["movies"] + catalog["shows"]:
-            self.assertIn(f'id="{m["id"]}"', page)
-
-    def test_the_landing_page_footer_links_the_credits(self):
-        self.assertIn('href="credits.html"', (ROOT / "site" / "index.html").read_text())
-        self.assertIn("cp site/credits.html _site/credits.html",
-                      (ROOT / ".github" / "workflows" / "pages.yml").read_text())
-
     def test_a_screenshot_run_writes_the_credits_beside_its_images(self):
         with tempfile.TemporaryDirectory() as d:
             screenshots.write_credits(pathlib.Path(d))
@@ -1249,7 +1216,7 @@ class RenderSet(unittest.TestCase):
     """A run replaces the figure set whole, or leaves it as it was."""
 
     JOBS = [({"name": "a"}, None, [{"file": "a.jpg"}]),
-            ({"name": "b"}, None, [{"file": "b.jpg", "dest": "site"}])]
+            ({"name": "b"}, None, [{"file": "b.jpg", "dest": "extra"}])]
 
     @staticmethod
     def write(scene, hero, outputs, stage):
@@ -1262,23 +1229,23 @@ class RenderSet(unittest.TestCase):
             if scene["name"] == "b":
                 raise subprocess.CalledProcessError(1, ["ffmpeg"])
         with tempfile.TemporaryDirectory() as d:
-            docs, site = pathlib.Path(d) / "docs", pathlib.Path(d) / "site"
+            docs, extra = pathlib.Path(d) / "docs", pathlib.Path(d) / "extra"
             docs.mkdir()
             (docs / "a.jpg").write_bytes(b"old")
             with contextlib.redirect_stderr(io.StringIO()):
-                failed = screenshots.render_set(self.JOBS, render, {"docs": docs, "site": site})
+                failed = screenshots.render_set(self.JOBS, render, {"docs": docs, "extra": extra})
             self.assertEqual(failed, ["b"])
             self.assertEqual(sorted(p.name for p in docs.iterdir()), ["a.jpg"])
             self.assertEqual((docs / "a.jpg").read_bytes(), b"old")
-            self.assertFalse(site.exists())
+            self.assertFalse(extra.exists())
 
     def test_a_clean_run_moves_each_output_to_its_destination_and_the_credits_beside_the_docs(self):
         with tempfile.TemporaryDirectory() as d:
-            docs, site = pathlib.Path(d) / "docs", pathlib.Path(d) / "site"
+            docs, extra = pathlib.Path(d) / "docs", pathlib.Path(d) / "extra"
             with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(screenshots.render_set(self.JOBS, self.write, {"docs": docs, "site": site}), [])
+                self.assertEqual(screenshots.render_set(self.JOBS, self.write, {"docs": docs, "extra": extra}), [])
             self.assertEqual(sorted(p.name for p in docs.iterdir()), ["CREDITS.md", "a.jpg"])
-            self.assertEqual(sorted(p.name for p in site.iterdir()), ["b.jpg"])
+            self.assertEqual(sorted(p.name for p in extra.iterdir()), ["b.jpg"])
 
 
 class OutputSpec(unittest.TestCase):
@@ -1294,9 +1261,9 @@ class OutputSpec(unittest.TestCase):
         self.assertEqual(self.spec({"file": "a.jpg"}, render_scale=3)[2:4], ((0, 0, 5760, 3240), (5760, 3240)))
 
     def test_a_crop_scales_with_the_render_and_keeps_its_size_unless_one_is_named(self):
-        dest, _, crop, size, q = self.spec({"file": "g.jpg", "dest": "site", "crop": [680, 0, 880, 160],
+        dest, _, crop, size, q = self.spec({"file": "g.jpg", "dest": "docs", "crop": [680, 0, 880, 160],
                                             "quality": 4}, render_scale=3)
-        self.assertEqual((dest, crop, size, q), ("site", (2040, 0, 2640, 480), (2640, 480), 4))
+        self.assertEqual((dest, crop, size, q), ("docs", (2040, 0, 2640, 480), (2640, 480), 4))
         self.assertEqual(self.spec({"file": "g.jpg", "crop": [680, 0, 880, 160], "size": "1320x240"},
                                    render_scale=3)[3], (1320, 240))
 
@@ -1333,31 +1300,6 @@ class OutputSpec(unittest.TestCase):
             for o in s["outputs"]:
                 with self.subTest(scene=s["name"], file=o["file"]):
                     screenshots.resolve_output(s, o, canvas)
-
-
-class CardSpec(unittest.TestCase):
-    """A `card` output is composed around another output of its scene, never cut from the capture."""
-
-    SCENE = {"name": "home", "outputs": [{"file": "home.jpg", "size": "1600x900"},
-                                         {"file": "og-card.jpg", "dest": "site", "card": "home.jpg"}]}
-
-    def test_a_card_resolves_to_its_source_output(self):
-        dest, file, source = screenshots.card_spec(self.SCENE, self.SCENE["outputs"][1])
-        self.assertEqual((dest, file, source["file"]), ("site", "og-card.jpg", "home.jpg"))
-
-    def test_a_card_without_a_source_or_with_pixel_keys_is_refused(self):
-        for out in ({"file": "og.jpg", "card": "missing.jpg"},
-                    {"file": "og.jpg", "card": "og.jpg"},
-                    {"file": "og.jpg", "card": "home.jpg", "crop": [0, 0, 10, 10]},
-                    {"file": "og.png", "card": "home.jpg"}):
-            scene = dict(self.SCENE, outputs=[*self.SCENE["outputs"], out])
-            with self.subTest(out=out), self.assertRaises(ValueError):
-                screenshots.card_spec(scene, out)
-
-    def test_the_manifest_renders_the_link_preview_from_the_home_figure(self):
-        manifest = json.loads(SCENES.read_text())
-        cards = [(s["name"], o) for s in manifest["scenes"] for o in s["outputs"] if "card" in o]
-        self.assertEqual(cards, [("home", {"file": "og-card.jpg", "dest": "site", "card": "home.jpg"})])
 
 
 class Fetch(unittest.TestCase):
@@ -1486,16 +1428,6 @@ class SceneManifest(unittest.TestCase):
                 if "size" in o:
                     self.assertRegex(o["size"], r"^\d+x\d+$", s["name"])
                 self.assertTrue(o["file"].endswith(".jpg"), o["file"])
-
-    def test_the_site_close_ups_are_all_rendered_and_supersampled(self):
-        site = {o["file"]: s for s in self.scenes for o in s["outputs"]
-                if o.get("dest") == "site" and "card" not in o}
-        self.assertEqual(set(site), {"closeup-glass.jpg", "closeup-glass-narrow.jpg",
-                                     "closeup-tiles.jpg", "closeup-player.jpg", "closeup-fan-caligari.jpg",
-                                     "closeup-fan-cosmos.jpg", "closeup-fan-elephants.jpg"})
-        for file, s in site.items():
-            with self.subTest(file=file):
-                self.assertGreaterEqual(s.get("render_scale", 1), 3)
 
     def test_every_scene_names_its_state_and_a_log_line_proving_it(self):
         for s in self.scenes:

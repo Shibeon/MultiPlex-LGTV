@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate the documentation screenshots and the website's close-up stills: `make screenshots`.
+"""Regenerate the documentation screenshots: `make screenshots`.
 
 Every figure is a named target STATE in `tests/screenshots/scenes.json`. For each scene this
 driver:
@@ -29,12 +29,8 @@ so the simulator draws the 1920x1080 canvas at that multiple (glyphs, icons and 
 to match) and the capture comes out that many times larger. An output may take a `crop`
 ([x, y, w, h] in CANVAS coordinates, so a crop means the same UI whatever the scale) and a JPEG
 `quality` (ffmpeg's -q:v, default 2); its `size` defaults to the crop times the scale, and any
-other size is a Lanczos resample. `dest` picks where it lands: `docs` (the default,
-`docs/screenshots/`) or `site` (`site/media/`, the website's close-up stills); `--out` sends
-every output to one directory instead. A `card` output is not cut from the capture at all: it is
-the website's link-preview card (`site/og/card.html`), composed by `tools/render-og-card.sh`
-around another output of the same scene once that one is staged, so it needs a headless Chromium
-(the script says which it looks for) whenever its scene is in the run.
+other size is a Lanczos resample. `dest` picks where it lands: `docs` (the default and only one,
+`docs/screenshots/`); `--out` sends every output to one directory instead.
 
 Only when every scene has succeeded is the staged set moved into place, together with a
 `CREDITS.md` for the documentation figures written from the demo library's manifests
@@ -46,7 +42,7 @@ channel of every pixel may differ by at most the scene's `max_delta` (default 1:
 rounding, which is not bit-stable run to run), except inside the scene's `free_regions`, each of
 which must carry a `tolerance_reason`. `--report FILE` also writes each scene's verdict (pixels
 that differ, the largest difference, the bound, the files it makes) as JSON, which is what
-`tools/site_stills.py` gates the release refresh on. `--retry-unstable` lets a scene whose two captures
+a caller can gate on. `--retry-unstable` lets a scene whose two captures
 disagree take a third: the first capture that another agrees with is the one written (a runner that stalls one
 capture mid-fade must not fail the refresh; three that never agree still do).
 
@@ -83,9 +79,7 @@ CATALOG = ROOT / "tests" / "demo_library" / "catalog.json"
 # What the `token` trigger holds. The mock accepts any token; this one only has to be non-empty.
 PLACEHOLDER_TOKEN = "demo-library-token"
 # Where an output's `dest` puts it when there is no --out.
-DESTS = {"docs": ROOT / "docs" / "screenshots", "site": ROOT / "site" / "media"}
-# What composes a `card` output (the site's link-preview card) around a staged figure.
-CARD_SCRIPT = ROOT / "tools" / "render-og-card.sh"
+DESTS = {"docs": ROOT / "docs" / "screenshots"}
 # The supersampling factors the simulator accepts (`surface::render_scale`).
 RENDER_SCALES = range(1, 5)
 # Lines that mean an arm did not reach its state, whatever else the log says.
@@ -149,28 +143,9 @@ def output_spec(scene, out, canvas):
     return dest, out["file"], crop, size, quality
 
 
-def card_spec(scene, out):
-    """A CARD output — `{"file", "dest", "card": <another output of this scene>}` — resolved:
-    `(dest, file, source)`. It is not cut from the capture: `tools/render-og-card.sh` composes
-    the site's link-preview card around the staged `source` image, so the card always shows the
-    figure this run made. Raises ValueError for anything the driver could not honour."""
-    where = f"scene {scene['name']}, output {out.get('file')!r}"
-    dest = out.get("dest", "docs")
-    if dest not in DESTS:
-        raise ValueError(f"{where}: dest {dest!r} is not one of {sorted(DESTS)}")
-    if "/" in out["file"] or not out["file"].endswith(".jpg"):
-        raise ValueError(f"{where}: file must be a bare .jpg name")
-    if set(out) - {"file", "dest", "card"}:
-        raise ValueError(f"{where}: a card takes no {sorted(set(out) - {'file', 'dest', 'card'})}")
-    sources = [o for o in scene["outputs"] if o["file"] == out["card"] and "card" not in o]
-    if not sources:
-        raise ValueError(f"{where}: card {out['card']!r} is not another output of this scene")
-    return dest, out["file"], sources[0]
-
-
 def resolve_output(scene, out, canvas):
-    """`card_spec` for a card output, `output_spec` for every other."""
-    return card_spec(scene, out) if "card" in out else output_spec(scene, out, canvas)
+    """`output_spec` for any output of the manifest."""
+    return output_spec(scene, out, canvas)
 
 
 def clean_env(rt, shot, scene, defaults, assets=None):
@@ -470,7 +445,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--bin", required=True, type=pathlib.Path, help="the simulator (make screenshots-sim)")
     ap.add_argument("--out", type=pathlib.Path,
-                    help="write every output here instead of docs/screenshots/ and site/media/")
+                    help="write every output here instead of docs/screenshots/")
     ap.add_argument("--only", help="comma-separated scene names or output files (home, ux-detail.jpg, …)")
     ap.add_argument("--check-determinism", action="store_true",
                     help="capture every scene twice and require the documented tolerance")
@@ -544,15 +519,8 @@ def main():
         else:
             png = take()
         for o in outputs:
-            if "card" not in o:
-                dest, file, crop, size, quality = output_spec(scene, o, canvas)
-                encode(png, stage / dest / file, crop, size, quality)
-        for o in outputs:
-            if "card" in o:
-                dest, file, source = card_spec(scene, o)
-                subprocess.run(["bash", str(CARD_SCRIPT), "--shot",
-                                str(stage / source.get("dest", "docs") / source["file"]),
-                                "--out", str(stage / dest / file)], check=True, stdout=subprocess.DEVNULL)
+            dest, file, crop, size, quality = output_spec(scene, o, canvas)
+            encode(png, stage / dest / file, crop, size, quality)
 
     failed = render_set(jobs, render, dests, a.keep)
     for line in report:

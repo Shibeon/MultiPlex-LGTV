@@ -11,8 +11,8 @@
 //!
 //! and commit what changed. The invalid examples' own `source directories` are authored, not generated.
 //!
-//! `pages.yml` stages this directory at `/hud/`, preserving the schema and examples' bytes.
-//! `ci.yml` includes `site/hud/**` in its gate inputs, so an authoring-file-only PR runs these
+//! The upstream published this directory at `/hud/` on its own site; this fork removed that site and its
+//! deploy workflow, so the directory is the source of truth for the goldens and the registry only. `ci.yml` includes `site/hud/**` in its gate inputs, so an authoring-file-only PR runs these
 //! goldens too. Registry CI additionally compares the app's emitted schema with its mirror and
 //! checks the pinned corpus through stock Draft 2020-12 validation and the actual compiler.
 

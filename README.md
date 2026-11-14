@@ -16,7 +16,8 @@ with this app here, not to the original project.
   installs beside PlxNative rather than replacing it.
 - The device name Plex sees: "MultiPlex (LG TV)".
 - No optional reporting: this fork's builds carry no crash-report or analytics destination, so
-  nothing is sent and the first-run question about reports is not asked.
+  nothing is sent, the first-run question about reports is not asked, and Settings → Privacy &
+  data lists only the privacy policy and Delete all local data.
 
 MultiPlex features (themes, My list, Watch together, ...) are being brought over step by step.
 
@@ -197,7 +198,8 @@ each title in Continue Watching (which tells Plex which titles are in that row f
 
 **Crash reports and usage analytics are off until you turn them on** — two separate first-run
 questions, each answerable with Don't Share, both reversible later under Account → Settings →
-Privacy & data. No title, search term, subtitle line, server name or address can appear in any
+Privacy & data. A build compiled without a reporting destination (every MultiPlex build so far)
+cannot send either, so it asks neither question and that page shows no reporting switch at all. No title, search term, subtitle line, server name or address can appear in any
 report. [`PRIVACY.md`](PRIVACY.md) is the whole statement, including the schemas.
 
 ASS/SSA subtitles render natively during direct play, including styles, positioning, overlapping

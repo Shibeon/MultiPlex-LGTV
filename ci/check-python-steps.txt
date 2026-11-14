@@ -198,8 +198,8 @@ python3 ci/test_ci_workflows.py
 python3 ci/test_build_budgets.py
 # tools/ci-durations.py (CI duration trends) against canned `gh api` output; no network.
 python3 tools/test_ci_durations.py
-# tools/ci-history.py (the live page's data: incremental merge, filtering, pull-request and nightly rows, re-runs,
-# cancelled counts, retention fold, paging stop) against a fake `gh api`, and the shape of site/ci/index.html plus its pure daily-chart rules run in node or macOS jsc (skipped when neither exists); no network.
+# tools/ci-history.py (the ci-metrics branch's data: incremental merge, filtering, pull-request and nightly rows, re-runs,
+# cancelled counts, retention fold, paging stop) against a fake `gh api`; no network.
 python3 tools/test_ci_history.py
 # tools/ci-summary.py (the page's "now" block with its order and selection, the two slowest lists and regressions) against synthetic series: step up and down,
 # noisy flat, missing days, the re-run wall rule, PR/push separation; no network.
@@ -232,14 +232,6 @@ python3 ci/test-compat.py
 # The cargo seed's own suite (restore only into an absent dir, the app crate never in the seed,
 # key refresh, off switch, clone failure), against a fake root and a private cache.
 python3 ci/test_cargo_seed.py
-# tools/site_video.py, the host half of the site demo video (encode, quality gates, the sentinel scan, the
-# manifest and `adopt`): the scanner on synthetic RGB frames, the encode argv asserted (never run), the gates'
-# pure logic, manifest tamper, adopt refusing anything but `linux-ci`, and the pinned-ffmpeg fetch against a
-# fake opener. Offline, no ffmpeg; the one real-ffmpeg case is off unless PLXNATIVE_SITE_VIDEO_FFMPEG is set.
-python3 tests/test_site_video.py
-# tools/site_stills.py, the simulator-made stills' half of the same refresh: which files it owns (read from the
-# generating tools), the manual set, adopt's refusals and the decide/commit-message logic. Offline.
-python3 tests/test_site_stills.py
 # The placeholder-accounting gate (rust-modules/ui/src/placeholder.rs): every reference to
 # SKELETON_TOP / SKELETON_BOT / CARD_PLACEHOLDER / STALE_ALPHA / Spinner::new|leading / a `*_loading`
 # message needs a `placeholder::` counter call beside it or a reasoned `placeholder-exempt:` comment, so

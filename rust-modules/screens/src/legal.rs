@@ -24,11 +24,6 @@ use super::registry::word;
 
 
 
-/// **The one contact address the application prints.**
-/// `every_document_prints_only_the_one_contact_address` scans the documents for stray `@`s;
-/// `screens::consent` imports it.
-pub const CONTACT_EMAIL: &str = "support@plxnative.com";
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Privacy,
@@ -111,9 +106,7 @@ static PRIVACY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| [
     plx_platform::i18n::msg::settings_legal_privacy_processing(),
     plx_platform::i18n::msg::settings_legal_privacy_processing_body(),
     plx_platform::i18n::msg::settings_legal_privacy_uninstall(),
-    plx_platform::i18n::msg::settings_legal_privacy_uninstall_body(),
-    plx_platform::i18n::msg::settings_legal_privacy_contact(),
-    plx_platform::i18n::msg::settings_legal_privacy_contact_body()
+    plx_platform::i18n::msg::settings_legal_privacy_uninstall_body()
 ].join("\n\n"));
 static OPEN_SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("{}\n\n{}", plx_platform::i18n::msg::settings_legal_opensource_body(), include_str!("../../../LICENSE")));
 static FFMPEG: std::sync::LazyLock<&'static str> = std::sync::LazyLock::new(plx_platform::i18n::msg::settings_legal_ffmpeg_body);
@@ -602,25 +595,14 @@ mod tests {
         }
     }
 
-    /// **No document may print an address other than [`CONTACT_EMAIL`].** Written against the
-    /// personal address these pages used to carry: a support address that reaches only some of
-    /// the screens is worse than none, because the reader cannot tell which one is current. The
-    /// scan is for `@` rather than for the old address, so the NEXT stray address fails too.
+    /// **No document prints an e-mail address.** This fork publishes no contact address (the
+    /// upstream's was removed); a security report goes through GitHub Security Advisories, which
+    /// the Security contact page names. The scan is for `@` rather than for any one address, so
+    /// a stray address of any kind fails.
     #[test]
-    fn every_document_prints_only_the_one_contact_address() {
+    fn no_document_prints_an_email_address() {
         for page in Page::ALL {
-            let local_len = CONTACT_EMAIL.find('@').expect("CONTACT_EMAIL has a local part");
-            for (i, _) in page.body().match_indices('@') {
-                let tail = i
-                    .checked_sub(local_len)
-                    .map(|start| &page.body()[start..])
-                    .unwrap_or("");
-                assert!(
-                    tail.starts_with(CONTACT_EMAIL),
-                    "{:?} prints an address that is not CONTACT_EMAIL",
-                    page.title()
-                );
-            }
+            assert!(!page.body().contains('@'), "{:?} prints an address", page.title());
         }
     }
 

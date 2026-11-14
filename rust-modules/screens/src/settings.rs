@@ -497,7 +497,8 @@ fn mount_page(
         SettingsPage::About => Box::new(super::legal::DocumentPage::about(entry)),
         SettingsPage::Document(i) => Box::new(super::legal::DocumentPage::legal(entry, i)),
         SettingsPage::Privacy => Box::new(super::consent::ConsentPage::settings(entry, cx, fx)),
-        SettingsPage::Preview(i) => Box::new(super::consent::PreviewPage::new(entry, i)),
+        SettingsPage::Preview(i) => Box::new(super::consent::PreviewPage::new(
+            entry, super::consent::offered_preview(i, cx.views.inputs.telemetry_absent))),
         SettingsPage::ConsentStage(i) => {
             Box::new(super::consent::ConsentPage::first_run(entry, i, cx, fx))
         }
@@ -1251,8 +1252,10 @@ fn trace_label(status: plx_platform::playback_trace::Status) -> &'static str {
 /// what each one used to say under its label is said here, in the left column, while the row has
 /// focus. A row with no sentence of its own (a server's switch, which states its own status in the
 /// table) shows the page's. Pure: a function of the focused row's identity alone, so a test states
-/// every answer and the screen only fades between them.
-fn sentence_for(id: Option<&RootId>) -> Cow<'static, str> {
+/// every answer and the screen only fades between them. `telemetry_absent` is the build fact
+/// (`ScreenInputs::telemetry_absent`): with no reporting destination, Privacy & data holds no
+/// reports, so its sentence names only what the page still offers.
+fn sentence_for(id: Option<&RootId>, telemetry_absent: bool) -> Cow<'static, str> {
     use plx_platform::i18n::msg;
     match id {
         Some(RootId::Favourites) => Cow::Owned(format!("{} {}", msg::settings_libraries_detail(), msg::settings_libraries_more())),
@@ -1263,6 +1266,7 @@ fn sentence_for(id: Option<&RootId>) -> Cow<'static, str> {
         Some(RootId::AutoSignIn) => Cow::Borrowed(msg::settings_auto_sign_in_detail()),
         Some(RootId::TrailerAutoplay) => Cow::Borrowed(msg::settings_trailers_detail()),
         Some(RootId::Resolution) => Cow::Borrowed(msg::settings_resolution_detail()),
+        Some(RootId::Privacy) if telemetry_absent => Cow::Borrowed(msg::settings_privacy_detail_local()),
         Some(RootId::Privacy) => Cow::Borrowed(msg::settings_privacy_detail()),
         Some(RootId::Diagnostics) => Cow::Borrowed(msg::settings_diagnostics_detail()),
         Some(RootId::Legal) => Cow::Borrowed(msg::settings_legal_detail()),
@@ -1436,7 +1440,7 @@ impl RootPage {
         // A page opens on its first seated row's sentence at once, with nothing fading: the
         // `follow` the first rebuild asked for would otherwise cross-fade the page's sentence
         // into row 0's on every open.
-        s.follow = plx_ui::follow_copy::FollowCopy::new(&sentence_for(s.form.selected_id()));
+        s.follow = plx_ui::follow_copy::FollowCopy::new(&sentence_for(s.form.selected_id(), s.inputs.telemetry_absent));
         s
     }
 
@@ -1479,7 +1483,7 @@ impl RootPage {
         if let Some(key) = self.form.key_at(self.form.table.sel.max(0) as usize) {
             self.state.sel = key;
         }
-        self.follow.follow(&sentence_for(self.form.selected_id()));
+        self.follow.follow(&sentence_for(self.form.selected_id(), self.inputs.telemetry_absent));
     }
 
     /// **Unencrypted connections**: one input per server the signed-in account answered
@@ -1736,7 +1740,7 @@ impl Machine<InnerHost> for RootPage {
                 if let Some(key) = self.form.key_at(self.form.table.sel.max(0) as usize) {
                     self.state.sel = key;
                 }
-                self.follow.follow(&sentence_for(self.form.selected_id()));
+                self.follow.follow(&sentence_for(self.form.selected_id(), self.inputs.telemetry_absent));
                 Handled::Yes
             }
             ScreenEvent::Activate(e) => {

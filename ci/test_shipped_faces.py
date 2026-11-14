@@ -37,7 +37,6 @@ LISTS = [
     ("the macOS simulator bundle", "ci/mkmacapp.py", r'for f in \("appfont', r"\):$"),
     ("the Windows/WSL simulator staging", "tools/sim.ps1", r"for file in appfont", r"; do$"),
     ("the GPL source bundle's pkg/ files", "ci/source_bundle.py", r"^PKG_FILES = \{", r"\}"),
-    ("the documentation stills' inputs", "tools/site_stills.py", r"^TREE_PATHS = \(", r"^\)"),
 ]
 
 
