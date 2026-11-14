@@ -1279,6 +1279,12 @@ pub fn select_audio(idx: i32) {
     FEED_SHARED.select_audio(idx);
 }
 
+/// The viewer's audio mode (`FeedCommand::AudioProcessing`): what the demuxer applies to every PCM
+/// block it decodes from now on, the running session's included.
+pub fn select_audio_processing(mode: plx_playback_contract::feed::AudioProcessing) {
+    FEED_SHARED.audio_processing.store(mode.code(), Relaxed);
+}
+
 /// The seek was given up on (`FeedCommand::AbandonSeek`): the spinner and the frozen playhead end
 /// with it. `seek_display_ns` goes back to `-1`, the HUD's "no seek target".
 pub fn seek_abandoned() {
@@ -1378,6 +1384,7 @@ fn native_feed_raw(failure: FailureSample) -> FeedRaw {
         side_exact_delta_ns: crate::side_reader::exact_delta_ns(),
         native_audio: crate::ff::native_audio::fed()
             .map(|(kind, channels)| plx_playback_contract::feed::NativeAudio { codec: kind.ffmpeg_name(), channels }),
+        app_pcm_audio: FEED_SHARED.app_pcm_audio.load(Acquire),
     }
 }
 

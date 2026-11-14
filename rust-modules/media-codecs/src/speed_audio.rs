@@ -130,20 +130,60 @@ pub fn downmix(fmt: SampleFormat, planar: bool, channels: usize, frames: usize, 
 pub fn downmix_by_mask(
     fmt: SampleFormat, planar: bool, mask: u64, channels: usize, frames: usize, planes: &[&[u8]],
 ) -> Vec<[f32; 2]> {
+    downmix_by_mask_lifted(fmt, planar, mask, channels, frames, planes, false).0
+}
+
+/// The layout FFmpeg gives a count when the stream states none (`av_channel_layout_default`), for
+/// the counts whose centre [`downmix`] already assumes at index 2: 3.0, 4.0, 5.0, 5.1, 6.1, 7.1.
+fn default_mask(channels: usize) -> u64 {
+    match channels {
+        3 => 0x7,
+        4 => 0x107,
+        5 => 0x37,
+        6 => 0x3f,
+        7 => 0x13f,
+        8 => 0x63f,
+        _ => 0,
+    }
+}
+
+/// [`downmix_by_mask`], with the audio mode's **centre lift** when `lift` is set (Voice, the
+/// desktop client's `pan` chain): the front centre at +3 dB and every other mixed channel at -3 dB,
+/// before the same scaling that keeps a full-scale signal on every channel from clipping, so the
+/// dialogue stands 6 dB further out of the mix. Returns the frames and whether a centre was lifted
+/// (`false` without `lift`, and for a source that has no centre, which then mixes exactly as
+/// [`downmix_by_mask`] does). A layout the mask does not name is read as FFmpeg's default for its
+/// count when lifting, the order [`downmix`] assumes.
+pub fn downmix_by_mask_lifted(
+    fmt: SampleFormat, planar: bool, mask: u64, channels: usize, frames: usize, planes: &[&[u8]], lift: bool,
+) -> (Vec<[f32; 2]>, bool) {
+    let named = mask != 0 && mask.count_ones() as usize == channels;
+    let mask = if !named && lift { default_mask(channels) } else { mask };
+    let lifted = lift && mask & AV_CH_FRONT_CENTER != 0 && mask.count_ones() as usize == channels;
     if mask == 0 || mask.count_ones() as usize != channels {
-        return downmix(fmt, planar, channels, frames, planes);
+        return (downmix(fmt, planar, channels, frames, planes), false);
     }
     // One (left, right) coefficient pair per channel, in the mask's ascending-bit order, scaled so
     // the louder side's coefficients sum to 1: a full-scale signal on every channel cannot clip.
-    let mut gains: Vec<[f32; 2]> = (0..64).filter(|b| mask >> b & 1 == 1).map(role_gain).collect();
+    let mut gains: Vec<[f32; 2]> = (0..64)
+        .filter(|b| mask >> b & 1 == 1)
+        .map(|b| {
+            let g = role_gain(b);
+            match (lifted, b) {
+                (false, _) => g,
+                (true, 2) => [g[0] * std::f32::consts::SQRT_2, g[1] * std::f32::consts::SQRT_2],
+                (true, _) => [g[0] * std::f32::consts::FRAC_1_SQRT_2, g[1] * std::f32::consts::FRAC_1_SQRT_2],
+            }
+        })
+        .collect();
     let peak = gains.iter().map(|g| g[0]).sum::<f32>().max(gains.iter().map(|g| g[1]).sum::<f32>());
     if peak <= 0.0 {
-        return downmix(fmt, planar, channels, frames, planes);
+        return (downmix(fmt, planar, channels, frames, planes), false);
     }
     for g in &mut gains {
         *g = [g[0] / peak, g[1] / peak];
     }
-    (0..frames)
+    let mixed = (0..frames)
         .map(|i| {
             let (mut l, mut r) = (0.0f32, 0.0f32);
             for (ch, g) in gains.iter().enumerate() {
@@ -156,8 +196,12 @@ pub fn downmix_by_mask(
             }
             [l, r]
         })
-        .collect()
+        .collect();
+    (mixed, lifted)
 }
+
+/// `AV_CH_FRONT_CENTER`, the bit the centre lift looks for.
+const AV_CH_FRONT_CENTER: u64 = 1 << 2;
 
 /// The stereo coefficients of one `AV_CH_*` bit before scaling: the fronts at 1, the centre and
 /// the side/back/top channels at -3 dB toward their own side, a centre-back or top-centre split

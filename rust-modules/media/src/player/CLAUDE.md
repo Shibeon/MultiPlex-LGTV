@@ -528,7 +528,8 @@ something.
   (decimated by the app) and FLAC, ALAC and LPCM (below) are exempt. **Lossless hi-res**: a mono or stereo FLAC, ALAC or LPCM track above 48 kHz is
   resampled by the app (`ff_pcm::PcmConverter`, lossless shape) to 48 kHz, or to 44.1 kHz for a multiple of 44.1 kHz (`devcaps::pcm_load_rate`, the one rule
   for the planner, Forced, the track menu and the profile), and declared S32 whatever its own depth, at unity gain, saturating at the i32 range,
-  without dither or limiter; one log line per stream counts the clipped samples and the peak. A 5.1 hi-res track still converts on the server
+  without dither or limiter (with the viewer's audio mode Off, the default; Night mode or Clear voices adds
+  `media-codecs/src/audio_mode.rs`'s compression and a -1 dBFS limiter to any app-decoded PCM, and Off stays bit-exact); one log line per stream counts the clipped samples and the peak. A 5.1 hi-res track still converts on the server
   (the profile keeps `audio.channels <= 2` for these codecs). A table rate (8 to 48 kHz) builds no converter and stays bit-exact. TrueHD is
   decoded as FFmpeg's `truehd` decodes it, up to the 7.1 bed; an Atmos object substream is not rendered. Its access units are
   1/1200 s, so the demuxer gathers decoded blocks shorter than 10 ms into AUs of about that length (`ff_pcm::AuBatcher`; a DTS,
@@ -776,6 +777,18 @@ something.
   the rate the session OFFERS its next Load (`session_rate_for` lowers it to 1x when the playback does not offer
   the pick; the viewer's intent is the session's `requested_rate_permille` and survives that) and persists across
   reloads; `applied_rate_permille` is the current pipeline's and is reset by `reset_session`. The feed throttle's run-on reads the applied one (`FeedPace::reference_at`).
+- **The audio mode (Off / Night mode / Clear voices) acts only on PCM the app decodes.** It is a
+  per-profile setting (`AudioModePref`, Settings > Playback and the More menu), and the pump hands it to
+  the feed as `FeedCommand::AudioProcessing` whenever it changes (`PlayerAdapter::sync_audio_processing`);
+  the demuxer reads it on each audio packet and the two PCM producers (`ff_pcm::PcmDecoder`,
+  `SpeedDecoder`) run `media-codecs/src/audio_mode.rs` over their output: a soft-knee compressor with
+  make-up gain (Night), centre +3 dB / others -3 dB in the downmix of a surround track or a 2.5 kHz
+  presence EQ with gentle compression on stereo and mono (Clear voices), always ending in a -1 dBFS
+  limiter, crossfaded through dry on a change, and falling back to the dry block on a non-finite result.
+  Where the TV or a receiver decodes the sound (every native AAC/AC3/EAC3/Opus/DTS track, passthrough, the
+  URI engine) no sample passes through the app: the demuxer publishes that as `FeedRaw::app_pcm_audio`
+  (`DemuxEffect::AppPcmAudio`, per open), `player::audio_mode_offered` reads it from the readout, and the
+  More menu lists no Audio mode row at all there; the saved mode is kept and has no effect.
 - **A Load that declares `"audio":"PCM"` on one of LG's audio stacks has its audio fed later than the
   picture it belongs with, by an amount the stack decides; a set with no lead (`adecsink` on 2016/2017, not
   determined; Realtek; MStar; an unknown stack) gets none at all** (#1086, #1088, #1092, #1093; FLAC and every other app-decoded codec (a DTS the app decodes under the lossy gate

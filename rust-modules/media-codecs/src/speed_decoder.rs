@@ -13,6 +13,8 @@ pub struct SpeedDecoder {
     frame: *mut c_void,
     audio: crate::speed_audio::SpeedAudio,
     logged: bool,
+    /// The viewer's audio mode, on the stereo 48 kHz S16 this decoder feeds ([`Self::set_audio_mode`]).
+    mode: crate::audio_mode::AudioModeStage,
 }
 
 impl SpeedDecoder {
@@ -40,7 +42,20 @@ impl SpeedDecoder {
             }
             return None;
         }
-        Some(SpeedDecoder { ctx, frame, audio: crate::speed_audio::SpeedAudio::new(permille), logged: false })
+        Some(SpeedDecoder {
+            ctx, frame, audio: crate::speed_audio::SpeedAudio::new(permille), logged: false,
+            mode: crate::audio_mode::AudioModeStage::new(crate::speed_audio::OUT_RATE, 2),
+        })
+    }
+
+    /// The audio mode for every AU decoded from now on (`crate::audio_mode`).
+    pub fn set_audio_mode(&mut self, mode: plx_playback_contract::feed::AudioProcessing) {
+        self.mode.set_mode(mode);
+    }
+
+    /// What the audio mode did to this stream (`crate::audio_mode::AudioModeReport`).
+    pub fn audio_mode_report(&self) -> crate::audio_mode::AudioModeReport {
+        self.mode.report()
     }
 
     /// Decode one packet whose content time is `pts_ns`; returns the PCM AUs now complete, each
@@ -77,8 +92,15 @@ impl SpeedDecoder {
                         vec![std::slice::from_raw_parts(*ext, nb * width * channels)]
                     };
                     let mask = frame_channel_mask(f);
-                    let stereo = crate::speed_audio::downmix_by_mask(sf, planar, mask, channels, nb, &planes);
+                    let (stereo, lifted) = crate::speed_audio::downmix_by_mask_lifted(
+                        sf, planar, mask, channels, nb, &planes, self.mode.wants_centre_lift(),
+                    );
+                    self.mode.set_centre_lifted(lifted);
+                    let first = aus.len();
                     aus.extend(self.audio.push(pts_ns, rate, &stereo));
+                    for (_, pcm) in &mut aus[first..] {
+                        self.mode.process_s16le(pcm);
+                    }
                 }
             }
             av_frame_unref(self.frame);

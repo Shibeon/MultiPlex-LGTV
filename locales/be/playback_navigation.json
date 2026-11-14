@@ -9,5 +9,10 @@
   "settings.playback.uri_engine": "Рухавік прайгравання",
   "settings.playback.uri_engine.copy": "Рэжым «Эксперыментальны» дазваляе тэлевізару самастойна атрымліваць файл. Кіраванне застаецца ранейшым. Калі не атрымаецца, відэа пачнецца нанова ў «Стандартным». Некаторыя відэа заўсёды ідуць у ім.",
   "settings.playback.uri_engine.off": "Стандартны",
-  "settings.playback.uri_engine.on": "Эксперыментальны"
+  "settings.playback.uri_engine.on": "Эксперыментальны",
+  "settings.playback.audio_mode": "Рэжым гуку",
+  "settings.playback.audio_mode.copy": "Начны рэжым выраўноўвае гучнасць: гучныя сцэны цішэй, ціхія дыялогі гучней. «Выразная гаворка» вылучае дыялогі. Не дзейнічае, калі гук дэкадуе тэлевізар або рэсівер.",
+  "settings.playback.audio_mode.off": "Выкл.",
+  "settings.playback.audio_mode.night": "Начны рэжым",
+  "settings.playback.audio_mode.voice": "Выразная гаворка"
 }

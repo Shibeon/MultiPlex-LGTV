@@ -9,5 +9,10 @@
   "settings.playback.uri_engine": "Wiedergabe-Engine",
   "settings.playback.uri_engine.copy": "Experimentell lässt den Fernseher die Datei selbst streamen. Die Bedienung bleibt gleich. Bei einem Fehler startet das Video neu in Standard. Manche Videos laufen immer in Standard.",
   "settings.playback.uri_engine.off": "Standard",
-  "settings.playback.uri_engine.on": "Experimentell"
+  "settings.playback.uri_engine.on": "Experimentell",
+  "settings.playback.audio_mode": "Audiomodus",
+  "settings.playback.audio_mode.copy": "Der Nachtmodus gleicht die Lautstärke aus: laute Szenen leiser, leise Dialoge lauter. Klare Stimmen hebt die Dialoge hervor. Ohne Wirkung, wenn der Fernseher oder ein Receiver den Ton decodiert.",
+  "settings.playback.audio_mode.off": "Aus",
+  "settings.playback.audio_mode.night": "Nachtmodus",
+  "settings.playback.audio_mode.voice": "Klare Stimmen"
 }

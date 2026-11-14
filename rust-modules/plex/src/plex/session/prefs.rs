@@ -36,7 +36,7 @@
 //! assignment. `subtitle_offsets` is the other tenant of the door and is declared the same way
 //! ([`SubtitleOffsetsPref`]).
 use super::{
-    MarkerSkipMode, DolbyVisionMode, InstantDpadSeeking, UriEngine, DeckPress, DirectPlayMode, HdrOverlayBrightness, LastLibrary, LibraryViews, NativeAudioRefusal, NextEpisodeMode, OpaqueExtensions,
+    MarkerSkipMode, DolbyVisionMode, InstantDpadSeeking, UriEngine, AudioMode, DeckPress, DirectPlayMode, HdrOverlayBrightness, LastLibrary, LibraryViews, NativeAudioRefusal, NextEpisodeMode, OpaqueExtensions,
     PlaintextConsent, HoldHintTaught, PlaybackQuality, ServerKeyPin, Session, SkipInterval, SubtitleOffsetEntry, SubtitleOffsets, SubtitlePosition,
     SubtitleSize, SubtitleTone, UiResolution, UnderPosters,
 };
@@ -128,6 +128,10 @@ pub struct Preferences {
     /// Opt-in to the URI engine (`On`); `Off` by default, the Feed engine every build had.
     #[serde(default, deserialize_with = "de_soft_uri_engine", skip_serializing_if = "UriEngine::is_default")]
     pub uri_engine: UriEngine,
+    /// The app's own audio processing (`Off`, `Night`, `Voice`); `Off` by default, the untouched
+    /// sound every build had.
+    #[serde(default, deserialize_with = "de_soft_audio_mode", skip_serializing_if = "AudioMode::is_default")]
+    pub audio_mode: AudioMode,
     /// Dolby Vision override (`Auto` or `Off`); `Auto` by default.
     #[serde(default, deserialize_with = "de_soft_dolby_vision_mode", skip_serializing_if = "DolbyVisionMode::is_default")]
     pub dolby_vision_mode: DolbyVisionMode,
@@ -532,6 +536,10 @@ setting!(InstantDpadSeekingPref: InstantDpadSeeking = instant_dpad_seeking, "ins
     account false, live true, settings Some(SettingsWrite::Confirm), parse Soft);
 setting!(UriEnginePref: UriEngine = uri_engine, "uri_engine", Profile fallback LegacyInstallKey,
     account false, live true, settings Some(SettingsWrite::Confirm), parse Soft);
+// The player's More menu writes it too, through the same `route::choose` door; optimistic, because
+// the viewer hears the effect while choosing.
+setting!(AudioModePref: AudioMode = audio_mode, "audio_mode", Profile fallback LegacyInstallKey,
+    account false, live true, settings Some(SettingsWrite::Optimistic), parse Soft);
 setting!(IntroSkipPref: MarkerSkipMode = intro_skip, "intro_skip", Profile fallback LegacyInstallKey,
     account false, live true, settings Some(SettingsWrite::Confirm), parse Soft);
 setting!(CreditsSkipPref: MarkerSkipMode = credits_skip, "credits_skip", Profile fallback LegacyInstallKey,
@@ -690,6 +698,7 @@ pub const DESCRIPTORS: &[Descriptor] = &[
     Descriptor::of::<SkipIntervalPref>(),
     Descriptor::of::<InstantDpadSeekingPref>(),
     Descriptor::of::<UriEnginePref>(),
+    Descriptor::of::<AudioModePref>(),
     Descriptor::of::<DolbyVisionModePref>(),
     Descriptor::of::<IntroSkipPref>(),
     Descriptor::of::<CreditsSkipPref>(),
@@ -1419,6 +1428,17 @@ where
         return Ok(UriEngine::default());
     };
     Ok(serde_json::from_value::<UriEngine>(v).unwrap_or_default())
+}
+
+/// The audio mode is a preference too: a spelling this build does not know degrades to Off.
+fn de_soft_audio_mode<'de, D>(d: D) -> Result<AudioMode, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Ok(v) = serde_json::Value::deserialize(d) else {
+        return Ok(AudioMode::default());
+    };
+    Ok(serde_json::from_value::<AudioMode>(v).unwrap_or_default())
 }
 
 /// Dolby Vision mode is a preference too: a spelling this build does not know degrades to Auto.

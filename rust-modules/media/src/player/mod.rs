@@ -2012,6 +2012,29 @@ pub(super) fn publish_audio_choice(ps: &crate::route::PlaybackSession, pa: &mut 
     pa.feed_command(FeedCommand::SelectAudio { idx: ps.readout().audio_choice() });
 }
 
+/// **Whether the More menu offers the audio mode** for the playback on screen: the Feed engine's
+/// demuxer said this session decodes the audio in the app and feeds the PCM it holds
+/// (`FeedRaw::app_pcm_audio`: an app-decoded codec, `ff_pcm::PcmDecoder`, or a speed session,
+/// `SpeedDecoder`). Everywhere else (the television decodes the compressed track, a receiver takes
+/// the bitstream, the URI engine fetches the file itself) no sample passes through the app and the
+/// entry is not shown at all; the saved mode is kept and has no effect there. A value of the
+/// session's readout, sampled once a tick, so the entry follows a reload (a track switch, a speed)
+/// live, and a read with no IO.
+pub fn audio_mode_offered(ps: &crate::route::PlaybackSession) -> bool {
+    ps.attempt_view().backend() == Some(attempt_view::Backend::Feed) && ps.readout().raw().app_pcm_audio
+}
+
+/// The viewer's audio mode as the feed carries it.
+pub fn audio_processing(mode: plx_plex::plex::session::AudioMode) -> plx_playback_contract::feed::AudioProcessing {
+    use plx_playback_contract::feed::AudioProcessing;
+    use plx_plex::plex::session::AudioMode;
+    match mode {
+        AudioMode::Off => AudioProcessing::Off,
+        AudioMode::Night => AudioProcessing::Night,
+        AudioMode::Voice => AudioProcessing::Voice,
+    }
+}
+
 /// Normal speed, in the thousandths every playback-rate value here is counted in.
 pub use plx_playback_contract::RATE_NORMAL;
 /// The speeds the player offers, slowest first: the same seven as Plex Web's Playback Speed.
@@ -4884,5 +4907,51 @@ mod audio_switch_tests {
         crate::player::reset_session_for_test();
         assert!(!audio_switching(), "a full reset (new item, teardown) ends it");
         reset();
+    }
+}
+
+#[cfg(test)]
+mod audio_mode_offer_tests {
+    use super::*;
+    use plx_playback_contract::feed::{AudioProcessing, FeedRaw};
+
+    /// A Feed session whose latest sample says the app does or does not decode the sound.
+    fn feed_session(app_pcm_audio: bool) -> crate::route::PlaybackSession {
+        let mut ps = crate::route::PlaybackSession::IDLE;
+        ps.begin_attempt_view(crate::route::RouteStartAttempt::fixture(), attempt_view::Backend::Feed);
+        ps.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw { app_pcm_audio, ..FeedRaw::IDLE }));
+        ps
+    }
+
+    /// **The audio mode is offered exactly where the samples pass through the app**: a Feed session
+    /// whose demuxer decodes the audio to PCM (FLAC, a speed session). Not a Feed session that feeds
+    /// the compressed track to the television, not the URI engine (the TV fetches and decodes the
+    /// whole file), not an idle session, whatever the Feed's flag would say there.
+    #[test]
+    fn the_audio_mode_is_offered_only_where_the_app_decodes_the_sound() {
+        assert!(audio_mode_offered(&feed_session(true)), "app-decoded PCM on the Feed");
+        assert!(!audio_mode_offered(&feed_session(false)), "the TV decodes the compressed track");
+        assert!(!audio_mode_offered(&crate::route::PlaybackSession::IDLE), "nothing playing");
+        let mut uri = crate::route::PlaybackSession::IDLE;
+        uri.begin_attempt_view(crate::route::RouteStartAttempt::fixture(), attempt_view::Backend::Uri);
+        uri.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw { app_pcm_audio: true, ..FeedRaw::IDLE }));
+        assert!(!audio_mode_offered(&uri), "the URI engine never hands the app a sample");
+        // and it follows the path live: the next sample (a track switch to AC3) takes it away
+        let mut ps = feed_session(true);
+        ps.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw { app_pcm_audio: false, ..FeedRaw::IDLE }));
+        assert!(!audio_mode_offered(&ps), "a switch to a track the TV decodes takes the entry away");
+    }
+
+    /// The saved mode reaches the feed as the same three modes, Off by default.
+    #[test]
+    fn each_saved_mode_reaches_the_feed_as_its_own_processing() {
+        use plx_plex::plex::session::AudioMode;
+        assert_eq!(audio_processing(AudioMode::default()), AudioProcessing::Off);
+        assert_eq!(audio_processing(AudioMode::Night), AudioProcessing::Night);
+        assert_eq!(audio_processing(AudioMode::Voice), AudioProcessing::Voice);
+        for mode in AudioMode::LADDER {
+            let p = audio_processing(mode);
+            assert_eq!(AudioProcessing::from_code(p.code()), p, "the feed's code round-trips");
+        }
     }
 }

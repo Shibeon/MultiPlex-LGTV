@@ -123,9 +123,9 @@ fn every_playback_field_pushes_its_picker() {
     assert_eq!(items.iter().map(|(_, d)| *d).collect::<Vec<_>>(),
         [SettingsPage::Picker(PickerKind::Quality), SettingsPage::Picker(PickerKind::DirectPlay), SettingsPage::Picker(PickerKind::DolbyVision), SettingsPage::Picker(PickerKind::UriEngine),
          SettingsPage::Picker(PickerKind::SkipInterval), SettingsPage::Picker(PickerKind::InstantDpadSeeking), SettingsPage::Picker(PickerKind::HdrOverlay),
-         SettingsPage::PlayerHud,
+         SettingsPage::Picker(PickerKind::AudioMode), SettingsPage::PlayerHud,
          SettingsPage::Picker(PickerKind::NextEpisode), SettingsPage::Picker(PickerKind::DeckPress)],
-        "Video: quality, direct play, Dolby Vision, playback engine. Player: skip interval, D-pad seeking, HDR overlay, the HUD page. Up next: next episode, continue watching");
+        "Video: quality, direct play, Dolby Vision, playback engine. Player: skip interval, D-pad seeking, HDR overlay, audio mode, the HUD page. Up next: next episode, continue watching");
     assert_every_nav_item_pushes_exactly_its_dest("playback", &items, &|| consent_opened(SettingsPage::Playback));
 }
 
@@ -298,6 +298,7 @@ struct PlaybackCells {
     next_episode: plx_media::route::NextEpisodeMode,
     instant_dpad_seeking: plx_plex::plex::session::InstantDpadSeeking,
     uri_engine: plx_plex::plex::session::UriEngine,
+    audio_mode: plx_plex::plex::session::AudioMode,
     dolby_vision: plx_plex::plex::session::DolbyVisionMode,
     deck_press: plx_media::route::DeckPress,
     skip: plx_media::route::SkipInterval,
@@ -306,7 +307,7 @@ impl PlaybackCells {
     fn capture() -> Self {
         use plx_media::route as r;
         PlaybackCells { quality: r::quality(), direct_play: r::direct_play_mode(), size: r::subtitle_size(),
-            position: r::subtitle_position(), tone: plx_media::player::subtitle_tone(), hdr: r::hdr_overlay_brightness(), next_episode: r::next_episode_mode(), instant_dpad_seeking: r::instant_dpad_seeking(), uri_engine: r::uri_engine(),
+            position: r::subtitle_position(), tone: plx_media::player::subtitle_tone(), hdr: r::hdr_overlay_brightness(), next_episode: r::next_episode_mode(), instant_dpad_seeking: r::instant_dpad_seeking(), uri_engine: r::uri_engine(), audio_mode: r::audio_mode(),
             dolby_vision: r::dolby_vision_mode(), deck_press: r::deck_press(), skip: r::skip_interval() }
     }
 }
@@ -316,7 +317,7 @@ impl Drop for PlaybackCells {
         r::restore_quality(self.quality); r::restore_direct_play_mode(self.direct_play);
         r::restore_subtitle_size(self.size); r::restore_subtitle_position(self.position);
         plx_media::player::restore_subtitle_tone(self.tone);
-        r::restore_hdr_overlay_brightness(self.hdr); r::restore_next_episode_mode(self.next_episode); r::restore_instant_dpad_seeking(self.instant_dpad_seeking); r::restore_uri_engine(self.uri_engine);
+        r::restore_hdr_overlay_brightness(self.hdr); r::restore_next_episode_mode(self.next_episode); r::restore_instant_dpad_seeking(self.instant_dpad_seeking); r::restore_uri_engine(self.uri_engine); r::restore_audio_mode(self.audio_mode);
         r::restore_dolby_vision_mode(self.dolby_vision); r::restore_deck_press(self.deck_press); r::restore_skip_interval(self.skip);
     }
 }
@@ -370,6 +371,7 @@ fn every_pushed_picker_opens_on_its_checked_line_and_pops_to_its_row() {
     r::restore_skip_interval(*ses::SkipInterval::LADDER.last().unwrap());
     r::restore_instant_dpad_seeking(*ses::InstantDpadSeeking::LADDER.last().unwrap());
     r::restore_uri_engine(*ses::UriEngine::LADDER.last().unwrap());
+    r::restore_audio_mode(*ses::AudioMode::LADDER.last().unwrap());
     r::restore_dolby_vision_mode(*ses::DolbyVisionMode::LADDER.last().unwrap());
     let lines = |kind: PickerKind| match kind {
         PickerKind::Quality => ladder_last(r::available_quality_ladder().len()),
@@ -383,11 +385,12 @@ fn every_pushed_picker_opens_on_its_checked_line_and_pops_to_its_row() {
         PickerKind::SkipInterval => ladder_last(ses::SkipInterval::LADDER.len()),
         PickerKind::InstantDpadSeeking => ladder_last(ses::InstantDpadSeeking::LADDER.len()),
         PickerKind::UriEngine => ladder_last(ses::UriEngine::LADDER.len()),
+        PickerKind::AudioMode => ladder_last(ses::AudioMode::LADDER.len()),
         PickerKind::DolbyVision => ladder_last(ses::DolbyVisionMode::LADDER.len()),
         other => panic!("{other:?} is not a local picker"),
     };
     let playback = super::super::preferences::nav_items_for_test(super::super::preferences::Kind::Playback, None);
-    assert_eq!(playback.len(), 10, "every Playback picker and the Player HUD page are in the table: {playback:?}");
+    assert_eq!(playback.len(), 11, "every Playback picker and the Player HUD page are in the table: {playback:?}");
     assert_eq!(playback.iter().filter(|(_, d)| *d == SettingsPage::PlayerHud).count(), 1, "the Player HUD row is the one that is not a picker");
     for &(row, dest) in playback.iter().filter(|(_, d)| *d != SettingsPage::PlayerHud) {
         let SettingsPage::Picker(kind) = dest else { panic!("a Playback row pushes a picker: {dest:?}") };
