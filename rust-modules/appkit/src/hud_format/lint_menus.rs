@@ -578,16 +578,16 @@ mod tests {
     }
 
     /// **A folded root asks for the room its rows need, and only a package that folds them is asked.** The case
-    /// above is clean at every count of folded rows below its five (the root asks 600 up to three rows, 608 at four,
-    /// and 655 px is room enough), and the fifth makes it 668. Classic folds nothing, so its More menu asks 600 as it
-    /// always did.
+    /// above is clean at every count of folded rows below its four (the root, counted with its Audio mode row, asks
+    /// 600 up to two rows and 608 at three, and 655 px is room enough), and the fourth makes it 668. Classic folds
+    /// nothing, so its More menu asks 600 as it always did.
     #[test]
     fn a_folded_root_asks_for_the_room_its_rows_need() {
         assert_eq!(more_menu::need_h(0), more_menu::NEED_H, "no folded row: the tallest page decides, as before");
-        assert_eq!(more_menu::need_h(3), more_menu::NEED_H, "three rows still fit the 600 the Quality page asks");
-        assert_eq!(more_menu::need_h(4), 608.0);
-        assert_eq!(more_menu::need_h(5), 668.0);
-        assert_eq!(more_menu::need_h(7), 788.0);
+        assert_eq!(more_menu::need_h(2), more_menu::NEED_H, "two rows still fit the 600 the Quality page asks");
+        assert_eq!(more_menu::need_h(3), 608.0);
+        assert_eq!(more_menu::need_h(4), 668.0);
+        assert_eq!(more_menu::need_h(7), 848.0);
         let text = super::super::lint::testing::apply(Base::Minimal, INVALID[3].edits);
         with_cx(&text, |cx| {
             assert_eq!(cx.compiled.folds().len(), 5, "the package folds five commands");
@@ -595,7 +595,7 @@ mod tests {
             for folds in 0..=5 {
                 let found = openers(state.state, folds);
                 let more = found.iter().find(|o| o.menu == Menu::More).expect("the gear");
-                assert_eq!(m2(cx, &state, more).is_some(), folds == 5, "{folds} folded rows: {:?}", more.placed);
+                assert_eq!(m2(cx, &state, more).is_some(), folds >= 4, "{folds} folded rows: {:?}", more.placed);
             }
         });
         with_cx(CLASSIC_HUD, |cx| {

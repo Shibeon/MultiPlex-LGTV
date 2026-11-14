@@ -429,6 +429,9 @@ pub struct PlayerAdapter {
     /// once the Load actually launches (`None`: no preview start is queued). Admission is taken
     /// when the queued start runs, never when it is merely queued.
     preview_admission: Option<bool>,
+    /// The audio mode last handed to the feed ([`Self::sync_audio_processing`]). Starts at `Off`,
+    /// which is what the feed's mirror starts at, so a viewer who never picks a mode sends nothing.
+    audio_processing_sent: plx_playback_contract::feed::AudioProcessing,
     /// The URI-mode probe's session (issue #1064, dev trigger `multiplex-uriprobe`): the probe plays
     /// through `com.webos.media` instead of an [`Engine`], so it lives BESIDE the engine slot and
     /// never in it. [`is_live`](Self::is_live) stays Engine-only: the Engine paths (`pump`, the
@@ -500,6 +503,7 @@ impl PlayerAdapter {
             release_fx: Vec::new(),
             queued_watch: QueuedWatch::Unwatched,
             preview_admission: None,
+            audio_processing_sent: plx_playback_contract::feed::AudioProcessing::Off,
             #[cfg(feature = "devtriggers")]
             uri: None,
             #[cfg(feature = "devtriggers")]
@@ -1796,6 +1800,15 @@ impl PlayerAdapter {
     /// other feed verb.
     pub(super) fn feed_command(&mut self, command: plx_playback_contract::feed::FeedCommand) {
         if let Some(feed) = self.physical.feed() { feed.command(command); }
+    }
+    /// Hand the feed the viewer's audio mode when it differs from the one last handed (a pick in the
+    /// More menu or in Settings, a profile switch): the demuxer applies it to the PCM it decodes from
+    /// the next packet on. One compare a tick otherwise. A composition with no feed has nothing to tell.
+    pub(super) fn sync_audio_processing(&mut self, mode: plx_playback_contract::feed::AudioProcessing) {
+        if mode == self.audio_processing_sent { return; }
+        let Some(feed) = self.physical.feed() else { return };
+        feed.command(plx_playback_contract::feed::FeedCommand::AudioProcessing(mode));
+        self.audio_processing_sent = mode;
     }
     /// The viewer's Pause, carried out by the feed (clock transition, native Pause, transport
     /// commit). A composition with no feed has nothing to pause: the Pause is deferred.

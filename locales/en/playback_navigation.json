@@ -42,5 +42,25 @@
   "settings.playback.uri_engine.on": {
     "value": "Experimental",
     "description": "Choice for the Playback engine setting: the television fetches and decodes the file itself while this app's player and controls stay, an experimental opt-in. A table row label, so short."
+  },
+  "settings.playback.audio_mode": {
+    "value": "Audio mode",
+    "description": "Playback setting title (Settings > Audio & subtitles, and the player's More menu row). The app's own processing of the sound it decodes; default Off. A table row label, so short."
+  },
+  "settings.playback.audio_mode.copy": {
+    "value": "Night mode evens out the volume: loud scenes quieter, quiet dialogue louder. Clear voices lifts the dialogue. No effect when the TV or a receiver decodes the sound.",
+    "description": "Explanation of the Audio mode setting. Names the picker's labels settings.playback.audio_mode.night and settings.playback.audio_mode.voice. Night mode is dynamic range compression; Clear voices lifts the dialogue (the centre channel, or the speech band of a stereo track). It applies only where the app decodes the sound itself: when the television or an AV receiver decodes it, the setting is kept and does nothing."
+  },
+  "settings.playback.audio_mode.off": {
+    "value": "Off",
+    "description": "Choice for the Audio mode setting: the sound is not processed."
+  },
+  "settings.playback.audio_mode.night": {
+    "value": "Night mode",
+    "description": "Choice for the Audio mode setting: dynamic range compression, loud passages quieter and quiet dialogue louder, for late-night viewing. A table row label, so short."
+  },
+  "settings.playback.audio_mode.voice": {
+    "value": "Clear voices",
+    "description": "Choice for the Audio mode setting: the dialogue is lifted above the music and effects. A table row label, so short."
   }
 }

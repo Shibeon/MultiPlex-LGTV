@@ -1074,6 +1074,8 @@ pub fn pump(ps: &mut crate::route::PlaybackSession, pa: &mut super::adapter::Pla
     // The HLS worker's report first, so this frame's samples carry it (the sparse facts take two of
     // its members) and the diagnostics read what the worker last said.
     pa.drain_abr(ps);
+    // The viewer's audio mode reaches the demuxer's PCM without a reload (`super::audio_processing`).
+    pa.sync_audio_processing(super::audio_processing(crate::route::audio_mode()));
     // Capture before a terminal release can clear the callback mailbox, then capture every
     // surviving/replacement Engine after the frame, including its early-return paths. A callback
     // or timeout raised during this tick must reach reports before the app observes Error.

@@ -6384,6 +6384,15 @@ pub fn demux(
                 } else {
                     None
                 };
+                // The audio passes through the app as PCM on these two paths only, and only there does
+                // the viewer's audio mode reach the sound: the player shows its menu entry while this
+                // says so (`FeedRaw::app_pcm_audio`, `player::audio_mode_offered`).
+                let app_pcm = pcm_dec.is_some() || speed_dec.is_some();
+                session.media().publish(DemuxEffect::AppPcmAudio(app_pcm));
+                if app_pcm {
+                    let mode = session.clock().audio_processing();
+                    session.media().record(&format!("ff: audio mode {mode:?} on the app-decoded PCM"));
+                }
                 // Opus goes to the television's own decoder (`ff_native_audio.rs`; its header travels
                 // in the Load). What is fed natively is recorded for the player, which learns a
                 // refusal from it. FLAC, ALAC and LPCM are decoded in the app (`pcm_dec`) and are not native.
@@ -6729,6 +6738,9 @@ pub fn demux(
                         if let Some(dec) = pcm_dec.as_mut() {
                             dec.reset_stream();
                         }
+                        if let Some(dec) = speed_dec.as_mut() {
+                            dec.reset_stream();
+                        }
                         if let Some(batch) = pcm_batch.as_mut() {
                             batch.clear();
                         }
@@ -6917,6 +6929,7 @@ pub fn demux(
                         // ([`AUDIO_AHEAD_HEADROOM`]); the gate is what makes that decision, here.
                         let gate = audio_push_gate(aq_p, headroom.video_reach_ns());
                         let pushed = if let Some(dec) = speed_dec.as_mut() {
+                            dec.set_audio_mode(session.clock().audio_processing());
                             let mut rv = 0;
                             for (au_pts, pcm) in dec.decode(pkt, pts) {
                                 rv = crate::aq::aq_push_gated(
@@ -6944,6 +6957,7 @@ pub fn demux(
                                 || state.drain_wire(),
                             )
                         } else if let Some(dec) = pcm_dec.as_mut() {
+                            dec.set_audio_mode(session.clock().audio_processing());
                             let (pcm_pts, pcm) = match dec.decode(pkt, pts) {
                                 Ok(decoded) => decoded,
                                 Err(why) => {

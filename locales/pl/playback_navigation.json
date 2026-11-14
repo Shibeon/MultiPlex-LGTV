@@ -9,5 +9,10 @@
   "settings.playback.uri_engine": "Silnik odtwarzania",
   "settings.playback.uri_engine.copy": "Tryb eksperymentalny pozwala telewizorowi samodzielnie strumieniować plik. Sterowanie się nie zmienia. Po błędzie film uruchomi się ponownie w trybie standardowym. Niektóre filmy zawsze go używają.",
   "settings.playback.uri_engine.off": "Standardowy",
-  "settings.playback.uri_engine.on": "Eksperymentalny"
+  "settings.playback.uri_engine.on": "Eksperymentalny",
+  "settings.playback.audio_mode": "Tryb dźwięku",
+  "settings.playback.audio_mode.copy": "Tryb nocny wyrównuje głośność: głośne sceny ciszej, ciche dialogi głośniej. Wyraźne głosy wysuwają dialogi na pierwszy plan. Bez efektu, gdy dźwięk dekoduje telewizor lub amplituner.",
+  "settings.playback.audio_mode.off": "Wył.",
+  "settings.playback.audio_mode.night": "Tryb nocny",
+  "settings.playback.audio_mode.voice": "Wyraźne głosy"
 }

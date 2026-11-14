@@ -145,6 +145,9 @@ pub(crate) fn apply_more_action(ps: &mut plx_media::route::PlaybackSession, pa: 
                 pa.set_play_rate(ps, r);
             }
         }
+        // Saved per profile at once; the player hands the new mode to the feed on its next pump
+        // (`PlayerAdapter::sync_audio_processing`), and the decoder crossfades into it.
+        plx_appkit::more_menu::Action::SetAudioMode(mode) => plx_media::route::select_audio_mode(mode, None),
         // Lab builds only. Nothing about playback changes: the snapshot is taken and the toast
         // reports, over whatever the player is doing.
         plx_appkit::more_menu::Action::SendDiagnostics => crate::lab::request_upload("menu", ps, pa),
