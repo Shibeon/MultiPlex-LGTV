@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
+/// Persisted on the television under this tag before the plxnative -> multiplex rename; renaming it
+/// would make every stored state unreadable, so it keeps its name.
 pub const FORMAT: &str = "plxnative-state";
 pub const SCHEMA: u32 = 1;
 pub const MAX_LOGICAL_BYTES: usize = 256 * 1024;

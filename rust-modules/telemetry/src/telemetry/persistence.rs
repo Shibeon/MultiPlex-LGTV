@@ -398,7 +398,7 @@ enum PreviousCanonical {
     Blocked,
 }
 
-/// Decode the complete `multiplex-record` wrapper used by the JSON canonical store that preceded
+/// Decode the complete `plxnative-record` wrapper used by the JSON canonical store that preceded
 /// DB8. A corrupt/future record is terminal and is never treated like an absent legacy source.
 #[cfg(any(
     all(target_os = "linux", target_arch = "arm", not(feature = "hostsim"), not(any(test, feature = "test-support"))),

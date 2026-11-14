@@ -490,7 +490,7 @@ fn versioned_wrapper_is_decoded_before_bare_session_and_clear_is_a_tombstone() {
         ),
         ("wrapper-cleared", serde_json::json!("Cleared")),
     ] {
-        let wrapper = serde_json::json!({"format":"multiplex-record","version":1,"domain":"session","key":"session","revision":7,"state":state});
+        let wrapper = serde_json::json!({"format":"plxnative-record","version":1,"domain":"session","key":"session","revision":7,"state":state});
         let source = LegacyFile::new(name, &wrapper);
         let mut store = MigrationFixture::default();
         let boot = persistence::bootstrap_with(

@@ -21,7 +21,10 @@ pub mod state;
 #[path = "../storage_service/wire.rs"]
 pub mod wire;
 
-const FORMAT: &str = "multiplex-record";
+/// The record wrapper's format tag. Written into every record already stored on a television, so it
+/// keeps the name it was written under (before the plxnative -> multiplex rename): a new tag would
+/// make every existing record unreadable.
+const FORMAT: &str = "plxnative-record";
 const VERSION: u64 = 1;
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -1026,7 +1029,7 @@ mod tests {
         let s = JsonStore::new(d.0.clone()).unwrap();
         std::fs::write(d.0.join("session.json"), br#"{"format":"other"}"#).unwrap();
         assert_eq!(s.load(RecordKey::Session), Err(StoreError::UnknownFormat));
-        std::fs::write(d.0.join("session.json"), br#"{"format":"multiplex-record","version":1,"domain":"consent","key":"session","revision":1,"state":"Cleared"}"#).unwrap();
+        std::fs::write(d.0.join("session.json"), br#"{"format":"plxnative-record","version":1,"domain":"consent","key":"session","revision":1,"state":"Cleared"}"#).unwrap();
         assert_eq!(
             s.load(RecordKey::Session),
             Err(StoreError::DomainKeyMismatch)
@@ -1222,7 +1225,7 @@ mod tests {
 
     #[test]
     fn a_future_record_version_is_not_a_missing_record() {
-        let bytes = br#"{"format":"multiplex-record","version":2,"domain":"session","key":"session","revision":1,"state":"Cleared"}"#;
+        let bytes = br#"{"format":"plxnative-record","version":2,"domain":"session","key":"session","revision":1,"state":"Cleared"}"#;
         assert_eq!(
             parse_record(bytes, RecordKey::Session),
             Err(StoreError::UnsupportedVersion)
@@ -1231,7 +1234,7 @@ mod tests {
             parse_record(&[0xff], RecordKey::Session),
             Err(StoreError::InvalidUtf8)
         );
-        let future_with_new_field = br#"{"format":"multiplex-record","version":2,"domain":"session","key":"session","revision":1,"state":"Cleared","new_field":true}"#;
+        let future_with_new_field = br#"{"format":"plxnative-record","version":2,"domain":"session","key":"session","revision":1,"state":"Cleared","new_field":true}"#;
         assert_eq!(
             parse_record(future_with_new_field, RecordKey::Session),
             Err(StoreError::UnsupportedVersion)
