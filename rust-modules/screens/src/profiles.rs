@@ -1260,8 +1260,14 @@ impl ProfilesScreen {
         }
     }
 
-    fn draw_caption(p: Painter, caption: Option<&str>, cx: f32) {
-        let Some(t) = caption.and_then(|c| CString::new(c).ok()) else { return };
+    /// The caption, elided to the name's own width so a long translation never runs into the
+    /// neighbouring tile's.
+    fn draw_caption(p: Painter, caption: Option<&str>, cx: f32, measure: &dyn plx_machine::machine::Measure) {
+        let Some(c) = caption else { return };
+        let line = plx_gfx::text::elide_by(c, AvatarRow::STYLE.w + AvatarRow::STYLE.gap - 12.0, false, |t| {
+            measure.width_str(t, theme::size::CAPTION, false)
+        });
+        let Ok(t) = CString::new(line) else { return };
         p.text(
             t.as_ptr(),
             cx,
@@ -1817,7 +1823,7 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), false, f.measure);
             Self::draw_face(p, u, rect);
             Self::draw_name(p, u, cx_, false, f.measure);
-            Self::draw_caption(p, self.caption(u), cx_);
+            Self::draw_caption(p, self.caption(u), cx_, f.measure);
             f.stop(
                 p,
                 Stop {
@@ -1843,7 +1849,7 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
                 AvatarRow::STYLE.h,
             );
             Self::draw_name(p, u, cx_, true, f.measure);
-            Self::draw_caption(p, self.caption(u), cx_);
+            Self::draw_caption(p, self.caption(u), cx_, f.measure);
             // the click dip folds into the focused avatar's pop (1.0 when idle)
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), true, f.measure);
             Self::draw_face(p, u, rect);
