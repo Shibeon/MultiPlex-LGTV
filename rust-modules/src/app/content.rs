@@ -646,6 +646,12 @@ pub(crate) fn content_requests(app: &mut App, fr: &mut Frame) {
                 let subject = subject.as_ref().map(|(sid, rk)| (*sid, rk.as_str()));
                 bridge::open_content_panel(&mut app.pages, instance, subject, panel);
             }
+            ContentReq::HeroMenu { rows, anchor } => {
+                halt_preview(app);
+                if open_hero_menu(&mut app.pages, instance, entry, rows, anchor, &ret) {
+                    app.ok_armed = false;
+                }
+            }
             ContentReq::ItemMenu => {
                 halt_preview(app);
                 // The ROUTE does not move: a surface is presented over the top page and never
@@ -677,6 +683,37 @@ pub(crate) fn content_requests(app: &mut App, fr: &mut Frame) {
         }
         super::bridge::reseat_player_focus_on_primary(&mut app.pages);
     }
+}
+
+/// **The Detail hero's More disc, performed**: the shared item menu over the page, its rows the
+/// page's own controls (`ContentReq::HeroMenu`). Only a Detail page has a hero, and a committed row
+/// goes back to THIS instance (`ItemMenuKind::Hero`'s `host`). Answers whether the menu was asked
+/// for. Shared with the route-test world's pump, so a key test opens the menu the loop opens.
+pub(crate) fn open_hero_menu(
+    pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>,
+    instance: plx_machine::machine::InstanceId,
+    entry: EntryId,
+    rows: Vec<plx_screens::registry::HeroMenuRow>,
+    anchor: [u32; 4],
+    ret: &plx_ui::screen::ReturnState<u32, plx_screens::registry::PageMemory>,
+) -> bool {
+    let Some(AppArg::Content(ContentArg::Detail { sid, rk })) = pages.nav.entry(entry).map(|e| &e.arg) else {
+        return false;
+    };
+    let arg = plx_screens::registry::ItemMenuArg {
+        sid: *sid,
+        rk: rk.clone(),
+        kind: plx_screens::registry::ItemMenuKind::Hero { host: instance, rows },
+        host: entry,
+        focus: ret.focus,
+        anchor,
+        loaded_episode: false,
+        from_home: false,
+        catalog: None,
+        watchlist: None,
+    };
+    super::bridge::open_item_menu(pages, arg);
+    true
 }
 
 /// **Home's BACK fold, performed**: the screen owns the fold (its dive), the input engine owns the

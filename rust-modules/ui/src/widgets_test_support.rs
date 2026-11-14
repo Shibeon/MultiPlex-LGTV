@@ -87,9 +87,9 @@ pub(super) fn contrast_over_art(ink: [f32; 4], art: f32, a: f32) -> f32 {
 /// is quoted from the device font; the shared leading remains the source for the inter-line step.
 pub(super) const HERO_CAP_H: f32 = 35.0 + theme::hero::TITLE_LEAD;
 
-/// The same line on the detail page, where the band's anchor is `TITLE_BOTTOM` outright.
+/// The same line on the detail page, where the band's anchor is `TITLE_FOOT` outright.
 pub(super) fn detail_title_cap_top() -> f32 {
-    crate::detail_layout::TITLE_BOTTOM - HERO_CAP_H
+    crate::detail_layout::TITLE_FOOT - HERO_CAP_H
 }
 
 /// A spread of pill widths. Deliberately wider than the device's (a real "TV" pill measures

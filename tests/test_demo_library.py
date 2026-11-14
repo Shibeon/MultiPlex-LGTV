@@ -417,7 +417,8 @@ class HeroGeometry(unittest.TestCase):
         for got, want in zip(v["box"], (1181.25, 121.5, 1795.5, 700.65)):
             self.assertAlmostEqual(got, want, delta=1.0)
         self.assertGreaterEqual(v["centre_x"], tool.HERO_CENTRE_MIN_X)
-        self.assertEqual({n: a for n, a in v["overlaps"].items() if a}, {})
+        advisory = {z["name"] for z in tool.hero_zones() if z.get("advisory")}
+        self.assertEqual({n: a for n, a in v["overlaps"].items() if a and n not in advisory}, {})
 
     def art(self, w, h, subject, **recipe):
         """(assets, record) for a title whose backdrop is a `w`x`h` source with `recipe`."""
@@ -527,16 +528,16 @@ class HeroGeometry(unittest.TestCase):
         v = self.verdict(3840, 2160, [2800, 1700, 3400, 2100])  # frame (1400,850)-(1700,1050)
         self.assertIn("overlap:home shelf row", v["reasons"])
 
-    def test_a_subject_in_the_starring_column_fails(self):
+    def test_a_subject_in_the_detail_lower_right_fails(self):
         v = self.verdict(3840, 2160, [3000, 1406, 3400, 1414])  # frame (1500,703)-(1700,707)
-        self.assertEqual(v["reasons"], ["overlap:detail starring column"])  # y 707 is above the shelf row (708)
+        self.assertEqual(v["reasons"], ["overlap:detail lower right"])  # y 707 is above the shelf row (708)
 
-    def test_a_subject_over_the_detail_synopsis_or_facts_fails(self):
+    def test_a_subject_over_the_detail_text_column_fails_and_the_wrap_band_only_reports(self):
         v = self.verdict(3840, 2160, [1800, 700, 2000, 900])  # frame (900,350)-(1000,450)
         self.assertIn("overlap:detail text column", v["reasons"])
-        v = self.verdict(3840, 2160, [2100, 1420, 2500, 1500])  # frame (1050,710)-(1250,750)
-        # the facts row stands inside the Home shelf row's band (from y 708), so both are named
-        self.assertEqual(v["reasons"], ["centre-left", "overlap:home shelf row", "overlap:detail facts row"])
+        v = self.verdict(3840, 2160, [2400, 400, 2800, 1000])  # frame (1200,200)-(1400,500)
+        self.assertEqual((v["verdict"], v["reasons"]), ("pass", []), v)
+        self.assertGreater(v["overlaps"]["detail text wrap band"], 0)
 
     def test_touching_a_zone_is_not_overlapping_it(self):
         # frame (1039,350)-(1400,500): its left edge is the detail text column's right edge
@@ -654,20 +655,22 @@ class HeroGeometry(unittest.TestCase):
     def test_the_zones_are_built_from_the_pins_and_every_pin_feeds_a_zone(self):
         zones = tool.hero_zones()
         self.assertEqual([z["name"] for z in zones if not z.get("advisory")],
-                         ["home text column", "home shelf row", "detail text column",
-                          "detail facts row", "detail starring column"])
+                         ["home text column", "home shelf row", "detail poster", "detail text column",
+                          "detail lower right"])
         by = {z["name"]: z["rect"] for z in zones}
         self.assertEqual(by["home text column"], [96, 206, 1039, 728])
         self.assertEqual(by["home shelf row"], [0, 708, 1920, 1080])
-        self.assertEqual(by["detail text column"], [96, 326, 1039, 1080])
-        self.assertEqual(by["detail facts row"], [1039, 714, 1264, 842])
-        self.assertEqual(by["detail starring column"], [1264, 702, 1824, 1080])
+        self.assertEqual(by["detail poster"], [96, 240, 422, 729])
+        self.assertEqual(by["detail text column"], [486, 66.88, 1039, 1080])
+        self.assertEqual([z["name"] for z in zones if z.get("advisory")], ["detail text wrap band"])
+        self.assertEqual(by["detail text wrap band"], [1039, 66.88, 1429, 1080])
+        self.assertEqual(by["detail lower right"], [1429, 702, 1824, 1080])
         used = {n for z in zones for n in z["uses"]}
         self.assertEqual(used, set(tool.HERO_PINS) - {n for n, p in tool.HERO_PINS.items() if p[1] == "text"})
 
     def test_a_drifted_python_copy_fails_naming_the_constant_and_its_file(self):
         for name, wrong in (("MARGIN_X", 90.0), ("COL_W", 600.0), ("PEEK_Y", 828.0), ("HERO_TEXT_W", 990.0),
-                            ("HERO_LOGO_TOP_HOME", 300.0), ("DETAIL_TITLE_BOTTOM", 500.0)):
+                            ("HERO_LOGO_TOP_HOME", 300.0), ("TITLE_FOOT", 500.0), ("TEXT_X", 400.0)):
             with self.subTest(name=name):
                 pins = {k: list(v) for k, v in tool.HERO_PINS.items()}
                 pins[name][-1] = wrong

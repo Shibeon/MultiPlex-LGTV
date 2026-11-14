@@ -185,6 +185,8 @@ fn content_request(request: &plx_screens::registry::ContentReq) -> Result<Value,
         ContentReq::PreviewTransport(play) => json!({"preview_transport":play}),
         ContentReq::PreviewSeek(position) => json!({"preview_seek":position}),
         ContentReq::ItemMenu => json!("itemmenu"),
+        ContentReq::HeroMenu { rows, anchor } => json!({"hero_menu":{
+            "rows":rows.iter().map(|r| r.elem).collect::<Vec<_>>(),"anchor":anchor}}),
         ContentReq::Panel(panel) => json!({"panel":match panel {
             ContentPanel::AltSources { anchor } => json!({"alt_sources":anchor}),
             ContentPanel::Versions { anchor } => json!({"versions":anchor}),

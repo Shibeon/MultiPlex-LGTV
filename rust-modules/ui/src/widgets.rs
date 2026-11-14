@@ -1791,19 +1791,6 @@ pub fn keyline_chip(p: Painter, x: f32, cy: f32, text: &str, col: [f32; 4], meas
     w
 }
 
-/// The identity band shared by both full-bleed heroes. The text run yields room to the
-/// outlined resolution/accessibility chips, and overlong metadata elides within its column.
-/// Returns the width drawn, from `r.x` to the last chip's edge.
-pub fn hero_identity(p: Painter, r: Rect, parts: &[&str], resolution: Option<&str>, chips: &[&str], measure: &dyn plx_machine::machine::Measure) -> f32 {
-    identity_row(Some(p), r, parts, resolution, chips, theme::TEXT_SECONDARY, measure)
-}
-
-/// The width [`hero_identity`] draws in `r`, asking the same measurements and drawing nothing: the
-/// extent the hero shade stands behind ([`crate::hero_shade::HeroShade::add_ink`]).
-pub fn hero_identity_w(r: Rect, parts: &[&str], resolution: Option<&str>, chips: &[&str], measure: &dyn plx_machine::machine::Measure) -> f32 {
-    identity_row(None, r, parts, resolution, chips, theme::TEXT_SECONDARY, measure)
-}
-
 /// Home's metadata band uses brighter reading ink over the hero art and reserves room for the rating.
 pub fn hero_metadata(p: Painter, r: Rect, parts: &[&str], quality: Option<&str>, rating: &str, measure: &dyn plx_machine::machine::Measure) {
     let rating = (!rating.is_empty() && keyline_chip_w(rating, measure) <= r.w * 0.5).then_some(rating);
@@ -1811,7 +1798,9 @@ pub fn hero_metadata(p: Painter, r: Rect, parts: &[&str], quality: Option<&str>,
     identity_row(Some(p), r, parts, quality, chips, theme::TEXT_READING, measure);
 }
 
-/// The one layout of the identity band, painted with `paint` or only measured without it.
+/// The one layout of Home's identity band: the text run yields room to the outlined
+/// resolution/rating chips, and overlong metadata elides within its column. Painted with `paint`,
+/// or only measured without it; returns the width from `r.x` to the last chip's edge.
 fn identity_row(paint: Option<Painter>, r: Rect, parts: &[&str], resolution: Option<&str>, chips: &[&str], ink: [f32; 4], measure: &dyn plx_machine::machine::Measure) -> f32 {
     use crate::hstack::{Flow, Item};
     let labels: Vec<&str> = resolution.into_iter().chain(chips.iter().copied()).collect();
@@ -1844,28 +1833,6 @@ fn identity_row(paint: Option<Painter>, r: Rect, parts: &[&str], resolution: Opt
         }));
     }
     flow.end() - r.x
-}
-
-#[cfg(test)]
-#[test]
-fn pdf_proposal_identity_uses_regular_caption_for_fitting_and_elided_metadata() {
-    let measure = crate::fixture::FixtureMeasure;
-    for (width, parts) in [(943.0, vec!["Movie", "Drama", "PG"]),
-        (260.0, vec!["An exceptionally long edition name that must be elided", "Movie", "Drama", "PG"])] {
-        let r = Rect::new(96.0, 582.0, width, BADGE_H);
-        let mut drawn = 0.0;
-        let runs = crate::draw_census::capture_runs(|| {
-            drawn = hero_identity(Painter::recording(), r, &parts, Some("4K"), &["CC"], &measure);
-        });
-        assert!(!runs.is_empty());
-        assert!(drawn > 0.0);
-        assert_eq!(hero_identity_w(r, &parts, Some("4K"), &["CC"], &measure), drawn,
-            "the measured-only width is the width the draw gives, elided or not");
-        for run in runs {
-            assert_eq!(run.size, theme::size::CAPTION, "PDF identity is 24 px, including {:?}", run.text);
-            assert!(!run.bold, "PDF metadata and chips use regular weight");
-        }
-    }
 }
 
 /// The year/episode date and length/remaining-time band, with source attribution last.
@@ -8041,6 +8008,11 @@ pub enum ControlStyle {
     /// deleting it would take `Button::plate`'s knockout branch with it; reach for the ground, not
     /// for this, when a control lands on video.
     Keyline,
+    /// The **primary** face — a page's one main action standing on its artwork (the Detail hero's
+    /// Play/Resume capsule): idle it is a light plate with dark ink ([`theme::CONTROL_PRIMARY_FILL`],
+    /// [`theme::CONTROL_PRIMARY_INK`]) so it reads first among the row's dark controls; focused it
+    /// takes the standard [`Accent`](Self::Accent) treatment, so focus reads alike across the family.
+    Primary,
     /// The **destructive** face — the control that ends something (a decision alert's destructive
     /// answer, e.g. consent's *Delete all local data*).
     ///
@@ -8440,6 +8412,8 @@ impl ControlStyle {
             },
             ControlStyle::Accent => flat(palette.idle, theme::CONTROL_IDLE_INK, palette.spent),
             ControlStyle::Custom { fill, ink } => flat(fill, ink, theme::CONTROL_SPENT_FILL),
+            ControlStyle::Primary if focused => ControlStyle::Accent.face(true, ground, palette),
+            ControlStyle::Primary => flat(theme::CONTROL_PRIMARY_FILL, theme::CONTROL_PRIMARY_INK, theme::CONTROL_SPENT_FILL),
             ControlStyle::Keyline if focused && ground == ControlGround::Keyed => ControlFace {
                 top: palette.focus_top,
                 body: palette.focus_body,
@@ -8997,7 +8971,16 @@ pub enum BadgeStyle {
     /// chip in that hue over a tile that already carries a state mark would be a second, competing
     /// claim about the same item (see `ui/CLAUDE.md`'s one-vocabulary rule).
     OverArt,
+    /// A HAIRLINE ring and its label in ONE hue, nothing inside — the Detail hero's technical
+    /// pills (`theme::TECH_VIDEO_INK` and its siblings), which stand straight on the artwork as an
+    /// outline the way the PLEX PASS capsule's outline form does ([`Painter::rring`]). The hue is
+    /// what the pill is about, so the caller passes a `TECH_*` role, never a raw colour.
+    Ring { ink: [f32; 4] },
 }
+/// [`BadgeStyle::Ring`]'s corner radius and stroke: the PLEX PASS capsule's outline geometry, so
+/// the two outlined capsule families on the Detail hero share one silhouette.
+const RING_RAD: f32 = 8.0;
+const RING_STROKE: f32 = 2.0;
 /// The chip's height — one band for every style, so a row mixing them stays on one line. Public
 /// because a caller that pins a chip to an edge (the episode still's duration pill) needs to know
 /// how tall the thing it is placing is.
@@ -9176,6 +9159,10 @@ pub fn badge(
             let rad = r.h * 0.5;
             p.rrect(r, rad, rad, theme::CONTROL_IDLE_FILL);
             theme::CONTROL_IDLE_INK
+        }
+        BadgeStyle::Ring { ink } => {
+            p.rring(r, RING_RAD, RING_STROKE, ink);
+            ink
         }
     };
     let ty = plx_gfx::text::text_vcenter_y(sz, 1, cy);
@@ -9356,6 +9343,63 @@ pub fn rating_group(
         }
         RatingPart::Suffix(s) => text(s, span.x, base, theme::size::MICRO, theme::TEXT_TERTIARY, 0),
     })
+}
+
+// ---- The viewer's own rating: five stars ------------------------------------------------------
+//
+// The Detail hero's ratings row ends with the SEATED viewer's own score (Plex `userRating`, 0..10)
+// as five stars after the providers' groups (MultiPlex web's detail page). A display, not a
+// control: nothing here writes a rating. Whole stars only — a half star needs a clip the mark's
+// one-mask rasterizer has no use for anywhere else, and the 0..10 scale rounds to the nearest of
+// the five.
+
+/// How many stars the row draws.
+pub const USER_STARS: usize = 5;
+/// One star's box: the rating marks' own box ([`RATING_MARK_D`]) a rung smaller, so five of them
+/// read as one quiet run beside a provider's mark rather than five more verdicts.
+const USER_STAR_D: f32 = RATING_MARK_D - theme::space::XS;
+/// The air between two stars.
+const USER_STAR_GAP: f32 = theme::space::XS;
+
+/// How many of the five stars a `0..=10` rating lights.
+pub fn user_stars_lit(rating: f32) -> usize {
+    ((rating.clamp(0.0, 10.0) / 2.0).round() as usize).min(USER_STARS)
+}
+
+fn user_stars_stack(x: f32) -> crate::hstack::HStack<'static> {
+    const ITEMS: [crate::hstack::Item; USER_STARS] = [crate::hstack::Item::new(USER_STAR_D); USER_STARS];
+    crate::hstack::HStack::new(&ITEMS, USER_STAR_GAP, crate::hstack::Align::Leading(x))
+}
+
+/// Width [`user_stars`] occupies.
+pub fn user_stars_w() -> f32 {
+    user_stars_stack(0.0).width()
+}
+
+/// Draw the five stars with the first one's LEFT edge at `x`, centred on `cy`; returns their width.
+/// `rating` is the viewer's `0..=10` score (0: not rated, every star off).
+pub fn user_stars(p: Painter, x: f32, cy: f32, rating: f32) -> f32 {
+    let lit = user_stars_lit(rating);
+    let stack = user_stars_stack(x);
+    for placed in stack.placed() {
+        let ink = if placed.i < lit { theme::USER_RATING_ON } else { theme::USER_RATING_OFF };
+        let r = Rect::new(placed.x, cy - USER_STAR_D * 0.5, USER_STAR_D, USER_STAR_D);
+        crate::icons::draw(p, crate::icons::Icon::Star, r, ink);
+    }
+    stack.width()
+}
+
+#[cfg(test)]
+#[test]
+fn a_rating_lights_the_nearest_whole_star_count() {
+    assert_eq!(user_stars_lit(0.0), 0);
+    assert_eq!(user_stars_lit(1.0), 1);
+    assert_eq!(user_stars_lit(6.0), 3);
+    assert_eq!(user_stars_lit(9.0), 5);
+    assert_eq!(user_stars_lit(10.0), 5);
+    assert_eq!(user_stars_lit(42.0), 5);
+    assert_eq!(user_stars_lit(-1.0), 0);
+    assert!((user_stars_w() - (5.0 * USER_STAR_D + 4.0 * USER_STAR_GAP)).abs() < 1e-3);
 }
 
 #[cfg(test)]

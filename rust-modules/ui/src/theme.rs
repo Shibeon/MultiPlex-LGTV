@@ -106,6 +106,9 @@ const RED_400: [f32; 4] = rgb8(0xeb, 0x52, 0x4a);
 const RED_500: [f32; 4] = rgb8(0xf5, 0x34, 0x1a);
 const GREEN_400: [f32; 4] = rgb8(0x3e, 0xc9, 0x6b);
 const GREEN_500: [f32; 4] = rgb8(0x2f, 0xae, 0x5b);
+// Violet — the one hue the Detail hero's technical pills give SOUND (`TECH_AUDIO_INK`), so the
+// picture's amber pill and the sound's pill read as two kinds of fact at a glance (MultiPlex web).
+const VIOLET_300: [f32; 4] = rgb8(0xa7, 0x8b, 0xfa);
 
 // The two ALPHA ramps are `WHITE`/`BLACK` at a measured weight, spelled `with_a(WHITE, .20)` at the
 // role: a new overlay is a weight on that ramp, never a new hue. `NEUTRAL_900` (#0c0c0d) is not a
@@ -246,8 +249,9 @@ pub mod layout {
 pub mod hero {
     /// Both full-bleed heroes use the same reading column in the proposal.
     pub const TEXT_W: f32 = 943.0;
-    /// Edition, kind, genres and content rating on the Detail hero: regular 24 px, as in the PDF.
-    /// Home's hero draws no identity line (board CW-13 v2).
+    /// The identity band's text (edition, kind, date, length, genres): regular 24 px, as in the
+    /// PDF. Home's metadata band draws it (`widgets::hero_metadata`); the Detail hero has no
+    /// identity line since its two-column restyle (its meta line is `detail::hero::draw_facts`).
     pub const IDENTITY_SIZE: i32 = super::size::CAPTION;
     /// Long titles without a clearLogo wrap over at most two DISPLAY lines.
     pub const TITLE_LINES: usize = 2;
@@ -257,6 +261,9 @@ pub mod hero {
 
     /// Minimum Play/Resume capsule; translated labels may grow beyond it.
     pub const PLAY_MIN_W: f32 = 224.0;
+    /// The Detail hero's WIDE primary Play/Resume capsule (MultiPlex web's detail page): the one
+    /// pill on its row, beside the round More disc, so it takes the room the discs gave up.
+    pub const DETAIL_PLAY_W: f32 = 336.0;
     /// Detail's lower shade reaches the credits at this knee.
     pub const SCRIM_MID_Y: f32 = 650.0;
     /// Opacity at the atmospheric midpoint. The shade ([`super::shade`]) supplies local contrast.
@@ -288,17 +295,22 @@ pub mod hero {
 /// Shared ink and geometry for the continuous Home and Detail edge fields and Catalog's
 /// feathered content blocks. Both field types use `gfx::scrim::GroundShade`.
 pub mod shade {
-    /// Detail needs legibility farther into the art for its wider title and synopsis.
-    pub const DETAIL_SIDE_X: [f32; 2] = [600.0, 1700.0];
-    /// Normal vertical entrance of the Detail shade.
-    pub const DETAIL_SIDE_Y: [f32; 2] = [120.0, 400.0];
-    /// Shift the fade upward as the preview logo travels into the corner.
-    pub const DETAIL_PREVIEW_RISE: f32 = 260.0;
+    /// Detail holds its edge shade across the whole text column (poster and copy side by side
+    /// reach two thirds of the screen), feathering out only past the column's right edge.
+    pub const DETAIL_SIDE_X: [f32; 2] = [1480.0, 1900.0];
+    /// Normal vertical entrance of the Detail shade: it starts below the top margin (the corner
+    /// the preview's logo travels to stays clear at rest) and is full before the title, which
+    /// stands level with the poster's top.
+    pub const DETAIL_SIDE_Y: [f32; 2] = [60.0, 200.0];
+    /// Shift the fade upward as the preview logo travels into the corner. The entrance already
+    /// stands near the top, so a short rise is enough, and a short one keeps the side's share at
+    /// the corner small enough that the shade there only ever deepens as the top fade takes over.
+    pub const DETAIL_PREVIEW_RISE: f32 = 100.0;
     /// Full-width top fade behind the compact preview title and the full-screen hint.
     pub const DETAIL_PREVIEW_TOP_Y: [f32; 2] = [20.0, 245.0];
     pub const DETAIL_PREVIEW_TOP_A: f32 = 0.45;
     /// Top and knee of the preview's bottom ramp, below the gap and behind the first lines of copy.
-    pub const DETAIL_PREVIEW_FOOT_Y: [f32; 2] = [520.0, 630.0];
+    pub const DETAIL_PREVIEW_FOOT_Y: [f32; 2] = [300.0, 440.0];
     /// Detail's edge shade strength before the preview boost.
     pub const DETAIL_SIDE_A: f32 = 0.65;
     /// Inactive pagination dots still need contrast against the art.
@@ -444,6 +456,11 @@ pub const FIELD_EDITING_INK: [f32; 4] = TEXT_PRIMARY;
 /// alone — never a second spring.
 pub const FIELD_WAITING_INK: [f32; 4] = WHITE;
 
+/// The idle plate of a page's PRIMARY action ([`ControlStyle::Primary`](crate::widgets::ControlStyle::Primary)):
+/// near-white, so the main action reads first among the row's dark controls.
+pub const CONTROL_PRIMARY_FILL: [f32; 4] = COOL_0;
+/// The ink on [`CONTROL_PRIMARY_FILL`]: the focused face's own dark ink.
+pub const CONTROL_PRIMARY_INK: [f32; 4] = ACCENT_INK;
 /// Idle (unfocused) control disc/pill fill — solid dark, faintly translucent.
 pub const CONTROL_IDLE_FILL: [f32; 4] = with_a(NEUTRAL_650, 0.92);
 /// White glyph/label over an idle control. Both grounds ink it the same: the design system states
@@ -1383,6 +1400,23 @@ pub const RATING_AUDIENCE: [f32; 4] = GREEN_400;
 /// deliberately not [`RATING_AUDIENCE`]: they are two marks' greens that land close, and folding
 /// them would let an audience tweak silently restyle a leaf.
 pub const RATING_LEAF: [f32; 4] = GREEN_500;
+/// A filled star of the viewer's OWN rating on the Detail hero (`widgets::user_stars`): the amber
+/// of [`RATING_CERTIFIED`]'s stop, its own role because a star is the viewer's word and a tomato
+/// is a critic's.
+pub const USER_RATING_ON: [f32; 4] = AMBER_300;
+/// A star the viewer's rating does not reach (and all five of an unrated title): caption weight,
+/// [`RATING_MUTED`]'s stop.
+pub const USER_RATING_OFF: [f32; 4] = COOL_400;
+
+// ── Technical pills (the Detail hero's last row, `widgets::BadgeStyle::Ring`) ─────────────────────
+// An outline and its label in ONE hue, nothing inside, so the pill sits on the artwork as a
+// hairline. The hue names WHAT the pill is about, never how good it is.
+/// The picture: resolution, HDR, Dolby Vision.
+pub const TECH_VIDEO_INK: [f32; 4] = AMBER_300;
+/// The sound: the audio codec and its channel layout.
+pub const TECH_AUDIO_INK: [f32; 4] = VIOLET_300;
+/// Accessibility tracks (CC, SDH, AD): neutral, the secondary text stop.
+pub const TECH_ACCESS_INK: [f32; 4] = COOL_300;
 /// The drained state, for both a hollow tomato and a negated crowd — `COOL_400`, the same stop
 /// [`TEXT_TERTIARY`] resolves to, because the negation is literally "this has the weight of a
 /// caption now". Its own role ON that stop rather than an alias OF the text token: a verdict mark

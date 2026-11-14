@@ -333,19 +333,16 @@ fn detail_watch_activation_dispatches_the_addressed_store_effect_in_the_press_fr
     }));
     dispatcher.frame_with(&mut rig, tick(1), Vec::new(), Vec::new(), &mut NoTap, false);
     let play = dispatcher.focus().expect("Detail seats its Play control");
-    // The row is Play, the Watchlist disc, then the watch toggle: two RIGHTs reach the toggle.
-    dispatcher.frame_with(&mut rig, tick(2), script_key(Key::Right, tick(2)), Vec::new(),
-        &mut NoTap, false);
-    dispatcher.frame_with(&mut rig, tick(3), script_key(Key::Right, tick(3)), Vec::new(),
-        &mut NoTap, false);
-    let watch = dispatcher.focus().expect("RIGHT twice reaches the watch control");
-    assert_ne!(watch.elem, play.elem);
+    // The watch toggle is a row of the hero's More menu: committing it delivers the hero action
+    // to the page, exactly as the menu's row does (`item_menu`'s `Action::Hero`).
+    // `detail::hero::ELEM_MARK_WATCHED`: the hero is private to the screens crate.
+    const MARK_WATCHED: u32 = 3;
 
     rig.stores.viewstate.borrow_mut().hold_inflight_for_test(sid, "held");
     let instance = dispatcher.nav.top_page().and_then(|entry| entry.inst.as_ref())
         .expect("the Detail page is mounted").id;
     dispatcher.emit(MachineId::Nav, Fx::Deliver(MachineId::Instance(instance),
-        Delivery::Screen(ScreenEvent::Activate(watch.elem))));
+        Delivery::Screen(ScreenEvent::App(AppMsg::HeroAction(MARK_WATCHED)))));
     let mut tap = ViewStateDispatch { sid, app_effects: 0, store_deliveries: 0 };
     dispatcher.frame_with(&mut rig, tick(4), Vec::new(), Vec::new(), &mut tap, false);
 
@@ -353,8 +350,8 @@ fn detail_watch_activation_dispatches_the_addressed_store_effect_in_the_press_fr
         "the Detail effect must cross the addressed Bridge store delivery exactly once");
     assert!(rig.stores.metadata.view().current().is_some_and(|detail| detail.watched),
         "the owning Bridge applies the optimistic edit before the press frame ends");
-    assert_ne!(dispatcher.focus().expect("the watch control remains focused").elem, watch.elem,
-        "same-frame reconciliation follows the watch control to its new identity");
+    assert_eq!(dispatcher.focus().expect("the hero keeps its focus").elem, play.elem,
+        "a menu action leaves the row's focus where it stood");
 }
 
 #[test]

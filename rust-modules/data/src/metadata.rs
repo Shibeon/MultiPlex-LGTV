@@ -1687,6 +1687,16 @@ pub struct Detail {
     pub dovi: Dovi,
     pub art: String,
     pub thumb: String,
+    /// The hero's POSTER card art: a portrait image of what the page is about — the show's poster
+    /// for an episode (`grandparentThumb`, its own `thumb` is a 16:9 still), else the item's own
+    /// `thumb`. Empty: the card draws its placeholder. Not serialized while empty, so the committed
+    /// replay recordings (which predate it) still round-trip canonically (`record::validate`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub poster: String,
+    /// The signed-in viewer's own score, `0..=10` rounded (`userRating`; 0: not rated) — the
+    /// hero's star row. Not serialized while 0, for the reason [`Self::poster`] gives.
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub user_rating: u8,
     /// The item's own `UltraBlurColors` corners (tl, tr, br, bl — the ring order
     /// [`plex::UltraBlurColors::corners`](plx_plex::plex::UltraBlurColors::corners) owns) and whether
     /// the server sent a usable envelope — what keys the detail page's ambient GROUND. It lives on
@@ -1743,6 +1753,16 @@ pub struct Detail {
     /// hero's Play Version disc; empty for a single-version item and for a show or season.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub versions: Vec<crate::pms::MediaVersion>,
+}
+
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
+}
+
+/// `userRating` (`0.0..=10.0`) as the hero's whole-point score; anything outside the range reads as
+/// unrated, never as a clamped extreme.
+pub fn user_rating_of(v: f64) -> u8 {
+    if v.is_finite() && (0.0..=10.0).contains(&v) { v.round() as u8 } else { 0 }
 }
 
 impl Detail {
@@ -2337,6 +2357,12 @@ fn fetch_detail(client: &'static plx_plex::plex::Client, sid: plx_plex::plex::Se
         dovi: Dovi::default(),
         art: it.art.clone(),
         thumb: it.thumb.clone(),
+        poster: if it.kind == "episode" && !it.grandparent_thumb.is_empty() {
+            it.grandparent_thumb.clone()
+        } else {
+            it.thumb.clone()
+        },
+        user_rating: user_rating_of(it.user_rating),
         blur: blur.unwrap_or_default(),
         has_blur: blur.is_some(),
         genres: it.genre.iter().map(|t| t.tag.clone()).collect(),

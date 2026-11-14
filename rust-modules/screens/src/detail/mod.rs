@@ -204,8 +204,8 @@ pub struct DetailScreen {
     preview_dwell: f32,
     preview_promoted: bool,
     preview_art: f32,
-    /// Identity line, ratings, facts and people — everything the hero's meta says EXCEPT the
-    /// synopsis, which keeps its own [`preview_synopsis`](Self::preview_synopsis) so it can stay
+    /// The meta line, ratings, credit table and technical pills — everything the hero's text
+    /// column says EXCEPT the synopsis, which keeps its own [`preview_synopsis`](Self::preview_synopsis) so it can stay
     /// visible through background autoplay while the rest of the meta clears.
     preview_prose: f32,
     preview_synopsis: f32,
@@ -314,12 +314,11 @@ pub struct DetailScreen {
     tabs: TabStrip,
     season_pop: CtlPop<1>,
     ctl_pop: CtlPop<{ hero::MAX_CTLS }>,
-    disc_unfurl: [Spring; hero::DISCS],
-    /// The bookmark disc: what the app last said of the title's membership, the flip toward its
-    /// face ([`plx_appkit::watchlist_disc::flip_frame`]) and a pending press, all the shared
-    /// [`plx_appkit::watchlist_disc::Disc`]'s. Render and input state only (never hashed): the
-    /// Watchlist store owns the truth, this page keeps no copy of the list.
-    watchlist: plx_appkit::watchlist_disc::Disc,
+    /// What the app last said of the title's Watchlist membership: the More menu's Watchlist row
+    /// reads Add or Remove from it. Nothing on the page draws it, so it has no face to flip. Input
+    /// state only (never hashed): the Watchlist store owns the truth, this page keeps no copy of
+    /// the list.
+    watchlist: plx_data::catalog::Membership,
     /// The loaded item's catalog id (movie or show guid, decoded once), mirrored for the app's feed.
     watchlist_hex: Option<[u8; 12]>,
     season_metrics: season::Metrics,
@@ -544,11 +543,11 @@ impl DetailScreen {
         self.watchlist_hex
     }
 
-    /// The membership the bookmark disc wears: On draws the filled face, Off and Unknown the outline
-    /// (the PUT is idempotent, so an unknown membership offers Add). A change flips the disc.
+    /// The title's Watchlist membership, for the More menu's Watchlist row: On offers Remove, Off and
+    /// Unknown offer Add (the PUT is idempotent, so an unknown membership offers Add).
     pub fn set_watchlist(&mut self, membership: plx_data::catalog::Membership) {
-        // When the disc snaps and when it animates is its own rule (`watchlist_disc::Disc::set`).
-        if self.watchlist.set(membership) {
+        if self.watchlist != membership {
+            self.watchlist = membership;
             plx_machine::idle::invalidate();
         }
     }
@@ -577,9 +576,9 @@ impl DetailScreen {
         if self.upcoming.list == d.episodes.id() { &self.upcoming.cells } else { &[] }
     }
 
-    /// The membership the disc currently wears.
+    /// The membership the More menu's Watchlist row reads.
     pub fn watchlist(&self) -> plx_data::catalog::Membership {
-        self.watchlist.membership()
+        self.watchlist
     }
 
     pub fn new(entry: EntryId, sid: ServerId, rk: String, hubs: plx_data::pms::HubsView<'_>) -> Self {
@@ -638,8 +637,7 @@ impl DetailScreen {
             tabs: TabStrip::new(),
             season_pop: CtlPop::new(),
             ctl_pop: CtlPop::new(),
-            disc_unfurl: [Spring::at(0.0); hero::DISCS],
-            watchlist: plx_appkit::watchlist_disc::Disc::new(plx_data::catalog::Membership::Unknown),
+            watchlist: plx_data::catalog::Membership::Unknown,
             watchlist_hex: None,
             season_metrics: season::Metrics::new(),
             about_rows: about::Rows::new(),
@@ -906,13 +904,11 @@ impl DetailScreen {
         }
     }
 
-    /// The More disc follows the on-deck subject even when a different season is loaded below it.
-    pub fn hero_menu_episode<'a>(&self, focus: Option<FocusKey<u32>>, meta: plx_data::metadata::MetadataView<'a>)
-        -> Option<(&'a plx_data::metadata::Episode, PosterMark)> {
-        let key = focus.filter(|key| key.entry == self.entry)?;
-        if key.elem != hero::ELEM_MORE { return None; }
-        let ep = hero::hero_episode(self.detail(meta)?)?;
-        Some((ep, episodes::watch_state(ep)))
+    /// The More menu's rows for the item as it stands: the hero actions the row does not draw
+    /// (`hero::menu_rows`), labelled for the episode the hero presents and the Watchlist membership
+    /// the page last heard.
+    pub fn hero_menu(&self, meta: plx_data::metadata::MetadataView<'_>) -> Vec<crate::registry::HeroMenuRow> {
+        hero::menu_rows(self.hero_set(meta), self.named_episode(meta), self.watchlist)
     }
 
     pub fn focused_episode(
@@ -980,6 +976,18 @@ impl DetailScreen {
         let measure = f.cx.measure;
         let Some(d) = self.detail(meta) else { return };
         match focus.and_then(|k| self.locate(k.elem, meta)) {
+            // The More disc under its menu (or any hero control a surface opens from): the same
+            // control the page pass leaves out, at the page's scroll and fades, drawn alone.
+            Some(Located::Hero(ctl)) => {
+                let hero_vis = hero_alpha(self.scroll.pos, HERO_FADE);
+                if hero_vis > 0.01 {
+                    let p = f.painter.translate(0.0, -self.scroll.pos).alpha(hero_vis * self.preview_chrome);
+                    let y = self.hero_chain(measure, meta).btn_y;
+                    // No ground read-back here: under the lift the frame holds the dimmed host
+                    // snapshot, not the hero's art, so the control keeps its default palette.
+                    self.draw_buttons(p, f.cx, y, 0.0, |c| c == ctl);
+                }
+            }
             Some(Located::Season(i)) => season::draw(
                 f.painter
                     .translate(0.0, self.section_top(1, d, measure) - self.scroll.pos),
@@ -1068,14 +1076,18 @@ impl DetailScreen {
         measure: &dyn plx_machine::machine::Measure,
     ) -> plx_ui::detail_layout::HeroChain {
         let (lead, synopsis) = hero_blurb(d, self.selected());
-        let synopsis_h = plx_ui::hero_synopsis(&synopsis, &lead)
-            .with_measure(measure)
-            .measure_h(plx_ui::detail_layout::HERO_TEXT_W);
-        plx_ui::detail_layout::hero_chain(
+        let synopsis_h = (!synopsis.is_empty()).then(|| {
+            plx_ui::hero_synopsis(&synopsis, &lead)
+                .with_measure(measure)
+                .measure_h(plx_ui::detail_layout::HERO_TEXT_W)
+        });
+        plx_ui::detail_layout::hero_chain(plx_ui::detail_layout::HeroRows {
+            // the viewer's stars stand on the row whether or not a provider has scored the item
+            ratings: d.is_some(),
             synopsis_h,
-            d.is_some_and(|detail| !detail.ratings.is_empty()),
-            measure,
-        )
+            credits: d.map_or(0, |d| hero::credit_rows(d).len()),
+            tech: d.is_some_and(|d| !hero::tech_pills(d).is_empty()),
+        })
     }
 
     /// Pin [`layout`](Self::layout) for one walk ([`LayoutPin`]). Validates first, so a pinned
@@ -1179,7 +1191,7 @@ impl DetailScreen {
         stamp: LayoutStamp,
     ) -> LayoutCache {
         let chain = self.compute_hero_chain(Some(d), measure);
-        let content_top = chain.btn_y + hero::CD + theme::space::XL;
+        let content_top = chain.foot + theme::space::XL;
         let (sections, n) = self.sections(Some(d));
         let live = &sections[..n];
         let mut top = [0.0f32; section::SLOTS];
@@ -1213,7 +1225,7 @@ impl DetailScreen {
         if let Some(d) = self.detail(meta) {
             self.ensure_layout(d, measure).content_top
         } else {
-            self.compute_hero_chain(None, measure).btn_y + hero::CD + theme::space::XL
+            self.compute_hero_chain(None, measure).foot + theme::space::XL
         }
     }
 
@@ -1517,16 +1529,10 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
         let meta = H::metadata(cx);
         let measure = cx.measure;
         let set = self.hero_set(meta);
-        let widths = hero::hero_widths(
-            cx.measure,
-            set,
-            set.restart,
-            self.disc_unfurl.map(|s| s.pos),
-            self.named_episode(meta),
-        );
+        let play = hero::play_w(cx.measure, set.restart);
         let (_, hero_n) = hero::visible_ctls(set, self.full_trailer());
         let hero_y = self.hero_chain(measure, meta).btn_y;
-        let hero_last = hero::hero_btn_rect_at(set, hero_n.saturating_sub(1), hero_y, widths);
+        let hero_last = hero::hero_btn_rect_at(set, hero_n.saturating_sub(1), hero_y, play);
         out.push(GroupSpec {
             id: hero::HERO_GROUP,
             kind: GroupKind::Row { wrap: false },
@@ -1539,9 +1545,9 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
                 EdgeRule::Stop,
             ],
             extent: Rect::new(
-                plx_ui::consts::MARGIN_X,
+                plx_ui::detail_layout::TEXT_X,
                 hero_y - self.scroll_target,
-                hero_last.x + hero_last.w - plx_ui::consts::MARGIN_X,
+                hero_last.x + hero_last.w - plx_ui::detail_layout::TEXT_X,
                 hero::CD,
             ),
             len: hero_n,
@@ -1771,15 +1777,9 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
             Located::Hero(ctl) => {
                 let set = self.hero_set(meta);
                 let i = hero::index_of(set, ctl)?;
-                let widths = hero::hero_widths(
-                    cx.measure,
-                    set,
-                    set.restart,
-                    self.disc_unfurl.map(|s| s.pos),
-                    self.named_episode(meta),
-                );
+                let play = hero::play_w(cx.measure, set.restart);
                 let base =
-                    hero::hero_btn_rect_at(set, i, self.hero_chain(measure, meta).btn_y - vertical, widths);
+                    hero::hero_btn_rect_at(set, i, self.hero_chain(measure, meta).btn_y - vertical, play);
                 (
                     base.scaled(self.ctl_pop.scale(i)),
                     base.scaled(plx_ui::widgets::CTRL_FOCUS_SCALE),
@@ -1946,13 +1946,12 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
                 if hero::index_of(set, ctl).is_some() {
                     return want;
                 }
-                if ctl.is_watch() {
-                    let (controls, _) = hero::hero_ctls(set);
-                    return FocusKey {
-                        entry: want.entry,
-                        elem: controls[hero::watch_index(set).unwrap()].elem(),
-                    };
-                }
+                // A More-menu action (its row performed it) is not a row control: the focus
+                // stands on the disc that opened the menu.
+                return FocusKey {
+                    entry: want.entry,
+                    elem: hero::HeroCtl::More.elem(),
+                };
             }
         }
         if self
@@ -2455,6 +2454,16 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Machine<H> for
                 self.play_hero(false, Some(*media), fx, H::metadata(cx));
                 Handled::Yes
             }
+            // A row of the hero's More menu committed: perform that control as a press on it
+            // would. Only a menu action, never Play or More themselves (the menu offers neither).
+            ScreenEvent::App(AppMsg::HeroAction(elem)) => {
+                if let Some(ctl) = hero::HeroCtl::of_elem(*elem)
+                    .filter(|c| !matches!(c, hero::HeroCtl::Play | hero::HeroCtl::More))
+                {
+                    self.activate_hero(ctl, cx, fx, H::metadata(cx));
+                }
+                Handled::Yes
+            }
             // Dismissed: the page under this surface has just been entered again, and it decided
             // what to ask for on the store as it stands. A request of this page's still in flight
             // would land on top of the item that page found loaded — and this page's teardown,
@@ -2611,7 +2620,13 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Screen<H> for 
         self.draw_backdrop(p, d, f.measure, preview, meta);
         let hero_vis = hero_alpha(self.scroll.pos, HERO_FADE);
         if hero_vis > 0.01 {
-            self.draw_hero(p.translate(0.0, -self.scroll.pos).alpha(hero_vis), f, d, nav_page_alpha);
+            // A hero control a surface lifts out of the dim (the More disc under its menu) is the
+            // lift's to draw (`redraw_focused`); the page pass leaves it out and says so.
+            let lifted = f
+                .lifted
+                .and_then(|k| hero::HeroCtl::of_elem(k.elem))
+                .filter(|c| f.leaves_out(self.entry, c.elem()));
+            self.draw_hero(p.translate(0.0, -self.scroll.pos).alpha(hero_vis), f, d, nav_page_alpha, lifted);
         }
         if let Some(d) = d {
             self.draw_compact_title(p, d, hero_vis, f.measure);
@@ -2923,7 +2938,14 @@ impl DetailScreen {
         }
     }
 
-    fn draw_hero<H: ContentLike + crate::registry::MetadataLike>(&self, p: Painter, cx: &Cx<'_, H>, d: Option<&Detail>, nav_page_alpha: f32) {
+    fn draw_hero<H: ContentLike + crate::registry::MetadataLike>(
+        &self,
+        p: Painter,
+        cx: &Cx<'_, H>,
+        d: Option<&Detail>,
+        nav_page_alpha: f32,
+        lifted: Option<hero::HeroCtl>,
+    ) {
         let meta = H::metadata(cx);
         let measure = cx.measure;
         use plx_ui::detail_layout::HERO_TEXT_W;
@@ -2955,25 +2977,29 @@ impl DetailScreen {
         let synopsis_view = plx_ui::hero_synopsis(&synopsis, &lead).with_measure(measure);
         let chain = self.hero_chain(measure, meta);
         // Two gates, and the difference is the whole behaviour. `prose` recedes the moment a
-        // picture is up: the identity line and the rating marks are how you decide whether to
-        // watch, and once the trailer itself is answering that question they are in the way.
-        // `chrome` only reaches 0 in full-trailer mode, and the rows below (facts, people) hold
-        // it — they are what the viewer reads WHILE the trailer plays, and the owner asked that
-        // nothing there vanish and come back under a playing preview.
+        // picture is up: the poster and the rating marks are how you decide whether to watch,
+        // and once the trailer itself is answering that question they are in the way. `chrome`
+        // only reaches 0 in full-trailer mode, and the facts, credits and pills hold it — they are
+        // what the viewer reads WHILE the trailer plays, and the owner asked that nothing there
+        // vanish and come back under a playing preview.
         let prose = p.alpha(self.preview_chrome * self.preview_prose);
+        self.draw_poster(prose, d);
         if let Some(d) = d {
-            self.identity_row(prose, d, chain.meta_y, cx.measure);
-            self.draw_ratings(prose, d, chain.ratings_y, cx.measure);
+            hero::draw_facts(chrome, d, chain.meta_y, cx.measure);
+            if let Some(y) = chain.ratings_y {
+                self.draw_ratings(prose, d, y, cx.measure);
+            }
         }
-        if !synopsis.is_empty() {
-            synopsis_view.draw(
-                synopsis_alpha,
-                Rect::new(plx_ui::consts::MARGIN_X, chain.syn_y, HERO_TEXT_W, 0.0),
-            );
+        if let Some(y) = chain.syn_y.filter(|_| !synopsis.is_empty()) {
+            synopsis_view.draw(synopsis_alpha, Rect::new(plx_ui::detail_layout::TEXT_X, y, HERO_TEXT_W, 0.0));
         }
         if let Some(d) = d {
-            hero::draw_facts(chrome, d, chain.facts_y, cx.measure);
-            hero::draw_people(chrome, d, chain.btn_y, measure);
+            if let Some(y) = chain.credits_y {
+                hero::draw_credits(chrome, &hero::credit_rows(d), y, measure);
+            }
+            if let Some(y) = chain.tech_y {
+                hero::draw_tech(chrome, &hero::tech_pills(d), y, measure);
+            }
         }
         // Full-trailer mode takes the action row with the rest of the page: the viewer asked for
         // the trailer and nothing else, and the transport drawn over the top
@@ -2981,7 +3007,7 @@ impl DetailScreen {
         // focus there — `hero::focusable` keeps Play legitimate, so the engine has somewhere to
         // stand and the page does not scroll itself into the sections below — it simply fades out
         // with `chrome`, like everything else the page owns.
-        self.draw_buttons(chrome, cx, chain.btn_y, nav_page_alpha);
+        self.draw_buttons(chrome, cx, chain.btn_y, nav_page_alpha, |ctl| Some(ctl) != lifted);
         // The hint that UP is there — since 2026-09-18 a third element on the HEADER line rather
         // than page furniture under the action row: centred on the screen, vertically centred on
         // the same row the preview-shrunk logo/title occupies (`PREVIEW_LOGO_Y`/`compact_band`),
@@ -3017,14 +3043,14 @@ impl DetailScreen {
     /// and back once scrolled to the top — and only while shrunk (`t`), so a normal hero (no
     /// preview) is untouched.
     fn logo_spot(&self, measure: &dyn plx_machine::machine::Measure, meta: plx_data::metadata::MetadataView<'_>) -> LogoSpot {
-        use plx_ui::detail_layout::{HERO_TEXT_W, TITLE_BOTTOM};
+        use plx_ui::detail_layout::{HERO_TEXT_W, TEXT_X, TITLE_FOOT};
         let hero_band = plx_ui::hero_logo::band_h(LogoRung::Hero);
         let compact_band = plx_ui::hero_logo::band_h(LogoRung::Compact);
         let t = self.preview_logo.pos;
         let lerp = |a: f32, b: f32| a + (b - a) * t;
         let band = Rect::new(
-            lerp(plx_ui::consts::MARGIN_X, plx_ui::detail_layout::PREVIEW_LOGO_X),
-            lerp(TITLE_BOTTOM - hero_band, plx_ui::detail_layout::PREVIEW_LOGO_Y),
+            lerp(TEXT_X, plx_ui::detail_layout::PREVIEW_LOGO_X),
+            lerp(TITLE_FOOT - hero_band, plx_ui::detail_layout::PREVIEW_LOGO_Y),
             lerp(HERO_TEXT_W, plx_ui::detail_layout::PREVIEW_LOGO_MAX_W),
             lerp(hero_band, compact_band),
         );
@@ -3040,34 +3066,24 @@ impl DetailScreen {
         plx_ui::landing_hero::detail_shade(visible, self.preview_field, self.preview_base_scrim, self.preview_logo.pos)
     }
 
-    fn identity_row(&self, p: Painter, d: &Detail, y: f32, measure: &dyn plx_machine::machine::Measure) {
-        let ordinal = (d.kind == "episode" && d.season > 0 && d.index > 0)
-            .then(|| plx_ui::fmt::episode_ordinal(d.season, d.index))
-            .unwrap_or_default();
-        let mut parts: Vec<&str> = Vec::new();
-        if d.kind == "episode" {
-            if !d.show_title.is_empty() {
-                parts.push(&d.show_title);
-            }
-            if !ordinal.is_empty() {
-                parts.push(&ordinal);
-            }
-        } else {
-            parts.push(if d.is_show { plx_platform::i18n::msg::browse_kind_tv_show() } else { plx_platform::i18n::msg::browse_kind_movie() });
-            parts.extend(d.genres.iter().take(2).map(String::as_str));
-        }
-        if !d.rating.is_empty() {
-            parts.push(&d.rating);
-        }
-        if !d.edition.is_empty() { parts.insert(0, &d.edition); }
-        let resolution = plx_ui::fmt::resolution(&d.video_resolution, d.width, d.height);
-        let chips: Vec<&str> = [
-            (!d.subs.is_empty(), plx_platform::i18n::msg::widgets_badge_cc()),
-            (d.subs.iter().any(|s| s.sdh), plx_platform::i18n::msg::widgets_badge_sdh()),
-            (d.audio.iter().any(|s| s.ad), plx_platform::i18n::msg::widgets_badge_ad()),
-        ].into_iter().filter_map(|(present, label)| present.then_some(label)).collect();
-        let r = Rect::new(plx_ui::consts::MARGIN_X, y, plx_ui::detail_layout::HERO_TEXT_W, plx_ui::widgets::BADGE_H);
-        plx_ui::widgets::hero_identity(p, r, &parts, resolution.as_deref(), &chips, measure);
+    /// The hero's poster card, left of the text column: the item's portrait art (an episode's show
+    /// poster), drawn by the shared card so its ring, radius and placeholder are every card's.
+    fn draw_poster(&self, p: Painter, d: Option<&Detail>) {
+        use plx_ui::detail_layout::{POSTER_H, POSTER_RES, POSTER_TOP, POSTER_W, POSTER_X};
+        let (sid, key) = match d {
+            Some(d) => (d.sid, d.poster.as_str()),
+            None => self.selected().map_or((self.sid, ""), |m| (m.sid, m.thumb.as_str())),
+        };
+        plx_ui::widgets::card_named(
+            p,
+            Rect::new(POSTER_X, POSTER_TOP, POSTER_W, POSTER_H),
+            plx_ui::widgets::Art::Thumb { sid: sid.raw(), key, res: POSTER_RES },
+            None,
+            theme::CARD_RING_RAD,
+            false,
+            1.0,
+            0.0,
+        );
     }
 
     fn draw_ratings(
@@ -3078,11 +3094,14 @@ impl DetailScreen {
         measure: &dyn plx_machine::machine::Measure,
     ) {
         let cy = y + plx_ui::widgets::RATING_MARK_D * 0.5;
+        let right = plx_ui::detail_layout::TEXT_X + plx_ui::detail_layout::HERO_TEXT_W;
         // The groups are measured lazily, one at a time, and the row stops at the first that does
         // not fit: a later, smaller group never jumps the queue, and no group past the break is
         // ever measured (a replay holds only the widths the recording asked for), so this does not
-        // go through `HStack::fit`, which needs every width up front.
-        let mut flow = Flow::new(plx_ui::consts::MARGIN_X, plx_ui::widgets::RATING_GROUP_GAP);
+        // go through `HStack::fit`, which needs every width up front. The viewer's own stars close
+        // the row, one group's air after the last provider, and are reserved first.
+        let stars_w = plx_ui::widgets::user_stars_w();
+        let mut flow = Flow::new(plx_ui::detail_layout::TEXT_X, plx_ui::widgets::RATING_GROUP_GAP);
         let mut i = 0;
         while i < d.ratings.len() {
             let provider = d.ratings[i].art.provider();
@@ -3101,31 +3120,35 @@ impl DetailScreen {
                 })
                 .collect();
             let width = plx_ui::widgets::rating_group_w(provider, &cells, measure);
-            if flow.next_x() + width > plx_ui::consts::SCR_W - plx_ui::consts::MARGIN_X {
+            if flow.next_x() + width + plx_ui::widgets::RATING_GROUP_GAP + stars_w > right {
                 break;
             }
             flow.place(|x| Item::new(plx_ui::widgets::rating_group(p, x, cy, provider, &cells, measure)));
             i = end;
         }
+        flow.place(|x| Item::new(plx_ui::widgets::user_stars(p, x, cy, f32::from(d.user_rating))));
     }
 
-    fn draw_buttons<H: ContentLike + crate::registry::MetadataLike>(&self, p: Painter, cx: &Cx<'_, H>, y: f32, nav_page_alpha: f32) {
+    /// The action row's controls that `draws` admits: the page pass admits all but a lifted one,
+    /// the opener lift ([`Self::redraw_focused`]) only the one it lifts.
+    fn draw_buttons<H: ContentLike + crate::registry::MetadataLike>(
+        &self,
+        p: Painter,
+        cx: &Cx<'_, H>,
+        y: f32,
+        nav_page_alpha: f32,
+        draws: impl Fn(hero::HeroCtl) -> bool,
+    ) {
         let meta = H::metadata(cx);
         let set = self.hero_set(meta);
-        let widths = hero::hero_widths(
-            cx.measure,
-            set,
-            set.restart,
-            self.disc_unfurl.map(|s| s.pos),
-            self.named_episode(meta),
-        );
+        let play = hero::play_w(cx.measure, set.restart);
         // Deliberately `hero_ctls`, not `hero::visible_ctls`: the row's FOCUSABLE extent narrows
         // to Play the instant `full_trailer()` flips (that gate lives in `valid`/`focusable` and
         // is unchanged), but what's DRAWN must not narrow in the same frame — the caller already
         // fades every button through `chrome`'s `preview_chrome` alpha (`draw_hero`), and cutting
-        // four of the five pills here a frame early defeats that fade before it can be seen.
+        // More here a frame early defeats that fade before it can be seen.
         let (controls, n) = hero::hero_ctls(set);
-        let row = hero::hero_row_rect(set, y, widths);
+        let row = hero::hero_row_rect(set, y, play);
         let row = [row.x, row.y - self.scroll.pos, row.w, row.h];
         let picture = plx_media::player::preview::view().picture;
         // A text-recording pass (the transition's prewarm, or a headless sweep) drew no pixels
@@ -3145,61 +3168,33 @@ impl DetailScreen {
         } else {
             ControlGround::Keyed
         };
-        for (i, ctl) in controls[..n].iter().copied().enumerate() {
-            let rect = hero::hero_btn_rect_at(set, i, y, widths);
+        for (i, ctl) in controls[..n].iter().copied().enumerate().filter(|&(_, ctl)| draws(ctl)) {
+            let rect = hero::hero_btn_rect_at(set, i, y, play);
             let fill = self.ctl_pop.focus(i);
             let scale = self.ctl_pop.scale(i);
             match ctl {
+                // The wide Play/Resume capsule: the page's one primary action, a WHITE pill at rest
+                // (`ControlStyle::Primary`) as on the web client's detail page.
                 hero::HeroCtl::Play => Button::new(
                     hero::hero_pill_label(set.restart).as_ptr(),
                     theme::size::BODY,
                     rect,
                 )
                 .icon(plx_ui::icons::Icon::Play)
+                .style(plx_ui::widgets::ControlStyle::Primary)
                 .focus_mix(fill)
                 .palette(palette)
                 .ground(ground)
                 .scale(scale)
                 .draw(&Env::inert(), p),
-                hero::HeroCtl::Alt => {
-                    Button::new(hero::alt_label().as_ptr(), theme::size::BODY, rect)
-                        .trailing_icon(hero::ALT_ICON)
-                        .focus_mix(fill)
-                        .palette(palette)
-                        .ground(ground)
-                        .scale(scale)
-                        .draw(&Env::inert(), p)
-                }
-                ctl => {
-                    let icon = match ctl {
-                        hero::HeroCtl::Restart => plx_ui::icons::Icon::Restart,
-                        hero::HeroCtl::Trailer => plx_ui::icons::Icon::Trailer,
-                        hero::HeroCtl::More => plx_ui::icons::Icon::More,
-                        hero::HeroCtl::MarkWatched => plx_ui::icons::Icon::Check,
-                        hero::HeroCtl::MarkUnwatched => plx_ui::icons::Icon::Minus,
-                        // At either rest the plain face; only a flip in flight layers the fill.
-                        hero::HeroCtl::Watchlist => plx_appkit::watchlist_disc::paint(self.watchlist.pos()).0,
-                        hero::HeroCtl::GoToShow => hero::GO_TO_SHOW_ICON,
-                        hero::HeroCtl::Version => hero::VERSION_ICON,
-                        _ => unreachable!(),
-                    };
-                    let mut button = CircleButton::new(c"".as_ptr())
-                        .icon(icon)
-                        .frame(rect)
-                        .focus_mix(fill)
-                        .palette(palette)
-                        .ground(ground)
-                        .scale(scale);
-                    if let Some((slot, label)) = hero::disc_verb(ctl, self.named_episode(meta)) {
-                        button = button.label(label.as_ptr(), self.disc_unfurl[slot].pos);
-                    }
-                    if ctl == hero::HeroCtl::Watchlist {
-                        if let Some(frame) = plx_appkit::watchlist_disc::paint(self.watchlist.pos()).1 {
-                            button = button.icon_fill(hero::face_icon(hero::Face::Filled), frame.fill, frame.ribbon_dy);
-                        }
-                    }
-                    button.draw(&Env::inert(), p);
-                }
+                _ => CircleButton::new(c"".as_ptr())
+                    .icon(plx_ui::icons::Icon::More)
+                    .frame(rect)
+                    .focus_mix(fill)
+                    .palette(palette)
+                    .ground(ground)
+                    .scale(scale)
+                    .draw(&Env::inert(), p),
             }
         }
     }
@@ -3896,21 +3891,8 @@ impl DetailScreen {
         self.ctl_pop.step(hero_index, dt);
         self.season_pop
             .step(matches!(focused, Some(Located::Season(_))).then_some(0), dt);
-        let disc = match focused {
-            Some(Located::Hero(c)) => hero::disc_verb(c, self.named_episode(meta)).map(|(i, _)| i),
-            _ => None,
-        };
-        // The bookmark disc's flip, and the identity the app's feed reads. Decorative: it moves
-        // no layout, so it never holds a page image.
+        // The identity the app's Watchlist feed reads.
         self.watchlist_hex = self.detail(meta).and_then(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid));
-        let watchlist_moving = self.watchlist.step(dt);
-        for (i, spring) in self.disc_unfurl.iter_mut().enumerate() {
-            spring.step(
-                f32::from(disc == Some(i)),
-                plx_ui::widgets::K_DISC_UNFURL,
-                dt,
-            );
-        }
 
         self.episode_cells.step(
             match focused {
@@ -4010,9 +3992,7 @@ impl DetailScreen {
 
         let moving = self.scroll.vel.abs() > 0.01
             || self.episode_scroll.vel.abs() > 0.01
-            || self.tab_scroll.vel.abs() > 0.01
-            || self.disc_unfurl.iter().any(|s| s.vel.abs() > 0.01)
-            || watchlist_moving;
+            || self.tab_scroll.vel.abs() > 0.01;
         if !meta.detail_loading()
             && !meta.season_loading()
             && focused.is_some_and(|located| self.return_pending && !self.return_waiting(meta) || self.restore_target_matches(located, meta))
@@ -4379,7 +4359,7 @@ impl DetailScreen {
 
     /// BACK's second stage, after `collapse_full_trailer`: while a trailer is autoplaying in the
     /// background (picture up, not promoted), BACK stops the preview so `preview_tick` animates
-    /// the logo, identity line and ratings back to their normal resting position — staying on the
+    /// the logo, the meta line and the ratings back to their normal resting position — staying on the
     /// page rather than leaving it. A second BACK press, with no preview left to collapse, falls
     /// through to the ordinary `ContentReq::Back` navigation below. Returns whether it fired.
     fn collapse_background_preview<H: ContentLike>(&mut self, fx: &mut Effects<'_, H>) -> bool {
@@ -4401,17 +4381,13 @@ impl DetailScreen {
                 )
             })
             .unwrap_or((false, PosterMark::None));
-        // The preview path replaced the disc. Play Trailer stays in the item menu. (Confirmed as
-        // the shipped decision by `screens::detail::tests` — see
-        // `a_movie_trailer_disc_plays_the_extra_from_the_start` et al., which explicitly assert
-        // `!hero_set().trailer` and then drive `ELEM_TRAILER` directly to prove `activate_hero`'s
-        // handling stays correct even though the disc itself is never shown.)
+        // The hero preview autoplays the trailer in the background; the More menu's Trailer row
+        // plays it whole, from the start, as the item menu's Play Trailer does.
         hero::HeroSet {
-            more: self.detail(meta).is_some_and(|d| hero::hero_episode(d).is_some()),
             version: self.detail(meta).is_some_and(|d| hero_versions(d).len() >= 2),
             go_show: self.detail(meta).is_some_and(|d| hero::go_to_show_target(d).is_some()),
             restart,
-            trailer: false,
+            trailer: self.detail(meta).is_some_and(|d| hero::trailer_play(d).is_some()),
             alt: self.alt_available(meta),
             mark,
             watchlist: self.detail(meta).is_some_and(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid).is_some()),
@@ -4597,15 +4573,10 @@ impl DetailScreen {
             }
             hero::HeroCtl::Alt | hero::HeroCtl::Version => {
                 let set = self.hero_set(meta);
-                if let Some(i) = hero::index_of(set, ctl) {
-                    let widths = hero::hero_widths(
-                        cx.measure,
-                        set,
-                        set.restart,
-                        self.disc_unfurl.map(|s| s.pos),
-                        self.named_episode(meta),
-                    );
-                    let mut rect = hero::hero_btn_rect_at(set, i, self.hero_chain(measure, meta).btn_y, widths);
+                // Both are More-menu rows now: the panel hangs off the More disc that opened it.
+                if let Some(i) = hero::index_of(set, hero::HeroCtl::More) {
+                    let play = hero::play_w(cx.measure, set.restart);
+                    let mut rect = hero::hero_btn_rect_at(set, i, self.hero_chain(measure, meta).btn_y, play);
                     rect.y -= self.scroll.pos;
                     // The ANCHOR travels on the argument, bit for bit, so the surface places
                     // itself off the control without the page or a static holding a `Rect` for it.
@@ -4618,21 +4589,28 @@ impl DetailScreen {
                     self.content(fx, ContentReq::Panel(panel));
                 }
             }
-            // The bookmark disc: the press is the item menu's own write (`Action::WatchlistAdd` /
-            // `WatchlistRemove`), identity captured here. The app queues it on the Watchlist store,
+            // The More menu's Watchlist row: the commit is the item menu's own write
+            // (`Action::WatchlistAdd` / `WatchlistRemove`), identity captured here. The app queues it on the Watchlist store,
             // which flips the face at once through the intent ledger and reverts it if plex.tv
             // refuses. An item with no `plex://movie|show` guid (an episode) presses nothing.
             hero::HeroCtl::Watchlist => {
                 if let Some(d) = self.detail(meta) {
-                    if let Some(act) = hero::press(&d.guid, self.watchlist.membership()).filter(|_| self.watchlist_hex.is_some()) {
-                        self.watchlist.press();
+                    if let Some(act) = hero::press(&d.guid, self.watchlist).filter(|_| self.watchlist_hex.is_some()) {
                         fx.push(Fx::App(AppFx::ItemMenu(crate::registry::ItemMenuReq {
                             act, sid: d.sid, item: None, season: None, loaded_episode: false, from_home: false,
                         })));
                     }
                 }
             }
-            hero::HeroCtl::More => self.content(fx, ContentReq::ItemMenu),
+            hero::HeroCtl::More => {
+                let set = self.hero_set(meta);
+                let play = hero::play_w(cx.measure, set.restart);
+                let i = hero::index_of(set, hero::HeroCtl::More).unwrap_or(1);
+                let mut rect = hero::hero_btn_rect_at(set, i, self.hero_chain(measure, meta).btn_y, play);
+                rect.y -= self.scroll.pos;
+                let anchor = [rect.x, rect.y, rect.w, rect.h].map(f32::to_bits);
+                self.content(fx, ContentReq::HeroMenu { rows: self.hero_menu(meta), anchor });
+            }
             hero::HeroCtl::MarkWatched | hero::HeroCtl::MarkUnwatched => {
                 if let Some(d) = self.detail(meta) {
                     fx.push(Fx::App(AppFx::Store(

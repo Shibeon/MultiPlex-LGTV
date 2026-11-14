@@ -1,5 +1,5 @@
-//! Host geometry for `hero_layout`: the row accumulation, the disc-unfurl budget and the pill
-//! width formula, on their own (the Detail page's own tests cover them through `HeroSet`).
+//! Host geometry for `hero_layout`: the row accumulation and the pill width formula, on their own
+//! (the Detail page's own tests cover them through `HeroSet`).
 use super::*;
 use std::ffi::CString;
 
@@ -80,25 +80,6 @@ fn pill_w_adds_icon_boxes_only_when_asked() {
     assert_eq!(both, plain + (20.0 * 1.15 + 12.0) + chevron_ink() + 12.0);
 }
 
-#[test]
-fn disc_caps_stay_circles_when_the_verb_cannot_fit() {
-    // The last control already ends at the People column: no room for any verb.
-    let caps = disc_caps_with([1.0; 3], [200.0; 3], |_| FACTS_R);
-    assert_eq!(caps, [CD; 3]);
-}
-
-#[test]
-fn disc_caps_open_when_room_and_close_when_the_trial_row_overruns() {
-    let roomy = disc_caps_with([1.0; 3], [60.0, 60.0, 60.0], |disc| 100.0 + disc.iter().sum::<f32>());
-    assert!(roomy.iter().all(|w| *w > CD), "all three unfurl with room: {roomy:?}");
-    // Three open discs together overrun FACTS_R although one alone would fit.
-    let tight = disc_caps_with([1.0; 3], [60.0; 3], |disc| FACTS_R - 3.0 * CD - 20.0 + disc.iter().sum::<f32>());
-    assert_eq!(tight, [CD; 3]);
-    // A closed fraction keeps a circle.
-    let shut = disc_caps_with([0.0; 3], [60.0; 3], |_| 100.0);
-    assert_eq!(shut, [CD; 3]);
-}
-
 /// Plain discs retain the ordinary `CGAP`; capsules also reserve room for their focus pop.
 /// and a control that is `0` wide is still on the row: it keeps a gap on each side. A disc springs
 /// between `CD` and its open width, never through 0, so this is the rule's edge, not a live case.
@@ -160,7 +141,7 @@ fn pdf_proposal_episode_facts_use_a_named_month_and_validate_resume() {
 
 #[test]
 fn focused_hero_capsules_keep_twenty_pixels_clear_on_both_sides() {
-    let widths = [224.0, CD, CD, 456.0, CD];
+    let widths = [224.0, CD, CD, 300.0, CD];
     for focused in [0, 3] {
         let frame = row_rect(&widths, focused, 0.0);
         let painted = frame.scaled(plx_ui::widgets::CTRL_FOCUS_SCALE);
@@ -178,7 +159,7 @@ fn focused_hero_capsules_keep_twenty_pixels_clear_on_both_sides() {
 }
 
 #[test]
-fn a_dense_translated_row_gives_up_focus_air_before_crossing_people() {
+fn a_dense_translated_row_gives_up_focus_air_before_crossing_its_right_edge() {
     let widths = [224.0, CD, CD, FACTS_R - plx_ui::consts::MARGIN_X - 224.0 - 2.0 * CD - 3.0 * CGAP - 1.0];
     let last = row_rect(&widths, 3, 0.0);
     assert!(last.x + last.w <= FACTS_R + 0.001);
@@ -186,5 +167,16 @@ fn a_dense_translated_row_gives_up_focus_air_before_crossing_people() {
         let previous = row_rect(&widths, i - 1, 0.0);
         let next = row_rect(&widths, i, 0.0);
         assert!(next.x - (previous.x + previous.w) >= CGAP - 0.001);
+    }
+}
+
+#[test]
+fn a_row_laid_out_from_another_left_edge_is_the_same_row_shifted() {
+    let widths = [336.0, CD];
+    for i in 0..=2 {
+        let margin = row_rect(&widths, i, 5.0);
+        let shifted = row_rect_in(plx_ui::consts::MARGIN_X + 390.0, FACTS_R + 390.0, &widths, i, 5.0);
+        assert!((shifted.x - margin.x - 390.0).abs() < 1e-3, "control {i}");
+        assert_eq!((shifted.y, shifted.w, shifted.h), (margin.y, margin.w, margin.h));
     }
 }

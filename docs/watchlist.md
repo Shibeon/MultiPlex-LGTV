@@ -20,7 +20,7 @@ catalog id name the same film in two unrelated id spaces; the only join between 
 | ids and ledger | `data::watchlist` (`model`, `ledger`, `order`) | rows, match table, `TileState`, intent ledger, comparator |
 | store | `stores::watchlist::WatchlistStore` | main-thread state plus a mailbox adapter; `StoreId::Watchlist` |
 | catalog | `data::catalog`, `stores::catalog::CatalogStore` | one Discover-only item; `StoreId::Catalog`, appended last |
-| screens | `screens::watchlist`, `screens::catalog`, the Detail and Home hero discs, `item_menu/watchlist.rs` | the page, the catalog page, the disc, the menu rows |
+| screens | `screens::watchlist`, `screens::catalog`, the Detail hero's More-menu row, the Home hero disc, `item_menu/watchlist.rs` | the page, the catalog page, the disc, the menu rows |
 | app | `app/watchlist.rs`, `app/input.rs`, `app/chrome.rs` | feed, presses, the tab pulse, the routes |
 
 Layers: `data` names `plx_plex` and below, never `net` or `media`; screens never name a sibling
@@ -133,12 +133,12 @@ question Q5). It is incremental for new guids and fully recomputed when the serv
 copy a tile opens is chosen current server first, then owned, then shared, Reachable only.
 
 **The other direction.** A `PmsMovie` carries `guid` and `show_guid` (an episode's `grandparentGuid`, a season's `parentGuid`: the server sends a season no `grandparentGuid`),
-each decoded once to `[u8; 12]`. The Detail and Home hero discs and the hold-menu rows use them to name the catalog
+each decoded once to `[u8; 12]`. The Detail hero's Watchlist row, the Home hero disc and the hold-menu rows use them to name the catalog
 id. `resolve_catalog_hex(known, fetch)` (`plex/models.rs`) is the helper for a row that lacks one: it
 fetches `client.metadata(rk or show_rk).guid` only when the id is not already known. A hold-menu card
 whose row carries no guid asks for it (`WatchlistStore::want_hex`, a worker reading the item's own
 server record, an episode's SHOW record): the menu being opened omits the row, the next one offers it
-once the record named a portable id (tests in `app/watchlist_press_tests.rs`). The Detail disc reads
+once the record named a portable id (tests in `app/watchlist_press_tests.rs`). The Detail hero's row reads
 the guid of the loaded record; the Home hero's disc reads the hero row's own (`PmsMovie::watchlist_subject`) and, unlike the menu, does not ask the server record for a missing one: its presence moves the focus row, so it appears only for a row that already names a title. Real
 PMS guids are hex; the mock's default placeholder guids are not, which is why `mock_pms` has a
 `{"guids":"all"}` mode for menu captures.
@@ -177,10 +177,11 @@ this id lives on another service with another token). `IntentLedger`:
   is a member (intents in flight included), **Off** when the list is `Ready` and it is absent,
   otherwise **Unknown**, which every surface draws as the Add face.
 
-**Surfaces.** The Detail hero's bookmark disc is second after Play/Resume (`ELEM_WATCHLIST`, a circle that never unfurls and carries no name, focused or not — owner, 2026-10-20: an icon-only control is its glyph and its focus fill —
-outline when off the list, filled when on; the fill rises from the bottom with a 3 px ribbon drop on a
-flip, not on the first answer). It exists only for an item whose guid is `plex://movie|show/<hex>`
-(`HeroSet::watchlist`).
+**Surfaces.** The Detail hero's action row is Play/Resume and a round More disc; the Watchlist is a
+row of the More menu (`ELEM_WATCHLIST`, `hero::menu_rows`): `Add to Watchlist` while the title is off
+the list or its membership is unknown, a destructive `Remove from Watchlist` while it is on. It exists
+only for an item whose guid is `plex://movie|show/<hex>` (`HeroSet::watchlist`). Committing the row
+hands the page `AppMsg::HeroAction(ELEM_WATCHLIST)`, which asks the same write a press always did.
 The **Home hero** carries the same disc, second after Play/Resume and before Info (Play, disc, Info, laid out by
 `hero_layout::flat_row` with one `CONTROL_GAP`, 20 px, between controls (the billboard's pager follows Info in the same row, 40 px after it: the gap and the dots group's own 20 px margin);
 the 12 px `HERO_ICON_GAP` is inside the Play pill). It is present when the hero row stands for a title
@@ -188,7 +189,7 @@ the 12 px `HERO_ICON_GAP` is inside the Play pill). It is present when the hero 
 semantics) with a known id. The application feeds it the membership of the title the hero shows
 (`HomeScreen::watchlist_hex` / `set_watchlist`, `app::watchlist::catalog_feed`); it flips only on a real
 membership change of that title, never on open or when the hero rotates to another title. A press is the
-same `AppFx::ItemMenu` write as Detail's. Face, glyphs, flip and the `Disc` state that decides when the flip plays are `plx_appkit::watchlist_disc`, shared.
+same `AppFx::ItemMenu` write as Detail's row. Face, glyphs, flip and the `Disc` state that decides when the flip plays are `plx_appkit::watchlist_disc` (Detail's page draws no disc: it keeps only the membership its row reads).
 The item menu offers `Add to Watchlist` / `Remove from Watchlist` for a movie and `Add Show to
 Watchlist` / `Remove Show...` for an episode or season, with the identity captured when the menu
 opened. A catalog page's primary pill reads `Add to Watchlist` / `On Watchlist`. An add from a menu

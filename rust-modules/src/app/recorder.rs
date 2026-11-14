@@ -207,8 +207,13 @@ const RESOLUTION_SHAPE: &str = "ProductResolutionV1{fo:Option<(entry:u32,elem:u3
 /// well as the term around it: the init shape names that type rather than spelling its fields, so
 /// a census that only said `ControlledHomeInitV3` would be claiming the change was in the
 /// envelope when it is in the session.
-pub(crate) const FP_PRIOR: u64 = 4239819007634745513;
-pub(crate) const FP_V6: u64 = 741022075462080307;
+///
+/// **The Detail hero's More menu** moves both profiles: `SCREEN_SHAPES` gains
+/// `ItemMenuKind::Hero{host,rows}` and the item menu's `Hero(elem)` action, so the two frozen
+/// vectors (`current-base-fingerprints.json`) and both numbers were re-derived from them, and the
+/// replay anchors were re-recorded on the new profile.
+pub(crate) const FP_PRIOR: u64 = 8932796983854629004;
+pub(crate) const FP_V6: u64 = 15834642128357272210;
 
 pub(crate) fn state_fp() -> u64 {
     let mut shapes: Vec<&str> = APP_SHAPES.to_vec();

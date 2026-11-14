@@ -19,15 +19,18 @@ fn detail_shade_regression_credits_do_not_create_a_second_patch() {
     let screen = bare(&guard, sid, "show");
     let meta = test_store().view();
     let measure = &plx_ui::fixture::FixtureMeasure;
-    let y = screen.hero_chain(measure, meta).btn_y - theme::space::LG;
+    let y = screen.hero_chain(measure, meta).credits_y.expect("a credit table");
     let shade = screen.hero_shade(1.0);
     let mut previous = shade.alpha(0.0, y);
+    let column_end = plx_ui::detail_layout::TEXT_X + plx_ui::detail_layout::HERO_TEXT_W;
     for x in (20..=1920).step_by(20) {
         let alpha = shade.alpha(x as f32, y);
         assert!(alpha <= previous + 0.001, "the shade darkened at x={x}: {previous} -> {alpha}");
+        if x as f32 <= column_end {
+            assert!(alpha > 0.5, "the shade protects the credit table at x={x}: {alpha}");
+        }
         previous = alpha;
     }
-    assert!(previous > 0.5, "the lower shade also protects the credits");
     clear();
 }
 
@@ -43,7 +46,7 @@ fn the_edge_shade_rises_with_the_preview_and_clears_for_full_trailer() {
     for t in [0.25, 0.5, 0.75, 1.0] {
         screen.preview_logo = Spring::at(t);
         let alpha = screen.hero_shade(1.0).alpha(x, y);
-        assert!(alpha >= previous, "the fade should follow the logo at {t}");
+        assert!(alpha >= previous, "the fade should follow the logo at {t}: {previous} -> {alpha}");
         previous = alpha;
     }
     assert!(previous > 0.4);

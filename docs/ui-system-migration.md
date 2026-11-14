@@ -634,7 +634,12 @@ table: a count in prose is a measurement nothing re-takes.
 
 ### Hero proposal alignment (2026-11-02)
 
-*Superseded for Home by the CW-13 v2 ladder (2026-11).* Home has its own ladder,
+*Superseded for Detail by the two-column hero (2026-11-14):* a poster card on the left and, in the
+text column beside it, the title, a meta line, the ratings row closed by the viewer's five stars, a
+Play/Resume pill and a round More disc whose shared item menu holds the other actions, the synopsis,
+a credit table and outlined technical pills (`detail_layout::hero_chain`); `hero_rows`,
+`hero_identity` and the people column are gone. *Superseded for Home by the CW-13 v2 ladder
+(2026-11).* Home has its own ladder,
 `landing_hero::home_rows` (no identity, ratings or facts line; the action row at y=668, the Continue
 Watching tiles at y=768), its pager follows Info in the action row at the board's spacing, and neither
 hero draws the wedge. Both now use a continuous left and bottom shade. The paragraphs below record

@@ -4,6 +4,51 @@
 
 use plx_platform::i18n::{msg, LocaleContext, MonthWidth};
 
+/// A channel layout in the design's spelling: `"5.1(side)"` → `"5.1"`, `"stereo"` → `"Stereo"`.
+///
+/// The parenthetical is ffmpeg's channel-ORDER note, not a different layout — `5.1(side)` and
+/// `5.1` are both six channels — so it is dropped rather than shown, and a word layout is
+/// capitalised because it sits mid-sentence beside a codec. Falls back to the channel COUNT when
+/// the server sent no layout at all, which is the only other thing that can be said.
+pub fn channel_layout(layout: &str, channels: i64) -> String {
+    let base = layout.split('(').next().unwrap_or("").trim();
+    if base.is_empty() {
+        return match channels {
+            0 => String::new(),
+            1 => msg::widgets_tracks_mono().to_string(),
+            2 => msg::widgets_tracks_stereo().to_string(),
+            n => msg::widgets_tracks_channels(n),
+        };
+    }
+    // a numeric layout ("5.1", "7.1") is already how it is written; a word one is capitalised
+    if base.starts_with(|c: char| c.is_ascii_digit()) {
+        base.to_string()
+    } else {
+        match base {
+            "mono" => msg::widgets_tracks_mono().to_string(),
+            "stereo" => msg::widgets_tracks_stereo().to_string(),
+            _ => title_case(base),
+        }
+    }
+}
+
+/// `"main 10"` → `"Main 10"`. Per WORD, and only the first character of each — upper-casing the
+/// whole run would give `MAIN 10`, which reads as a second acronym beside `HEVC`.
+pub fn title_case(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for (i, w) in s.split_whitespace().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        let mut cs = w.chars();
+        if let Some(c) = cs.next() {
+            out.extend(c.to_uppercase());
+            out.push_str(cs.as_str());
+        }
+    }
+    out
+}
+
 pub fn converts_on_server() -> &'static str { msg::core_converts_on_server() }
 
 /// **The one duration** — a film's or episode's length, "2h 14m" / "14m", on every screen that

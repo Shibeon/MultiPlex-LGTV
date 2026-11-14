@@ -520,10 +520,24 @@ pub enum ItemMenuKind {
     /// tab's season number (`Season::index`): together the address of the season's episodes, which
     /// is all a season-scoped write reaches them by (`viewstate::Scope::Season`).
     Season { mark: plx_ui::widgets::PosterMark, show_rk: String, index: i64 },
+    /// The Detail hero's More disc ([`ContentReq::HeroMenu`]): the hero actions the row no longer
+    /// draws, one row each. A press is DELIVERED back to the page instance `host` as
+    /// [`AppMsg::HeroAction`], so the page performs it exactly as it performed the disc it replaces.
+    Hero { host: plx_machine::machine::InstanceId, rows: Vec<HeroMenuRow> },
     /// A Watchlist tile that is not playable on a reachable server (plan §1.9): no PMS item, so
     /// `sid` is `UNSET` and `rk` empty; the subject is [`ItemMenuArg::catalog`] and `state` picks the
     /// rows (`item_menu::hold::rows_for`).
     Catalog { state: plx_data::watchlist::model::TileState },
+}
+
+/// One row of the Detail hero's More menu: the hero control it stands for (its `ELEM_*` identity,
+/// `screens::detail::hero`), the label and mark it wears, captured when the menu opened.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HeroMenuRow {
+    pub elem: u32,
+    pub label: String,
+    pub icon: plx_ui::icons::Icon,
+    pub destructive: bool,
 }
 
 /// **Identity, not contents.** `PmsMovie` is a wire DTO with no `PartialEq` of its own, and one
@@ -540,6 +554,7 @@ impl PartialEq for ItemMenuKind {
             (Self::Season { mark: a, show_rk: sa, index: ia }, Self::Season { mark: b, show_rk: sb, index: ib }) =>
                 a == b && sa == sb && ia == ib,
             (Self::Catalog { state: a }, Self::Catalog { state: b }) => a == b,
+            (Self::Hero { host: a, rows: ra }, Self::Hero { host: b, rows: rb }) => a == b && ra == rb,
             _ => false,
         }
     }
@@ -564,6 +579,10 @@ impl plx_machine::machine::LogicalState for ItemMenuArg {
             ItemMenuKind::Episode { mark, .. } => { c.u32(1).u32(*mark as u32); }
             ItemMenuKind::Season { mark, show_rk, index } => { c.u32(2).u32(*mark as u32).str(show_rk).u64(*index as u64); }
             ItemMenuKind::Catalog { state } => { c.u32(3).u32(*state as u32); }
+            ItemMenuKind::Hero { host, rows } => {
+                c.u32(4).u32(host.0).u32(rows.len() as u32);
+                for row in rows { c.u32(row.elem).str(&row.label).bool(row.destructive); }
+            }
         }
         c.u32(self.host.0);
         c.option(self.focus, |c, key| { c.u32(key.entry.0).u32(key.elem); });
@@ -1185,6 +1204,10 @@ pub enum ContentReq {
     /// all.
     PreviewSeek(i64),
     ItemMenu,
+    /// **The Detail hero's More disc**: present the shared item menu with the hero's remaining
+    /// actions as its rows ([`ItemMenuKind::Hero`]). The page names the rows and the disc's drawn
+    /// rect; the loop knows the page's entry, instance and item, so none of those ride here.
+    HeroMenu { rows: Vec<HeroMenuRow>, anchor: [u32; 4] },
     /// **Present one of the Detail page's own panels** on the container tree (spec §6.2's
     /// "page-owned panels"). The page names WHICH and supplies whatever the panel needs to place
     /// itself; the loop knows the style and the page's identity, so neither is on this request.
@@ -1505,6 +1528,9 @@ pub enum AppMsg {
     /// The *Play Version* surface committed a row: play that version of the page's item, as its
     /// Play pill would (resuming). The surface names the version and the page plays it.
     PlayVersion(plx_plex::plex::MediaId),
+    /// A row of the hero's More menu ([`ItemMenuKind::Hero`]) was committed: perform the hero
+    /// control with this `ELEM_*` identity, as a press on it would.
+    HeroAction(u32),
     /// **A `toggle_section` command was performed** (`app::playback::perform_hud_command`, from a tab's
     /// OK or click or from a package's disc): the player page opens that section if it is closed and closes it
     /// if it is open, under the package's policy. The page owns the sections ([`crate::player::input::Sections`]),
@@ -2049,7 +2075,7 @@ pub const ARG_SHAPE: &str = "AppArg{Login,Profiles,Onboard,Home,Library,LibraryC
      AltSources{host:u32,sid:u32,rk:str,anchor:[u32;4]},\
      VersionsPanel{host:u32,sid:u32,rk:str,anchor:[u32;4]},\
      TracksPanel{page:i32},AboutPanel,PersonBio,CollectionAbout,AccountMenu,\
-     ItemMenu{sid:u32,rk:str,kind:{Card{from_deck:bool,type:u32},Episode{mark:u32},Season{mark:u32},Catalog{state:u32}},\
+     ItemMenu{sid:u32,rk:str,kind:{Card{from_deck:bool,type:u32},Episode{mark:u32},Season{mark:u32},Catalog{state:u32},Hero{host:u32,rows:[{elem:u32,label:str,destructive:bool}]}},\
      host:u32,focus:Option<{entry:u32,elem:u32}>,anchor:[u32;4],loaded_episode:bool,from_home:bool,catalog:Option<{guid:str}>},\
      WatchlistMenu{host:u32,options:{type:u32,sort:u32,descending:bool,show:u32},anchor:[u32;4]}}";
 
@@ -2814,7 +2840,9 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // Previous pin: 0xf852_85cc_f116_356b. Re-record incompatible replay anchors.
 // The Library menu retains its parent scroll across a Genre drill-in and the selected library
 // through its closing morph. Previous pin: 0x7e36_4373_746a_c3dc.
-const SCREEN_SHAPES_PIN: u64 = 0x1427_1d82_bf6b_e04c;
+// Detail's hero More menu: `ItemMenuKind::Hero{host,rows}` joins `ARG_SHAPE` and the item menu's
+// `Action` gains `Hero(elem)`. Previous pin: 0x1427_1d82_bf6b_e04c; re-record the replay anchors.
+const SCREEN_SHAPES_PIN: u64 = 0x086d_35c6_7e98_86f1;
 
 #[cfg(test)]
 mod arg_tests {

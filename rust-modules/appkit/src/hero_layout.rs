@@ -4,10 +4,10 @@
 //!
 //! **What lives here.** Only decisions that name no screen and no control enum: the row's
 //! constants ([`CGAP`], [`CD`], [`PW`], [`FACTS_R`]), a pill's measured width ([`pill_w`]), the
-//! left-to-right accumulation of a row of known widths ([`row_rect`]), the disc-unfurl budget
-//! ([`disc_caps_with`]) and the date/runtime-or-extent line ([`meta_facts`]). Which controls a
-//! given page shows (`HeroCtl`, `HeroSet`) stays with that page and feeds these functions its
-//! widths.
+//! left-to-right accumulation of a row of known widths from any left edge ([`row_rect_in`], and
+//! [`row_rect`] from the margin) and the date/runtime-or-extent line ([`meta_facts`]). Which
+//! controls a given page shows (`HeroCtl`, `HeroSet`) stays with that page and feeds these functions
+//! its widths.
 //!
 //! **Shared contract.** These began as the bodies of `screens::detail::hero` and were
 //! re-based on the shared `HStack`. Both heroes now share the proposal's minimum Play width;
@@ -18,15 +18,10 @@ use std::ffi::CStr;
 use plx_data::metadata::{Detail, Episode};
 use plx_machine::machine::Measure;
 use plx_ui::hstack::{Align, HStack, Item};
-use plx_ui::widgets::CircleButton;
 use plx_ui::{theme, Rect};
 
-/// Maximum row: Play, bookmark, Go to Show, Version, Restart, Trailer, Alt, watch face and More.
+/// The most controls one hero row lays out (the accumulation's fixed storage).
 pub const MAX_CTLS: usize = 9;
-
-/// How many of the row's controls are discs that unfurl to a verb on focus: Restart, Trailer, the
-/// watch toggle, Play Version and Go to Show (the bookmark disc never unfurls).
-pub const DISCS: usize = 5;
 
 /// The Play/Resume pill's minimum width: a pathologically short label still gets a pill.
 pub const PW: f32 = theme::hero::PLAY_MIN_W;
@@ -36,12 +31,9 @@ pub const PW: f32 = theme::hero::PLAY_MIN_W;
 pub const CGAP: f32 = plx_ui::widgets::CONTROL_GAP;
 pub const CD: f32 = plx_ui::widgets::StatusOverlay::CTRL_H;
 
-/// The right edge the hero's controls and facts line may reach: the People column's left edge less
-/// one small gap.
-pub const FACTS_R: f32 = plx_ui::consts::SCR_W
-    - plx_ui::consts::MARGIN_X
-    - plx_ui::detail_layout::PEOPLE_W
-    - theme::space::SM;
+/// The right edge a margin-anchored hero row ([`row_rect`], the catalog page's) may reach: the
+/// end of the shared reading column.
+pub const FACTS_R: f32 = plx_ui::consts::MARGIN_X + plx_ui::detail_layout::HERO_TEXT_W;
 
 /// Duplicated from `widgets::Button`'s own PRIVATE `BTN_ICON_RATIO`/`BTN_ICON_GAP` (1.15, 12.0):
 /// those two constants are `widgets.rs`-internal and this layer names only `ui/`'s public surface.
@@ -91,35 +83,29 @@ pub fn play_text(resumes: bool) -> &'static str {
     }
 }
 
-/// Every measured width the Detail row's accumulation needs, as one value.
-#[derive(Clone, Copy, Debug)]
-pub struct HeroWidths {
-    pub pill: f32,
-    pub alt: f32,
-    /// the unfurling discs, in the page's disc slot order, each already unfurled
-    pub disc: [f32; DISCS],
+/// [`row_rect_in`] from the page margin to [`FACTS_R`]: the catalog page's row.
+pub fn row_rect(widths: &[f32], i: usize, y: f32) -> Rect {
+    row_rect_in(plx_ui::consts::MARGIN_X, FACTS_R, widths, i, y)
 }
 
 /// The accumulation itself, PURE: the drawn frame of control `i` in a row whose controls, in drawn
-/// order, are `widths` wide, placed by the shared
-/// [`HStack`]. Every control is PRESENT whatever its width: a disc springing between `CD` and its
-/// open width never passes through 0 and so never pops its gap. Capsules reserve their focus
-/// expansion on each side, keeping `CGAP` clear when focused. Plain discs retain their ordinary
-/// gap; the first control keeps its base at the page margin. An index past the end lands one gap
-/// after the reserved right edge of the last control.
+/// order, are `widths` wide, placed by the shared [`HStack`] from `left`. Every control is PRESENT
+/// whatever its width, so none pops its gap. Capsules reserve their focus expansion on each side,
+/// keeping `CGAP` clear when focused. Plain discs retain their ordinary gap; the first control
+/// keeps its base at `left`. An index past the end lands one gap after the reserved right edge of
+/// the last control. A dense translated row gives up that decorative air before its last control
+/// crosses `right`.
 ///
-/// `widths` is never empty from the Detail row (`hero_ctls` always yields Play and a watch face).
-/// The Detail-only fallback the old inline loop had for an empty row (`cw.pill`) is therefore
-/// unreachable and was not carried over: an empty slice yields a zero-width control at the margin.
-pub fn row_rect(widths: &[f32], i: usize, y: f32) -> Rect {
+/// An empty slice yields a zero-width control at `left`.
+pub fn row_rect_in(left: f32, right: f32, widths: &[f32], i: usize, y: f32) -> Rect {
     debug_assert!(widths.len() <= MAX_CTLS);
     let n = widths.len().min(MAX_CTLS);
-    // A dense translated row may already spend nearly all the room before People. Give up
-    // decorative air before letting the existing controls cross that boundary.
+    // A dense translated row may already spend nearly all the room before `right`. Give up
+    // decorative air before letting the existing controls cross it.
     let base_w = widths[..n].iter().sum::<f32>() + CGAP * n.saturating_sub(1) as f32;
     let air_w = widths[..n].iter().enumerate()
         .map(|(k, w)| capsule_focus_air(*w) * if k == 0 { 1.0 } else { 2.0 }).sum::<f32>();
-    let room = (FACTS_R - plx_ui::consts::MARGIN_X - base_w).max(0.0);
+    let room = (right - left - base_w).max(0.0);
     let air_scale = if air_w > 0.0 { (room / air_w).min(1.0) } else { 1.0 };
     // Fixed storage: this runs ~10-16 times a frame on Detail, so it allocates nothing. One extra,
     // zero-wide item (the sentinel) stands in for "past the end": the stack puts it one gap after
@@ -130,9 +116,9 @@ pub fn row_rect(widths: &[f32], i: usize, y: f32) -> Rect {
         *slot = Item::new(*w + air + if k == 0 { 0.0 } else { air });
     }
     items[n] = Item::new(0.0);
-    let stack = HStack::new(&items[..=n], CGAP, Align::Leading(plx_ui::consts::MARGIN_X));
+    let stack = HStack::new(&items[..=n], CGAP, Align::Leading(left));
     let at = i.min(n);
-    let (x, _) = stack.span(at).unwrap_or((plx_ui::consts::MARGIN_X, 0.0));
+    let (x, _) = stack.span(at).unwrap_or((left, 0.0));
     let w = widths.get(i).or(widths.last()).copied().unwrap_or(0.0);
     let leading_air = if at == 0 || at == n { 0.0 } else { capsule_focus_air(w) * air_scale };
     Rect::new(x + leading_air, y, w, CD)
@@ -149,40 +135,10 @@ pub fn flat_row(items: &[Item]) -> HStack<'_> {
     HStack::new(items, CGAP, Align::Leading(plx_ui::consts::MARGIN_X))
 }
 
-/// Reserved right edge, including a capsule's focus expansion, for the unfurl budget.
-pub fn row_right(widths: &[f32]) -> f32 {
-    row_rect(widths, widths.len(), 0.0).x - if widths.is_empty() { 0.0 } else { CGAP }
-}
-
 /// Reserve the capsule's horizontal focus pop, opening continuously from a plain disc.
-/// The excess-width bound avoids a jump on the first frame of the unfurl spring.
+/// The excess-width bound keeps a disc-wide control from claiming any.
 fn capsule_focus_air(w: f32) -> f32 {
     (w * (plx_ui::widgets::CTRL_FOCUS_SCALE - 1.0) * 0.5).min((w - CD).max(0.0))
-}
-
-/// Every disc's drawn width right now. `last_right(disc)` is the right edge of the row's LAST
-/// control when the `N` discs are `disc` wide; `label_w` is each disc's measured verb and
-/// `unfurl` its 0..1 open fraction.
-///
-/// Every active verb must fit wholly before the People column as a single extra, and the last
-/// control of the trial layout must still sit at or before [`FACTS_R`], otherwise every disc
-/// remains a circle. Every disc can be mid-unfurl at once (one opening while another closes), so a
-/// pair-wide budget is not enough: two extras that each fit can still push a third across the
-/// People column.
-pub fn disc_caps_with<const N: usize>(
-    unfurl: [f32; N],
-    label_w: [f32; N],
-    last_right: impl Fn([f32; N]) -> f32,
-) -> [f32; N] {
-    let budget = CircleButton::label_budget(CD, FACTS_R - last_right([CD; N]));
-    if label_w.iter().zip(unfurl).any(|(label, open)| open > 0.0 && *label > budget) {
-        return [CD; N];
-    }
-    let open = std::array::from_fn(|i| CircleButton::cap_w(CD, unfurl[i], label_w[i]));
-    if last_right(open) > FACTS_R + 0.01 {
-        return [CD; N];
-    }
-    open
 }
 
 /// The same episode lead on Home and Detail, including its prose separator.

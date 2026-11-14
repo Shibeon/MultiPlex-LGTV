@@ -349,16 +349,16 @@ the crew credits that are currently parsed and discarded.
 
 ### 5c. The detail-page action row, and watched-state granularity
 
-The reference detail page has **six circular action buttons**; we had two (`detail.rs:88` `NBTN = 2`) when audited; now we have three, Play/Resume, the Watchlist bookmark disc and the watched toggle:
+The reference detail page has **six circular action buttons**; we had two (`detail.rs:88` `NBTN = 2`) when audited. Since the two-column hero (2026-11-14) the row is the MultiPlex web client's: a wide white Play/Resume pill and a round More disc whose menu holds the rest:
 
 | # | Button | Us |
 |---|---|---|
 | 1 | ▶ Play | ✅ |
-| 2 | ↺ Play from start / restart | ❌ (cheap win #4) |
-| 3 | 🔖 Watchlist | ✅ (unlabelled bookmark disc, second after Play/Resume: outline off the list, filled on it) |
-| 4 | ⊘✓ Mark as watched | ✅ but wrong scope — see below |
+| 2 | ↺ Play from start / restart | ✅ (More menu: Play from Start, when there is a resume point) |
+| 3 | 🔖 Watchlist | ✅ (More menu: Add to Watchlist, or a destructive Remove while on the list) |
+| 4 | ⊘✓ Mark as watched | ✅ (More menu) but wrong scope — see below |
 | 5 | ↥ Share | ❌ (plex.tv/social) |
-| 6 | … More | ❌ — and this is the one that matters, because it hosts the rest |
+| 6 | … More | ✅ (the shared item menu, `ItemMenuKind::Hero`) |
 
 **Watched state needs three scopes, and we have one.** Plex's More menu carries `Mark Season Watched`
 and `Delete Season` alongside the item-level rows — so the vocabulary is **episode / season / show**.
@@ -515,8 +515,8 @@ player, transport and tracks auditors, and is counted once in the themes above.
 > re-matched on the next trigger. `docs/watchlist.md`, *Live-update gaps*.
 
 - **Watchlist add action absent (adjacent catalog: plex.tv Discover)** — `major` / `medium` — **closed 2026-10.**
-  The official rail carries Watchlist between Home and the libraries, plus an 'Add to Watchlist' action on items. Shipped: a plex.tv Discover client, `data::watchlist`, a Watchlist strip destination (the bookmark tab) and page, the add and remove actions on the Detail and Home heroes (a bookmark disc), the item hold menu and the catalog page, and the catalog page for titles no server holds.
-  *Where:* rust-modules/plex/src/plex/watchlist.rs and discover.rs (the Discover client), rust-modules/data/src/stores/watchlist.rs (`WatchlistStore`) and stores/catalog.rs (`CatalogStore`), rust-modules/screens/src/watchlist/ (the page), catalog.rs (the catalog page), item_menu/watchlist.rs (the rows), detail/hero.rs (the disc) and rust-modules/src/app/watchlist.rs (the application wiring).
+  The official rail carries Watchlist between Home and the libraries, plus an 'Add to Watchlist' action on items. Shipped: a plex.tv Discover client, `data::watchlist`, a Watchlist strip destination (the bookmark tab) and page, the add and remove actions on the Home hero (a bookmark disc) and in the Detail hero's More menu (a Watchlist row), the item hold menu and the catalog page, and the catalog page for titles no server holds.
+  *Where:* rust-modules/plex/src/plex/watchlist.rs and discover.rs (the Discover client), rust-modules/data/src/stores/watchlist.rs (`WatchlistStore`) and stores/catalog.rs (`CatalogStore`), rust-modules/screens/src/watchlist/ (the page), catalog.rs (the catalog page), item_menu/watchlist.rs (the rows), detail/hero.rs (the More menu's Watchlist row), appkit/src/watchlist_disc.rs (Home's disc) and rust-modules/src/app/watchlist.rs (the application wiring).
   *Verified:* The strip tab is `TAB_KEY_WATCHLIST` in rust-modules/ui/src/widgets.rs; `Action::WatchlistAdd` / `WatchlistRemove` / `GoToCatalog` exist in `screens::item_menu` and `app::input::apply_item_action` queues the write and pulses the tab. Still open: the catalog page has no Trailer button (an owner default), the match table is not persisted, and a card whose row carries no guid is offered Add one menu later (`watchlist_card_face` asks `WatchlistStore::want_hex`; the first menu omits the row), never when the server did not answer or the item has no portable id. See `docs/watchlist.md`.
 
 - **No persistent left navigation rail** — `minor` / `large`
@@ -675,8 +675,8 @@ player, transport and tracks auditors, and is counted once in the themes above.
 
 - **No Watchlist button (adjacent-catalog / Plex Discover feature)** — `minor` / `large` — **closed 2026-10.**
   The reference action row includes a bookmark = Add to Watchlist. It is a plex.tv Discover-graph action (`PUT https://discover.provider.plex.tv/actions/addToWatchlist?ratingKey=<hex>`), not a PMS one.
-  *Where:* `rust-modules/screens/src/detail/hero.rs`: the hero's second control (`ELEM_WATCHLIST`, `HeroCtl::Watchlist`), an unlabelled disc after Play/Resume; the write goes through `WatchlistStore` (`rust-modules/data/src/stores/watchlist.rs`) and `app/watchlist.rs`.
-  *Verified:* The disc is outline off the list and filled on it, fills from the bottom with a 3 px ribbon drop on a flip, and draws the Add face while membership is unknown. Its press is `Action::WatchlistAdd { hex }` or `Action::WatchlistRemove(guid)`; a record whose guid is not `plex://movie|show/<24 hex>` has no disc.
+  *Where:* `rust-modules/screens/src/detail/hero.rs`: a row of the hero's More menu (`ELEM_WATCHLIST`, `HeroCtl::Watchlist`, `menu_rows`); the write goes through `WatchlistStore` (`rust-modules/data/src/stores/watchlist.rs`) and `app/watchlist.rs`.
+  *Verified:* The row reads Add while the title is off the list or its membership is unknown and a destructive Remove while it is on. Its commit is `Action::WatchlistAdd { hex }` or `Action::WatchlistRemove(guid)`; a record whose guid is not `plex://movie|show/<24 hex>` has no row.
 
 - **No Share button and no "Activity by You" row (adjacent-catalog / social)** — `polish` / `large`
   The reference has a Share (↥) action and an "Activity by You" row showing the user's avatar and their review/watch activity. Both are Plex's social/Discover graph, not PMS. Nothing of the sort exists here. Flagged as adjacent-catalog, not a library feature.

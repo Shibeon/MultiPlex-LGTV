@@ -173,6 +173,13 @@ fn pump_requests(d: &mut Dispatcher<AppHost>, rig: &mut Bridge, mut item: Option
                 nav_push_with_return(d, AppArg::Content(arg), ret);
                 seen.push("content:Push".into());
             }
+            ContentReq::HeroMenu { rows, anchor } => {
+                let MachineId::Instance(instance) = source else { continue };
+                if crate::app::content::open_hero_menu(d, instance, entry, rows, anchor, &ret) {
+                    if let Some((pump, _)) = item.as_mut() { pump.ok_armed = false; }
+                }
+                seen.push("content:HeroMenu".into());
+            }
             _ => seen.push("unperformed content:request".into()),
         }
     }

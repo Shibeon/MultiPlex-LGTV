@@ -162,8 +162,7 @@ pub(super) fn bare_held(sid: ServerId, rk: &str) -> DetailScreen {
         tabs: TabStrip::new(),
         season_pop: CtlPop::new(),
         ctl_pop: CtlPop::new(),
-        disc_unfurl: [Spring::at(0.0); hero::DISCS],
-        watchlist: plx_appkit::watchlist_disc::Disc::new(plx_data::catalog::Membership::Unknown), watchlist_hex: None,
+        watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None,
         season_metrics: season::Metrics::new(),
         about_rows: about::Rows::new(),
         ground: AmbientWash::flat(theme::SURFACE_APP),
@@ -612,7 +611,7 @@ fn a_spot_round_trips_through_the_page_it_describes() {
     let measure = plx_ui::fixture::FixtureMeasure;
     for (elem, section, col, text) in [
         (hero::ELEM_PLAY, 0, 0, false),
-        (hero::ELEM_MARK_WATCHED, 0, 2, false),
+        (hero::ELEM_MORE, 0, 1, false),
         (season::elem(1).unwrap(), 1, 1, false),
         (
             episodes::elem(1, episodes::Row::Still).unwrap(),
@@ -1313,12 +1312,12 @@ fn hero_focus_is_clamped_when_the_control_set_shrinks_under_it() {
         },
         &cx(&measure, None),
     );
-    assert_eq!(got.elem, hero::ELEM_PLAY);
+    assert_eq!(got.elem, hero::ELEM_MORE, "a menu action's focus stands on the More disc");
     clear();
 }
 
 #[test]
-fn hero_focus_follows_its_control_when_the_set_grows_under_it() {
+fn hero_focus_on_a_menu_action_lands_on_the_more_disc_that_offers_it() {
     let sid = ServerId::UNSET;
     let _guard = install(Detail {
         sid,
@@ -1335,41 +1334,11 @@ fn hero_focus_follows_its_control_when_the_set_grows_under_it() {
     };
     assert_eq!(
         Focusable::<TestHost>::reconcile(&screen, want, &cx(&measure, None)),
-        want
+        FocusKey { entry: EntryId(7), elem: hero::ELEM_MORE }
     );
+    let more = FocusKey { entry: EntryId(7), elem: hero::ELEM_MORE };
+    assert_eq!(Focusable::<TestHost>::reconcile(&screen, more, &cx(&measure, None)), more);
     clear();
-}
-
-#[test]
-fn hero_focus_stays_in_place_when_also_available_lands() {
-    let before = hero::HeroSet { more: false,
-        watchlist: true,
-        go_show: false,
-        version: false,
-        restart: true,
-        trailer: false,
-        alt: false,
-        mark: PosterMark::None,
-    };
-    let after = hero::HeroSet {
-        watchlist: true,
-        go_show: false,
-        version: false,
-        alt: true,
-        ..before
-    };
-    let before_index = hero::watch_index(before).unwrap();
-    let after_index = hero::watch_index(after).unwrap();
-    assert_eq!(
-        after_index,
-        before_index,
-        "the trailing Alt pill leaves the watched control in place"
-    );
-    assert_eq!(
-        hero::ctl_at(before, before_index).unwrap().elem(),
-        hero::ctl_at(after, after_index).unwrap().elem(),
-        "the engine keeps the same watched control key"
-    );
 }
 
 #[test]
@@ -1509,36 +1478,6 @@ fn a_landed_view_state_refresh_puts_the_browsed_season_back_and_never_steers_ano
 }
 
 #[test]
-fn a_pointer_lands_on_the_capsule_the_unfurl_drew() {
-    let y = 812.0;
-    let set = hero::HeroSet { more: false,
-        watchlist: true,
-        go_show: false,
-        version: false,
-        restart: true,
-        trailer: false,
-        alt: false,
-        mark: PosterMark::InProgress,
-    };
-    let index = hero::watch_index(set).unwrap();
-    assert_eq!(hero::ctl_at(set, index - 1), Some(hero::HeroCtl::Restart));
-    for unfurl in [0.2, 0.6, 1.0] {
-        let disc = hero::disc_caps_at(set, 230.0, 0.0, [0.0, 0.0, unfurl, 0.0, 0.0], [201.0, 0.0, 267.0, 0.0, 0.0]);
-        let widths = hero::HeroWidths {
-            pill: 230.0,
-            alt: 0.0,
-            disc,
-        };
-        let previous = hero::hero_btn_rect_at(set, index - 1, y, widths);
-        let capsule = hero::hero_btn_rect_at(set, index, y, widths);
-        assert!(capsule.w > hero::CD);
-        assert!(capsule.contains(capsule.x + capsule.w - 1.0, capsule.cy()));
-        assert!(!previous.contains(capsule.x + 1.0, capsule.cy()));
-        assert_eq!(capsule.y, y);
-    }
-}
-
-#[test]
 fn hero_action_row_hit_matches_the_drawn_controls_at_every_set_size() {
     let _guard = plx_base::testlock::serial();
     use plx_ui::hit::{HitMap, PointerKind};
@@ -1588,24 +1527,16 @@ fn hero_action_row_hit_matches_the_drawn_controls_at_every_set_size() {
                     let set = screen.hero_set(test_store().view());
                     assert_eq!(
                         (set.restart, set.alt, set.trailer),
-                        (restart, alt, false),
-                        "the preview path replaced the Trailer disc"
+                        (restart, alt, trailer),
+                        "the More menu offers what the item has"
                     );
                     let (controls, n) = hero::hero_ctls(set);
-                    assert_eq!(n, 3 + usize::from(restart) + usize::from(alt));
+                    assert_eq!(n, 2, "Play and More, whatever the menu holds");
                     sizes.insert(n);
-                    for unfurl in [
-                        [0.0, 0.0, 0.0, 0.0, 0.0],
-                        [0.0, 0.0, 1.0, 0.0, 0.0],
-                        [0.0, 1.0, 0.0, 0.0, 0.0],
-                        [0.3, 0.0, 0.7, 0.0, 0.0],
-                        [1.0, 0.0, 0.0, 0.0, 0.0],
-                        [0.0, 1.0, 1.0, 0.0, 0.0],
-                    ] {
-                        screen.disc_unfurl = unfurl.map(Spring::at);
+                    {
                         for scroll in [0.0, 48.0] {
                             screen.scroll = Spring::at(scroll);
-                            let widths = hero::hero_widths(&measure, set, restart, unfurl, false);
+                            let widths = hero::play_w(&measure, restart);
                             let mut stops = Vec::new();
                             let mut drawn = Vec::new();
                             for (i, control) in controls[..n].iter().enumerate() {
@@ -1617,7 +1548,7 @@ fn hero_action_row_hit_matches_the_drawn_controls_at_every_set_size() {
                                 painted.y -= scroll;
                                 assert_eq!((placed.rect.x, placed.rect.y, placed.rect.w, placed.rect.h),
                                     (painted.x, painted.y, painted.w, painted.h),
-                                    "set={set:?} control={control:?} unfurl={unfurl:?}");
+                                    "set={set:?} control={control:?}");
                                 assert_eq!(placed.index, Some(i as u32));
                                 drawn.push((key, painted));
                                 stops.push(Stop { key, rect: placed.rect, rest_rect: placed.rest_rect,
@@ -1646,8 +1577,8 @@ fn hero_action_row_hit_matches_the_drawn_controls_at_every_set_size() {
             }
         }
     }
-    assert_eq!(sizes.into_iter().collect::<Vec<_>>(), vec![3, 4, 5]);
-    assert_eq!(cases, 192);
+    assert_eq!(sizes.into_iter().collect::<Vec<_>>(), vec![2]);
+    assert_eq!(cases, 32);
     clear();
     plx_plex::plex::reset_servers_for_test();
 }
@@ -1738,7 +1669,7 @@ fn preview_chrome_drives_the_below_hero_sections_to_zero_in_full_trailer_mode_an
 }
 
 /// **Background autoplay must not fade the rows between the synopsis and Play.** `draw_hero`
-/// used to gate the identity/meta line, the ratings row, the facts row and the people column on
+/// used to gate the meta line, the ratings row, the credit table and the technical pills on
 /// `chrome * preview_prose` — and `preview_prose` tracks `player::preview::View::prose`, which
 /// drops to 0 the instant ANY picture is up, background autoplay included. `preview_chrome` is
 /// the value those rows are drawn through now (same as the buttons and the below-hero sections),
@@ -1780,8 +1711,8 @@ fn background_autoplay_recedes_identity_and_ratings_but_holds_the_facts_row_and_
     );
     assert!(
         screen.preview_chrome > 0.99,
-        "preview_chrome={} must stay full during background autoplay: draw_hero gates the facts \
-         row (date · runtime · Direct Play) and the people column on it, and those must not \
+        "preview_chrome={} must stay full during background autoplay: draw_hero gates the meta \
+         line (date · runtime · Direct Play) and the credit table on it, and those must not \
          vanish and come back under a playing preview",
         screen.preview_chrome
     );
@@ -1936,7 +1867,7 @@ fn a_long_synopsis_keeps_the_first_section_one_region_gap_below_the_buttons() {
     let chain = screen.hero_chain(&plx_ui::fixture::FixtureMeasure, test_store().view());
     assert_eq!(
         screen.section_top(1, detail, &plx_ui::fixture::FixtureMeasure),
-        chain.btn_y + hero::CD + theme::space::XL
+        chain.foot + theme::space::XL
     );
     assert_eq!(screen.content_top(&plx_ui::fixture::FixtureMeasure, test_store().view()), screen.section_top(1, detail, &plx_ui::fixture::FixtureMeasure));
     clear();
@@ -1967,8 +1898,9 @@ fn the_hero_chain_is_identical_whether_or_not_the_trailer_preview_has_faded_its_
     assert_eq!(rest.meta_y, faded.meta_y, "meta line must not move when it fades");
     assert_eq!(rest.ratings_y, faded.ratings_y, "ratings row must not move when it fades");
     assert_eq!(rest.syn_y, faded.syn_y, "synopsis must not move");
-    assert_eq!(rest.facts_y, faded.facts_y, "facts/playback-note line must not move when it fades");
     assert_eq!(rest.btn_y, faded.btn_y, "the action row must not move");
+    assert_eq!(rest.credits_y, faded.credits_y, "the credit table must not move");
+    assert_eq!(rest.foot, faded.foot, "the sections below must not move");
     clear();
 }
 
@@ -2781,7 +2713,7 @@ fn a_movie_trailer_disc_plays_the_extra_from_the_start() {
         },
     )));
     let mut screen = bare(&_guard, ServerId::UNSET, "movie");
-    assert!(!screen.hero_set(test_store().view()).trailer, "the preview path replaced the Trailer disc");
+    assert!(screen.hero_set(test_store().view()).trailer, "the More menu offers the Trailer");
     let (_, effects) = step(
         &mut screen,
         &ScreenEvent::Activate(hero::ELEM_TRAILER),
@@ -2945,7 +2877,7 @@ fn a_trailer_disc_requires_both_rk_and_part() {
 }
 
 #[test]
-fn extras_landing_does_not_grow_a_trailer_disc_or_move_play_identity() {
+fn extras_landing_adds_a_trailer_row_without_moving_play_identity() {
     let sid = ServerId::UNSET;
     let _guard = install(Detail {
         sid,
@@ -2966,7 +2898,7 @@ fn extras_landing_does_not_grow_a_trailer_disc_or_move_play_identity() {
         ..Default::default()
     }));
     let after = screen.hero_set(test_store().view());
-    assert!(!after.trailer, "the preview path replaced the Trailer disc");
+    assert!(after.trailer, "the More menu offers the Trailer");
     assert_eq!(hero::index_of(after, hero::HeroCtl::Play), Some(0));
     assert_eq!(hero::HeroCtl::Play.elem(), play_elem);
     clear();
@@ -5058,7 +4990,7 @@ fn an_unfocused_related_row_that_fills_the_screen_does_not_ask() {
     clear();
 }
 
-// ---- the bookmark disc on a DetailScreen (docs/watchlist-plan.md §1.4, §1.8) -----------------
+// ---- the Watchlist row on a DetailScreen (docs/watchlist-plan.md §1.4, §1.8) -----------------
 
 const WL_HEX: [u8; 12] = [0x5d, 0x77, 0x6b, 0x1d, 0x96, 0xb6, 0x55, 0x00, 0x1f, 0x2a, 0x9c, 0x3e];
 const WL_GUID: &str = "plex://movie/5d776b1d96b655001f2a9c3e";
@@ -5100,15 +5032,15 @@ fn a_non_plex_guid_has_no_bookmark_disc() {
     assert!(item_menu_acts(&fx).is_empty());
 }
 
-/// A `plex://movie` title gets the disc second, and OK on it asks the item menu's own write: Add
-/// from the outline face, Remove (keyed by the guid) from the filled one.
+/// A `plex://movie` title gets a Watchlist row in the More menu, and committing it asks the item
+/// menu's own write: Add while off the list, Remove (keyed by the guid) while on it.
 #[test]
-fn the_bookmark_disc_press_emits_the_item_menu_write() {
+fn the_watchlist_row_press_emits_the_item_menu_write() {
     let _guard = install(movie_with_guid(WL_GUID));
     let mut screen = bare(&_guard, ServerId::UNSET, "movie");
     let set = screen.hero_set(test_store().view());
     assert!(set.watchlist);
-    assert_eq!(hero::index_of(set, hero::HeroCtl::Watchlist), Some(1));
+    assert!(screen.hero_menu(test_store().view()).iter().any(|r| r.elem == hero::ELEM_WATCHLIST));
     tick_page(&mut screen, None, 16);
     assert_eq!(screen.watchlist_hex(), Some(WL_HEX));
     let (_, fx) = step(&mut screen, &ScreenEvent::Activate(hero::ELEM_WATCHLIST), Some(hero::ELEM_WATCHLIST));
@@ -5118,64 +5050,24 @@ fn the_bookmark_disc_press_emits_the_item_menu_write() {
     assert_eq!(item_menu_acts(&fx), vec![crate::registry::ItemMenuAction::WatchlistRemove(WL_GUID.into())]);
 }
 
-/// The first membership answer is the disc's rest face: no fill/ribbon flip plays on open. A later
-/// change from a known face does animate.
+/// The membership is a read for the More menu's Watchlist row, nothing the page draws: a change
+/// turns the row's face (Add, then a destructive Remove) and asks one frame, and an unchanged
+/// answer asks none. The page keeps no flip spring to animate.
 #[test]
-fn the_first_membership_answer_snaps_and_a_later_change_animates() {
-    let _guard = install(movie_with_guid(WL_GUID));
-    let mut screen = bare(&_guard, ServerId::UNSET, "movie");
-    screen.set_watchlist(plx_data::catalog::Membership::On);
-    tick_page(&mut screen, None, 16);
-    assert_eq!(screen.watchlist.pos(), 1.0, "open on an on-list title draws the filled face at rest");
-    screen.set_watchlist(plx_data::catalog::Membership::Off);
-    tick_page(&mut screen, None, 16);
-    assert!(
-        (0.0..1.0).contains(&screen.watchlist.pos()) && screen.watchlist.pos() > 0.0,
-        "a flip from a known face animates"
-    );
-}
-
-/// The Add pressed while the membership is still `Unknown` (the list unread) is the user's own
-/// change: it unfurls instead of snapping. With no press, the same change is the first answer and snaps.
-#[test]
-fn an_add_pressed_from_an_unknown_membership_unfurls() {
+fn a_membership_change_turns_the_watchlist_row_and_animates_nothing() {
     let _guard = install(movie_with_guid(WL_GUID));
     let mut screen = bare(&_guard, ServerId::UNSET, "movie");
     tick_page(&mut screen, None, 16);
-    step(&mut screen, &ScreenEvent::Activate(hero::ELEM_WATCHLIST), Some(hero::ELEM_WATCHLIST));
+    let row = |s: &DetailScreen| s.hero_menu(test_store().view()).into_iter().find(|r| r.elem == hero::ELEM_WATCHLIST).unwrap();
+    assert!(!row(&screen).destructive, "an unknown membership offers Add");
     screen.set_watchlist(plx_data::catalog::Membership::On);
-    let mut trace = Vec::new();
-    for n in 0..8 {
-        tick_page(&mut screen, None, 16 * n);
-        trace.push(screen.watchlist.pos());
-    }
-    assert!(trace.iter().filter(|p| **p > 0.0 && **p < 1.0).count() >= 5, "the add unfurls over frames: {trace:?}");
-
-    let mut unpressed = bare(&_guard, ServerId::UNSET, "movie");
-    unpressed.set_watchlist(plx_data::catalog::Membership::On);
-    assert_eq!(unpressed.watchlist.pos(), 1.0, "an unpressed first answer snaps");
+    assert_eq!(screen.watchlist(), plx_data::catalog::Membership::On);
+    assert!(row(&screen).destructive, "on the list, the row offers Remove");
+    screen.set_watchlist(plx_data::catalog::Membership::Off);
+    assert!(!row(&screen).destructive, "off the list again, Add");
 }
 
-/// A flip Off -> On, ticked until idle, rests EXACTLY on the filled face (not 0.999 drawing a clip).
-#[test]
-fn the_bookmark_flip_snaps_to_its_target_at_rest() {
-    let _guard = install(movie_with_guid(WL_GUID));
-    let mut screen = bare(&_guard, ServerId::UNSET, "movie");
-    screen.set_watchlist(plx_data::catalog::Membership::Off);
-    tick_page(&mut screen, None, 16);
-    screen.set_watchlist(plx_data::catalog::Membership::On);
-    for n in 0..600 {
-        tick_page(&mut screen, None, 16 * n);
-    }
-    assert_eq!(screen.watchlist.pos(), 1.0);
-    screen.set_watchlist(plx_data::catalog::Membership::Off);
-    for n in 0..600 {
-        tick_page(&mut screen, None, 16 * n);
-    }
-    assert_eq!(screen.watchlist.pos(), 0.0);
-}
-
-// ---- the hero's ratings row and identity line, read off the PAINTED runs ----------------------
+// ---- the hero's ratings row and meta line, read off the PAINTED runs --------------------------
 
 /// Shipped advances scaled by `.0`: a way to make a ratings row overflow by a chosen amount.
 struct ScaledMeasure(f32);
@@ -5228,24 +5120,27 @@ fn the_ratings_row_paints_its_groups_one_gap_apart() {
     let runs = plx_ui::draw_census::capture_runs(|| screen.draw_ratings(plx_ui::Painter::recording(), &d, 600.0, m));
     let first = painted_x(&runs, "IMDb").expect("first caption painted");
     let second = painted_x(&runs, "TMDB").expect("second caption painted");
-    assert!((first - plx_ui::consts::MARGIN_X).abs() < 0.5, "the row starts at the margin: {first}");
+    assert!((first - plx_ui::detail_layout::TEXT_X).abs() < 0.5, "the row starts the text column: {first}");
     let gap = second - (first + group_w(RatingArt::Imdb, 8.1, m));
     assert!((gap - plx_ui::widgets::RATING_GROUP_GAP).abs() < 0.5, "groups a gap apart, got {gap}");
 }
 
-/// **A group that would overflow the right margin is not drawn.** The scale is bisected until the
-/// second group is JUST past the margin (by less than a gap), so a row that tested the group
-/// against `end()` (the last group's edge, without the gap it owes) would still draw it.
+/// **A group that would overflow the text column is not drawn.** The scale is bisected until the
+/// second group is JUST past the column's end, less the viewer's stars and the gap before them (by
+/// less than a gap), so a row that tested the group against `end()` (the last group's edge, without
+/// the gap it owes) would still draw it.
 #[test]
 fn a_ratings_group_that_would_overflow_the_margin_is_not_drawn() {
     use plx_data::metadata::RatingArt;
     let _guard = plx_base::testlock::serial();
     let screen = bare_held(ServerId::UNSET, "rk");
     let d = two_provider_ratings();
-    let limit = plx_ui::consts::SCR_W - plx_ui::consts::MARGIN_X;
+    let limit = plx_ui::detail_layout::TEXT_X + plx_ui::detail_layout::HERO_TEXT_W
+        - plx_ui::widgets::RATING_GROUP_GAP
+        - plx_ui::widgets::user_stars_w();
     let overshoot = |k: f32| {
         let m = ScaledMeasure(k);
-        plx_ui::consts::MARGIN_X + group_w(RatingArt::Imdb, 8.1, &m) + plx_ui::widgets::RATING_GROUP_GAP + group_w(RatingArt::Tmdb, 7.5, &m) - limit
+        plx_ui::detail_layout::TEXT_X + group_w(RatingArt::Imdb, 8.1, &m) + plx_ui::widgets::RATING_GROUP_GAP + group_w(RatingArt::Tmdb, 7.5, &m) - limit
     };
     let (mut lo, mut hi) = (1.0f32, 12.0f32);
     assert!(overshoot(lo) < 0.0 && overshoot(hi) > 0.0, "the bracket straddles the margin");
@@ -5263,58 +5158,6 @@ fn a_ratings_group_that_would_overflow_the_margin_is_not_drawn() {
     let m = ScaledMeasure(lo);
     let runs = plx_ui::draw_census::capture_runs(|| screen.draw_ratings(plx_ui::Painter::recording(), &d, 600.0, &m));
     assert!(painted_x(&runs, "TMDB").is_some(), "a group that fits is drawn");
-}
-
-fn identity_detail(parts_empty: bool) -> Detail {
-    use plx_data::metadata::Stream;
-    let mut d = Detail {
-        kind: if parts_empty { "episode".into() } else { "movie".into() },
-        video_resolution: "1080".into(),
-        subs: vec![Stream { sdh: true, ..Default::default() }],
-        ..Default::default()
-    };
-    d.is_show = false;
-    d
-}
-
-fn keyline_left(label_x: f32, text: &str, m: &dyn plx_machine::machine::Measure) -> (f32, f32) {
-    let left = label_x - 7.0;
-    (left, left + plx_ui::widgets::keyline_chip_w(text, m))
-}
-
-/// **The identity line: the chips stand `SM` after the dotted run and `XS` apart.**
-#[test]
-fn the_identity_line_paints_sm_after_the_run_and_xs_between_chips() {
-    let _guard = plx_base::testlock::serial();
-    let screen = bare_held(ServerId::UNSET, "rk");
-    let d = identity_detail(false);
-    let m = &plx_base::fontcov::advances::ShippedMeasure;
-    let runs = plx_ui::draw_census::capture_runs(|| screen.identity_row(plx_ui::Painter::recording(), &d, 300.0, m));
-    let kind = plx_platform::i18n::msg::browse_kind_movie();
-    let kind_run = runs.iter().find(|r| r.text == kind).expect("the kind label is painted");
-    // The recording painter has no loaded font. Geometry comes from the same injected measure
-    // as the run, rather than the painter's uninitialized-font width estimate.
-    let run_right = kind_run.at.x + plx_machine::machine::Measure::width_str(m, kind, theme::hero::IDENTITY_SIZE, false);
-    let res = keyline_left(painted_x(&runs, "1080p").expect("resolution chip"), "1080p", m);
-    let cc_label = plx_platform::i18n::msg::widgets_badge_cc();
-    let sdh_label = plx_platform::i18n::msg::widgets_badge_sdh();
-    let cc = keyline_left(painted_x(&runs, cc_label).expect("CC chip"), cc_label, m);
-    let sdh = keyline_left(painted_x(&runs, sdh_label).expect("SDH chip"), sdh_label, m);
-    assert!((res.0 - run_right - theme::space::SM).abs() < 0.5, "SM after the dotted run: {} vs {run_right}", res.0);
-    assert!((cc.0 - res.1 - theme::space::XS).abs() < 0.5, "XS between the badge and the first chip");
-    assert!((sdh.0 - cc.1 - theme::space::XS).abs() < 0.5, "XS between the chips");
-}
-
-/// **An empty dotted run owes no gap**: the first chip stands on the margin itself.
-#[test]
-fn an_empty_identity_run_leaves_no_gap_before_the_first_chip() {
-    let _guard = plx_base::testlock::serial();
-    let screen = bare_held(ServerId::UNSET, "rk");
-    let d = identity_detail(true);
-    let m = &plx_base::fontcov::advances::ShippedMeasure;
-    let runs = plx_ui::draw_census::capture_runs(|| screen.identity_row(plx_ui::Painter::recording(), &d, 300.0, m));
-    let res = keyline_left(painted_x(&runs, "1080p").expect("resolution chip"), "1080p", m);
-    assert!((res.0 - plx_ui::consts::MARGIN_X).abs() < 0.5, "no run, no gap: chip at {}", res.0);
 }
 
 /// **The held episode still is drawn ONCE while its hold menu is up.** The page pass (a frame
@@ -5351,13 +5194,13 @@ fn the_held_episode_still_is_left_out_of_the_page_pass_and_drawn_once_by_the_lif
             }
         })
     };
-    // The first cell, as a census reads it: its still is the one tag-21 art quad over the strip, its
-    // label plate the one tag-2 rounded rect as wide as a cell.
+    // The first cell, as a census reads it: its still is the one tag-21 art quad over the strip
+    // (below the hero's poster, which ends above y 800), its label plate the one tag-2 rounded rect as wide as a cell.
     let stills = |v: &[(u64, plx_ui::Rect)]| -> Vec<plx_ui::Rect> {
-        v.iter().filter(|(t, r)| *t == 21 && r.x < 540.0 && r.y > 900.0).map(|(_, r)| *r).collect()
+        v.iter().filter(|(t, r)| *t == 21 && r.x < 540.0 && r.y > 800.0).map(|(_, r)| *r).collect()
     };
     let plates = |v: &[(u64, plx_ui::Rect)]| -> Vec<plx_ui::Rect> {
-        v.iter().filter(|(t, r)| *t == 2 && (r.w - episodes::W).abs() < 8.0 && r.x < 540.0 && r.y > 900.0 && r.h < 200.0).map(|(_, r)| *r).collect()
+        v.iter().filter(|(t, r)| *t == 2 && (r.w - episodes::W).abs() < 8.0 && r.x < 540.0 && r.y > 800.0 && r.h < 200.0).map(|(_, r)| *r).collect()
     };
 
     // the menu is up: the page pass leaves the whole cell out and says so...
@@ -5384,6 +5227,47 @@ fn the_held_episode_still_is_left_out_of_the_page_pass_and_drawn_once_by_the_lif
     let after = plates(&page_pressed).len();
     assert_eq!((before, after), (1, 1), "plates before / after the lift stands down");
     assert_eq!(plates(&lift), plates(&page_pressed), "...and it is the same plate");
+    clear();
+}
+
+/// **The More disc is lifted above its menu's dim, drawn once.** While the hero menu is up the
+/// page pass (a frame whose `lifted` names the More key) leaves the disc out and says so
+/// (`popover::lift_owns`); the opener lift (`redraw_focused`) draws exactly what the page pass
+/// left out, and nothing else of the page.
+#[test]
+fn the_more_disc_is_left_out_of_the_page_pass_and_drawn_by_the_lift() {
+    let sid = ServerId::UNSET;
+    let _guard = install(detail(sid, "movie"));
+    let mut screen = bare(&_guard, sid, "movie");
+    let measure = plx_ui::fixture::FixtureMeasure;
+    let key = FocusKey { entry: EntryId(7), elem: hero::ELEM_MORE };
+    let context = cx(&measure, Some(key.elem));
+    let mut census = |lifted: Option<FocusKey<u32>>, lift: bool| {
+        plx_ui::popover::set_lift_owns(false);
+        plx_ui::draw_census::capture(|| {
+            let mut f = DrawFrame::new(&context, plx_ui::Painter::recording());
+            f.lifted = lifted;
+            if lift {
+                screen.redraw_focused::<TestHost>(&mut f, Some(key));
+            } else {
+                plx_gfx::gfx::without_frame_clear(|| Screen::<TestHost>::draw(&mut screen, &mut f));
+            }
+        })
+    };
+    let whole = census(None, false);
+    assert!(!plx_ui::popover::lift_owns(), "no lift, nothing is left out");
+    let left = census(Some(key), false);
+    assert!(plx_ui::popover::lift_owns(), "the page pass said the lift owns the disc");
+    let lift = census(None, true);
+    assert!(!lift.is_empty(), "the lift drew the disc");
+    // what the page pass left out is exactly what the lift drew
+    let mut missing = whole.clone();
+    for quad in &left {
+        if let Some(i) = missing.iter().position(|q| q == quad) {
+            missing.remove(i);
+        }
+    }
+    assert_eq!(missing, lift, "the page pass left out {missing:?}, the lift drew {lift:?}");
     clear();
 }
 
@@ -5667,18 +5551,18 @@ fn episode_naming_its_show() -> Detail {
     }
 }
 
-/// An episode's hero offers the way back up to its show, second in the row (the bookmark is
-/// absent here), and OK asks the item menu's own navigation — the one route that carries the
-/// season, so the show page opens on the season this episode belongs to.
+/// An episode's More menu offers the way back up to its show, and the row asks the item menu's own
+/// navigation — the one route that carries the season, so the show page opens on the season this
+/// episode belongs to.
 #[test]
-fn an_episode_gets_a_go_to_show_disc_that_presses_the_item_menus_navigation() {
+fn an_episode_gets_a_go_to_show_row_that_presses_the_item_menus_navigation() {
     let _guard = install(episode_naming_its_show());
     let mut screen = bare(&_guard, ServerId::UNSET, "ep");
     let set = screen.hero_set(test_store().view());
     assert!(set.go_show);
-    assert!(!set.more, "More belongs to a show’s on-deck hero, not this episode page");
-    assert!(!set.watchlist, "no plex guid: the bookmark disc is not in this row");
-    assert_eq!(hero::index_of(set, hero::HeroCtl::GoToShow), Some(1));
+    assert!(!set.watchlist, "no plex guid: the Watchlist row is not in this menu");
+    let rows = screen.hero_menu(test_store().view());
+    assert!(rows.iter().any(|r| r.elem == hero::ELEM_GO_TO_SHOW));
     let (_, fx) = step(
         &mut screen,
         &ScreenEvent::Activate(hero::ELEM_GO_TO_SHOW),

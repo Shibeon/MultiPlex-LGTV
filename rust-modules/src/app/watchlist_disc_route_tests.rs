@@ -39,7 +39,15 @@ fn home_disc(w: &World) -> Option<([u8; 12], Membership)> {
     home(w).probe_for_test().disc
 }
 
-/// Is a menu (the Sort & Filter surface) up over the page?
+/// `detail::hero::ELEM_MORE`, `ELEM_WATCHLIST` and `ELEM_GO_TO_SHOW`: the hero is private to the
+/// screens crate, and a hero control's elem is its own engine key.
+const MORE: u32 = 9;
+const WATCHLIST: u32 = 6;
+const GO_SHOW: u32 = 8;
+/// The hero menu's row for a control is keyed `item_menu::HERO_KEY_BASE + elem`.
+const MENU_ROW: u32 = 1000;
+
+/// Is a menu (the Sort & Filter surface, the hero's More menu) up over the page?
 fn menu_up(w: &World) -> bool {
     w.d.nav.modals.top().is_some()
 }
@@ -79,10 +87,11 @@ fn the_home_heros_disc_adds_then_removes_the_title_by_keys() {
     assert_eq!(w.writes().len(), 2, "and writes nothing");
 }
 
-/// **The same chain on a movie's Detail page:** Right from Play reaches the bookmark disc, OK adds,
-/// OK again removes, and BACK pops the page.
+/// **The same chain on a movie's Detail page, through its More menu:** Right from Play reaches the
+/// More disc, OK opens the hero's menu, the Watchlist row adds the title and puts focus back on the
+/// disc; the menu again, its row now Remove, removes it; and BACK pops the page.
 #[test]
-fn a_movie_details_disc_adds_then_removes_the_title_by_keys() {
+fn a_movie_details_more_menu_adds_then_removes_the_title_by_keys() {
     let mut w = World::detail_with_disc("r14-detail-disc", HEX);
     w.frames(40);
     assert_eq!(detail(&w).watchlist_hex(), Some(HEX), "premise: the page names the title's catalog id");
@@ -92,18 +101,28 @@ fn a_movie_details_disc_adds_then_removes_the_title_by_keys() {
     assert!(play.is_some(), "premise: focus is on the hero");
 
     w.press(Key::Right);
-    let disc = w.elem();
-    assert_ne!(disc, play, "Right from Play moves to the next control");
+    let more = w.elem();
+    assert_eq!(more, Some(MORE), "Right from Play moves to the More disc");
     assert_eq!(w.writes(), vec![], "moving to the disc writes nothing");
 
-    w.press(Key::Ok);
-    assert_eq!(w.writes(), vec![(HEX, Intent::Add)], "OK on the disc sends exactly one add for the page's title");
-    assert_eq!(detail(&w).watchlist(), Membership::On, "and the disc wears the face of a title on the Watchlist");
-    assert_eq!(w.elem(), disc, "the press leaves focus on the disc");
+    // The menu's rows for this movie: the watched toggle, then the Watchlist row.
+    let through_menu = |w: &mut World| {
+        w.press(Key::Ok);
+        assert!(menu_up(w), "OK on More opens the hero's menu");
+        w.press(Key::Down);
+        assert_eq!(w.elem(), Some(MENU_ROW + WATCHLIST), "premise: the highlight is on the Watchlist row");
+        w.press(Key::Ok);
+        w.settle(40);
+        assert!(!menu_up(w), "committing the row closes the menu");
+    };
+    through_menu(&mut w);
+    assert_eq!(w.writes(), vec![(HEX, Intent::Add)], "the Watchlist row sends exactly one add for the page's title");
+    assert_eq!(detail(&w).watchlist(), Membership::On, "and the page reads the title as on the Watchlist");
+    assert_eq!(w.elem(), more, "focus is back on the More disc");
 
-    w.press(Key::Ok);
-    assert_eq!(w.writes(), vec![(HEX, Intent::Add), (HEX, Intent::Remove)], "OK again sends the removal");
-    assert_eq!(detail(&w).watchlist(), Membership::Off, "and the face goes back");
+    through_menu(&mut w);
+    assert_eq!(w.writes(), vec![(HEX, Intent::Add), (HEX, Intent::Remove)], "the row again sends the removal");
+    assert_eq!(detail(&w).watchlist(), Membership::Off, "and the membership goes back");
 
     w.press(Key::Back);
     assert!(!w.on(&detail_arg("movie")), "BACK leaves the Detail page");
@@ -198,8 +217,8 @@ fn the_sort_and_filter_menu_reorders_narrows_and_resets_the_grid_by_keys() {
 /// **A focused icon-only hero control is its glyph and its focus fill, and nothing else** (owner,
 /// 2026-10-20: "I don't want these labels"): no word of any control's name is drawn, and nothing at
 /// all is drawn in the band under the hero's control row, on the Home hero with the bookmark disc
-/// focused, on the Home hero with Info focused, and on a movie's Detail hero with the bookmark disc
-/// focused (on either face of the disc). Read off the frame the product draws once every spring has
+/// focused (on either face of the disc), on the Home hero with Info focused, and on a movie's Detail
+/// hero with the More disc focused. Read off the frame the product draws once every spring has
 /// run to rest.
 #[test]
 fn a_focused_icon_only_hero_control_draws_no_name_on_the_home_hero_and_the_detail_hero() {
@@ -223,7 +242,7 @@ fn a_focused_icon_only_hero_control_draws_no_name_on_the_home_hero_and_the_detai
     let cases: [(&str, fn() -> World, &[Key], bool); 3] = [
         ("home, bookmark disc", || World::home_with_disc("r14-nameless-home-disc", HEX), &[Key::Right], true),
         ("home, Info", || World::home_with_disc("r14-nameless-home-info", HEX), &[Key::Right, Key::Right], false),
-        ("detail, bookmark disc", || World::detail_with_disc("r14-nameless-detail-disc", HEX), &[Key::Right], true),
+        ("detail, More disc", || World::detail_with_disc("r14-nameless-detail-more", HEX), &[Key::Right], false),
     ];
     let mut problems = Vec::new();
     for (case, mount, keys, flip) in cases {
@@ -281,17 +300,15 @@ fn the_watchlists_sort_and_filter_lifts_its_pill_while_the_menu_is_up() {
     assert_eq!(w.elem(), Some(PILL_ELEM), "with focus back on the pill");
 }
 
-/// **An episode page's Go to Show disc, by keys**: Right from Play reaches the disc (the row is
-/// Play, Go to Show, the watch disc; no bookmark without a catalog guid), its verb unfurls inside the capsule and
-/// nothing is drawn in the band under the row (a focused icon-only control draws no caption), OK
-/// opens the SHOW's page seeded on the episode's season, and BACK returns to the episode page with
-/// the disc focused. The seed is read the frame the request is performed, before the mount spends it.
+/// **An episode page's Go to Show row, by keys**: Right from Play reaches the More disc (the row is
+/// Play and More), and nothing is drawn in the band under the row (a focused icon-only control
+/// draws no caption); OK opens the hero's menu, whose first row is Go to Show (this episode has no
+/// resume, trailer or second version) and names it once; OK on it opens the SHOW's page seeded on
+/// the episode's season, and BACK returns to the episode page with the More disc focused. The seed
+/// is read the frame the request is performed, before the mount spends it.
 #[test]
-fn an_episode_pages_go_to_show_disc_opens_the_show_on_the_episodes_season_and_back_returns_to_it() {
+fn an_episode_pages_go_to_show_row_opens_the_show_on_the_episodes_season_and_back_returns_to_it() {
     use plx_platform::i18n::msg::browse_menu_go_show;
-    // `detail::hero::ELEM_GO_TO_SHOW`: the hero is private to the screens crate, and a hero control's
-    // elem is its own engine key.
-    const GO_SHOW: u32 = 8;
     let sid = ServerId::from_raw(1);
     let episode = detail_arg_for(sid, "ep-5");
     let mut w = World::detail_episode("go-to-show-route", sid, "ep-5", "show-7", 3);
@@ -303,16 +320,23 @@ fn an_episode_pages_go_to_show_disc_opens_the_show_on_the_episodes_season_and_ba
     assert!(play_key.is_some(), "premise: focus is on the hero");
 
     w.press(Key::Right);
-    assert_eq!(w.elem(), Some(GO_SHOW), "one Right from Play reaches the Go to Show disc");
+    assert_eq!(w.elem(), Some(MORE), "one Right from Play reaches the More disc");
     w.frames(90);
     let drawn = w.drawn();
     let verb = browse_menu_go_show().to_string();
-    assert_eq!(drawn.words.iter().filter(|(text, _)| *text == verb).count(), 1,
-        "the unfurled capsule draws the verb once: {:?}", drawn.words);
+    assert!(!drawn.words.iter().any(|(text, _)| *text == verb), "the row names no menu action: {:?}", drawn.words);
     let row_bottom = play.y + play.h * 0.5 + plx_appkit::hero_layout::CD * 0.5;
     let band = play.y + play.h..row_bottom + plx_ui::theme::space::XS + 2.0 * plx_ui::theme::size::CAPTION as f32;
     let in_band: Vec<_> = drawn.words.iter().filter(|(_, at)| band.contains(&at.y)).collect();
     assert!(in_band.is_empty(), "nothing stands under the control row: {in_band:?}");
+
+    w.press(Key::Ok);
+    assert!(menu_up(&w), "OK on More opens the hero's menu");
+    assert_eq!(w.elem(), Some(MENU_ROW + GO_SHOW), "on its Go to Show row");
+    w.frames(60);
+    let drawn = w.drawn();
+    assert_eq!(drawn.words.iter().filter(|(text, _)| *text == verb).count(), 1,
+        "the menu names Go to Show once: {:?}", drawn.words);
 
     // OK: the request is performed in the frame that raises it; the mount that follows spends the seed.
     let mut seed = None;
@@ -322,15 +346,15 @@ fn an_episode_pages_go_to_show_disc_opens_the_show_on_the_episodes_season_and_ba
         if seed.is_some() { break; }
         w.step(vec![]);
     }
-    let seed = seed.expect("OK on the disc seeds a Detail page");
+    let seed = seed.expect("OK on the Go to Show row seeds a Detail page");
     assert_eq!((seed.sid, seed.rk.as_str(), seed.spot.season), (sid, "show-7", Some(3)),
         "the show's page, on the episode's season, on the episode's server");
     w.frames(60);
     assert!(w.on(&detail_arg_for(sid, "show-7")), "the show's page is on top");
 
     // The store holds one current item: the show's page took it, and the episode page that BACK
-    // reveals asks its server again, so for a moment the page has no item (its hero is Play and the
-    // watch disc) and then the episode lands. The disc must be focused again once it has.
+    // reveals asks its server again, so for a moment the page has no item and then the episode
+    // lands. The More disc must be focused again once it has.
     let show = plx_data::metadata::Detail { sid, rk: "show-7".into(), is_show: true, kind: "show".into(), ..Default::default() };
     plx_data::metadata::set_current_for_test(w.bridge.stores.metadata.state_mut(), Some(show));
     w.tap(Key::Back, 2);
@@ -338,5 +362,5 @@ fn an_episode_pages_go_to_show_disc_opens_the_show_on_the_episodes_season_and_ba
     plx_data::metadata::set_current_for_test(w.bridge.stores.metadata.state_mut(),
         Some(World::episode_detail(sid, "ep-5", "show-7", 3)));
     w.frames(60);
-    assert_eq!(w.elem(), Some(GO_SHOW), "BACK returns with the disc focused");
+    assert_eq!(w.elem(), Some(MORE), "BACK returns with the More disc focused");
 }

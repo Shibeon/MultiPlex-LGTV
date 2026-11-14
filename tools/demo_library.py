@@ -634,7 +634,7 @@ HERO_CENTRE_MIN_X = 0.60 * ART[0]
 # ffmpeg rounds the scaled picture to whole pixels, so the mapped box is good to about one.
 HERO_FRAME_EPS = 1.0
 # Composition policy for these stills: keep the focal subject out of the lower-right 35%.
-# This is an art-selection reserve, not the live bounds of variable-length People text.
+# This is an art-selection reserve, not the bounds of any text the layout draws.
 # Text contrast is checked separately against the actual UI geometry in widgets_hero_shade_tests (Home) and
 # widgets_hero_scrim_tests (Detail).
 HERO_SUBJECT_FOOT = 0.65 * ART[1]
@@ -656,14 +656,21 @@ HERO_PINS = {
     "COL_W": ["rust-modules/ui/src/landing_hero.rs", "const", "COL_W", 943.0],
     "HOME_ACTIONS_Y": ["rust-modules/ui/src/theme.rs", "const", "hero::HOME_ACTIONS_Y", 668.0],
     "CTRL_H": ["rust-modules/ui/src/widgets.rs", "const", "CTRL_H", 60.0],
-    "DETAIL_TITLE_BOTTOM": ["rust-modules/ui/src/detail_layout.rs", "const", "TITLE_BOTTOM", 566.0],
     "HERO_LOGO_H_MAX": ["rust-modules/ui/src/theme.rs", "const", "logo::HERO_H_MAX", 240.0],
-    "DETAIL_FACTS_TOP": ["rust-modules/ui/src/detail_layout.rs", "literal", r"minimum\.facts_y,\s*([0-9.]+)", 714.0],
     "HERO_LOGO_TOP_HOME": ["rust-modules/ui/src/hero_logo.rs", "literal", r"tall\.y,\s*([0-9.]+),", 206.0],
     "HERO_TEXT_W": ["rust-modules/ui/src/detail_layout.rs", "const", "HERO_TEXT_W", 943.0],
-    "PEOPLE_W": ["rust-modules/ui/src/detail_layout.rs", "const", "PEOPLE_W", 560.0],
-    "PEOPLE_LEAD": ["rust-modules/ui/src/detail_layout.rs", "const", "PEOPLE_LEAD", 32.0],
-    "PEOPLE_MAX_LINES": ["rust-modules/ui/src/detail_layout.rs", "const", "PEOPLE_MAX_LINES", 4.0],
+    # The Detail hero's two columns: the poster card, then the text column one XL to its right,
+    # whose title band stands on TITLE_FOOT (a logo grows up from there, at most HERO_LOGO_H_MAX).
+    "SM": ["rust-modules/ui/src/theme.rs", "const", "space::SM", 16.0],
+    "XL": ["rust-modules/ui/src/theme.rs", "const", "space::XL", 64.0],
+    "DISPLAY": ["rust-modules/gfx/src/gfx/tokens.rs", "const", "size::DISPLAY", 48.0],
+    "TITLE_LEAD": ["rust-modules/ui/src/theme.rs", "const", "hero::TITLE_LEAD", 50.88],
+    "POSTER_X": ["rust-modules/ui/src/detail_layout.rs", "const", "POSTER_X", 96.0],
+    "POSTER_TOP": ["rust-modules/ui/src/detail_layout.rs", "const", "POSTER_TOP", 240.0],
+    "POSTER_W": ["rust-modules/ui/src/detail_layout.rs", "const", "POSTER_W", 326.0],
+    "POSTER_H": ["rust-modules/ui/src/detail_layout.rs", "const", "POSTER_H", 489.0],
+    "TEXT_X": ["rust-modules/ui/src/detail_layout.rs", "const", "TEXT_X", 486.0],
+    "TITLE_FOOT": ["rust-modules/ui/src/detail_layout.rs", "const", "TITLE_FOOT", 306.88],
     # The formulas the zones rebuild from those numbers:
     "HOME_ROW_RULE": ["rust-modules/screens/src/home/mod.rs", "text",
                       "const HERO_ROW_Y: f32 = theme::hero::HOME_ACTIONS_Y;", None],
@@ -672,10 +679,10 @@ HERO_PINS = {
     "HOME_SHELF_HEADING_RULE": ["rust-modules/screens/src/home/mod.rs", "text", "row_y - TITLE_DY - lift", None],
     "HOME_SHELF_PEEK_RULE": ["rust-modules/screens/src/home/mod.rs", "text",
                              "let top = PEEK_Y + (GRID_TOP_Y - PEEK_Y) * self.snap.pos;", None],
-    "DETAIL_PEOPLE_RULE": ["rust-modules/ui/src/detail_layout.rs", "text",
-                           "Rect::new(SCR_W - MARGIN_X - PEOPLE_W, 700.0, PEOPLE_W, 100.0)", None],
-    "DETAIL_TEXT_RULE": ["rust-modules/ui/src/detail_layout.rs", "text",
-                         "Rect::new(MARGIN_X, TITLE_BOTTOM - 200.0, HERO_TEXT_W, 200.0)", None],
+    "DETAIL_POSTER_RULE": ["rust-modules/screens/src/detail/mod.rs", "text",
+                           "Rect::new(POSTER_X, POSTER_TOP, POSTER_W, POSTER_H)", None],
+    "DETAIL_CHAIN_RULE": ["rust-modules/ui/src/detail_layout.rs", "text",
+                          "Anchor::Top(TITLE_FOOT + theme::space::SM)", None],
 }
 
 
@@ -764,8 +771,10 @@ def hero_zones(pins=None):
     from the pinned layout numbers."""
     v = {n: p[3] for n, p in (HERO_PINS if pins is None else pins).items()}
     w, h = v["SCR_W"], v["SCR_H"]
-    text_r = v["MARGIN_X"] + v["HERO_TEXT_W"]
-    people_l = w - v["MARGIN_X"] - v["PEOPLE_W"]
+    text_r = v["TEXT_X"] + v["HERO_TEXT_W"]
+    # The art reserve both heroes share: the stills were chosen to keep their subject right of
+    # Home's text column, and Detail's gated text column stops at the same edge.
+    reserve_r = v["MARGIN_X"] + v["COL_W"]
 
     def zone(name, rect, uses, **extra):
         return dict(name=name, rect=rect, uses=uses, **extra)
@@ -778,18 +787,25 @@ def hero_zones(pins=None):
              ["MARGIN_X", "HERO_LOGO_TOP_HOME", "TEXT_W", "COL_W", "HOME_ACTIONS_Y", "CTRL_H"]),
         # The peek shelf: its heading draws TITLE_DY above the row origin PEEK_Y, its cards below.
         zone("home shelf row", [0.0, v["PEEK_Y"] - v["TITLE_DY"], w, h], ["PEEK_Y", "TITLE_DY", "SCR_H", "SCR_W"]),
-        # Detail: logo, identity line, synopsis and buttons, to the synopsis' wrap edge. The chain
-        # below the title is measured at run time, so this runs to the foot of the frame.
-        zone("detail text column", [v["MARGIN_X"], v["DETAIL_TITLE_BOTTOM"] - v["HERO_LOGO_H_MAX"], text_r, h],
-             ["MARGIN_X", "DETAIL_TITLE_BOTTOM", "HERO_LOGO_H_MAX", "HERO_TEXT_W", "SCR_H"]),
-        # The facts row runs from there to the people column and sits level with that column's top
-        # line (a 4-line block reaches PEOPLE_MAX_LINES * PEOPLE_LEAD below it).
-        zone("detail facts row", [text_r, v["DETAIL_FACTS_TOP"], people_l,
-                                  v["DETAIL_FACTS_TOP"] + v["PEOPLE_MAX_LINES"] * v["PEOPLE_LEAD"]],
-             ["MARGIN_X", "HERO_TEXT_W", "SCR_W", "PEOPLE_W", "DETAIL_FACTS_TOP", "PEOPLE_MAX_LINES", "PEOPLE_LEAD"]),
-        # The existing lower-right art-selection reserve, independent of variable People text.
-        zone("detail starring column", [people_l, HERO_SUBJECT_FOOT, w - v["MARGIN_X"], h],
-             ["SCR_W", "MARGIN_X", "PEOPLE_W", "SCR_H"]),
+        # Detail, left column: the poster card covers the art outright.
+        zone("detail poster", [v["POSTER_X"], v["POSTER_TOP"], v["POSTER_X"] + v["POSTER_W"],
+                               v["POSTER_TOP"] + v["POSTER_H"]],
+             ["POSTER_X", "POSTER_TOP", "POSTER_W", "POSTER_H"]),
+        # Detail, text column: the logo (up from the title foot), the meta line, ratings, actions,
+        # synopsis, credits and pills. The chain under the title is measured at run time, so this
+        # runs to the foot of the frame. Gated up to the shared art reserve's edge.
+        zone("detail text column", [v["TEXT_X"], v["TITLE_FOOT"] - v["HERO_LOGO_H_MAX"], reserve_r, h],
+             ["TEXT_X", "TITLE_FOOT", "HERO_LOGO_H_MAX", "MARGIN_X", "COL_W", "SCR_H", "SM", "XL",
+              "DISPLAY", "TITLE_LEAD"]),
+        # ADVISORY: the rest of the text column, out to the synopsis' and credits' wrap edge. Long
+        # rows draw over the art here under the hero scrim; the report lists what a subject shares
+        # with it, but it fails nothing until the stills are re-chosen for the two-column hero.
+        zone("detail text wrap band", [reserve_r, v["TITLE_FOOT"] - v["HERO_LOGO_H_MAX"], text_r, h],
+             ["MARGIN_X", "COL_W", "TEXT_X", "HERO_TEXT_W", "TITLE_FOOT", "HERO_LOGO_H_MAX", "SCR_H"],
+             advisory=True),
+        # The lower-right art-selection reserve, right of the text column.
+        zone("detail lower right", [text_r, HERO_SUBJECT_FOOT, w - v["MARGIN_X"], h],
+             ["SCR_W", "MARGIN_X"]),
     ]
 
 
@@ -823,7 +839,8 @@ def hero_geometry(assets, rec):
     """The hero-art verdict for one title, from its manifests alone. `verdict` is `pass`, `fail` or
     `skip` (no art: that is a backdrop gap already); `reasons` says why it fails: `extend`/`mode`
     (not a cover crop), `no-subject`, `bad-subject`, `outside-source`, `outside-frame` (the crop cuts
-    the subject off), `centre-left`, and `overlap:<zone>` per gated zone it touches."""
+    the subject off), `centre-left`, and `overlap:<zone>` per gated zone it touches. An advisory
+    zone's overlap is recorded in `overlaps` and adds no reason."""
     out = {"verdict": "fail", "reasons": [], "box": None, "overlaps": {}, "centre_x": None,
            "source": None}
     art = rec.get("art")
@@ -856,7 +873,7 @@ def hero_geometry(assets, rec):
     for z in hero_zones():
         hit = _overlap(box, z["rect"])
         out["overlaps"][z["name"]] = hit
-        if hit:
+        if hit and not z.get("advisory"):
             out["reasons"].append(f"overlap:{z['name']}")
     out["verdict"] = "fail" if out["reasons"] else "pass"
     return out
@@ -973,7 +990,8 @@ def hero_report(assets, catalog):
     gated zone, and the verdict."""
     print("hero zones (frame pixels x0 y0 x1 y1); each number is pinned to the Rust source in HERO_PINS:")
     for z in hero_zones():
-        print(f"  {z['name']:<24} {' '.join(f'{n:g}' for n in z['rect'])}")
+        print(f"  {z['name']:<24} {' '.join(f'{n:g}' for n in z['rect'])}"
+              f"{'  (advisory: reported, never fails)' if z.get('advisory') else ''}")
     print("pins (python copy == Rust source, checked by `check --complete`):")
     for name, (file, kind, key, value) in HERO_PINS.items():
         print(f"  {name:<24} {'' if value is None else f'{value:g}':<7} {file} {kind} {key}")

@@ -17,43 +17,10 @@ pub const MID_WEIGHT: f32 = theme::hero::SCRIM_MID_A / theme::hero::SCRIM_FOOT_A
 /// and `screens::detail`'s `preview_plane_tests` pin them equal.
 pub const PREVIEW_FIELD: f32 = 1.35;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct HeroStack {
-    pub title: VSpan,
-    pub meta: VSpan,
-    pub ratings: Option<VSpan>,
-    pub synopsis: Option<VSpan>,
-    pub facts: VSpan,
-    pub actions: VSpan,
-}
-
-/// Detail's measured ladder, pinned at the foot of its title (`title_bottom`) and growing down from
-/// there. Identity and ratings form a tight group; prose and facts get block air, and facts stand
-/// close to their action. Absent rows leave no phantom gap. Home does not stack these rows (it has
-/// [`home_rows`]).
-pub fn hero_rows(title_h: f32, meta_h: f32, ratings_h: Option<f32>, synopsis_h: Option<f32>, title_bottom: f32) -> HeroStack {
-    let items = [
-        Item::new(title_h),
-        Item::new(meta_h).before(theme::space::SM),
-        ratings_h.map_or(Item::absent(), |h| Item::new(h).before(theme::space::XS)),
-        synopsis_h.map_or(Item::absent(), |h| Item::new(h).before(theme::space::LG)),
-        // TextView measures full leading boxes. Their trailing air belongs to the prose;
-        // the proposal spends the larger block gap above it, not a second time below it.
-        Item::new(theme::hero::FACTS_H).before(if synopsis_h.is_some() { theme::space::MD } else { theme::space::LG }),
-        Item::new(0.0).before(theme::space::MD),
-    ];
-    let stack = VStack::new(&items, 0.0, Anchor::Top(title_bottom - title_h));
-    let span = |i| stack.span(i).map(|(y, h)| VSpan { i, y, h, box_y: y });
-    HeroStack {
-        title: span(0).unwrap(), meta: span(1).unwrap(), ratings: span(2),
-        synopsis: span(3), facts: span(4).unwrap(), actions: span(5).unwrap(),
-    }
-}
-
 /// Home's hero ladder (owner's board CW-13 v2): the title, ONE block under it, and the action row,
 /// all growing up from [`theme::hero::HOME_ACTIONS_Y`]. Home owns its ladder because it dropped the
-/// identity line, the ratings row and the facts line that [`hero_rows`] stacks; Detail keeps those
-/// and its own anchor, and this function never moves it.
+/// identity line, the ratings row and the facts line; Detail keeps a meta line and the ratings in
+/// its own two-column ladder (`detail_layout::hero_chain`), and this function never moves it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HomeStack {
     pub title: VSpan,
@@ -250,25 +217,6 @@ pub fn base_scrim_a(y: f32, hero_a: f32) -> f32 {
 mod tests {
     use super::*;
 
-    /// Detail's ladder with no ratings row, the title's foot at 566.
-    fn hero_stack(title_h: f32, meta_h: f32, synopsis_h: Option<f32>) -> HeroStack {
-        hero_rows(title_h, meta_h, None, synopsis_h, 566.0)
-    }
-
-    #[test]
-    fn the_hero_text_is_one_ladder_with_an_absent_synopsis() {
-        let with = hero_stack(120.0, 34.0, Some(72.0));
-        assert_eq!(with.title.y + with.title.h, 566.0);
-        assert_eq!(with.meta.y, 582.0);
-        assert_eq!(with.synopsis.unwrap().y, 656.0);
-        assert_eq!(with.facts.y, 752.0);
-        assert_eq!(with.actions.y, 800.0);
-        let bare = hero_stack(120.0, 34.0, None);
-        assert!(bare.synopsis.is_none());
-        assert_eq!(bare.facts.y - (bare.meta.y + bare.meta.h), theme::space::LG);
-        assert_eq!(with.facts.y - bare.facts.y, 72.0 + theme::space::MD, "the synopsis block and its air are all an absent one gives back");
-    }
-
     /// The owner's v2 ladder, pixel for pixel: an episode's one-line label tops out at 602 with the
     /// 120 px logo's foot at 586, a two-line synopsis at 566 with the title's foot at 550, a one-line
     /// synopsis comes down a line (and its title with it), and every block ends at 638.
@@ -290,30 +238,11 @@ mod tests {
         assert_eq!(bare.title.y + bare.title.h, 638.0, "no block: the title stands the 30 above the actions");
     }
 
-    /// Detail is untouched by Home's ladder: its title stands at 446 over a 566 foot and its action
-    /// row at 838, nowhere near Home's.
+    /// Detail is untouched by Home's ladder: its action row stands in its own two-column ladder.
     #[test]
     fn detail_ladder_is_not_home_ladder() {
-        let detail = hero_rows(120.0, 34.0, Some(30.0), Some(72.0), 566.0);
-        assert_eq!((detail.title.y, detail.actions.y), (446.0, 838.0));
-        assert_ne!(home_rows(120.0, Some(72.0)).actions.y, detail.actions.y);
-    }
-
-    #[test]
-    fn pdf_synopsis_padding_preserves_the_facts_and_action_anchors() {
-        for ratings in [None, Some(30.0)] {
-            let rows = hero_rows(120.0, 34.0, ratings, Some(72.0), 566.0);
-            let previous = rows.ratings.unwrap_or(rows.meta);
-            let synopsis = rows.synopsis.unwrap();
-            assert_eq!(synopsis.y - (previous.y + previous.h), 40.0,
-                "the proposal gives prose a full block gap above it");
-            assert_eq!(rows.facts.y - (synopsis.y + synopsis.h), 24.0,
-                "the synopsis line boxes already include trailing leading");
-            assert_eq!(rows.actions.y - (rows.facts.y + rows.facts.h), 24.0);
-            assert_eq!(rows.title.y + rows.title.h, 566.0);
-            assert_eq!(rows.facts.y, if ratings.is_some() { 790.0 } else { 752.0 });
-            assert_eq!(rows.actions.y, if ratings.is_some() { 838.0 } else { 800.0 });
-        }
+        let detail = crate::detail_layout::hero_chain(crate::detail_layout::HeroRows::default());
+        assert_ne!(home_rows(120.0, Some(72.0)).actions.y, detail.btn_y);
     }
 }
 

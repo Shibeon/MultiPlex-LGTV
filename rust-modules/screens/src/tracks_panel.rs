@@ -303,23 +303,6 @@ pub fn fmt_codec_profile(codec: &str, profile: &str) -> Option<String> {
     })
 }
 
-/// `"main 10"` → `"Main 10"`. Per WORD, and only the first character of each — upper-casing the
-/// whole run would give `MAIN 10`, which reads as a second acronym beside `HEVC`.
-fn title_case(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for (i, w) in s.split_whitespace().enumerate() {
-        if i > 0 {
-            out.push(' ');
-        }
-        let mut cs = w.chars();
-        if let Some(c) = cs.next() {
-            out.extend(c.to_uppercase());
-            out.push_str(cs.as_str());
-        }
-    }
-    out
-}
-
 /// `"10-bit · 4:2:0"` — bit depth and chroma as ONE fact, because neither is meaningful without
 /// the other. Either half alone still draws, so a container that reports only one is not silent.
 pub fn fmt_depth_chroma(bit_depth: i64, chroma: &str) -> Option<String> {
@@ -369,33 +352,10 @@ fn localized_precision(value: f64, max_scale: i16) -> String {
     plx_platform::i18n::current().decimal(coefficient, scale)
 }
 
-/// A channel layout in the design's spelling: `"5.1(side)"` → `"5.1"`, `"stereo"` → `"Stereo"`.
-///
-/// The parenthetical is ffmpeg's channel-ORDER note, not a different layout — `5.1(side)` and
-/// `5.1` are both six channels — so it is dropped rather than shown, and a word layout is
-/// capitalised because it sits mid-sentence beside a codec. Falls back to the channel COUNT when
-/// the server sent no layout at all, which is the only other thing that can be said.
-pub fn fmt_layout(layout: &str, channels: i64) -> String {
-    let base = layout.split('(').next().unwrap_or("").trim();
-    if base.is_empty() {
-        return match channels {
-            0 => String::new(),
-            1 => plx_platform::i18n::msg::widgets_tracks_mono().to_string(),
-            2 => plx_platform::i18n::msg::widgets_tracks_stereo().to_string(),
-            n => plx_platform::i18n::msg::widgets_tracks_channels(n),
-        };
-    }
-    // a numeric layout ("5.1", "7.1") is already how it is written; a word one is capitalised
-    if base.starts_with(|c: char| c.is_ascii_digit()) {
-        base.to_string()
-    } else {
-        match base {
-            "mono" => plx_platform::i18n::msg::widgets_tracks_mono().to_string(),
-            "stereo" => plx_platform::i18n::msg::widgets_tracks_stereo().to_string(),
-            _ => title_case(base),
-        }
-    }
-}
+/// A channel layout in the design's spelling ([`plx_ui::fmt::channel_layout`], shared with the
+/// Detail hero's audio pill).
+pub use plx_ui::fmt::channel_layout as fmt_layout;
+use plx_ui::fmt::title_case;
 
 /// Does this audio track carry Dolby Atmos? — [`Stream::has_atmos`], which is where the rule and
 /// its evidence live now.

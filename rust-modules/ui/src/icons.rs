@@ -71,6 +71,9 @@ pub enum Icon {
     /// A bare plus, the stroke of [`Icon::Minus`] crossed: the leading mark of an action chip that
     /// ADDS to what a page shows (the Library's "+ More filters", `page_header::Chip::Filled`).
     Plus,
+    /// A filled five-pointed star — one of the Detail hero's five user-rating stars
+    /// (`widgets::user_stars`), the MultiPlex web app's own `star` path.
+    Star,
     /// The player row's Previous/Next episode discs.
     Previous,
     Next,
@@ -343,6 +346,7 @@ fn src(id: Icon) -> &'static str {
         Icon::MinusCircleFill => include_str!("../../../assets/icons/minus-circle-fill.svg"),
         Icon::Minus => include_str!("../../../assets/icons/minus.svg"),
         Icon::Plus => include_str!("../../../assets/icons/plus.svg"),
+        Icon::Star => include_str!("../../../assets/icons/star.svg"),
         Icon::Play => include_str!("../../../assets/icons/play.svg"),
         Icon::Pause => include_str!("../../../assets/icons/pause.svg"),
         Icon::Rewind => include_str!("../../../assets/icons/rewind.svg"),

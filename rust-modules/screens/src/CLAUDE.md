@@ -122,7 +122,7 @@ Every Settings drill-down is a family-stack push through `family::form_activate`
 
 `docs/watchlist.md` is the map; these are the rules that bind a screen here.
 
-- **A screen asks, the application writes and pulses.** The Watchlist page, the Detail bookmark disc,
+- **A screen asks, the application writes and pulses.** The Watchlist page, the Detail hero's Watchlist row,
   the item menu and the catalog page name no store: a press is an `Action` / `AppFx`
   (`WatchlistAdd { hex }`, `WatchlistRemove(guid)`, `GoToCatalog(guid)`, `CatalogOut`) and
   `app::input::apply_item_action` queues the write on the Watchlist store and pulses the strip's
@@ -145,15 +145,16 @@ Every Settings drill-down is a family-stack push through `family::form_activate`
   a row acts on. `ItemMenuKind::Catalog` rows are `Go to ...`, then Add or Remove; the menu opens on
   the go row, and Remove is `destructive(true)`. `Action::has_subject()` (not `!rk().is_empty()`) is
   the activation guard, because `WatchlistAdd` has no ratingKey.
-- **The hero disc is second and unlabelled** (`detail/hero.rs`: `ELEM_WATCHLIST`, `HeroCtl::Watchlist`;
-  the face, glyphs, `flip_frame` and the `Disc` that owns the membership, flip spring and press flag are
-  `plx_appkit::watchlist_disc`, shared with Home's hero). There is one element id for both faces so focus survives a flip,
-  it is always the circle width so it never unfurls, and it is not a focus anchor in full-trailer
-  mode. Its guid must be `plex://movie|show/<24 hex>` or it is absent: `HeroSet::watchlist` is
-  set from `catalog_hex_of_guid` and `hero_ctls` omits the disc otherwise. When the fill snaps and
-  when it flips is `Disc::set`'s one rule (the first answer snaps; a change from a known face, or one
-  answering the user's own press, plays the flip); a screen never copies it.
-- **Home's hero carries the same disc** (`home/mod.rs`: `HERO_WATCHLIST_ELEM`, `HeroDisc`). A hero
+- **Detail's Watchlist is a row of the hero's More menu** (`detail/hero.rs`: `ELEM_WATCHLIST`,
+  `HeroCtl::Watchlist`, `menu_rows`). The action row is Play/Resume and More only (`hero_ctls`);
+  every other hero action (Play from Start, Trailer, Play Version, Go to Show, the watched toggle,
+  the Watchlist, Also available) is a row of the shared item menu (`ItemMenuKind::Hero`, opened by
+  `ContentReq::HeroMenu`), and committing one hands the page `AppMsg::HeroAction(elem)`, which
+  performs that control exactly as a press on it did. The row reads `Add` while the membership is
+  Off or Unknown and a destructive `Remove` while On. Its guid must be `plex://movie|show/<24 hex>`
+  or it is absent: `HeroSet::watchlist` is set from `catalog_hex_of_guid`. The page keeps only the
+  membership the row reads (`DetailScreen::set_watchlist`); it draws no disc, so nothing flips.
+- **Home's hero carries the shared bookmark disc** (`home/mod.rs`: `HERO_WATCHLIST_ELEM`, `HeroDisc`). A hero
   control's SLOT (`Located::Hero(slot)`: 0 Play, 1 Info, 2 disc, the `CtlPop` index) is not its
   POSITION in the row (`hero_slots`: Play, disc, Info); neighbours, the focus extent and the hit
   stops all go through `hero_slots` / `hero_rects`. The disc exists only for a hero row with a known

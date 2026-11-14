@@ -1,26 +1,60 @@
 //! Shared detail hero geometry, also used by the contrast and safe-area audits.
+//!
+//! **The Detail hero is two columns** (MultiPlex web's detail page): the item's poster card on the
+//! left ([`POSTER_X`], [`POSTER_TOP`], [`POSTER_W`] × [`POSTER_H`]) and a text column to its right
+//! ([`TEXT_X`]) that grows DOWN from the title's foot ([`TITLE_FOOT`]): the meta line (date, runtime,
+//! content rating), the ratings row (the providers' scores, then the viewer's five stars), the
+//! action row (the wide Play/Resume capsule and the round More disc), the synopsis, the two-column
+//! credit table and the technical pills. [`hero_chain`] is that ladder; absent rows leave no gap.
 use super::{consts::{MARGIN_X, MARGIN_Y}, theme, widgets};
+use super::hstack::Item;
+use super::vstack::{Anchor, VStack};
 #[cfg(any(test, feature = "test-support"))]
 use super::{consts::SCR_W, Rect};
 #[cfg(test)]
 use super::consts::SCR_H;
 
+/// The reading column's width: the synopsis wraps here, and the credit values elide here.
 pub const HERO_TEXT_W: f32 = theme::hero::TEXT_W;
+/// The title foot the CATALOG page (`screens::catalog`) stands its single-column hero on. The
+/// Detail hero's own two-column ladder is anchored at [`TITLE_FOOT`] instead.
 pub const TITLE_BOTTOM: f32 = 566.0;
-pub const PEOPLE_W: f32 = 560.0;
-pub const PEOPLE_LEAD: f32 = 32.0;
-pub const PEOPLE_MAX_LINES: usize = 4;
-pub const PEOPLE_INK: [f32; 4] = theme::TEXT_SECONDARY;
+
+/// The poster card's left edge: the safe margin, where every page's content starts.
+pub const POSTER_X: f32 = MARGIN_X;
+/// The poster card's top edge, in page coordinates at rest.
+pub const POSTER_TOP: f32 = 240.0;
+/// The poster card's width, and its height at the poster's own 2:3.
+pub const POSTER_W: f32 = 326.0;
+pub const POSTER_H: f32 = POSTER_W * 1.5;
+/// The resolution the poster card asks the server for: the card's own size, rounded up a little
+/// so the shared card's focus-free draw never upscales.
+pub const POSTER_RES: (std::os::raw::c_int, std::os::raw::c_int) = (360, 540);
+/// The text column's left edge: the poster's right edge and the page's widest rung of air.
+pub const TEXT_X: f32 = POSTER_X + POSTER_W + theme::space::XL;
+/// The title band's foot: a one-line typed title's line box, one small rung below the poster's top,
+/// so its cap band starts level with the card beside it. A taller logo or a second title line
+/// grows upward from here (`hero_logo`'s bottom anchor), and nothing under it moves.
+pub const TITLE_FOOT: f32 = POSTER_TOP + theme::hero::TITLE_LEAD + theme::space::SM;
+
+/// One credit row's line box in the credit table (label · rule · value).
+pub const CREDIT_LEAD: f32 = theme::space::LG;
+/// The air on either side of the credit table's vertical rule.
+pub const CREDIT_RULE_GAP: f32 = theme::space::MD;
+/// The rule's own width.
+pub const CREDIT_RULE_W: f32 = 2.0;
+/// The air between two technical pills.
+pub const TECH_GAP: f32 = theme::space::SM;
+
 /// The facts row's ink, and the second time this trade has been made: at `TEXT_TERTIARY`
 /// (L=0.317) the row needed α≈0.79 of scrim for 4.5:1 — an essentially black hero corner — so
 /// `widgets_hero_scrim_tests` carried it at a lowered 2.6 floor and wrote the ink step down as
-/// deferred. Tightening the hero rhythm is what came due: every rung the row moves up sits in
-/// less of the atmospheric ramp (each segment is linear in `y`), and the two named rungs the owner asked
-/// for cost 0.16 of contrast, which no scrim retune buys back cheaply — the ramp's own
-/// measurement says it is 97% of the drop, and steepening it darkens the artwork the hero exists
-/// to show. One ink step costs nothing on screen and takes the row to the ordinary 3.0 floor,
-/// exactly as [`PEOPLE_INK`] did for the people column.
+/// deferred. One ink step costs nothing on screen and takes the row to the ordinary 3.0 floor.
 pub const FACTS_INK: [f32; 4] = theme::TEXT_SECONDARY;
+/// A credit row's VALUE ink (the names, the genres): secondary, like the facts.
+pub const CREDIT_INK: [f32; 4] = theme::TEXT_SECONDARY;
+/// A credit row's uppercase LABEL ink: tertiary, the About labels' weight.
+pub const CREDIT_LABEL_INK: [f32; 4] = theme::TEXT_TERTIARY;
 pub const COMPACT_TITLE_BOT: f32 = MARGIN_Y + theme::logo::COMPACT_H_MAX;
 pub const TOP_MARGIN: f32 = COMPACT_TITLE_BOT + 26.0;
 
@@ -33,42 +67,66 @@ pub const PREVIEW_LOGO_Y: f32 = MARGIN_Y;
 /// Keeps a wide wordmark from reaching toward the center of the screen once it has shrunk.
 pub const PREVIEW_LOGO_MAX_W: f32 = 480.0;
 
-#[derive(Clone, Copy)]
+/// Where each row of the text column stands, in page coordinates at rest. A row the item does not
+/// have is `None` and takes no room.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HeroChain {
+    /// The meta line (date · runtime · content rating, and how it plays).
     pub meta_y: f32,
-    pub ratings_y: f32,
-    pub syn_y: f32,
-    pub facts_y: f32,
+    /// The ratings row: the providers' groups and the viewer's stars.
+    pub ratings_y: Option<f32>,
+    /// The action row: Play/Resume and the More disc.
     pub btn_y: f32,
+    pub syn_y: Option<f32>,
+    /// The credit table's first row.
+    pub credits_y: Option<f32>,
+    /// The technical pills' row.
+    pub tech_y: Option<f32>,
+    /// The hero's foot: the lower of the text column's last row and the poster card.
+    pub foot: f32,
 }
 
-/// Detail's hero ladder, anchored at the title's foot (Home has its own, `landing_hero::home_rows`).
-/// Ratings are optional; their absence leaves no gap.
-pub fn hero_chain(
-    syn_h: f32,
-    has_ratings: bool,
-    measure: &dyn plx_machine::machine::Measure,
-) -> HeroChain {
-    let _ = measure;
-    let rows = super::landing_hero::hero_rows(
-        theme::logo::HERO_BAND_H, widgets::BADGE_H,
-        has_ratings.then_some(widgets::RATING_MARK_D), Some(syn_h.max(34.0)),
-        TITLE_BOTTOM,
-    );
+/// What the text column holds, measured: each row that is present, by the height it draws.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct HeroRows {
+    pub ratings: bool,
+    /// The synopsis' measured height; `None` (or nothing to say) takes no room.
+    pub synopsis_h: Option<f32>,
+    /// How many credit rows the table has (0: no table).
+    pub credits: usize,
+    pub tech: bool,
+}
+
+/// Detail's ladder, anchored at the title's foot and growing down: the identity group (meta,
+/// ratings) tight under the title, block air around the action row and the prose, medium air
+/// between the reference rows under it.
+pub fn hero_chain(rows: HeroRows) -> HeroChain {
+    let cd = widgets::StatusOverlay::CTRL_H;
+    let items = [
+        // the first row's air is the anchor's: a stack ignores `before` on its first item
+        Item::new(theme::hero::FACTS_H),
+        if rows.ratings { Item::new(widgets::RATING_MARK_D).before(theme::space::MD) } else { Item::absent() },
+        Item::new(cd).before(theme::space::LG),
+        rows.synopsis_h.filter(|h| *h > 0.0).map_or(Item::absent(), |h| Item::new(h).before(theme::space::LG)),
+        if rows.credits > 0 {
+            Item::new(CREDIT_LEAD * rows.credits as f32).before(theme::space::MD)
+        } else {
+            Item::absent()
+        },
+        if rows.tech { Item::new(widgets::BADGE_H).before(theme::space::MD) } else { Item::absent() },
+    ];
+    let stack = VStack::new(&items, 0.0, Anchor::Top(TITLE_FOOT + theme::space::SM));
+    let y = |i| stack.span(i).map(|(y, _)| y);
+    let text_foot = stack.placed().last().map_or(TITLE_FOOT, |s| s.y + s.h);
     HeroChain {
-        meta_y: rows.meta.y,
-        ratings_y: rows.ratings.map_or(rows.synopsis.unwrap().y, |r| r.y),
-        syn_y: rows.synopsis.unwrap().y, facts_y: rows.facts.y, btn_y: rows.actions.y,
+        meta_y: y(0).unwrap_or(TITLE_FOOT),
+        ratings_y: y(1),
+        btn_y: y(2).unwrap_or(TITLE_FOOT),
+        syn_y: y(3),
+        credits_y: y(4),
+        tech_y: y(5),
+        foot: text_foot.max(POSTER_TOP + POSTER_H),
     }
-}
-
-/// Bottom of the credits' full leading boxes, aligned by the last cap band to the facts.
-pub fn people_box_bottom(btn_y: f32, cap_h: f32) -> f32 {
-    btn_y - theme::space::MD + PEOPLE_LEAD - (theme::hero::FACTS_H + cap_h) * 0.5
-}
-
-pub fn people_top(btn_y: f32, lines: usize, cap_h: f32) -> f32 {
-    people_box_bottom(btn_y, cap_h) - lines as f32 * PEOPLE_LEAD
 }
 
 pub fn base_scrim_a(y: f32, hero_vis: f32) -> f32 {
@@ -80,8 +138,8 @@ pub fn overscan_rects(out: &mut Vec<(&'static str, Rect)>) {
     let tall = theme::logo::COMPACT_H_MAX;
     out.push(("detail pinned compact title (tallest logo)",
         Rect::new(MARGIN_X, COMPACT_TITLE_BOT - tall, SCR_W - 2.0 * MARGIN_X, tall)));
-    out.push(("detail hero text column", Rect::new(MARGIN_X, TITLE_BOTTOM - 200.0, HERO_TEXT_W, 200.0)));
-    out.push(("detail people column (right edge)", Rect::new(SCR_W - MARGIN_X - PEOPLE_W, 700.0, PEOPLE_W, 100.0)));
+    out.push(("detail hero poster", Rect::new(POSTER_X, POSTER_TOP, POSTER_W, POSTER_H)));
+    out.push(("detail hero text column", Rect::new(TEXT_X, TITLE_FOOT - 200.0, HERO_TEXT_W, 200.0)));
     out.push(("detail below-hero flow, at rest", Rect::new(MARGIN_X, TOP_MARGIN, SCR_W - 2.0 * MARGIN_X, 100.0)));
 }
 
@@ -90,34 +148,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pdf_proposal_detail_rows_follow_the_shared_ladder() {
-        let m = crate::fixture::FixtureMeasure;
-        let ch = hero_chain(72.0, true, &m);
-        assert_eq!(ch.meta_y, 582.0);
-        assert_eq!(ch.ratings_y, 624.0);
-        assert_eq!(ch.syn_y, 694.0);
-        assert_eq!(ch.facts_y, 790.0);
-        assert_eq!(ch.btn_y, 838.0);
-        let bare = hero_chain(72.0, false, &m);
-        assert_eq!(bare.syn_y, ch.syn_y - widgets::RATING_MARK_D - theme::space::XS);
-        assert_eq!(bare.btn_y, ch.btn_y - widgets::RATING_MARK_D - theme::space::XS);
+    fn the_text_column_stacks_down_from_the_title_foot() {
+        let full = hero_chain(HeroRows { ratings: true, synopsis_h: Some(72.0), credits: 2, tech: true });
+        assert_eq!(full.meta_y, TITLE_FOOT + theme::space::SM);
+        let ratings = full.ratings_y.unwrap();
+        assert_eq!(ratings, full.meta_y + theme::hero::FACTS_H + theme::space::MD);
+        assert_eq!(full.btn_y, ratings + widgets::RATING_MARK_D + theme::space::LG);
+        let syn = full.syn_y.unwrap();
+        assert_eq!(syn, full.btn_y + widgets::StatusOverlay::CTRL_H + theme::space::LG);
+        let credits = full.credits_y.unwrap();
+        assert_eq!(credits, syn + 72.0 + theme::space::MD);
+        let tech = full.tech_y.unwrap();
+        assert_eq!(tech, credits + 2.0 * CREDIT_LEAD + theme::space::MD);
+        assert_eq!(full.foot, tech + widgets::BADGE_H);
+        assert!(full.foot < SCR_H, "the whole hero stands on the first screen");
     }
 
     #[test]
-    fn hero_people_share_the_facts_cap_band_and_grow_upward() {
-        let ch = hero_chain(72.0, true, &crate::fixture::FixtureMeasure);
-        let minimum = hero_chain(34.0, false, &crate::fixture::FixtureMeasure);
-        assert_eq!(minimum.facts_y, 714.0);
-        assert_eq!(people_top(minimum.btn_y, PEOPLE_MAX_LINES, 18.0), 621.0);
-        for cap_h in [16.0, 18.0, 24.0] {
-            for lines in 1..=PEOPLE_MAX_LINES {
-                assert_eq!(people_top(ch.btn_y, lines, cap_h) + (lines - 1) as f32 * PEOPLE_LEAD + cap_h * 0.5,
-                    ch.facts_y + theme::hero::FACTS_H * 0.5,
-                    "last credit cap band must share the facts centre");
-            }
-        }
-        let facts_r = SCR_W - MARGIN_X - PEOPLE_W - theme::space::SM;
-        assert!(facts_r < SCR_W - MARGIN_X - PEOPLE_W);
+    fn an_absent_row_leaves_no_gap_and_the_poster_holds_the_foot() {
+        let bare = hero_chain(HeroRows::default());
+        assert_eq!(bare.ratings_y, None);
+        assert_eq!(bare.btn_y, bare.meta_y + theme::hero::FACTS_H + theme::space::LG);
+        assert_eq!((bare.syn_y, bare.credits_y, bare.tech_y), (None, None, None));
+        assert_eq!(bare.foot, POSTER_TOP + POSTER_H, "a short column ends where the poster does");
+        let empty_blurb = hero_chain(HeroRows { synopsis_h: Some(0.0), ..HeroRows::default() });
+        assert_eq!(empty_blurb, bare, "an empty synopsis is no row at all");
+    }
+
+    #[test]
+    fn the_columns_sit_inside_the_safe_area() {
+        assert_eq!(POSTER_X, MARGIN_X);
+        assert!(TEXT_X > POSTER_X + POSTER_W);
+        assert!(TEXT_X + HERO_TEXT_W <= SCR_W - MARGIN_X);
+        assert!(TITLE_FOOT > POSTER_TOP && TITLE_FOOT < POSTER_TOP + POSTER_H);
+        assert!(POSTER_TOP > TOP_MARGIN, "the compact title's band is clear of the poster");
     }
 
     #[test]
@@ -129,37 +193,17 @@ mod tests {
     }
 
     #[test]
-    fn overscan_rects_keep_the_legacy_detail_regions() {
+    fn overscan_rects_name_the_detail_regions() {
         let mut got = Vec::new();
         overscan_rects(&mut got);
-        assert_eq!(got.len(), 4);
-
-        let want = [
-            (
-                "detail pinned compact title (tallest logo)",
-                Rect::new(
-                    MARGIN_X,
-                    COMPACT_TITLE_BOT - theme::logo::COMPACT_H_MAX,
-                    SCR_W - 2.0 * MARGIN_X,
-                    theme::logo::COMPACT_H_MAX,
-                ),
-            ),
-            (
-                "detail hero text column",
-                Rect::new(MARGIN_X, TITLE_BOTTOM - 200.0, HERO_TEXT_W, 200.0),
-            ),
-            (
-                "detail people column (right edge)",
-                Rect::new(SCR_W - MARGIN_X - PEOPLE_W, 700.0, PEOPLE_W, 100.0),
-            ),
-            (
-                "detail below-hero flow, at rest",
-                Rect::new(MARGIN_X, TOP_MARGIN, SCR_W - 2.0 * MARGIN_X, 100.0),
-            ),
-        ];
-        for (got, want) in got.iter().zip(want.iter()) {
-            assert_eq!(got.0, want.0);
-            assert_eq!((got.1.x, got.1.y, got.1.w, got.1.h), (want.1.x, want.1.y, want.1.w, want.1.h));
-        }
+        let names: Vec<&str> = got.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names, [
+            "detail pinned compact title (tallest logo)",
+            "detail hero poster",
+            "detail hero text column",
+            "detail below-hero flow, at rest",
+        ]);
+        let poster = got[1].1;
+        assert_eq!((poster.x, poster.y, poster.w, poster.h), (POSTER_X, POSTER_TOP, POSTER_W, POSTER_H));
     }
 }

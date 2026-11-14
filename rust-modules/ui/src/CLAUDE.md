@@ -51,7 +51,7 @@ arguments, and its time is the `dt` it is handed.
    SYNOPSIS is the case that proves
    the rule and it is no longer here: a blurb is the longest run of prose on its page, so it is
    reading copy, and Detail draws it at `LABEL` 26 through `ui::hero_synopsis`. Home has a separate line for episode, movie or show metadata, or a short premise. Remaining time lives in the Resume button. (The hero
-   identity line uses `theme::hero::IDENTITY_SIZE`, regular `CAPTION` 24, matching the latest PDF.) Pass a rung to `Painter::text`/`Label`/`TextView`/`text::elide` instead of a bare
+   identity line on Home uses `theme::hero::IDENTITY_SIZE`, regular `CAPTION` 24, matching the latest PDF.) Pass a rung to `Painter::text`/`Label`/`TextView`/`text::elide` instead of a bare
    `24`/`28`/… — a size is a role, not a magic number; pick the nearest rung, and if no rung fits a
    genuinely new role, **add a documented rung to `pub mod size` in `gfx/tokens.rs`** (`theme::size`
    re-exports it, so call sites still spell `theme::size::X`), don't inline a literal. Exactly two
@@ -516,7 +516,7 @@ presentation in a design pass.
    runs inside `idle::decorative` so a page image is never held for it. **No plate behind the
    mark**: a disc there is the strip's selected plate and reads as "this tab is selected". The APPLICATION asks
    (`ChromeSnapshot::pulse`); no screen does, and a screen that wants one reports an `AppFx`. A
-   hero disc that swaps a glyph for its filled twin (the Detail and Home hero bookmark) uses
+   hero disc that swaps a glyph for its filled twin (the Home hero bookmark) uses
    `CircleButton::icon_fill(filled, fill, dy)`: the filled glyph is revealed from the box's bottom
    up with a downward nudge, the two icons share one silhouette, and a settled control passes the
    resting icon alone so nothing of the animation lingers. The 3 px ribbon drop is a named constant

@@ -243,7 +243,7 @@ fn recommended_opens_the_band_its_setting_asks_for() {
     grade_shelf_bands(&mut w, "Recommended", "Recently Added", "Top Rated");
 }
 
-/// Detail: Related is the focused shelf (three Downs from the top), About the section below it.
+/// Detail: Related is the focused shelf (two Downs from the hero, past the collection shelf), About the section below it.
 #[test]
 fn detail_related_opens_the_band_its_setting_asks_for() {
     use plx_data::pms::PmsMovie;
@@ -258,7 +258,7 @@ fn detail_related_opens_the_band_its_setting_asks_for() {
         ..Default::default()
     };
     let mut w = World::detail_page("band-detail", detail);
-    for _ in 0..3 {
+    for _ in 0..2 {
         w.press(super::Key::Down);
         w.frames(30);
     }

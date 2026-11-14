@@ -122,6 +122,10 @@ pub enum Action {
     /// Play this leaf's version `media`, resuming as Play does. The id, never a position: the app
     /// resolves it against the item it fetches (`plx_plex::plex::Metadata::media_version`).
     PlayVersion { rk: String, media: plx_plex::plex::MediaId },
+    /// A row of the Detail hero's More menu ([`ItemMenuKind::Hero`]): the hero control with this
+    /// `ELEM_*` identity. The menu delivers it back to its page (`ItemMenuScreen::activate`); it
+    /// never reaches the app.
+    Hero(u32),
 }
 
 impl Action {
@@ -145,7 +149,7 @@ impl Action {
     /// Does the action name what it acts on? A ratingKey-keyed action needs a non-empty key; a
     /// catalog-keyed [`Action::WatchlistAdd`] carries its 12-byte id instead and has no key.
     pub fn has_subject(&self) -> bool {
-        matches!(self, Action::WatchlistAdd { .. }) || !self.rk().is_empty()
+        matches!(self, Action::WatchlistAdd { .. } | Action::Hero(_)) || !self.rk().is_empty()
     }
 
     /// The ratingKey this action acts on.
@@ -163,8 +167,8 @@ impl Action {
             | Action::ChooseVersion(rk) => rk,
             Action::PlayVersion { rk, .. } => rk,
             Action::PlayTrailer { rk, .. } => rk,
-            // No ratingKey: the subject is a catalog id.
-            Action::WatchlistAdd { .. } => "",
+            // No ratingKey: the subject is a catalog id, or the page's own hero control.
+            Action::WatchlistAdd { .. } | Action::Hero(_) => "",
         }
     }
 
@@ -184,6 +188,7 @@ impl Action {
             Action::WatchlistAdd { .. } => 11,
             Action::ChooseVersion(_) => 12,
             Action::PlayVersion { .. } => 13,
+            Action::Hero(_) => 14,
         };
         c.u32(tag).str(self.rk());
         if let Action::WatchlistAdd { hex } = self {
@@ -194,6 +199,9 @@ impl Action {
         }
         if let Action::PlayVersion { media, .. } = self {
             c.u64(media.0 as u64);
+        }
+        if let Action::Hero(elem) = self {
+            c.u32(*elem);
         }
         if let Action::PlayTrailer {
             part,
@@ -221,7 +229,7 @@ const EDGE: f32 = theme::space::XL;
 const EDGE_X: f32 = plx_ui::consts::MARGIN_X;
 
 pub const SHAPE: &str =
-    "ItemMenu{arg:ItemMenuArg,acts:[Option<Action{tag:u32,rk:str,season:u32,part:str,vcodec:str,acodec:str,title:str,hex:str(WatchlistAdd only),media:u64(PlayVersion only)}>],sel:i32,\
+    "ItemMenu{arg:ItemMenuArg,acts:[Option<Action{tag:u32,rk:str,season:u32,part:str,vcodec:str,acodec:str,title:str,hex:str(WatchlistAdd only),media:u64(PlayVersion only),elem:u32(Hero only)}>],sel:i32,\
      table:TableViewMotion}";
 
 /// Is `m` an item the menu has anything to offer? A leaf or a show/season — i.e. everything the
@@ -255,6 +263,8 @@ pub enum ItemRow {
     PlayVersion,
     /// One version on the Play Version page, by its position in the list captured at open.
     Version(u16),
+    /// One row of the Detail hero's More menu, by the hero control's `ELEM_*` identity.
+    Hero(u8),
 }
 
 impl ItemRow {
@@ -281,12 +291,15 @@ impl FormId for ItemRow {
             ItemRow::WatchlistAdd => 11,
             ItemRow::PlayVersion => 12,
             ItemRow::Version(n) => VERSION_KEY_BASE + u32::from(*n),
+            ItemRow::Hero(elem) => HERO_KEY_BASE + u32::from(*elem),
         })
     }
 }
 
 /// The Play Version page's row keys start here, clear of the fixed rows above.
 const VERSION_KEY_BASE: u32 = 100;
+/// The hero menu's row keys start here, clear of the fixed rows and of the version rows.
+const HERO_KEY_BASE: u32 = 1000;
 
 /// **Does OK on this Continue Watching card, while OK does not play, open the SHOW's page?** Only
 /// an episode that names its show. `app::input::activate_deck_card` decides the press with it and
@@ -613,6 +626,23 @@ fn build_versions(rk: &str, versions: &[MediaVersion]) -> ItemForm {
     }))
 }
 
+/// **The Detail hero's More menu**: one row per hero control the action row no longer draws, in the
+/// page's order, each acting by its control's identity ([`Action::Hero`]).
+fn build_hero(rows: &[crate::registry::HeroMenuRow]) -> ItemForm {
+    let sec = rows.iter().filter_map(|r| u8::try_from(r.elem).ok().map(|e| (e, r))).fold(
+        FormSection::new(""),
+        |sec, (elem, r)| {
+            sec.item(
+                ItemRow::Hero(elem),
+                RowKind::Button,
+                Action::Hero(r.elem),
+                Row::new(r.label.clone()).licon(r.icon).destructive(r.destructive),
+            )
+        },
+    );
+    Form::new().section(sec)
+}
+
 /// Beside the card, never over it: to its RIGHT by default, flipped to its LEFT when that would run
 /// past the screen's keep-out. Vertically it hangs off the card's top edge, pulled back inside the
 /// safe band so a bottom shelf still gets a whole panel. Pure (anchor + measured height in, rect
@@ -723,6 +753,7 @@ impl ItemMenuScreen {
                 let member = self.face.as_ref().map_or(plx_data::catalog::Membership::On, |f| f.member);
                 build_catalog(*state, kind, &self.arg.rk, guid, member)
             }
+            ItemMenuKind::Hero { rows, .. } => build_hero(rows),
         };
         // a short list of one-line actions — BODY labels, not menu-size HEADLINE
         self.form.table.compact = true;
@@ -765,6 +796,17 @@ impl ItemMenuScreen {
             });
         if let Some(Action::ChooseVersion(rk)) = &act {
             self.show_versions(rk);
+            return;
+        }
+        // A hero row is the PAGE's own control: dismiss, then hand the press back to the page,
+        // which performs it as it performed the disc (a panel it opens is presented after this
+        // menu has started closing).
+        if let (Some(Action::Hero(elem)), ItemMenuKind::Hero { host, .. }) = (&act, &self.arg.kind) {
+            fx.push(Fx::Nav(NavOp::Dismiss(self.entry)));
+            fx.push(Fx::Deliver(
+                plx_machine::machine::MachineId::Instance(*host),
+                plx_machine::machine::Delivery::Screen(ScreenEvent::App(crate::registry::AppMsg::HeroAction(*elem))),
+            ));
             return;
         }
         // Every arm of the dispatch turns an rk into a blocking fetch, a scrobble or a play; an
