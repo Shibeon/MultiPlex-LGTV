@@ -268,6 +268,44 @@ mod tests {
             "fixtures/multiplex.plxhud is fixtures/multiplex/ packed: run multiplex-sim --hud-pack again");
     }
 
+    /// **Opening the MultiPlex Info panel moves nothing above it**, in every shipped language: the head (exit,
+    /// title) and the stream row (pills, info disc) keep their y, so the disc the viewer pressed stays under the
+    /// focus ring; the panel takes the transport's place below the row. The stream row hugs its pills and the info
+    /// disc trails them (`ControlRect::trail`), in both states.
+    #[test]
+    fn multiplex_info_panel_opens_below_the_row_and_moves_nothing_above_it() {
+        use crate::hud_format::compile::OPEN_INFO;
+        use crate::hud_format::Slot;
+        for language in SHIPPED {
+            let cx = LocaleContext::resolve(language, None, None, None, None);
+            let hud = load_multiplex("0.0.0-test", &cx, &ShippedMeasure);
+            let compact = hud.compiled.lookup(0, Slot::Discs, true, true, false).expect("the compact state");
+            let info = hud.compiled.lookup(OPEN_INFO, Slot::Discs, true, true, false).expect("the Info state");
+            let band = |state: &crate::hud_format::compile::CompiledState, id: &str| {
+                state.bands.iter().find(|(name, _)| name == id).map(|(_, r)| *r).unwrap_or_else(|| panic!("{}: band {id}", language.tag()))
+            };
+            for id in ["head", "stream"] {
+                assert_eq!(band(compact, id).y, band(info, id).y, "{}: the {id} band keeps its y", language.tag());
+            }
+            assert!(band(info, "info").y >= band(info, "stream").y + band(info, "stream").h, "{}: the panel is under the row", language.tag());
+            assert!(band(compact, "head").y + band(compact, "head").h <= band(compact, "stream").y, "{}: the pills never reach the title", language.tag());
+            for state in [compact, info] {
+                let about = state.control("info").expect("the info disc");
+                assert!(about.trail, "{}: the info disc trails the pills", language.tag());
+                assert!(!state.control("exit").expect("exit").trail, "{}: the exit disc does not", language.tag());
+            }
+        }
+        // the row is resolution, range and audio in every state: never a mode pill (a transcode is a note of the panel)
+        let hud = load_multiplex("0.0.0-test", plx_platform::i18n::english(), &ShippedMeasure);
+        for state in hud.compiled.states() {
+            for op in &state.ops {
+                if let crate::hud_format::compile::DrawOp::Facts { stream, .. } = op {
+                    assert_eq!(stream, &["resolution", "dynamic_range", "audio_codec"], "{:?}", state.key);
+                }
+            }
+        }
+    }
+
     /// **Classic answers every frame the player can be in**, in every shipped language: for every slot the
     /// HUD can hold, with and without chapters, as an episode or a movie, paused or playing, the compact
     /// state (`open == 0`) and its geometry exist. This is the proof that `frame_state` returning `None`

@@ -109,6 +109,12 @@ const GREEN_500: [f32; 4] = rgb8(0x2f, 0xae, 0x5b);
 // Violet — the one hue the Detail hero's technical pills give SOUND (`TECH_AUDIO_INK`), so the
 // picture's amber pill and the sound's pill read as two kinds of fact at a glance (MultiPlex web).
 const VIOLET_300: [f32; 4] = rgb8(0xa7, 0x8b, 0xfa);
+// Sky — the player's HDR pill (`STREAM_HDR_*`), the web player's HDR blue: the one hue a picture format
+// that is more than SDR is told by, rim and label.
+const SKY_300: [f32; 4] = rgb8(0x6f, 0xd8, 0xff);
+const SKY_400: [f32; 4] = rgb8(0x3e, 0xcb, 0xff);
+// Indigo — the player's audio pill rim (`STREAM_AUDIO_RIM`), the web player's sound indigo.
+const INDIGO_400: [f32; 4] = rgb8(0x6c, 0x8c, 0xff);
 
 // The two ALPHA ramps are `WHITE`/`BLACK` at a measured weight, spelled `with_a(WHITE, .20)` at the
 // role: a new overlay is a weight on that ramp, never a new hue. `NEUTRAL_900` (#0c0c0d) is not a
@@ -1447,11 +1453,12 @@ pub const TECH_AUDIO_INK: [f32; 4] = VIOLET_300;
 pub const TECH_ACCESS_INK: [f32; 4] = COOL_300;
 
 // ── The player's stream pills (the MultiPlex HUD's `facts.stream` run, `widgets::BadgeStyle::Solid`
-// and `Rimmed`) ─────────────────────────────────────────────────────────────────────────────────────
+// and `Rimmed`; the web player's `.ptech` pills) ──────────────────────────────────────────────────────
 // Facts about THIS session's stream standing on the picture: the resolution as the one solid amber
-// capsule (the picture's hue, [`TECH_VIDEO_INK`]'s stop); the other three on one dark neutral ground,
-// so a bright picture never tints them: the dynamic range rimmed, the stream mode plain, the audio
-// codec under a quieter rim (the web player's dashed pill, one pass here).
+// capsule (the picture's hue, [`TECH_VIDEO_INK`]'s stop); the others on one dark neutral ground, so a
+// bright picture never tints them, told apart by their rim: an HDR kind in the picture's blue, SDR in a
+// quiet white, the sound in its indigo; a pill the TV cannot verify under the unsure rim (the web
+// player's dashed outline, one pass here).
 /// The resolution pill's fill: the picture's amber, [`TECH_VIDEO_INK`]'s stop.
 pub const STREAM_RES_FILL: [f32; 4] = AMBER_300;
 /// The resolution pill's label on that fill: the amber family's near-black.
@@ -1461,10 +1468,22 @@ pub const STREAM_PILL_INK: [f32; 4] = COOL_0;
 /// The neutral stream pills' ground: the controls' idle surface ([`CONTROL_IDLE_FILL`]), dark and nearly
 /// opaque, so the picture behind cannot tint it.
 pub const STREAM_PILL_FILL: [f32; 4] = CONTROL_IDLE_FILL;
-/// The dynamic-range pill's rim: the overlays' neutral keyline.
-pub const STREAM_PILL_RIM: [f32; 4] = OVERLAY_BORDER;
-/// The audio pill's rim: quieter than [`STREAM_PILL_RIM`], a fact about the sound beside the picture's.
-pub const STREAM_PILL_RIM_QUIET: [f32; 4] = with_a(WHITE, 0.30);
+/// An HDR pill's rim (`HDR`, `Dolby Vision`): the web player's HDR blue (`#3ecbff`).
+pub const STREAM_HDR_RIM: [f32; 4] = SKY_400;
+/// An HDR pill's label: the lighter stop of the same blue (`#6fd8ff`).
+pub const STREAM_HDR_INK: [f32; 4] = SKY_300;
+/// The SDR pill's rim: a quiet white keyline (the web player's 40 % white).
+pub const STREAM_SDR_RIM: [f32; 4] = with_a(WHITE, 0.40);
+/// The SDR pill's label: a touch below white (the web player's 85 %), so the range that is no feature reads
+/// quieter than the one that is.
+pub const STREAM_SDR_INK: [f32; 4] = with_a(WHITE, 0.85);
+/// The audio pill's rim: the web player's sound indigo (`#6c8cff`).
+pub const STREAM_AUDIO_RIM: [f32; 4] = INDIGO_400;
+/// An unsure pill's rim (deduced, not verifiable on the TV): the web player's dashed 45 % white, as one
+/// solid keyline.
+pub const STREAM_UNSURE_RIM: [f32; 4] = with_a(WHITE, 0.45);
+/// An unsure pill's label: the web player dims the whole pill to 85 %.
+pub const STREAM_UNSURE_INK: [f32; 4] = with_a(WHITE, 0.85);
 /// The drained state, for both a hollow tomato and a negated crowd — `COOL_400`, the same stop
 /// [`TEXT_TERTIARY`] resolves to, because the negation is literally "this has the weight of a
 /// caption now". Its own role ON that stop rather than an alias OF the text token: a verdict mark

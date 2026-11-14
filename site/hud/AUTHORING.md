@@ -8,9 +8,12 @@ and start its plugin version at `1.0.0`. Package format and `hud.format` are bot
 Use `schema/manifest/1.0.json` for metadata and resource declarations and `schema/hud/1.0.json` for
 hud.json. To declare the optional playbar end-time lane, set `hud.format` to `"1.1"` and use
 `schema/hud/1.1.json`. Format `"1.2"` (`schema/hud/1.2.json`) adds the `exit` command, the `title.name`,
-`title.subtitle` and `clock.now` bindings, a facts row's `stream` pills, an item's `caption`, the `plate` rest face, `playbar.remaining` and four icons; the
-app's default HUD, `builtin:multiplex` (`multiplex-sim --hud-export builtin:multiplex`), is a worked example of
-each, and it passes `--hud-lint --lang all` (cost ceilings included) as shipped. Resource IDs refer to ordinary package-relative SVG files, never inline data or URLs.
+`title.subtitle` and `clock.now` bindings, a facts row's `stream` pills and its hugging `w`, the playback details
+bindings (`label.video`, `label.audio`, `stream.*`), an item's `caption`, the `plate` rest face, `playbar.remaining`
+and four icons; the app's default HUD, `builtin:multiplex` (`multiplex-sim --hud-export builtin:multiplex`), is a
+worked example of each. It passes `--hud-lint --lang all` except for one cost finding: its compact states carry the
+stream-pill row under the title, over the compact draw-op and glyph-run ceilings (`HUD-E1401`), which the built-in
+alone is allowed pending a measurement on the television. A package that copies it as is is refused for its cost. Resource IDs refer to ordinary package-relative SVG files, never inline data or URLs.
 
 Build and validate using the same immutable artifact:
 

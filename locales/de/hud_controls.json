@@ -6,5 +6,16 @@
   "player.hud.seek_forward_caption": "+{seconds} s",
   "player.hud.skip_back": "Zurückspringen",
   "player.hud.skip_forward": "Vorspringen",
+  "player.stream.app_audio": "von MultiPlex dekodiert und als PCM an den Fernseher gesendet",
+  "player.stream.audio": "Audio",
+  "player.stream.output": "Ausgabe: {value}",
+  "player.stream.server_audio": "Ton vom Server umgewandelt",
+  "player.stream.source": "Quelle: {value}",
+  "player.stream.to_sdr": "Quelle {source}, in SDR umgewandelt",
+  "player.stream.transcode_note": "der Server wandelt das Video für diesen Fernseher um",
+  "player.stream.transcoding": "Transkodierung",
+  "player.stream.tv_audio": "vom Fernseher dekodiert oder unverändert an den Receiver weitergegeben",
+  "player.stream.unsure_note": "mit „?“ markierte Angaben lassen sich auf diesem Fernseher nicht prüfen: Fernseher oder Receiver entscheiden",
+  "player.stream.video": "Video",
   "player.up_next.seconds_left": "Nächste Episode · {seconds} s"
 }

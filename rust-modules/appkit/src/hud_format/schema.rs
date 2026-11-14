@@ -133,7 +133,8 @@ pub fn versions() -> impl Iterator<Item = Since> {
 /// The version every 1.0 entry arrived in.
 pub const V1_0: Since = (1, 0);
 /// The version the MultiPlex player's vocabulary arrived in (the `exit` command, the `title.name`,
-/// `title.subtitle` and `clock.now` binds, a `facts` cell's `stream` pills and a control's `caption`).
+/// `title.subtitle` and `clock.now` binds, a `facts` cell's `stream` pills and hugging `w`, the playback details
+/// binds `label.video`, `label.audio` and `stream.*`, and a control's `caption`).
 pub const V1_2: Since = (1, 2);
 
 /// The one `id` that is not reverse-DNS: the built-in HUD (D2). [`Pattern::ReverseDns`] accepts exactly this
@@ -777,6 +778,13 @@ pub static BINDINGS: &[Binding] = &[
     Binding { name: "title.name", since: V1_2, doc: "The playing item's own name (server text): an episode's title, else the item's title." },
     Binding { name: "title.subtitle", since: V1_2, doc: "The line under `title.name`: an episode's show and address (\"Show · S1 · E4\"), else the item's year; empty when neither is known. Server text, may elide." },
     Binding { name: "clock.now", since: V1_2, doc: "The wall-clock time, in the TV's 12- or 24-hour format (app text, never elides: like `label.*` it takes no `w` and no `max_lines`). The app supplies it once a frame; the HUD reads no clock." },
+    Binding { name: "label.video", since: V1_2, doc: "The playback details panel's picture heading, in capitals (app text, localized; like `label.info` it takes no `w` and no `max_lines`)." },
+    Binding { name: "label.audio", since: V1_2, doc: "The playback details panel's sound heading, in capitals (app text, localized; no `w`, no `max_lines`)." },
+    Binding { name: "stream.video_source", since: V1_2, doc: "\"Source: \" and the picture the file carries (\"1080p HDR\"), or a dash. Composed from server facts, may elide." },
+    Binding { name: "stream.video_output", since: V1_2, doc: "\"Output: \" and the picture the TV is shown (\"720p SDR\"), or a dash. May elide." },
+    Binding { name: "stream.audio_source", since: V1_2, doc: "\"Source: \" and the sound the file carries (\"Dolby Digital 5.1\"), or a dash. May elide." },
+    Binding { name: "stream.audio_output", since: V1_2, doc: "\"Output: \" and the sound that reaches the TV (\"AAC Stereo\"), or a dash. May elide." },
+    Binding { name: "stream.notes", since: V1_2, doc: "The playback details panel's notes, one to a line: each conversion explained once, then what a `?` pill means. Empty when there is nothing to explain; wraps at `max_lines`." },
 ];
 
 /// What a `text` cell's `bind` may name.
@@ -792,6 +800,13 @@ pub const TEXT_BINDS: &[&str] = &[
     "title.name",
     "title.subtitle",
     "clock.now",
+    "label.video",
+    "label.audio",
+    "stream.video_source",
+    "stream.video_output",
+    "stream.audio_source",
+    "stream.audio_output",
+    "stream.notes",
 ];
 /// What an `image` cell's `bind` may name.
 pub const IMAGE_BINDS: &[&str] = &["info.still"];
@@ -1195,6 +1210,18 @@ pub static CELL_TEXT: Node = Node {
             require: &[],
             forbid: &["w", "max_lines"],
         },
+        Rule::IfValue {
+            key: "bind",
+            equals: "label.video",
+            require: &[],
+            forbid: &["w", "max_lines"],
+        },
+        Rule::IfValue {
+            key: "bind",
+            equals: "label.audio",
+            require: &[],
+            forbid: &["w", "max_lines"],
+        },
     ],
     doc: "A line of bound text. App-owned text (`label.*`, `item.start`) takes no `w` and no `max_lines`.",
 };
@@ -1327,9 +1354,15 @@ pub static CELL_FACTS: Node = Node {
         Field::opt(
             "stream",
             Ty::EnumList(&["resolution", "dynamic_range", "stream_mode", "audio_codec"]),
-            "The stream pills, after the badges: what THIS session's stream is (the picture's resolution as a solid amber pill, its dynamic range outlined, Direct Play or a conversion on the neutral fill, the audio codec dashed). An ordered subset; a fact the stream does not state draws no pill.",
+            "The stream pills, after the badges: what THIS session's stream is, the web player's way (the picture's resolution as a solid amber pill, its dynamic range outlined, `Transcoding` on the neutral fill while the server re-encodes the picture and nothing otherwise, the sound as codec and channels in one pill). A pill the TV cannot verify wears the unsure rim and a `?`. An ordered subset; a fact the stream does not state draws no pill.",
         )
         .default("[]")
+        .at(V1_2),
+        Field::opt(
+            "w",
+            PX_W,
+            "The room the run is fitted in, in px, in place of the band's free width. With `w` the run HUGS the chips it draws: the start-aligned cells after it in its band close up behind its last chip (the MultiPlex stream pills and their ⓘ disc). Absent: `fill`.",
+        )
         .at(V1_2),
         Field::req("size", Ty::Enum(BODY_SIZES), "A type-scale rung name."),
     ],
@@ -2027,9 +2060,10 @@ mod tests {
         assert!(CONDITIONS.iter().all(|c| c.since <= CURRENT));
         assert!(BINDINGS.iter().all(|b| b.since <= CURRENT));
         assert!(
-            every_field().iter().filter(|(_, f)| f.since > V1_0).all(|(_, f)| (f.key == "end_time_width" && f.since == (1, 1))
-                || (matches!(f.key, "stream" | "caption" | "remaining") && f.since == V1_2)),
-            "the end-time lane is the only 1.1 addition, the stream pills, the disc caption and the remaining clock's ink the 1.2 fields"
+            every_field().iter().filter(|(_, f)| f.since > V1_0).all(|(owner, f)| (f.key == "end_time_width" && f.since == (1, 1))
+                || (matches!(f.key, "stream" | "caption" | "remaining") && f.since == V1_2)
+                || (*owner == "facts" && f.key == "w" && f.since == V1_2)),
+            "the end-time lane is the only 1.1 addition, the stream pills, the disc caption, the remaining clock's ink and a facts row's hugging width the 1.2 fields"
         );
     }
 
@@ -2336,7 +2370,7 @@ mod tests {
     fn hud_format_schema_binding_lists_are_subsets_of_the_catalogue_and_card_scope_is_by_name() {
         let names: HashSet<_> = BINDINGS.iter().map(|b| b.name).collect();
         assert_eq!(names.len(), BINDINGS.len(), "binding names are unique");
-        assert_eq!(BINDINGS.len(), 33);
+        assert_eq!(BINDINGS.len(), 40);
         for list in [
             TEXT_BINDS,
             IMAGE_BINDS,
@@ -2528,6 +2562,7 @@ mod tests {
                 "playback_fact",
                 "badges",
                 "stream",
+                "w",
                 "size"
             ]
         );

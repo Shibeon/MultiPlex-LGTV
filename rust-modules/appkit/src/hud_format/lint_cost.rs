@@ -833,16 +833,57 @@ mod tests {
         }
     }
 
-    /// **The default built-in is within its class too**, every state under every slot in every shipped language. A
-    /// built-in is never linted at run time ([`crate::player_hud::loaded::load_multiplex`] compiles it directly), so
-    /// this is the only gate: a package that copied it must pass `--hud-lint`, and a package refused for its cost must
-    /// not fall back to a default that is itself over a ceiling. The ceilings are the television's; the package is
-    /// trimmed to them (the stream pills live in the Info section), never the other way round.
+    /// **The default built-in is within its class too**, every state under every slot in every shipped language,
+    /// with ONE allowance. A built-in is never linted at run time ([`crate::player_hud::loaded::load_multiplex`]
+    /// compiles it directly), so this is the only gate on it.
+    ///
+    /// **The allowance: the stream-pill row of the compact states, and nothing else.** The row under the title
+    /// (resolution, HDR or SDR, audio, left of the info disc, as the web player draws it) is a hugging `facts` op
+    /// whose price is one op plus one capsule and one glyph run per pill: 4 draw ops and 3 glyph runs, which
+    /// takes the compact states to 16 and 11 against the television's 13 and 9. It is admitted HERE ONLY, for
+    /// compact states only, by exactly that op's weight ([`stream_row_allowance`]), and the global ceilings
+    /// (which every dropped package is held to) do not move. This is the owner's decision pending a frame-time
+    /// measurement on the television (`ARM_PROFILE=release`, the `profile-tv` skill: Mali HWCNT and a sched trace
+    /// of the compact episode with the row); until then a package that copies this one is refused by `--hud-lint`
+    /// with `HUD-E1401` and falls back to it, as any package over a ceiling does.
     #[test]
     fn every_state_of_multiplex_is_within_its_class() {
         const MULTIPLEX: &str = include_str!("fixtures/multiplex/hud.json");
-        let over: Vec<_> = e1401(MULTIPLEX, &[]).into_iter().map(|f| f.message).collect();
-        assert!(over.is_empty(), "{} states over their class:\n{}", over.len(), over.join("\n"));
+        let package = crate::hud_format::fixtures::parse(MULTIPLEX.as_bytes()).package.expect("the multiplex fixture parses");
+        let mut over_found = Vec::new();
+        for lang in LintLang::shipped() {
+            let compiled = compile(&package, &ShippedMeasure, CompileCtx { labels: lang.labels.clone() });
+            for s in crate::hud_format::lint::states_of(&compiled) {
+                let class = Class::of(s.key.open);
+                let mut c = ceiling(class);
+                let allowance = stream_row_allowance(s.state);
+                if class == Class::Compact {
+                    // the row exists in every compact state, and its weight is the three pills' and no more
+                    assert_eq!((allowance.draw_ops, allowance.glyph_runs), (4, 3), "{}: the stream row", state_name(s.key));
+                    c.draw_ops += allowance.draw_ops;
+                    c.glyph_runs += allowance.glyph_runs;
+                }
+                let o = over(c, &state_cost(s.state));
+                if !o.is_empty() {
+                    over_found.push(format!("{} {} under {}: {o:?}", lang.tag, state_name(s.key), slot_name(s.key)));
+                }
+            }
+        }
+        assert!(over_found.is_empty(), "{} states over their class:\n{}", over_found.len(), over_found.join("\n"));
+    }
+
+    /// The weight of a state's hugging stream-pill `facts` op (the row left of the info disc), zero without one.
+    fn stream_row_allowance(state: &crate::hud_format::compile::CompiledState) -> crate::hud_format::compile::Contributor {
+        state
+            .ops
+            .iter()
+            .filter(|op| matches!(op, DrawOp::Facts { hug: true, .. }))
+            .map(crate::hud_format::compile::weigh)
+            .fold(Default::default(), |a, b| crate::hud_format::compile::Contributor {
+                draw_ops: a.draw_ops + b.draw_ops,
+                glyph_runs: a.glyph_runs + b.glyph_runs,
+                ..a
+            })
     }
 
     #[test]

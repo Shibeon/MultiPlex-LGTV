@@ -107,7 +107,30 @@ pub(super) fn text_of(f: &Frame<'_>, bind: &str) -> Option<String> {
             |n| if n.is_real_episode && !n.ep_title.is_empty() { n.ep_title.clone() } else { n.title.clone() })),
         "title.subtitle" => Some(f.meta.now_playing().map_or_else(String::new, subtitle)),
         "clock.now" => f.model.now.and_then(|time| plx_platform::i18n::current().time_of_day(time)),
+        // the playback details panel (format 1.2): the web player's "source -> output" lines and notes
+        "label.video" => Some(plx_platform::i18n::msg::player_stream_video().to_uppercase()),
+        "label.audio" => Some(plx_platform::i18n::msg::player_stream_audio().to_uppercase()),
+        "stream.video_source" | "stream.video_output" | "stream.audio_source" | "stream.audio_output" | "stream.notes" => {
+            Some(stream_text(crate::info_panel::stream_output(f.ps, f.meta.playing()).as_ref(), bind))
+        }
         _ => None,
+    }
+}
+
+/// **A playback details line** ([`StreamOutput`](crate::info_panel::StreamOutput)): `Source: <value>` or
+/// `Output: <value>`, a dash for an unknown value or while nothing resolved is streaming; the notes one to a
+/// line, empty with nothing to explain.
+pub(crate) fn stream_text(output: Option<&crate::info_panel::StreamOutput>, bind: &str) -> String {
+    use plx_platform::i18n::msg;
+    let dash = "\u{2014}";
+    let value = |pick: fn(&crate::info_panel::StreamOutput) -> &str| output.map_or(dash, pick);
+    match bind {
+        "stream.video_source" => msg::player_stream_source(value(|o| &o.video_source)),
+        "stream.video_output" => msg::player_stream_output(value(|o| &o.video_output)),
+        "stream.audio_source" => msg::player_stream_source(value(|o| &o.audio_source)),
+        "stream.audio_output" => msg::player_stream_output(value(|o| &o.audio_output)),
+        "stream.notes" => output.map(crate::info_panel::StreamOutput::notes_text).unwrap_or_default(),
+        _ => String::new(),
     }
 }
 
@@ -126,7 +149,12 @@ pub(super) fn subtitle(n: &plx_data::metadata::NowPlaying) -> String {
 
 /// Whether `bind` is one of the section text binds [`text`] draws.
 pub(super) fn is_section_text(bind: &str) -> bool {
-    matches!(bind, "info.title" | "info.summary" | "label.info" | "label.chapters" | "title.name" | "title.subtitle" | "clock.now")
+    matches!(
+        bind,
+        "info.title" | "info.summary" | "label.info" | "label.chapters" | "title.name" | "title.subtitle" | "clock.now"
+            | "label.video" | "label.audio" | "stream.video_source" | "stream.video_output" | "stream.audio_source"
+            | "stream.audio_output" | "stream.notes"
+    )
 }
 
 /// The frame a [`TextView`] draws a line box into so the box's top lands on `top`: the view takes the CAP
@@ -191,20 +219,45 @@ pub(super) fn facts_run(
     bold: &Live<bool>,
     ink: &Live<Rgba>,
 ) -> Option<FactsRun> {
-    let c = info_content(f.meta)?;
-    let (order, badges): (Vec<&str>, Vec<&str>) = (order.iter().map(String::as_str).collect(), badges.iter().map(String::as_str).collect());
-    let stream: Vec<&str> = stream.iter().map(String::as_str).collect();
+    let shape = Shape { order, badges, stream, genres_max, playback_fact, size, bold: bold.at(holds(f)), ink: ink.at(holds(f)) };
+    facts_run_in(f.meta, f.ps, f.measure, rect, &shape)
+}
+
+/// A `Facts` op's own keys, its inks resolved.
+pub(super) struct Shape<'a> {
+    pub order: &'a [String],
+    pub badges: &'a [String],
+    pub stream: &'a [String],
+    pub genres_max: u32,
+    pub playback_fact: bool,
+    pub size: i32,
+    pub bold: bool,
+    pub ink: Rgba,
+}
+
+/// [`facts_run`] over the frame's reads alone (the item, the session and the measure), so the screen can ask
+/// where a hugging run ends outside a draw ([`super::trail`]).
+pub(super) fn facts_run_in(
+    meta: plx_data::metadata::MetadataView<'_>,
+    ps: &plx_media::route::PlaybackSession,
+    measure: &dyn plx_machine::machine::Measure,
+    rect: Rect,
+    s: &Shape<'_>,
+) -> Option<FactsRun> {
+    let c = info_content(meta)?;
+    let (order, badges): (Vec<&str>, Vec<&str>) = (s.order.iter().map(String::as_str).collect(), s.badges.iter().map(String::as_str).collect());
+    let stream: Vec<&str> = s.stream.iter().map(String::as_str).collect();
     let shape = FactsShape {
         order: &order,
         badges: &badges,
         stream: &stream,
-        genres_max: genres_max as usize,
-        playback_fact,
-        ink: ink.at(holds(f)),
-        bold: i32::from(bold.at(holds(f))),
-        size,
+        genres_max: s.genres_max as usize,
+        playback_fact: s.playback_fact,
+        ink: s.ink,
+        bold: i32::from(s.bold),
+        size: s.size,
     };
-    let chips = info_chips(&c, &shape, f.ps, f.measure);
+    let chips = info_chips(&c, &shape, ps, measure);
     let row = chips.row(rect.x);
     let kept = row.fit(rect.w);
     let n = row.kept(kept).placed().count();
@@ -212,13 +265,19 @@ pub(super) fn facts_run(
 }
 
 impl FactsRun {
+    /// The right edge of the last chip the run keeps when it starts at `x`; `x` itself when it keeps none.
+    pub(super) fn right(&self, x: f32) -> f32 {
+        self.chips.row(x).kept(self.kept).placed().map(|s| s.x + s.w).fold(x, f32::max)
+    }
+
     /// Draw the surviving chips centred on `my`.
     fn draw(&self, q: Painter, x: f32, my: f32, f: &Frame<'_>) {
         draw_chip_row(q, &self.chips, self.chips.row(x).kept(self.kept), my, f.measure);
     }
 }
 
-/// A `Facts` row: the metadata line and the capability badges, centred on the cell's height.
+/// A `Facts` row: the metadata line and the capability badges, centred on the cell's height. Returns the right
+/// edge of its last chip (its `x` when it keeps none), where the controls trailing a hugging run close up to.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn facts(
     f: &Frame<'_>,
@@ -232,10 +291,12 @@ pub(super) fn facts(
     size: i32,
     bold: &Live<bool>,
     ink: &Live<Rgba>,
-) {
-    if let Some(run) = facts_run(f, rect, order, badges, stream, genres_max, playback_fact, size, bold, ink) {
+) -> f32 {
+    let run = facts_run(f, rect, order, badges, stream, genres_max, playback_fact, size, bold, ink);
+    if let Some(run) = run.as_ref() {
         run.draw(q, rect.x, rect.y + rect.h * 0.5, f);
     }
+    run.map_or(rect.x, |r| r.right(rect.x))
 }
 
 /// **A group's children, stacked from the REAL heights** ([`OpGroup`]; `docs/hud-plugins.md`, PR8). The hand-written
@@ -294,7 +355,7 @@ pub(super) fn group_for<T: AsRef<DrawOp>>(
                 let h = (!text.is_empty() || (*max_lines == 1 && content.is_some())).then(|| view.measure_h(rect.w));
                 (Body::Text { view, rect: *rect, alpha: *alpha, op: child_ops[0] }, h)
             }
-            [DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink }] => {
+            [DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink, .. }] => {
                 let bold = Live { base: bold.at(predicates), cases: Vec::new() };
                 let ink = Live { base: ink.at(predicates), cases: Vec::new() };
                 let run = facts_run(f, *rect, order, badges, stream, *genres_max, *playback_fact, *size, &bold, &ink);
@@ -334,7 +395,7 @@ pub(super) fn decor(compiled: &Compiled, f: &Frame<'_>, q: Painter, op: &DrawOp,
         DrawOp::Rule { rect, ink: value } => rule(q, *rect, &ink(value), f),
         DrawOp::Icon { rect, asset, ink: value } => icon(compiled, q, *rect, asset, &ink(value), f),
         DrawOp::Image { rect, bind, radius } => image(f, q, *rect, bind, *radius),
-        DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink: value } => {
+        DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink: value, .. } => {
             let bold = Live { base: bold.at(holds), cases: Vec::new() };
             facts(f, q, *rect, order, badges, stream, *genres_max, *playback_fact, *size, &bold, &ink(value));
         }

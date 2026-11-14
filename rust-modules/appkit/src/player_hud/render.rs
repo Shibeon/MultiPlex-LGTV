@@ -575,6 +575,8 @@ fn walk<H: Host>(
         // the end of the group being drawn: its children are drawn together, from their real heights
         let mut grouped_to = 0;
         let mut kicker_rect: Option<TitleLine> = None;
+        // how far the controls trailing a hugging facts run move (`trail`): set by the run, which comes first
+        let mut trail_dx = 0.0;
         for (at, op) in state.ops[span.ops.clone()].iter().enumerate().map(|(k, op)| (span.ops.start + k, op)) {
             if at < grouped_to {
                 continue;
@@ -596,6 +598,9 @@ fn walk<H: Host>(
                     Some(Text::Title) => draw_title(f, row, q, kicker_rect.take(), Some(TitleLine::of(f, *rect, *size, bold, ink, *alpha, *max_lines, *leading))),
                     None => sections::text(f, q, *rect, bind, *size, bold, ink, *alpha, *max_lines, *leading),
                 },
+                DrawOp::Control(c) if trail_dx != 0.0 && super::trail::trails(state, c) => {
+                    draw_control(compiled, f, row, &e, q.translate(trail_dx, 0.0), state, c)
+                }
                 DrawOp::Control(c) => draw_control(compiled, f, row, &e, q, state, c),
                 DrawOp::UpNext { rects, credits_rest, next_rest, credits_focus, next_focus, countdown } => {
                     if f.slot.is_up_next_pair() {
@@ -655,8 +660,11 @@ fn walk<H: Host>(
                 DrawOp::Rule { rect, ink } => sections::rule(q, *rect, ink, f),
                 DrawOp::Icon { rect, asset, ink } => sections::icon(compiled, q, *rect, asset, ink, f),
                 DrawOp::Image { rect, bind, radius } => sections::image(f, q, *rect, bind, *radius),
-                DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink } => {
-                    sections::facts(f, q, *rect, order, badges, stream, *genres_max, *playback_fact, *size, bold, ink)
+                DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink, hug } => {
+                    let right = sections::facts(f, q, *rect, order, badges, stream, *genres_max, *playback_fact, *size, bold, ink);
+                    if *hug {
+                        trail_dx = right - (rect.x + rect.w);
+                    }
                 }
                 DrawOp::Strip { .. } => sections::strip(f, df, row, q, op, moved, compiled),
             }

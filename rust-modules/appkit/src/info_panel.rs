@@ -152,7 +152,7 @@ pub(crate) struct FactsShape<'a> {
     pub order: &'a [&'a str],
     /// `content_rating`, `audio_format`, `cc`, `sdh`, `ad`, in drop-priority order
     pub badges: &'a [&'a str],
-    /// `resolution`, `dynamic_range`, `stream_mode`, `audio_codec`: the stream pills, after the badges
+    /// `resolution`, `dynamic_range`, `stream_mode`, `audio_codec`: the stream pills ([`StreamOutput::pill`]), after the badges
     pub stream: &'a [&'a str],
     pub genres_max: usize,
     pub playback_fact: bool,
@@ -190,7 +190,7 @@ pub(crate) fn info_chips(
         )
     });
     let now_fact = now_fact.flatten();
-    let facts = if shape.stream.is_empty() { None } else { stream_facts(ps, c.playing) };
+    let output = if shape.stream.is_empty() { None } else { stream_output(ps, c.playing) };
     let mut chips = ChipRow::new();
     let mut meta = Vec::new();
     for part in shape.order {
@@ -226,70 +226,288 @@ pub(crate) fn info_chips(
             _ => {}
         }
     }
-    for pill in shape.stream {
-        if let Some((label, kind)) = stream_pill(pill, &facts) {
-            chips.push(Chip::stream(label, kind, measure));
+    for name in shape.stream {
+        if let Some(pill) = output.as_ref().and_then(|o| o.pill(name)) {
+            chips.push(Chip::stream(pill, measure));
         }
     }
     chips
 }
 
-/// **What the playing stream is, for the stream pills** (`facts.stream`): read once per row off the
-/// resolved route and the playing item, the same reads [`playback_now`] composes. `None` while nothing
-/// resolved is streaming (a pending play still describes the previous item, see [`playback_now`]).
-pub(crate) struct StreamFacts {
-    /// the picture's height class, `fmt::resolution` of the stream's raster
-    resolution: Option<String>,
-    /// `DV`, `HDR` or `SDR`: what the television is SHOWN (`route::hdr_picture`)
-    dynamic_range: &'static str,
-    /// Direct Play, Direct Stream or Converting (no codec: the pill is short)
-    mode: String,
-    /// the audio codec the stream declares, as the app names codecs (`metadata::friendly_codec`)
-    audio: Option<String>,
-}
-
-/// The stream facts of `ps` playing `item`, or `None` when nothing resolved is streaming.
-pub(crate) fn stream_facts(ps: &plx_media::route::PlaybackSession, item: Option<&metadata::PlayingItem>) -> Option<StreamFacts> {
+/// **What the playing stream is**, read off the resolved route and the playing item: the inputs of
+/// [`StreamOutput::derive`], the one place the stream pills and the playback details panel come from. `None`
+/// while nothing resolved is streaming (a pending play still describes the previous item, see
+/// [`playback_now`]).
+pub(crate) fn stream_input(ps: &plx_media::route::PlaybackSession, item: Option<&metadata::PlayingItem>) -> Option<StreamInput> {
     use plx_media::route;
     if !route::has_url(ps) || route::play_pending() {
         return None;
     }
     let (transcoding, remux) = (route::is_transcoding(ps), route::is_remux(ps));
-    let (w, h) = route::stream_raster(ps);
-    let keeps_video = !transcoding || remux;
-    let dynamic_range = match item {
-        Some(i) if keeps_video && i.dovi.present => "DV",
-        Some(i) if route::hdr_picture(i.hdr, transcoding, remux) => "HDR",
-        _ => "SDR",
-    };
-    let mode = if !transcoding {
-        plx_platform::i18n::msg::widgets_playback_direct_play()
-    } else if remux {
-        plx_platform::i18n::msg::widgets_playback_direct_stream()
-    } else {
-        plx_platform::i18n::msg::widgets_playback_converting()
-    };
+    let src_range = item.and_then(|i| {
+        if i.dovi.present {
+            Some(SourceRange::DolbyVision)
+        } else if i.hdr {
+            Some(SourceRange::Hdr)
+        } else {
+            None
+        }
+    });
+    let sid = route::cur_audio_sid(ps);
+    let track = item.and_then(|i| i.audio.iter().find(|s| s.id == sid && sid != 0).or_else(|| i.audio.iter().find(|s| s.default)).or_else(|| i.audio.first()));
+    let src_audio = track.map(|t| AudioFacts { codec: t.codec.clone(), channels: t.channels, profile: t.profile.clone(), title: t.title.clone(), atmos: t.has_atmos() });
     let acodec = route::stream_acodec(ps);
-    Some(StreamFacts {
-        resolution: plx_ui::fmt::resolution("", w, h),
-        dynamic_range,
-        mode: mode.to_string(),
-        audio: (!acodec.is_empty()).then(|| metadata::friendly_codec(&acodec)),
+    let declared = plx_platform::devcaps::audio_codec_id(&acodec);
+    let out_audio = match route::stream_pcm(ps) {
+        Some(Ok(pcm)) => AudioOut::App { channels: i64::from(pcm.channels) },
+        _ if acodec.is_empty() => AudioOut::Kept,
+        // the stream declares another codec than the track it carries: the server converted the sound
+        _ if transcoding && track.is_some_and(|t| plx_platform::devcaps::audio_codec_id(&t.codec) != declared) => {
+            AudioOut::Server { codec: acodec, channels: route::stream_achannels(ps) }
+        }
+        _ => AudioOut::Kept,
+    };
+    Some(StreamInput {
+        src_raster: item.map_or((0, 0), |i| (i.width, i.height)),
+        src_range,
+        out_raster: route::stream_raster(ps),
+        video_kept: !transcoding || remux,
+        src_audio,
+        out_audio,
     })
 }
 
-/// One stream pill by its `facts.stream` name, with the look it takes; `None` for a fact the stream
-/// does not state.
-fn stream_pill(pill: &str, facts: &Option<StreamFacts>) -> Option<(String, crate::chip_row::StreamPill)> {
-    use crate::chip_row::StreamPill;
-    let s = facts.as_ref()?;
-    match pill {
-        "resolution" => s.resolution.clone().map(|r| (r, StreamPill::Resolution)),
-        "dynamic_range" => Some((s.dynamic_range.to_owned(), StreamPill::DynamicRange)),
-        "stream_mode" => Some((s.mode.clone(), StreamPill::Mode)),
-        "audio_codec" => s.audio.clone().map(|a| (a, StreamPill::Audio)),
+/// The dynamic range the source file carries (`PlayingItem::dovi`, `PlayingItem::hdr`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SourceRange {
+    DolbyVision,
+    Hdr,
+}
+
+impl SourceRange {
+    /// The pill's label, the web player's: a format name, never translated.
+    fn label(self) -> &'static str {
+        match self {
+            SourceRange::DolbyVision => "Dolby Vision",
+            SourceRange::Hdr => "HDR",
+        }
+    }
+}
+
+/// The audio track the file carries, as PMS describes it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AudioFacts {
+    pub codec: String,
+    pub channels: i64,
+    pub profile: String,
+    pub title: String,
+    /// the track carries Atmos ([`metadata::Stream::has_atmos`]: PMS says so in the profile)
+    pub atmos: bool,
+}
+
+/// What reaches the TV's sound path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum AudioOut {
+    /// the track as the file carries it: the TV decodes it or passes it to a receiver, which the app cannot see
+    Kept,
+    /// the server converted it to `codec`, `channels` wide (0: unstated)
+    Server { codec: String, channels: i64 },
+    /// the app decodes it and feeds PCM, `channels` wide
+    App { channels: i64 },
+}
+
+/// The inputs of [`StreamOutput::derive`]: plain values, so every arm is host-testable.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StreamInput {
+    /// the source's stored frame size (0: unknown)
+    pub src_raster: (i64, i64),
+    pub src_range: Option<SourceRange>,
+    /// the picture the stream carries (`route::stream_raster`)
+    pub out_raster: (i64, i64),
+    /// the stream keeps the source's video (a direct play, a remux that copies it); false while the server
+    /// re-encodes the picture
+    pub video_kept: bool,
+    pub src_audio: Option<AudioFacts>,
+    pub out_audio: AudioOut,
+}
+
+/// One stream pill: its label, its look, and whether it is `unsure` (deduced, not verifiable on this TV: the
+/// web player's dashed pill with a small "?").
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Pill {
+    pub label: String,
+    pub kind: crate::chip_row::StreamPill,
+    pub unsure: bool,
+}
+
+/// **What the stream is, said the web player's way** (`apps/web/src/playerui.tsx`, `PlayerOutput`): the pills
+/// of the row beside the ⓘ disc and the "source → output" lines and notes of its panel. Built by
+/// [`StreamOutput::derive`] from [`StreamInput`] alone.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct StreamOutput {
+    /// the picture the stream carries (`720p`), the one solid pill
+    pub resolution: Option<Pill>,
+    /// the dynamic range the TV is shown: the source's HDR kind when the video is kept, else `SDR`
+    pub range: Option<Pill>,
+    /// "Transcoding" while the server re-encodes the picture, else nothing: a direct play or a remux is not a
+    /// fact worth a pill (the web player's changelog, "only transcoding is shown")
+    pub mode: Option<Pill>,
+    /// the sound, codec and channels in one pill ("Dolby Digital 5.1")
+    pub audio: Option<Pill>,
+    /// the panel's lines, each the value after "Source:" / "Output:"; `—` when nothing is known
+    pub video_source: String,
+    pub video_output: String,
+    pub audio_source: String,
+    pub audio_output: String,
+    /// the panel's notes: every conversion explained once, then what the "?" means when a pill is unsure;
+    /// each capitalised with a final period
+    pub notes: Vec<String>,
+}
+
+/// The em dash the panel shows for an unknown value (the web player's `'—'`).
+const UNKNOWN: &str = "\u{2014}";
+
+impl StreamOutput {
+    /// Derive the pills, the panel's lines and its notes from `input`.
+    pub(crate) fn derive(input: &StreamInput) -> StreamOutput {
+        use crate::chip_row::StreamPill as K;
+        use plx_platform::i18n::msg;
+        let pill = |label: String, kind: K, unsure: bool| Pill { label, kind, unsure };
+        let join = |parts: &[Option<&str>]| parts.iter().flatten().copied().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" ");
+        let mut hints: Vec<String> = Vec::new();
+
+        // the picture
+        let src_res = plx_ui::fmt::resolution("", input.src_raster.0, input.src_raster.1);
+        let out_res = plx_ui::fmt::resolution("", input.out_raster.0, input.out_raster.1);
+        let range = match (input.src_range, input.video_kept) {
+            (Some(r), true) => Some(pill(r.label().to_owned(), K::Hdr, false)),
+            (Some(r), false) => {
+                hints.push(msg::player_stream_to_sdr(r.label()));
+                Some(pill("SDR".to_owned(), K::Sdr, false))
+            }
+            (None, _) if out_res.is_some() => Some(pill("SDR".to_owned(), K::Sdr, false)),
+            (None, _) => None,
+        };
+        let mode = (!input.video_kept).then(|| {
+            hints.push(msg::player_stream_transcode_note().to_owned());
+            pill(msg::player_stream_transcoding().to_owned(), K::Mode, false)
+        });
+        let src_range_label = input.src_range.map(SourceRange::label).or(src_res.as_ref().map(|_| "SDR"));
+        let video_source = join(&[src_res.as_deref(), src_range_label]);
+        let video_output = join(&[out_res.as_deref(), range.as_ref().map(|r| r.label.as_str())]);
+
+        // the sound
+        let src_audio = input.src_audio.as_ref().map(audio_label).filter(|s| !s.is_empty());
+        let audio = match &input.out_audio {
+            AudioOut::Server { codec, channels } => {
+                hints.push(msg::player_stream_server_audio().to_owned());
+                let label = join(&[Some(&metadata::friendly_codec(codec)), channels_label(*channels).as_deref()]);
+                (!label.is_empty()).then(|| pill(label, K::Audio, false))
+            }
+            AudioOut::App { channels } => {
+                hints.push(msg::player_stream_app_audio().to_owned());
+                Some(pill(join(&[Some("PCM"), channels_label(*channels).as_deref()]), K::Audio, false))
+            }
+            AudioOut::Kept => src_audio.clone().map(|label| {
+                hints.push(msg::player_stream_tv_audio().to_owned());
+                pill(label, K::Audio, true)
+            }),
+        };
+        let audio_output = audio.as_ref().map(|a| a.label.clone());
+
+        let unsure = [&range, &mode, &audio].into_iter().flatten().any(|p| p.unsure);
+        if unsure {
+            hints.push(msg::player_stream_unsure_note().to_owned());
+        }
+        let mut notes: Vec<String> = Vec::new();
+        for hint in hints {
+            let note = sentence(&hint);
+            if !notes.contains(&note) {
+                notes.push(note);
+            }
+        }
+        let or_unknown = |s: String| if s.is_empty() { UNKNOWN.to_owned() } else { s };
+        StreamOutput {
+            resolution: out_res.map(|r| pill(r, K::Resolution, false)),
+            range,
+            mode,
+            audio,
+            video_source: or_unknown(video_source),
+            video_output: or_unknown(video_output),
+            audio_source: or_unknown(src_audio.unwrap_or_default()),
+            audio_output: or_unknown(audio_output.unwrap_or_default()),
+            notes,
+        }
+    }
+
+    /// The pill a `facts.stream` name shows, `None` for a fact the stream does not state.
+    pub(crate) fn pill(&self, name: &str) -> Option<&Pill> {
+        match name {
+            "resolution" => self.resolution.as_ref(),
+            "dynamic_range" => self.range.as_ref(),
+            "stream_mode" => self.mode.as_ref(),
+            "audio_codec" => self.audio.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// The panel's notes, one to a line (`TextView` breaks at a newline).
+    pub(crate) fn notes_text(&self) -> String {
+        self.notes.join("\n")
+    }
+}
+
+/// A note as the panel prints it: capitalised, with a final period (the web player's
+/// `n.charAt(0).toUpperCase() + n.slice(1) + '.'`).
+fn sentence(hint: &str) -> String {
+    let mut chars = hint.chars();
+    let Some(first) = chars.next() else { return String::new() };
+    format!("{}{}.", first.to_uppercase(), chars.as_str())
+}
+
+/// A track's codec and channels as one label ("Dolby Digital 5.1"): the app's codec names
+/// ([`metadata::friendly_codec`]), with the web player's refinements of a DTS family and of Atmos, which only
+/// the track's profile and title state.
+fn audio_label(a: &AudioFacts) -> String {
+    let codec = a.codec.to_ascii_lowercase();
+    let title = a.title.to_ascii_lowercase();
+    let profile = a.profile.to_ascii_lowercase();
+    let mut name = metadata::friendly_codec(codec.trim_end_matches("-ma"));
+    if codec == "dca" || codec == "dts" {
+        if title.contains("dts:x") || title.contains("dts-x") {
+            name = "DTS:X".to_owned();
+        } else if profile.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| w == "ma") || title.contains("dts-hd ma") {
+            name = "DTS-HD MA".to_owned();
+        } else if profile.contains("hra") || title.contains("dts-hd") {
+            name = "DTS-HD".to_owned();
+        }
+    }
+    // Atmos travels in a TrueHD or Dolby Digital Plus track: PMS names it in the profile, a title may too
+    if a.atmos || title.contains("atmos") {
+        name = "Dolby Atmos".to_owned();
+    }
+    match channels_label(a.channels) {
+        Some(ch) if !name.is_empty() => format!("{name} {ch}"),
+        _ => name,
+    }
+}
+
+/// A channel count as the web player names it: 7.1, 5.1, Stereo, Mono, else "N ch"; `None` when unstated.
+fn channels_label(n: i64) -> Option<String> {
+    use plx_platform::i18n::msg;
+    match n {
+        n if n >= 8 => Some("7.1".to_owned()),
+        n if n >= 6 => Some("5.1".to_owned()),
+        2 => Some(msg::widgets_tracks_stereo().to_owned()),
+        1 => Some(msg::widgets_tracks_mono().to_owned()),
+        n if n > 0 => Some(msg::widgets_tracks_channels(n)),
         _ => None,
     }
+}
+
+/// The stream output of `ps` playing `item`, or `None` while nothing resolved is streaming.
+pub(crate) fn stream_output(ps: &plx_media::route::PlaybackSession, item: Option<&metadata::PlayingItem>) -> Option<StreamOutput> {
+    stream_input(ps, item).map(|i| StreamOutput::derive(&i))
 }
 
 // ---- helpers ----
@@ -515,5 +733,112 @@ mod detail_tests {
 
         test_store().run(plx_data::stores::metadata::MetadataCmd::SetNowPlaying(None));
         plx_data::metadata::set_current_for_test(test_store().state_mut(), None);
+    }
+}
+
+/// **The stream pills and the playback details panel, said the web player's way** (`StreamOutput::derive`),
+/// on plain inputs. Every expected string is built from the same catalogue the code reads (`msg::*`,
+/// `metadata::friendly_codec`), so the tests hold in whatever language the test process resolves.
+#[cfg(test)]
+mod stream_output_tests {
+    use super::{metadata, AudioFacts, AudioOut, SourceRange, StreamInput, StreamOutput, UNKNOWN};
+    use crate::chip_row::StreamPill as K;
+    use plx_platform::i18n::msg;
+
+    fn input() -> StreamInput {
+        StreamInput {
+            src_raster: (1920, 1080),
+            src_range: None,
+            out_raster: (1920, 1080),
+            video_kept: true,
+            src_audio: Some(AudioFacts { codec: "ac3".into(), channels: 6, ..AudioFacts::default() }),
+            out_audio: AudioOut::Kept,
+        }
+    }
+
+    fn note(s: &str) -> String {
+        super::sentence(s)
+    }
+
+    /// The row the MultiPlex HUD draws: resolution, range, audio. Never a mode pill, whatever the stream does.
+    fn row(o: &StreamOutput) -> Vec<(String, K, bool)> {
+        ["resolution", "dynamic_range", "audio_codec"].iter().filter_map(|n| o.pill(n)).map(|p| (p.label.clone(), p.kind, p.unsure)).collect()
+    }
+
+    #[test]
+    fn a_direct_play_shows_resolution_sdr_and_the_unsure_audio_and_no_transcode_note() {
+        let o = StreamOutput::derive(&input());
+        let dd = format!("{} 5.1", metadata::friendly_codec("ac3"));
+        assert_eq!(row(&o), [("1080p".to_owned(), K::Resolution, false), ("SDR".to_owned(), K::Sdr, false), (dd.clone(), K::Audio, true)]);
+        assert!(o.mode.is_none(), "a direct play has no mode pill");
+        assert_eq!((o.video_source.as_str(), o.video_output.as_str()), ("1080p SDR", "1080p SDR"));
+        assert_eq!((o.audio_source.as_str(), o.audio_output.as_str()), (dd.as_str(), dd.as_str()));
+        assert_eq!(o.notes, [note(msg::player_stream_tv_audio()), note(msg::player_stream_unsure_note())]);
+        assert!(!o.notes.contains(&note(msg::player_stream_transcode_note())));
+    }
+
+    #[test]
+    fn a_transcode_explains_itself_in_the_panel_and_draws_no_mode_pill_in_the_row() {
+        let o = StreamOutput::derive(&StreamInput { out_raster: (1280, 720), video_kept: false, ..input() });
+        assert!(row(&o).iter().all(|(_, kind, _)| *kind != K::Mode), "no mode pill in the row: {:?}", row(&o));
+        assert_eq!(row(&o)[0].0, "720p");
+        assert_eq!(o.notes[0], note(msg::player_stream_transcode_note()));
+        assert_eq!((o.video_source.as_str(), o.video_output.as_str()), ("1080p SDR", "720p SDR"));
+        // a remux keeps the video: no transcode note
+        let remux = StreamOutput::derive(&StreamInput { video_kept: true, ..input() });
+        assert!(!remux.notes.contains(&note(msg::player_stream_transcode_note())));
+    }
+
+    #[test]
+    fn hdr_is_kept_on_a_direct_play_and_converted_to_sdr_with_a_note_on_a_transcode() {
+        let kept = StreamOutput::derive(&StreamInput { src_range: Some(SourceRange::DolbyVision), ..input() });
+        assert_eq!(kept.range.as_ref().map(|p| (p.label.as_str(), p.kind)), Some(("Dolby Vision", K::Hdr)));
+        assert_eq!(kept.video_output, "1080p Dolby Vision");
+        let tone = StreamOutput::derive(&StreamInput { src_range: Some(SourceRange::Hdr), video_kept: false, ..input() });
+        assert_eq!(tone.range.as_ref().map(|p| (p.label.as_str(), p.kind)), Some(("SDR", K::Sdr)));
+        assert_eq!(tone.video_source, "1080p HDR");
+        assert!(tone.notes.contains(&note(&msg::player_stream_to_sdr("HDR"))), "{:?}", tone.notes);
+    }
+
+    #[test]
+    fn server_and_app_audio_are_sure_and_say_who_converted_the_sound() {
+        let server = StreamOutput::derive(&StreamInput { out_audio: AudioOut::Server { codec: "aac".into(), channels: 2 }, ..input() });
+        let aac = format!("{} {}", metadata::friendly_codec("aac"), msg::widgets_tracks_stereo());
+        assert_eq!(server.audio.as_ref().map(|p| (p.label.as_str(), p.unsure)), Some((aac.as_str(), false)));
+        assert_eq!(server.notes, [note(msg::player_stream_server_audio())], "nothing unsure, no unsure note");
+        let app = StreamOutput::derive(&StreamInput { out_audio: AudioOut::App { channels: 8 }, ..input() });
+        assert_eq!(app.audio_output, "PCM 7.1");
+        assert_eq!(app.notes, [note(msg::player_stream_app_audio())]);
+    }
+
+    #[test]
+    fn premium_audio_takes_the_web_players_names() {
+        let label = |codec: &str, profile: &str, title: &str, channels| {
+            super::audio_label(&AudioFacts { codec: codec.into(), channels, profile: profile.into(), title: title.into(), atmos: false })
+        };
+        assert_eq!(label("dca", "ma", "", 8), "DTS-HD MA 7.1");
+        assert_eq!(label("dca", "", "English DTS:X", 8), "DTS:X 7.1");
+        assert_eq!(label("dca", "hra", "", 6), "DTS-HD 5.1");
+        assert_eq!(label("truehd", "", "TrueHD Atmos 7.1", 8), "Dolby Atmos 7.1");
+        let profiled = AudioFacts { codec: "eac3".into(), channels: 6, profile: "dolby digital plus + dolby atmos".into(), atmos: true, ..AudioFacts::default() };
+        assert_eq!(super::audio_label(&profiled), "Dolby Atmos 5.1", "PMS names Atmos in the profile");
+        assert_eq!(label("eac3", "", "", 0), metadata::friendly_codec("eac3"), "no channels, no number");
+    }
+
+    #[test]
+    fn nothing_known_reads_as_a_dash_and_draws_no_pill() {
+        let o = StreamOutput::derive(&StreamInput { src_raster: (0, 0), out_raster: (0, 0), src_audio: None, ..input() });
+        assert!(row(&o).is_empty());
+        for v in [&o.video_source, &o.video_output, &o.audio_source, &o.audio_output] {
+            assert_eq!(v, UNKNOWN);
+        }
+        assert!(o.notes.is_empty());
+    }
+
+    #[test]
+    fn notes_are_sentences_and_one_to_a_line() {
+        assert_eq!(super::sentence("élan vital"), "Élan vital.");
+        let o = StreamOutput::derive(&input());
+        assert_eq!(o.notes_text().lines().count(), o.notes.len());
     }
 }

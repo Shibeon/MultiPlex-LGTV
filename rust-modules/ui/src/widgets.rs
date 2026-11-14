@@ -8875,10 +8875,11 @@ pub enum BadgeStyle {
     /// ([`theme::STREAM_RES_FILL`] / [`theme::STREAM_RES_INK`]), the one stream fact the run leads with.
     Solid { fill: [f32; 4], ink: [f32; 4] },
     /// A capsule `fill`ed and RIMMED in `rim`, the label in `ink`, in ONE pass ([`Painter::rect_rimmed_w`]) — the
-    /// player's outlined and audio stream pills ([`theme::STREAM_PILL_FILL`] under [`theme::STREAM_PILL_RIM`] or
-    /// [`theme::STREAM_PILL_RIM_QUIET`]): a dark ground keeps the label legible over a bright picture, and the rim is
-    /// what tells the pills apart. The web player's audio pill is dashed; a dash is a draw call each (some thirty a
-    /// pill, every frame), so the quiet rim stands for it at one.
+    /// player's outlined stream pills ([`theme::STREAM_PILL_FILL`] under [`theme::STREAM_HDR_RIM`],
+    /// [`theme::STREAM_SDR_RIM`], [`theme::STREAM_AUDIO_RIM`] or [`theme::STREAM_UNSURE_RIM`]): a dark ground keeps the
+    /// label legible over a bright picture, and the rim is
+    /// what tells the pills apart. The web player's unsure pill is dashed; a dash is a draw call each (some thirty a
+    /// pill, every frame), so the unsure rim stands for it at one.
     Rimmed { fill: [f32; 4], rim: [f32; 4], ink: [f32; 4] },
 }
 /// [`BadgeStyle::Ring`]'s corner radius and stroke: the PLEX PASS capsule's outline geometry, so

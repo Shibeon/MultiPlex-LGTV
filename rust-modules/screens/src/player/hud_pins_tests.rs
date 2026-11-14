@@ -3361,6 +3361,42 @@ mod multiplex {
         assert_eq!(run.screen().hud.sections.iter().collect::<Vec<_>>(), vec![Section::Info]);
     }
 
+    /// **The playback details panel opens and closes on the Info disc, and the focus never leaves it**: OK opens
+    /// the panel (the pills' row and the disc stay where they were, so the ring stays on the disc), Left and Right
+    /// on the disc stay in the head, OK again closes the panel, and Back closes it too, the focus still on the
+    /// disc each time. While it is open the bar and the row are not stops (a modal section) and the panel has none
+    /// of its own, so Down keeps the ring on the disc.
+    #[test]
+    fn the_info_disc_opens_the_details_panel_and_ok_or_back_closes_it_with_the_focus_kept() {
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let mut run = run();
+        run.walk("UU");
+        assert_eq!(run.held_now(), Some(head_elem(INFO)));
+        let disc = run.screen().geometry_for(false).head[INFO as usize];
+        run.step('K');
+        assert_eq!(run.screen().hud.sections.iter().collect::<Vec<_>>(), vec![Section::Info], "OK opens the panel");
+        assert_eq!(run.held_now(), Some(head_elem(INFO)), "the focus stays on the disc");
+        assert_eq!(run.screen().geometry_for(false).head[INFO as usize], disc, "the disc does not move when the panel opens");
+        run.step('R');
+        assert_eq!(run.group_now(), GROUP_HEAD.0, "Right on the disc stays in the head");
+        run.step('L');
+        assert_eq!(run.group_now(), GROUP_HEAD.0, "Left stays in the head");
+        assert_eq!(run.held_now(), Some(head_elem(EXIT)), "Left from the disc: the back chevron");
+        run.step('R');
+        assert_eq!(run.held_now(), Some(head_elem(INFO)), "Right from the chevron: the disc");
+        run.step('D');
+        assert_eq!(run.held_now(), Some(head_elem(INFO)), "the panel has no stop and a modal page links nothing else: Down stays on the disc");
+        run.step('K');
+        assert_eq!(run.screen().hud.sections.bits(), 0, "OK again closes the panel");
+        assert_eq!(run.held_now(), Some(head_elem(INFO)));
+        run.step('K');
+        assert_eq!(run.screen().hud.sections.iter().collect::<Vec<_>>(), vec![Section::Info]);
+        run.step('B');
+        assert_eq!(run.screen().hud.sections.bits(), 0, "Back closes the panel");
+        assert_eq!(run.held_now(), Some(head_elem(INFO)), "and leaves the focus on the disc");
+    }
+
     /// OK on the back chevron asks `exit`, the app's leave-playback (`exit_player`), as Back does from the picture.
     #[test]
     fn ok_on_the_back_chevron_leaves_playback() {

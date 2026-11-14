@@ -541,7 +541,7 @@ also legal on a `vstack` cell and on a control item), and exactly one of:
   (F29); its content (text, images, controls) stays inside;
 - `facts` {`bind`: `info.facts`, `order` (ordered subset of `duration year genres content_rating`),
   `genres_max`, `bold`, `ink`, `playback_fact` (bool; drawn regular in `TEXT_TERTIARY` as today),
-  `badges` (ordered subset of `content_rating audio_format cc sdh ad`), `size`}: content rating appears
+  `badges` (ordered subset of `content_rating audio_format cc sdh ad`), `stream` and `w` (format 1.2, below), `size`}: content rating appears
   in `order` OR `badges`, never both; all of it is fitted by `ChipRow` (moved out of `info_panel.rs` into a
   shared appkit module), which drops whole chips tail first;
 - `vstack` {`gap`, `w`, `cells`}; `spacer` {`w`}. The compiler places a `vstack`'s children at their WORST case
@@ -841,11 +841,24 @@ What format 1.2 adds, each refused with `E0107` in a 1.0 or 1.1 package:
   and `clock.now` (the wall clock in the TV's 12/24-hour format). The app fills `clock.now` once a frame from the
   live wall clock only for a package that binds it (`Compiled::declares_clock`), and never in a recording or a
   controlled replay, which has no wall clock (`app/clock.rs`): a capture under the replay clock draws no clock;
-- a facts row's `stream` list (`resolution`, `dynamic_range`, `stream_mode`, `audio_codec`): the stream pills from the
-  theme's `STREAM_*` tokens, the resolution solid amber and the other three on one dark neutral ground (the dynamic
-  range rimmed, the mode plain, the audio codec under a quieter rim standing for the web player's dashed pill). Each
-  pill is one pass (`widgets::BadgeStyle::Solid` or `Rimmed`, `Painter::rect_rimmed_w`) and one label, and the cost
-  model counts it as one draw op and one glyph run;
+- a facts row's `stream` list (`resolution`, `dynamic_range`, `stream_mode`, `audio_codec`): the stream pills, said the
+  web player's way (`apps/web/src/playerui.tsx`, `PlayerOutput`) by ONE derivation, `info_panel::StreamOutput::derive`,
+  that the details panel reads too. The resolution is the picture the stream carries, solid amber; the dynamic range
+  is the source's HDR kind (`HDR`, `Dolby Vision`) while the video is kept, else `SDR`; `stream_mode` is "Transcoding"
+  while the server re-encodes the picture and draws nothing otherwise; the audio is codec and channels in one pill
+  ("Dolby Digital 5.1", "DTS-HD MA 7.1", "Dolby Atmos 7.1"). A pill the TV cannot verify (a kept track the TV or the
+  receiver decodes) is UNSURE: a quieter rim (`STREAM_UNSURE_*`, standing for the web player's dashed pill) and a
+  " ?". Inks are the theme's `STREAM_*` tokens. Each pill is one pass (`widgets::BadgeStyle::Solid` or `Rimmed`,
+  `Painter::rect_rimmed_w`) and one label, and the cost model counts it as one draw op and one glyph run;
+- a facts row's `w` (px): the row HUGS its chips. It is placed in a room `w` wide, and every start-aligned control
+  after it in the band TRAILS it (`ControlRect::trail`): a frame closes those controls up behind the last chip the run
+  keeps, by `player_hud::trail::trail_dx`, the same shift in the draw and in the screen's geometry report (the stops
+  and hit rects), so the focus ring, the pointer and the pixels agree. Only a head control trails. MultiPlex's ⓘ disc
+  stands this way after its pills;
+- the bindings `label.video` and `label.audio` (the details panel's headings, upper-cased) and `stream.video_source`,
+  `stream.video_output`, `stream.audio_source`, `stream.audio_output` ("Source: 1080p HDR", "Output: 720p SDR", `—` when
+  unknown) and `stream.notes` (every conversion explained once, then what the "?" means when a pill is unsure, each a
+  sentence on a line of its own: a newline in a `TextView` text is a hard break);
 - an item's `caption`: a disc that draws its interval under its glyph (`−10s` / `+10s`, from the Skip interval
   setting through `seek` with `by: "setting"`), which the cost model counts as one glyph run;
 - the icons `builtin:chevron-left`, `builtin:plus`, `builtin:skip-back` and `builtin:skip-forward`
@@ -864,15 +877,30 @@ from the back chevron is the Info disc, a stop of its own), Down off the lowest 
 once, like the tabs. A tab-band `open_more` pill (the "+ More" pill under the row) is a tab slot. The captions' band treats a head
 control as standing above the room they lift into, not as one they keep clear of (`Compiled::band_extents`).
 
-Every state of `builtin:multiplex` is within its class's ceilings in every language
-(`lint_cost::every_state_of_multiplex_is_within_its_class`; `--hud-lint` on the fixture reports no error), so it is a
-worked example a package may copy. To get there the compact states (no section open, Up Next, Skip) carry the head,
-the bar with its clocks, the three transport discs and More, and the stream pills live in the Info section, which the
-ⓘ disc beside the title opens; the ceilings were not moved.
+The head is the web player's: the back disc and the title, and under the title the stream pills (resolution, range,
+audio; never a mode pill, a transcode is a note of the panel) with the ⓘ disc trailing the last one. The ⓘ disc toggles
+the Info section, which is MultiPlex's playback details panel: "Video" and "Audio", each "Source: …" and "Output: …",
+then the notes (`stream.*` above). It is modal: it opens under the pills' row in the transport's place (the bar and
+the row are not on screen and not stops), the head and the row keep their y (the tabs' `gap_before` is keyed on
+`panel.info` for it), the focus stays on the ⓘ disc, and OK on the disc or Back closes it. Classic's Info content (the
+still, title, synopsis, the year/genres/duration line, the rating and capability badges) is not in it, and its two
+buttons, From the beginning and Go to the show or film, are reached through More (a command with no control folds
+into the menu).
 
-Known deviations from the web player, each a limit of the format or of the cost ceilings today: the stream pills are
-behind the ⓘ disc instead of under the title (four pills over a compact state's draw-op ceiling); the audio pill is
-rimmed, not dashed; the elapsed and remaining clocks sit under the bar's ends rather than beside it
+**The one exception to the ceilings: the stream-pill row.** Every state of `builtin:multiplex` other than the compact
+ones is within its class's ceilings in every language. The compact states (no section open, Up Next, Skip) carry the
+head, the pills' row, the bar with its clocks, the three transport discs and More: the row is one facts op of three
+pills, 4 draw ops and 3 glyph runs, which takes them to 16 and 11 against the television's 13 and 9.
+`lint_cost::every_state_of_multiplex_is_within_its_class` admits exactly that op's weight, on compact states only,
+for this built-in only; the global ceilings, which every dropped package is held to, did not move, so `--hud-lint`
+reports `HUD-E1401` on the fixture and a package that copies it is refused for its cost and falls back to it. This is
+the owner's decision PENDING a frame-time measurement on the television (`ARM_PROFILE=release`, the `profile-tv`
+skill: Mali HWCNT and a sched trace of the compact episode with the row). A built-in is never linted at run time.
+
+Known deviations from the web player, each a limit of the format or of the cost ceilings today: an unsure pill is
+rimmed, not dashed, its "?" the label's size; no surround mark beside a 5.1 or 7.1 label; `HDR` does not name HDR10
+or HLG; the panel's lines are plain "Source: value" (no bold label), with no rule above the notes, at a fixed worst-case
+height, under the pills' row rather than beside it; the elapsed and remaining clocks sit under the bar's ends rather than beside it
 (`playbar.clocks: "ends"`); the play disc has no warm glow ring at rest; the picture has a bottom scrim only (the
 format has no top one).
 

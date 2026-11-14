@@ -418,11 +418,14 @@ impl<'a> TextView<'a> {
         // property, which includes it — so the standard glue character silently did nothing.
         // `detail`'s people column is the case: the atoms of "Starring A B, C D" are the PEOPLE,
         // and a break inside one puts a surname alone on the next line.
-        let words: Vec<&str> = self
-            .text
-            .split(|c: char| c.is_whitespace() && c != '\u{a0}')
-            .filter(|w| !w.is_empty())
-            .collect();
+        // A newline is a hard break: the words of each line of the text, and which word starts a new one.
+        let mut words: Vec<&str> = Vec::new();
+        let mut hard: Vec<bool> = Vec::new();
+        for paragraph in self.text.split('\n') {
+            let start = words.len();
+            words.extend(paragraph.split(|c: char| c.is_whitespace() && c != '\u{a0}').filter(|w| !w.is_empty()));
+            hard.extend((start..words.len()).map(|i| i == start && start > 0));
+        }
         let mut lines: Vec<String> = Vec::new();
         let mut cur = String::new();
         let mut i = 0;
@@ -438,6 +441,13 @@ impl<'a> TextView<'a> {
             }
         };
         while i < words.len() {
+            if word_offset == 0 && hard[i] && !cur.is_empty() {
+                lines.push(std::mem::take(&mut cur));
+                if self.max_lines > 0 && lines.len() == self.max_lines {
+                    break;
+                }
+                continue;
+            }
             let word = &words[i][word_offset..];
             if self.break_long_words && cur.is_empty() && self.measure(word) > avail(lines.len()) {
                 // Keep progress even in a degenerate column narrower than one glyph. The final
@@ -1121,6 +1131,22 @@ mod tests {
 
     fn lines_of(view: &TextView, w: f32) -> Vec<String> {
         view.wrap(w).lines.iter().map(|l| l.to_string_lossy().into_owned()).collect()
+    }
+
+    /// **A newline is a hard break**: each line of the text starts a line of its own and wraps on its own (the
+    /// player's playback details panel lists its notes one to a line), `max_lines` counts the lines it makes and
+    /// the cut elides the last one kept; an empty line between two adds nothing.
+    #[test]
+    fn a_newline_starts_a_new_line_and_each_wraps_on_its_own() {
+        let _serial = plx_base::testlock::serial();
+        let view = TextView::new("one two\nthree four five\n\nsix", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx);
+        assert_eq!(lines_of(&view, 200.0), vec!["one two", "three four five", "six"]);
+        assert_eq!(lines_of(&view, 100.0), vec!["one two", "three four", "five", "six"]);
+        let cut = TextView::new("one two\nthree four five\nsix", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx).max_lines(2);
+        assert_eq!(lines_of(&cut, 200.0).len(), 2);
+        assert_eq!(lines_of(&cut, 200.0)[0], "one two");
+        let plain = TextView::new("one two three", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx);
+        assert_eq!(lines_of(&plain, 200.0), vec!["one two three"], "no newline, no change");
     }
 
     /// An Arabic or Hebrew paragraph in a left-aligned column draws RIGHT-aligned (its start is its

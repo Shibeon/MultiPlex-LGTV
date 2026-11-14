@@ -6,5 +6,16 @@
   "player.hud.seek_forward_caption": "+{seconds} s",
   "player.hud.skip_back": "Terugspringen",
   "player.hud.skip_forward": "Vooruitspringen",
+  "player.stream.app_audio": "gedecodeerd door MultiPlex en als PCM naar de tv gestuurd",
+  "player.stream.audio": "Audio",
+  "player.stream.output": "Uitvoer: {value}",
+  "player.stream.server_audio": "audio omgezet door de server",
+  "player.stream.source": "Bron: {value}",
+  "player.stream.to_sdr": "bron {source}, omgezet naar SDR",
+  "player.stream.transcode_note": "de server zet de video om voor deze tv",
+  "player.stream.transcoding": "Transcoderen",
+  "player.stream.tv_audio": "gedecodeerd door de tv, of ongewijzigd doorgegeven aan je receiver",
+  "player.stream.unsure_note": "onderdelen met een „?” zijn op deze tv niet te controleren: de tv of de receiver beslist",
+  "player.stream.video": "Video",
   "player.up_next.seconds_left": "Volgende aflevering · {seconds} s"
 }

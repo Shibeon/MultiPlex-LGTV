@@ -57,6 +57,8 @@ fn labels() -> AppLabels {
         go_to_movie: msg::widgets_info_go_movie().to_owned(),
         commands: AppLabels::in_language(plx_platform::i18n::current()).commands,
         clock_samples: AppLabels::in_language(plx_platform::i18n::current()).clock_samples,
+        label_video: AppLabels::in_language(plx_platform::i18n::current()).label_video,
+        label_audio: AppLabels::in_language(plx_platform::i18n::current()).label_audio,
     }
 }
 

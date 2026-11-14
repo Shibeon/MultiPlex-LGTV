@@ -6,5 +6,16 @@
   "player.hud.seek_forward_caption": "+{seconds} s",
   "player.hud.skip_back": "Ugrás vissza",
   "player.hud.skip_forward": "Ugrás előre",
+  "player.stream.app_audio": "a MultiPlex dekódolja, és PCM-ként küldi a tévének",
+  "player.stream.audio": "Hang",
+  "player.stream.output": "Kimenet: {value}",
+  "player.stream.server_audio": "a hangot a szerver alakítja át",
+  "player.stream.source": "Forrás: {value}",
+  "player.stream.to_sdr": "forrás: {source}, SDR-re alakítva",
+  "player.stream.transcode_note": "a szerver átalakítja a videót ehhez a tévéhez",
+  "player.stream.transcoding": "Átkódolás",
+  "player.stream.tv_audio": "a tévé dekódolja, vagy változatlanul továbbítja az erősítőnek",
+  "player.stream.unsure_note": "a „?” jelű elemek ezen a tévén nem ellenőrizhetők: a tévé vagy az erősítő dönt",
+  "player.stream.video": "Videó",
   "player.up_next.seconds_left": "Következő epizód · {seconds} mp"
 }

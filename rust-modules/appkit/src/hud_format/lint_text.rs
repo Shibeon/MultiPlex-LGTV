@@ -120,11 +120,12 @@ pub fn metrics(measure: &dyn Measure, langs: &[super::lint::LintLang]) -> Vec<Me
     for lang in langs {
         // Exhaustive destructuring makes a new compiler label require a corpus decision.
         let AppLabels { tab_info, tab_chapters, next_episode, next_seconds, watch_credits,
-            skip_intro, watch_intro, skip_credits, from_beginning, go_to_show, go_to_movie, commands, clock_samples } = &lang.labels;
+            skip_intro, watch_intro, skip_credits, from_beginning, go_to_show, go_to_movie, commands, clock_samples, label_video, label_audio } = &lang.labels;
         let mut strings: Vec<(String, String)> = [
             ("label.info", tab_info), ("label.chapters", tab_chapters), ("next", next_episode),
             ("credits", watch_credits), ("skip.intro", skip_intro), ("watch.intro", watch_intro), ("skip.credits", skip_credits),
             ("from_beginning", from_beginning), ("go_to_show", go_to_show), ("go_to_movie", go_to_movie),
+            ("label.video", label_video), ("label.audio", label_audio),
         ].into_iter().map(|(role, text)| (role.to_owned(), text.clone())).collect();
         strings.extend(commands.iter().map(|(role, text)| (format!("command.{role}"), text.clone())));
         strings.extend(next_seconds.iter().enumerate().map(|(n, text)| (format!("next.seconds.{n}"), text.clone())));
@@ -197,7 +198,7 @@ fn nodes_by_pointer(package: &Package) -> BTreeMap<&str, &Object> {
 /// The app text a `bind` names, or `None` for server text and for a bind that is no text.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AppText {
-    /// `label.chapters` / `label.info`
+    /// `label.chapters` / `label.info` / `label.video` / `label.audio`
     Label,
     /// `item.start`
     ChapterStart,
@@ -209,7 +210,7 @@ enum AppText {
 
 fn app_text(bind: &str) -> Option<AppText> {
     match bind {
-        "label.chapters" | "label.info" => Some(AppText::Label),
+        "label.chapters" | "label.info" | "label.video" | "label.audio" => Some(AppText::Label),
         "item.start" => Some(AppText::ChapterStart),
         "item.title" => Some(AppText::ChapterFallback),
         "title.kicker" => Some(AppText::KickerPrefix),
@@ -280,13 +281,12 @@ impl<'a> Texts<'a> {
         bolds: &[bool],
     ) -> Option<(String, f32)> {
         let candidates: Vec<String> = match kind {
-            AppText::Label => {
-                vec![if bind == "label.chapters" {
-                    self.labels.tab_chapters.clone()
-                } else {
-                    self.labels.tab_info.clone()
-                }]
-            }
+            AppText::Label => vec![match bind {
+                "label.chapters" => self.labels.tab_chapters.clone(),
+                "label.video" => self.labels.label_video.clone(),
+                "label.audio" => self.labels.label_audio.clone(),
+                _ => self.labels.tab_info.clone(),
+            }],
             AppText::ChapterStart => bolds
                 .iter()
                 .map(|&bold| self.widest_clock(size, bold))

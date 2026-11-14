@@ -33,6 +33,59 @@
     "value": "Skip forward",
     "description": "Label for a declared player HUD pill or button that seeks forward; the command owns the interval."
   },
+  "player.stream.app_audio": {
+    "value": "decoded by MultiPlex and sent to the TV as PCM",
+    "description": "Note in the player's playback details panel, lower case, no final period: the app decodes the sound itself."
+  },
+  "player.stream.audio": {
+    "value": "Audio",
+    "description": "Heading of the sound lines in the player's playback details panel (the ⓘ disc): shown in capitals; one word."
+  },
+  "player.stream.output": {
+    "value": "Output: {value}",
+    "description": "A line of the player's playback details panel: what reaches the screen or the receiver (e.g. '720p SDR'). Keep the value last.",
+    "args": {
+      "value": "str"
+    }
+  },
+  "player.stream.server_audio": {
+    "value": "audio converted by the server",
+    "description": "Note in the player's playback details panel, lower case, no final period: the Plex server converts the sound for this TV."
+  },
+  "player.stream.source": {
+    "value": "Source: {value}",
+    "description": "A line of the player's playback details panel: what the file itself carries (e.g. '1080p HDR'). Keep the value last.",
+    "args": {
+      "value": "str"
+    }
+  },
+  "player.stream.to_sdr": {
+    "value": "source {source}, converted to SDR",
+    "description": "Note in the player's playback details panel, lower case, no final period (the app adds them): the server converted the HDR picture to SDR. {source} is a picture format such as 'HDR' or 'Dolby Vision'.",
+    "args": {
+      "source": "str"
+    }
+  },
+  "player.stream.transcode_note": {
+    "value": "the server converts the video for this TV",
+    "description": "Note in the player's playback details panel, lower case, no final period: why the picture is not the original file."
+  },
+  "player.stream.transcoding": {
+    "value": "Transcoding",
+    "description": "Short pill in the player: the Plex server is converting the video for this TV."
+  },
+  "player.stream.tv_audio": {
+    "value": "decoded by the TV, or passed as is to your receiver",
+    "description": "Note in the player's playback details panel, lower case, no final period: the TV decodes the sound itself, or sends it untouched to an amplifier; the app cannot tell which."
+  },
+  "player.stream.unsure_note": {
+    "value": "items marked “?” cannot be checked on this TV: the TV or the receiver decides",
+    "description": "Note in the player's playback details panel, lower case, no final period: what the question mark on a pill means."
+  },
+  "player.stream.video": {
+    "value": "Video",
+    "description": "Heading of the picture lines in the player's playback details panel (the ⓘ disc): shown in capitals; one word."
+  },
   "player.up_next.seconds_left": {
     "value": "Next Episode · {seconds} s",
     "description": "The Play Next button label with whole seconds remaining for a declared numeric HUD countdown; all values are measured before layout.",

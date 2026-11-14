@@ -117,6 +117,10 @@ pub struct AppLabels {
     /// per hour at minutes whose digits differ), measured so the clock's room is its widest string and app
     /// text never elides (D10).
     pub clock_samples: Vec<String>,
+    /// the playback details panel's picture heading (`player_stream_video`, in capitals), the text of `label.video`
+    pub label_video: String,
+    /// its sound heading (`player_stream_audio`, in capitals), the text of `label.audio`
+    pub label_audio: String,
 }
 
 /// The [`AppLabels::commands`] key of a format 1.2 package's root `open_more` label ("More"); 1.0 and 1.1 keep
@@ -165,6 +169,8 @@ impl AppLabels {
             clock_samples: (0..24)
                 .flat_map(|hour| CLOCK_SAMPLE_MINUTES.iter().filter_map(move |&minute| cx.time_of_day([hour, minute])))
                 .collect(),
+            label_video: msg::player_stream_video_in(cx).to_uppercase(),
+            label_audio: msg::player_stream_audio_in(cx).to_uppercase(),
         }
     }
 
@@ -400,6 +406,11 @@ pub struct ControlRect {
     pub section: Option<String>,
     /// a disc's app read-out under its glyph (`caption`, format 1.2; only a `seek` has one)
     pub caption: bool,
+    /// **It trails a hugging `facts` run** (format 1.2's `facts.w`): a start-aligned control after that run in
+    /// its band. `rect` is where it stands when the run fills its room; the frame draws it, and the screen
+    /// reports its stop, closed up behind the chips the run actually draws
+    /// ([`crate::player_hud::trail::trail_dx`]).
+    pub trail: bool,
 }
 
 /// The scrub bar's rects: the track, and the pointer grab band around it (the lowest stop, #162).
@@ -475,6 +486,8 @@ pub enum DrawOp {
         stream: Vec<String>,
         genres_max: u32,
         playback_fact: bool,
+        /// the run hugs its chips (format 1.2's `w`): `rect.w` is its room, the cells after it trail its last chip
+        hug: bool,
     },
     Playbar {
         track: Rect,
@@ -1339,6 +1352,8 @@ struct Mode<'m> {
 /// What one pass over the bands produced.
 #[derive(Default)]
 struct Out {
+    /// the controls being emitted trail a hugging `facts` run ([`ControlRect::trail`])
+    trailing: bool,
     ops: Vec<DrawOp>,
     /// `ops[i]`'s presence under the `item.*` terms in force when it was pushed (a strip card's)
     present: Vec<Live<bool>>,
@@ -1723,6 +1738,8 @@ impl<'e, 'p> Env<'e, 'p> {
         match o.get("bind").and_then(Val::as_str) {
             Some("label.chapters") => Some(&self.labels.tab_chapters),
             Some("label.info") => Some(&self.labels.tab_info),
+            Some("label.video") => Some(&self.labels.label_video),
+            Some("label.audio") => Some(&self.labels.label_audio),
             // the clock's room is its widest time in this language's format
             Some("clock.now") => {
                 let (size, bold) = (self.size_px(o, "size"), self.live_bold(o).base);
@@ -1767,7 +1784,7 @@ impl<'e, 'p> Env<'e, 'p> {
                 Size::new(Dim::Fill, h)
             }
             // as tall as its tallest chip: a badge is `BADGE_H` whatever the type rung
-            "facts" => Size::new(Dim::Fill, self.measure.line_h(self.size_px(o, "size")).max(BADGE_H)),
+            "facts" => Size::new(self.dim(o, "w").unwrap_or(Dim::Fill), self.measure.line_h(self.size_px(o, "size")).max(BADGE_H)),
             "vstack" => {
                 let (heights, widest) = self.vstack_items(o);
                 let h = VStack::new(&heights.0, heights.1, Anchor::Top(0.0)).height();
@@ -1987,6 +2004,8 @@ impl<'e, 'p> Env<'e, 'p> {
         }
 
         let at = self.pack(&row, &widths, gap, boxr);
+        // the start-aligned cells after a hugging run trail it ([`ControlRect::trail`])
+        let mut hugged = false;
         for (i, cell) in row.iter().enumerate() {
             let (x, w) = at[i];
             let h = if cell.size.stretch { boxr.h } else { cell.size.h };
@@ -2007,8 +2026,12 @@ impl<'e, 'p> Env<'e, 'p> {
             }
             let mark = out.gate.len();
             out.gate.extend(cell.gate.iter().cloned());
+            let trailing = out.trailing;
+            out.trailing = trailing || (hugged && cell.grp == SegmentAlign::Start);
             self.emit(cell.kind, cell.o, r, cell.valign, mode, out);
+            out.trailing = trailing;
             out.gate.truncate(mark);
+            hugged |= cell.kind == "facts" && cell.grp == SegmentAlign::Start && cell.o.get("w").is_some();
         }
     }
 
@@ -2053,6 +2076,7 @@ impl<'e, 'p> Env<'e, 'p> {
                 stream: names(self.list(o, "stream")),
                 genres_max: self.num(o, "genres_max").map_or(0, |n| n.max(0.0) as u32),
                 playback_fact: o.get("playback_fact").and_then(Val::as_bool).unwrap_or(false),
+                hug: o.get("w").is_some(),
             }),
             "spacer" => {}
             "rect" => self.emit_rect(o, r, mode, out),
@@ -2121,6 +2145,7 @@ impl<'e, 'p> Env<'e, 'p> {
             band: out.band.clone(),
             section: ctl.o.get("section").and_then(Val::as_str).map(str::to_owned),
             caption,
+            trail: out.trailing,
         };
         out.controls.push(c.clone());
         out.control_origins.push(ctl.o.pointer.clone());
@@ -2641,7 +2666,7 @@ fn plate_rest(rest: Rest, r: Rect) -> u64 {
 }
 
 /// One op's terms.
-fn weigh(op: &DrawOp) -> Contributor {
+pub(crate) fn weigh(op: &DrawOp) -> Contributor {
     let mut c = Contributor { draw_ops: 1, ..Contributor::default() };
     match op {
         DrawOp::Scrim { rect } => c.blended_px = area(*rect),

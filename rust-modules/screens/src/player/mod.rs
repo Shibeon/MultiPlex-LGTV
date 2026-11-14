@@ -2281,9 +2281,19 @@ impl PlayerScreen {
         player_hud::geometry::geometry_content(&self.compiled, self.hud.sections.bits(), self.eff_slot(), chapters, self.model.is_episode, self.model.paused)
     }
 
-    /// [`Self::geometry_for`] for the content the `Cx` holds.
+    /// [`Self::geometry_for`] for the content the `Cx` holds, with the head controls that trail a hugging facts
+    /// run (the ⓘ disc after the stream pills) closed up behind the chips the frame draws
+    /// ([`player_hud::trail`]): the stops and hit rects stand where the draw puts the controls.
     fn hud_geometry<H: PlayerLike + crate::registry::MetadataLike>(&self, cx: &Cx<'_, H>) -> HudGeometry {
-        self.geometry_for(plx_appkit::chapters_panel::has_chapters(H::metadata(cx)))
+        let meta = H::metadata(cx);
+        let chapters = plx_appkit::chapters_panel::has_chapters(meta);
+        let mut geo = self.geometry_for(chapters);
+        let bits = self.hud.sections.bits();
+        if let Some((state, skip)) = player_hud::geometry::frame_state_content(&self.compiled, bits, self.eff_slot(), chapters, self.model.is_episode, self.model.paused) {
+            let state = state.skip_variant(skip);
+            player_hud::trail::shift(&mut geo, state, player_hud::trail::trail_dx(state, meta, H::session(cx), cx.measure));
+        }
+        geo
     }
 
     /// **The rect a menu opened for `kind` hangs from**, handed to it when it is mounted (the app seeds the

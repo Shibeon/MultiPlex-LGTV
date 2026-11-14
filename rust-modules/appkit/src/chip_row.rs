@@ -58,31 +58,49 @@ pub enum ChipKind {
     Run { parts: Vec<String>, lead_dot: bool, size: c_int, bold: c_int, col: [f32; 4] },
     /// An outlined capability badge ([`meta_badge`]) saying this.
     Badge(String),
-    /// One of the player's stream pills, styled by what it is about.
-    Stream(String, StreamPill),
+    /// One of the player's stream pills, styled by what it is about and whether it is unsure; the label
+    /// already carries the unsure "?" ([`stream_label`]).
+    Stream(String, StreamPill, bool),
 }
 
-/// **What a stream pill is about**, which picks its look (`facts.stream`, the MultiPlex HUD's technical
-/// row): the resolution the one solid amber capsule, the other three on one dark ground (the dynamic range
-/// rimmed, the stream mode plain, the audio codec under a quieter rim). Each is one pass and one label. The
-/// look is the ONE place the four differ.
+/// **What a stream pill is about**, which picks its look (`facts.stream`, the MultiPlex HUD's stream row,
+/// the web player's `.ptech` pills): the resolution the one solid amber capsule; the others on one dark ground
+/// told apart by their rim (an HDR kind in the picture's blue, SDR in a quiet white, the sound in its indigo),
+/// "Transcoding" plain. An UNSURE pill (deduced, not verifiable on this TV) wears the quiet unsure rim in place
+/// of its own and a "?" after its label ([`stream_label`]). Each is one pass and one label. The look is the ONE
+/// place they differ.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StreamPill {
     Resolution,
-    DynamicRange,
+    Hdr,
+    Sdr,
     Mode,
     Audio,
 }
 
 impl StreamPill {
-    /// The shared badge leaf's style for this pill.
-    pub fn style(self) -> BadgeStyle {
+    /// The shared badge leaf's style for this pill; `unsure` swaps its rim for the unsure one.
+    pub fn style(self, unsure: bool) -> BadgeStyle {
+        let rimmed = |rim, ink| BadgeStyle::Rimmed { fill: theme::STREAM_PILL_FILL, rim, ink };
+        if unsure && self != StreamPill::Resolution {
+            return rimmed(theme::STREAM_UNSURE_RIM, theme::STREAM_UNSURE_INK);
+        }
         match self {
             StreamPill::Resolution => BadgeStyle::Solid { fill: theme::STREAM_RES_FILL, ink: theme::STREAM_RES_INK },
-            StreamPill::DynamicRange => BadgeStyle::Rimmed { fill: theme::STREAM_PILL_FILL, rim: theme::STREAM_PILL_RIM, ink: theme::STREAM_PILL_INK },
+            StreamPill::Hdr => rimmed(theme::STREAM_HDR_RIM, theme::STREAM_HDR_INK),
+            StreamPill::Sdr => rimmed(theme::STREAM_SDR_RIM, theme::STREAM_SDR_INK),
             StreamPill::Mode => BadgeStyle::Solid { fill: theme::STREAM_PILL_FILL, ink: theme::STREAM_PILL_INK },
-            StreamPill::Audio => BadgeStyle::Rimmed { fill: theme::STREAM_PILL_FILL, rim: theme::STREAM_PILL_RIM_QUIET, ink: theme::STREAM_PILL_INK },
+            StreamPill::Audio => rimmed(theme::STREAM_AUDIO_RIM, theme::STREAM_PILL_INK),
         }
+    }
+}
+
+/// A stream pill's label as drawn: an unsure pill says so with a "?" after it (the web player's `<i>?</i>`).
+pub fn stream_label(label: &str, unsure: bool) -> String {
+    if unsure {
+        format!("{label} ?")
+    } else {
+        label.to_owned()
     }
 }
 
@@ -128,9 +146,10 @@ impl Chip {
     }
 
     /// A stream pill ([`StreamPill`]): the badge leaf's width, its look by kind.
-    pub fn stream(label: String, pill: StreamPill, measure: &dyn plx_machine::machine::Measure) -> Self {
+    pub(crate) fn stream(pill: &crate::info_panel::Pill, measure: &dyn plx_machine::machine::Measure) -> Self {
+        let label = stream_label(&pill.label, pill.unsure);
         let w = badge_w(&label, None, measure);
-        Self { kind: ChipKind::Stream(label, pill), w }
+        Self { kind: ChipKind::Stream(label, pill.kind, pill.unsure), w }
     }
 }
 
@@ -142,7 +161,7 @@ pub const CHIP_PRIORITY: u8 = 1;
 
 /// The most chips the row can hold: one per kind it can show — the item's meta run, the live
 /// playback fact, the rating, the premium-audio tag, CC, SDH and AD, then the four stream pills
-/// (resolution, dynamic range, stream mode, audio codec: [`StreamPill`]).
+/// (resolution, dynamic range, Transcoding, audio: [`StreamPill`]).
 pub const MAX_CHIPS: usize = 11;
 
 /// **The chip row: every candidate chip and its [`Item`], in priority order** — the input of
@@ -218,8 +237,8 @@ pub fn draw_chip_row(
             ChipKind::Badge(label) => {
                 meta_badge(p, placed.x, my, label, measure);
             }
-            ChipKind::Stream(label, pill) => {
-                badge(p, placed.x, my, label, None, pill.style(), measure);
+            ChipKind::Stream(label, pill, unsure) => {
+                badge(p, placed.x, my, label, None, pill.style(*unsure), measure);
             }
         }
     }
