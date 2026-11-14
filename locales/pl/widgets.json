@@ -118,7 +118,7 @@
     "many": "{heading} · {count} ŚCIEŻEK",
     "other": "{heading} · {count} ŚCIEŻKI"
   },
-  "widgets.reason.jail_help": "Naprawa wymaga zrootowanego TV i dostępu do Homebrew Channel. Pomoc: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem.",
+  "widgets.reason.jail_help": "Naprawa wymaga zrootowanego TV i dostępu do Homebrew Channel.",
   "widgets.tracks.empty": "Brak ścieżek",
   "widgets.tracks.bytes": {
     "one": "{count} bajt",

@@ -115,7 +115,7 @@
     "many": "{heading} · {count} PISTES",
     "other": "{heading} · {count} PISTES"
   },
-  "widgets.reason.jail_help": "La reparació requereix un televisor amb accés root i Homebrew Channel. Ajuda: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem.",
+  "widgets.reason.jail_help": "La reparació requereix un televisor amb accés root i Homebrew Channel.",
   "widgets.tracks.empty": "No hi ha pistes",
   "widgets.tracks.bytes": {
     "one": "{count} byte",

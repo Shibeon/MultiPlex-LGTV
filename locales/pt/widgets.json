@@ -115,7 +115,7 @@
     "many": "{heading} · {count} DE FAIXAS",
     "other": "{heading} · {count} FAIXAS"
   },
-  "widgets.reason.jail_help": "A reparação requer um televisor com root e acesso ao Homebrew Channel. Ajuda: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem",
+  "widgets.reason.jail_help": "A reparação requer um televisor com root e acesso ao Homebrew Channel.",
   "widgets.tracks.empty": "Sem faixas",
   "widgets.tracks.bytes": {
     "one": "{count} byte",
