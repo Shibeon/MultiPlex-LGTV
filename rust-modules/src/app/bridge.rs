@@ -1579,6 +1579,9 @@ impl Bridge {
                 .map(|facts| (facts.machine_id.clone(), sid))).collect());
         }
         next.resolution_offered = plx_platform::tv::device::ui_resolution_offered();
+        // A build fact (compile-time keys), captured here so the Privacy & data page takes it as
+        // an input rather than reading the telemetry sender itself.
+        next.telemetry_absent = !plx_telemetry::telemetry::sender::configured();
         if self.screen_grant_key != Some(key) {
             let session = &grant_session;
             let mut grants = plx_screens::inputs::GrantInputs { offers: grant::offers(),

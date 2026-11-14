@@ -78,7 +78,9 @@ fn the_sentence_follows_the_focused_row() {
         focus(&mut page, id);
         assert_eq!(page.follow.text(), want, "{id:?}");
     }
-    assert_eq!(settings_sentence(None), msg::settings_consent_settings_copy(), "no focused row: the page's");
+    assert_eq!(settings_sentence(None, false), msg::settings_consent_settings_copy(), "no focused row: the page's");
+    assert_eq!(settings_sentence(None, true), msg::settings_consent_settings_copy_local(),
+        "a build with no reporting destination says no word about reporting");
 }
 
 /// Flipping a switch keeps the sentence (the same row stays focused): nothing fades.
@@ -172,8 +174,9 @@ fn the_note_and_every_sentence_fit_in_every_language() {
         let leading = theme::size::LABEL as f32 + theme::space::XS;
         let mut all: Vec<Option<RowId>> = ids.iter().copied().map(Some).collect();
         all.push(None);
-        for id in all {
-            let view = TextView::new(settings_sentence(id), theme::size::LABEL, theme::TEXT_READING)
+        let all = all.into_iter().flat_map(|id| [(id, false), (id, true)]);
+        for (id, absent) in all {
+            let view = TextView::new(settings_sentence(id, absent), theme::size::LABEL, theme::TEXT_READING)
                 .leading(leading)
                 .max_lines(plx_ui::follow_copy::FOLLOW_LINES + 1)
                 .with_measure(&ShippedMeasure);

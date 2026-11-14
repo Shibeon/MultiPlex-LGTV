@@ -25,13 +25,18 @@ pub struct ScreenInputs {
     /// A host-local semantic revision, independent of server-roster changes.
     pub grant_generation: u64,
     pub resolution_offered: bool,
+    /// The build has no reporting destination compiled in (`plx_telemetry::telemetry::sender::
+    /// configured()` is false), so the Privacy & data page shows no reporting switch, no example
+    /// report and no identifier document: a choice that changes nothing is not offered. False
+    /// (every row shown) for a host that does not capture it, which is what a keyed build shows.
+    pub telemetry_absent: bool,
 }
 impl Default for ScreenInputs {
     fn default() -> Self {
         Self { session: Arc::new(Session::default()), settled: false, visible_generation: 0, revision: 0,
             profile: Arc::new(CurrentProfile { user: None, generation: 0, stamp: String::new() }),
             current_server: ServerId::UNSET, servers: Default::default(), grants: Arc::new(GrantInputs::default()),
-            grant_generation: 0, resolution_offered: false }
+            grant_generation: 0, resolution_offered: false, telemetry_absent: false }
     }
 }
 impl ScreenInputs {
@@ -43,6 +48,7 @@ impl ScreenInputs {
             && self.current_server == other.current_server
             && self.servers == other.servers
             && self.resolution_offered == other.resolution_offered
+            && self.telemetry_absent == other.telemetry_absent
             && self.grant_generation == other.grant_generation
             && self.profile.generation == other.profile.generation
             && self.profile.stamp == other.profile.stamp
@@ -82,7 +88,7 @@ pub(crate) fn capture_fixture() -> ScreenInputs {
         revision: { let (cache, profile) = session::screen_input_revision(); cache.wrapping_add(profile) },
         profile: session::current_snapshot(),
         current_server: plx_plex::plex::current_server(), servers: Arc::new(servers), grant_generation: grant::revision(),
-        resolution_offered: plx_platform::tv::device::ui_resolution_offered() }
+        resolution_offered: plx_platform::tv::device::ui_resolution_offered(), telemetry_absent: false }
 }
 
 /// Immutable publications for legacy fixture contexts that outlive their helper call.

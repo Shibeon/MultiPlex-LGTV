@@ -4,7 +4,8 @@
 //! under the Settings root (Settings v2 anatomy: rows without sub-lines, the focused row's sentence
 //! in the left column) — two toggles, five documents, Delete all local data, and a Done that
 //! appears only once the draft differs from the stored answer, with one line beside it saying
-//! what BACK does; [`ConsentPage::first_run`] is one
+//! what BACK does (a build with no reporting destination compiled in lists only the policy and
+//! Delete: [`consent_form`]); [`ConsentPage::first_run`] is one
 //! STAGE of the sign-in's question — a full disclosure, the reading list and two equal answers
 //! in one row. Exceptional overflow scrolls at BODY size while the selected answer retains focus;
 //! the second
@@ -146,6 +147,9 @@ pub struct ConsentPage {
     /// Privacy & data's sentence beside the table: the focused row's own, else the page's
     /// ([`settings_sentence`], a pure function of the focused row). Unused by first run.
     follow: FollowCopy,
+    /// The build has no reporting destination (`ScreenInputs::telemetry_absent`, taken at mount):
+    /// Privacy & data then lists the policy and Delete alone ([`consent_form`]).
+    telemetry_absent: bool,
     state: ConsentState,
 }
 
@@ -171,7 +175,7 @@ impl LogicalState for ConsentState {
 /// sub-line, the sentence is said in the left column while the row has focus). A pure function of
 /// the focused row; a page with no focused row says its own. Every row has one of its own today -
 /// the words are the old sub-lines.
-fn settings_sentence(id: Option<RowId>) -> &'static str {
+fn settings_sentence(id: Option<RowId>, telemetry_absent: bool) -> &'static str {
     use plx_platform::i18n::msg;
     match id {
         Some(RowId::Errors) => msg::settings_consent_crash_detail(),
@@ -182,15 +186,26 @@ fn settings_sentence(id: Option<RowId>) -> &'static str {
         Some(RowId::ErrorsId) => msg::settings_consent_preview_errors_id(),
         Some(RowId::AnalyticsId) => msg::settings_consent_preview_analytics_id(),
         Some(RowId::Delete) => msg::settings_consent_delete_detail(),
-        None => msg::settings_consent_settings_copy(),
+        None => settings_copy(telemetry_absent),
     }
+}
+
+/// The page's own sentence: a build with no reporting destination has no reporting to control.
+fn settings_copy(telemetry_absent: bool) -> &'static str {
+    use plx_platform::i18n::msg;
+    if telemetry_absent { msg::settings_consent_settings_copy_local() } else { msg::settings_consent_settings_copy() }
 }
 
 /// The page's rows as a [`Form`], from plain inputs. First run lists the stage's own example and
 /// the policy (two `Nav` rows, keyed 0 and 1 as the two-row list always was); Privacy & data lists
 /// the two switches, the five documents and Delete. Every preview row is a `Nav` row onto its
 /// `SettingsPage::Preview`, whose byte carries the kind and the ceremony's crumb flag.
-fn consent_form(mode: Mode, draft: (bool, bool)) -> Form<RowId, Act, SettingsPage> {
+///
+/// A build with no reporting destination compiled in (`telemetry_absent`) lists only what still
+/// does something: the privacy policy and Delete all local data. The switches, the two example
+/// reports and the two identifier documents would describe sending that this build cannot do, so
+/// they are not built at all (the rows keep their hand-assigned keys, so focus is by identity either way).
+fn consent_form(mode: Mode, draft: (bool, bool), telemetry_absent: bool) -> Form<RowId, Act, SettingsPage> {
     let flag = match mode {
         Mode::Settings => 0,
         Mode::FirstRun { product: false, .. } => FIRST_RUN_CRASH,
@@ -217,9 +232,11 @@ fn consent_form(mode: Mode, draft: (bool, bool)) -> Form<RowId, Act, SettingsPag
         }
         Mode::Settings => {
             let (errors, usage) = draft;
+            let reporting = !telemetry_absent;
             Form::new()
                 .section(
                     FormSection::new(plx_platform::i18n::msg::settings_consent_reporting())
+                        .visible(reporting)
                         .item(RowId::Errors, RowKind::Toggle, Act::FlipErrors,
                             Row::new(plx_platform::i18n::msg::settings_consent_crash_row()).toggle(errors))
                         .item(RowId::Usage, RowKind::Toggle, Act::FlipUsage,
@@ -227,15 +244,15 @@ fn consent_form(mode: Mode, draft: (bool, bool)) -> Form<RowId, Act, SettingsPag
                 )
                 .section(
                     FormSection::new(plx_platform::i18n::msg::settings_consent_information())
-                        .item(RowId::PreviewCrash, preview(PreviewKind::Crash), Act::Open,
+                        .item_if(reporting, RowId::PreviewCrash, preview(PreviewKind::Crash), Act::Open,
                             Row::new(plx_platform::i18n::msg::settings_consent_crash_document()).chevron(true))
-                        .item(RowId::PreviewUsage, preview(PreviewKind::Usage), Act::Open,
+                        .item_if(reporting, RowId::PreviewUsage, preview(PreviewKind::Usage), Act::Open,
                             Row::new(plx_platform::i18n::msg::settings_consent_usage_document()).chevron(true))
                         .item(RowId::Policy, preview(PreviewKind::Policy), Act::Open,
                             Row::new(plx_platform::i18n::msg::settings_consent_policy()).chevron(true))
-                        .item(RowId::ErrorsId, preview(PreviewKind::ErrorsId), Act::Open,
+                        .item_if(reporting, RowId::ErrorsId, preview(PreviewKind::ErrorsId), Act::Open,
                             Row::new(plx_platform::i18n::msg::settings_consent_crash_id()).chevron(true))
-                        .item(RowId::AnalyticsId, preview(PreviewKind::AnalyticsId), Act::Open,
+                        .item_if(reporting, RowId::AnalyticsId, preview(PreviewKind::AnalyticsId), Act::Open,
                             Row::new(plx_platform::i18n::msg::settings_consent_analytics_id()).chevron(true)),
                 )
                 .section(
@@ -250,13 +267,14 @@ fn consent_form(mode: Mode, draft: (bool, bool)) -> Form<RowId, Act, SettingsPag
 
 impl ConsentPage {
     /// Privacy & data, seeded from the published decision.
-    pub fn settings(entry: EntryId, _cx: &Cx<'_, InnerHost>, _fx: &mut Effects<'_, InnerHost>) -> Self {
+    pub fn settings(entry: EntryId, cx: &Cx<'_, InnerHost>, _fx: &mut Effects<'_, InnerHost>) -> Self {
         let prev = consent::current().unwrap_or_default();
         let mut s = Self::bare(entry, Mode::Settings, (prev.errors, prev.usage));
+        s.telemetry_absent = cx.views.inputs.telemetry_absent;
         s.rebuild(None);
         s.form.table.list_focused = true;
         // opens on the first row's sentence at once, nothing fading
-        s.follow = FollowCopy::new(settings_sentence(s.form.selected_id().copied()));
+        s.follow = FollowCopy::new(settings_sentence(s.form.selected_id().copied(), s.telemetry_absent));
         s
     }
 
@@ -319,6 +337,7 @@ impl ConsentPage {
                 Mode::FirstRun { .. } => RouteLayout::screen(),
             },
             follow: FollowCopy::new(""),
+            telemetry_absent: false,
             state: ConsentState {
                 mode: match mode {
                     Mode::Settings => 0,
@@ -342,7 +361,7 @@ impl ConsentPage {
             self.form.table.compact = false;
             self.form.table.board_metrics(true);
         }
-        let form = consent_form(self.mode, self.draft);
+        let form = consent_form(self.mode, self.draft, self.telemetry_absent);
         match keep {
             Some(id) if self.form.table.n_rows() > 0 => self.form.set_sliding(form, Some(&id)),
             _ => self.form.set(form, None),
@@ -355,7 +374,7 @@ impl ConsentPage {
     /// stage's disclosure instead). A sentence already shown changes nothing.
     fn follow_focus(&mut self) {
         if matches!(self.mode, Mode::Settings) {
-            self.follow.follow(settings_sentence(self.form.selected_id().copied()));
+            self.follow.follow(settings_sentence(self.form.selected_id().copied(), self.telemetry_absent));
         }
     }
 
@@ -368,7 +387,7 @@ impl ConsentPage {
     }
     fn body(&self) -> &'static str {
         match self.mode {
-            Mode::Settings => plx_platform::i18n::msg::settings_consent_settings_copy(),
+            Mode::Settings => settings_copy(self.telemetry_absent),
             Mode::FirstRun { product: false, .. } => plx_platform::i18n::msg::settings_consent_crash_body(),
             Mode::FirstRun { product: true, .. } => plx_platform::i18n::msg::settings_consent_product_body(),
         }
@@ -1090,6 +1109,20 @@ impl LogicalState for PreviewState {
     }
 }
 
+/// The preview a `SettingsPage::Preview(which)` mounts in this build. With no reporting
+/// destination compiled in, Privacy & data lists no example report and no identifier document
+/// ([`consent_form`]), so a route that still names one (a dev `--screen` boot, a stale recording)
+/// opens the privacy policy, the one document the page does list, rather than a page about
+/// sending this build cannot do. Pure: the build fact arrives as `telemetry_absent`.
+pub fn offered_preview(which: u8, telemetry_absent: bool) -> u8 {
+    let kind = PreviewKind::ALL[(which & 0x0f) as usize % PreviewKind::ALL.len()];
+    if !telemetry_absent || kind == PreviewKind::Policy {
+        return which;
+    }
+    let policy = PreviewKind::ALL.iter().position(|k| *k == PreviewKind::Policy).unwrap_or(0) as u8;
+    (which & 0xf0) | policy
+}
+
 impl PreviewPage {
     pub fn new(entry: EntryId, which: u8) -> Self {
         let kind = PreviewKind::ALL[(which & 0x0f) as usize % PreviewKind::ALL.len()];
@@ -1527,7 +1560,7 @@ fn errors_id_document() -> String {
 pub fn nav_items_for_test(first_run: Option<bool>) -> Vec<(u32, SettingsPage)> {
     let mode = first_run.map_or(Mode::Settings, |product| Mode::FirstRun { product, errors: false });
     let mut form: FormTable<RowId, Act, SettingsPage> = FormTable::new(super::registry::BAND);
-    form.set(consent_form(mode, (false, false)), None);
+    form.set(consent_form(mode, (false, false), false), None);
     (0..form.table.n_rows() as usize)
         .filter_map(|i| match form.binding_at(i)?.kind.clone() {
             RowKind::Nav(dest) => Some((form.key_at(i)?.0, dest)),
@@ -1563,3 +1596,7 @@ mod text_fit_tests;
 #[cfg(test)]
 #[path = "consent_v2_tests.rs"]
 mod v2_tests;
+
+#[cfg(test)]
+#[path = "consent_build_tests.rs"]
+mod build_tests;

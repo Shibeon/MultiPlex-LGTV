@@ -23,6 +23,10 @@
     "value": "Optional reports, privacy information and local data.",
     "description": "Settings, account, onboarding or privacy UI: settings.privacy.detail"
   },
+  "settings.privacy.detail_local": {
+    "value": "Privacy information and local data.",
+    "description": "Settings, account, onboarding or privacy UI: settings.privacy.detail_local (a build with no reporting destination compiled in)"
+  },
   "settings.legal.title": {
     "value": "Legal notices",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.title"
@@ -289,6 +293,10 @@
   "settings.consent.settings_copy": {
     "value": "Control optional reporting, review exactly what may be shared, and manage data stored by MultiPlex on this television.",
     "description": "Settings, account, onboarding or privacy UI: settings.consent.settings_copy"
+  },
+  "settings.consent.settings_copy_local": {
+    "value": "Read the privacy policy and manage data stored by MultiPlex on this television.",
+    "description": "Settings, account, onboarding or privacy UI: settings.consent.settings_copy_local (a build with no reporting destination compiled in)"
   },
   "settings.consent.reporting": {
     "value": "Reporting",

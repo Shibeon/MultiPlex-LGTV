@@ -371,6 +371,11 @@ category's identifier from this television. Signing out does the same for both c
 One report that the sender had already picked up at the moment you withdraw or sign out may still
 be sent; no further report is picked up after it.
 
+A build compiled without either reporting destination (every MultiPlex build so far) cannot send
+either category, so it asks neither question and Settings → Privacy & data shows neither switch,
+neither example report and neither identifier: the page lists only this policy and Delete all
+local data.
+
 To ask what a category holds for your installation, or to have it deleted, write to the contact
 below and quote the identifier Settings shows for that category — the Crash report ID for crash
 and error reports, the Analytics ID for product analytics. Each identifier is the only handle its

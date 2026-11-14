@@ -197,7 +197,8 @@ each title in Continue Watching (which tells Plex which titles are in that row f
 
 **Crash reports and usage analytics are off until you turn them on** — two separate first-run
 questions, each answerable with Don't Share, both reversible later under Account → Settings →
-Privacy & data. No title, search term, subtitle line, server name or address can appear in any
+Privacy & data. A build compiled without a reporting destination (every MultiPlex build so far)
+cannot send either, so it asks neither question and that page shows no reporting switch at all. No title, search term, subtitle line, server name or address can appear in any
 report. [`PRIVACY.md`](PRIVACY.md) is the whole statement, including the schemas.
 
 ASS/SSA subtitles render natively during direct play, including styles, positioning, overlapping

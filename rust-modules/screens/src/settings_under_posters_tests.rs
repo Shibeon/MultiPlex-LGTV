@@ -743,7 +743,7 @@ fn the_root_row_reads_the_setting() {
     let (value, sub) = read(false, &[P::Year, P::Length]);
     assert_eq!(value.as_deref(), Some("Year \u{b7} Length"), "the default reads its names");
     assert_eq!(sub, "", "Settings v2: the root row has no sub-line");
-    assert_eq!(super::super::sentence_for(Some(&RootId::UnderPosters)), "Choose what appears under posters, for movies and TV shows alike.",
+    assert_eq!(super::super::sentence_for(Some(&RootId::UnderPosters), false), "Choose what appears under posters, for movies and TV shows alike.",
         "the sentence moved beside the table");
     assert_eq!(read(true, &[P::Year, P::Length]).0.as_deref(), Some("Year \u{b7} Length"), "the title is the page's own row");
     assert_eq!(read(true, &[P::Genre]).0.as_deref(), Some("Genre"));

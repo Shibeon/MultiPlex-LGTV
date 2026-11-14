@@ -363,7 +363,10 @@ everyone gets **Privacy & data**, **Legal notices** and **About PlxNative**.
 
 - **Privacy & data** holds the two saved reporting choices, one scrollable what-is-actually-sent document PER CHANNEL (Crashes / Errors, Analytics / Usage),
   the privacy policy, and Delete all local data. Changed switches commit through Done; BACK
-  discards the draft. Playback diagnostics remain a playback action rather than a global setting.
+  discards the draft. A build with no reporting destination compiled in (`ScreenInputs::telemetry_absent`,
+  captured by the Bridge from `sender::configured()`) lists only the privacy policy and Delete all local
+  data: no switch, no example report and no identifier document, and the root's sentence for the row
+  drops the reports. Playback diagnostics remain a playback action rather than a global setting.
 - **Legal notices** contains six readable documents: **Privacy policy**, **Open-source licences**,
   **FFmpeg & source offer**, **PlxNative source code**, **Trademarks & non-affiliation**, and
   **Security contact**. UP/DOWN scrolls a notice; BACK leaves it.

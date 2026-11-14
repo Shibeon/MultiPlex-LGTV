@@ -92,14 +92,25 @@ fn the_root_with_every_conditional_row_scrolls_with_focus() {
 /// The sentence is a pure function of the focused row: its own, else the page's.
 #[test]
 fn the_sentence_follows_the_focused_row_and_falls_back_to_the_pages() {
-    assert_eq!(sentence_for(Some(&RootId::Language)), msg::settings_language_detail());
-    assert_eq!(sentence_for(Some(&RootId::TrailerAutoplay)), msg::settings_trailers_detail());
-    assert_eq!(sentence_for(Some(&RootId::Diagnostics)), msg::settings_diagnostics_detail());
-    assert_eq!(sentence_for(None), msg::settings_root_copy(), "no focused row, the page sentence");
-    assert_eq!(sentence_for(Some(&RootId::Plaintext(ServerMachineId("m".into())))), msg::settings_root_copy(),
+    assert_eq!(sentence_for(Some(&RootId::Language), false), msg::settings_language_detail());
+    assert_eq!(sentence_for(Some(&RootId::TrailerAutoplay), false), msg::settings_trailers_detail());
+    assert_eq!(sentence_for(Some(&RootId::Diagnostics), false), msg::settings_diagnostics_detail());
+    assert_eq!(sentence_for(None, false), msg::settings_root_copy(), "no focused row, the page sentence");
+    assert_eq!(sentence_for(Some(&RootId::Plaintext(ServerMachineId("m".into()))), false), msg::settings_root_copy(),
         "a server's switch states its own status in the table and has no sentence of its own");
-    let libraries = sentence_for(Some(&RootId::Favourites));
+    let libraries = sentence_for(Some(&RootId::Favourites), false);
     assert!(libraries.starts_with(msg::settings_libraries_detail()) && libraries.ends_with(msg::settings_libraries_more()));
+}
+
+/// Privacy & data's sentence on the root names reports only in a build that can send them
+/// (`ScreenInputs::telemetry_absent`); every other row says the same in both builds.
+#[test]
+fn the_privacy_sentence_mentions_reports_only_in_a_keyed_build() {
+    assert_eq!(sentence_for(Some(&RootId::Privacy), false), msg::settings_privacy_detail());
+    assert_eq!(sentence_for(Some(&RootId::Privacy), true), msg::settings_privacy_detail_local());
+    for id in [RootId::Language, RootId::Diagnostics, RootId::Legal, RootId::About] {
+        assert_eq!(sentence_for(Some(&id), true), sentence_for(Some(&id), false), "{id:?}");
+    }
 }
 
 /// A page that opens shows its first row's sentence at once: the page's own sentence is never
@@ -110,7 +121,7 @@ fn the_root_opens_on_its_first_rows_sentence_with_nothing_fading() {
     let root = RootPage::new(EntryId(0), cx(None).views.directory, &crate::registry::capture_fixture());
     let first = root.form.selected_id().cloned();
     assert!(first.is_some(), "the root seats a row on mount");
-    assert_eq!(root.follow.text(), sentence_for(first.as_ref()).as_ref());
+    assert_eq!(root.follow.text(), sentence_for(first.as_ref(), false).as_ref());
     assert_eq!(root.follow.arrival(), 1.0, "nothing is fading right after mount");
 }
 
@@ -143,8 +154,8 @@ fn every_followed_sentence_fits_five_lines_in_every_language() {
             RootId::Language, RootId::AutoSignIn, RootId::TrailerAutoplay, RootId::Resolution, RootId::Privacy,
             RootId::Diagnostics, RootId::Legal, RootId::About];
         all.push(RootId::Plaintext(ServerMachineId("m".into())));
-        for id in all {
-            let text = sentence_for(Some(&id));
+        for (id, absent) in all.into_iter().flat_map(|id| [(id.clone(), false), (id, true)]) {
+            let text = sentence_for(Some(&id), absent);
             let view = TextView::new(&text, theme::size::LABEL, theme::TEXT_READING)
                 .leading(theme::size::LABEL as f32 + theme::space::XS)
                 .max_lines(plx_ui::follow_copy::FOLLOW_LINES + 1)

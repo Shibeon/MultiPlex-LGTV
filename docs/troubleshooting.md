@@ -179,8 +179,8 @@ passphrase, even if you see one in a file.
 ### Sending a report from the app instead
 
 There is no "send logs" button in the app, and the playback failure screen has no **Send report**
-button (only the sign-in screen has one). Two optional switches in **Settings → Privacy & data** send technical details to the
-project by themselves. **Crash reports** is off until you turn it on. With it on, the app sends a
+button (only the sign-in screen has one). In a build compiled with a reporting destination, two optional switches in **Settings → Privacy & data** send technical details to the
+project by themselves; a build without one (every MultiPlex build so far) shows neither switch and sends nothing. **Crash reports** is off until you turn it on. With it on, the app sends a
 crash report, and also a short report when playback reaches the failure screen: the failure kind
 and coarse connection and quality details, with no title, address or token. It does not send these
 log files, and it does not replace an issue with your TV details. Turning it on is your choice and

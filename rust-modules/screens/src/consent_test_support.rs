@@ -13,8 +13,13 @@ pub use plx_machine::present::Present;
 /// television. Consent does not inspect the retained Browse directory, so the explicit empty
 /// fixture is sufficient; the nested host still carries the same view type as production.
 pub fn test_cx(m: &FixtureMeasure) -> Cx<'_, InnerHost> {
+    test_cx_with(m, crate::registry::publication_fixture())
+}
+
+/// [`test_cx`] over inputs the test states (a build with or without a reporting destination).
+pub fn test_cx_with<'a>(m: &'a FixtureMeasure, inputs: &'a crate::registry::ScreenInputs) -> Cx<'a, InnerHost> {
     Cx {
-        views: crate::registry::InnerViews::new(plx_data::stores::browse::DirectoryView::empty_for_test(), crate::registry::publication_fixture()),
+        views: crate::registry::InnerViews::new(plx_data::stores::browse::DirectoryView::empty_for_test(), inputs),
         tick: Tick::default(),
         measure: m,
         press: PressRead::default(),
