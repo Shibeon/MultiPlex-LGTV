@@ -32,9 +32,11 @@ def check(cond: bool, msg: str) -> None:
         print(f"  FAIL — {msg}")
 
 
-def lg_maintainer_address(value: str) -> bool:
-    """Whether Maintainer uses the email form accepted by LG's package validator."""
-    return re.fullmatch(r"[^<>]+ <[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}>", value) is not None
+def maintainer_is_name_only(value: str) -> bool:
+    """Whether Maintainer is a bare name: the fork publishes no contact address in its package, so a field
+    carrying an email (any `@`, any `<...>`) is refused. LG's Seller Lounge validator would want an email
+    form here; the package is distributed through webosbrew, not the LG Content Store."""
+    return re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]*", value) is not None
 
 
 @functools.lru_cache(maxsize=None)
@@ -346,19 +348,20 @@ def _selftest() -> int:
     variables that no Python test can otherwise see. `make check` runs it, beside `flavor.py`'s.
     """
     maintainer_cases = {
-        "Gleb Linnik <support@plxnative.com>": True,
-        "Gleb Linnik <GLinnik21@users.noreply.github.com>": True,
-        # RFC 5322 permits `+`, but LG's Seller Lounge IPK validator rejects it.
-        "Gleb Linnik <23104281+GLinnik21@users.noreply.github.com>": False,
-        "Gleb Linnik <not-an-email>": False,
+        "Shibeon": True,
+        "Some Maintainer": True,
+        "Some Maintainer <someone@example.com>": False,
+        "someone@example.com": False,
+        "<someone>": False,
+        "": False,
     }
     maintainer_bad = 0
     for value, want in maintainer_cases.items():
-        got = lg_maintainer_address(value)
+        got = maintainer_is_name_only(value)
         if got != want:
             maintainer_bad += 1
-            print(f"  FAIL — lg_maintainer_address({value!r}) = {got!r}, want {want!r}")
-    print(f"check-package: lg_maintainer_address "
+            print(f"  FAIL — maintainer_is_name_only({value!r}) = {got!r}, want {want!r}")
+    print(f"check-package: maintainer_is_name_only "
           f"{len(maintainer_cases) - maintainer_bad}/{len(maintainer_cases)} cases correct")
 
     # The stamps below are spelled out LITERALLY as the Makefile writes them (`RUST_CFG`), so a decoder
@@ -1609,8 +1612,8 @@ else:
 
 # Control-file provenance. None of this is read by opkg, and that is the point: it is what a
 # human — a webosbrew reviewer, or a user running `opkg info` — sees about who ships this and
-# under what terms. The Maintainer assertion exists because the field held a personal Gmail that
-# travelled inside every distributed .ipk, and nothing would have caught its return.
+# under what terms. The Maintainer assertion exists because the field once held a personal mailbox, then
+# the upstream project's support address, inside every distributed .ipk: it is a name and nothing else.
 check("Homepage" in control, "control declares a Homepage")
 
 # The three fields webosbrew's ipk-verify reads to decide whether a package was built by a webOS
@@ -1626,10 +1629,8 @@ check("Homepage" in control, "control declares a Homepage")
 for field in ("webOS-Package-Format-Version", "webOS-Packager-Version"):
     check(field in control, f"control declares {field}")
 check(control.get("License") == "GPL-3.0-or-later", f'control License == GPL-3.0-or-later (saw {control.get("License")!r})')
-check(lg_maintainer_address(control["Maintainer"]),
-      f'control Maintainer has an LG-compatible email address ({control["Maintainer"]})')
-check("@users.noreply.github.com" in control["Maintainer"] or "@gmail.com" not in control["Maintainer"],
-      f'control Maintainer is not a personal mailbox ({control["Maintainer"]})')
+check(maintainer_is_name_only(control["Maintainer"]),
+      f'control Maintainer is a name with no contact address ({control["Maintainer"]})')
 
 print("== icons ==")
 # Graded on the STAGED artwork, so a badged debug tile is checked as thoroughly as the release one
