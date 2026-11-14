@@ -1681,11 +1681,15 @@ impl TableView {
         let text_right = frame.x + frame.w - SIDE - CONTENT_PAD;
 
         // ---- the cards (under everything): one plate per section on a carded table ----
+        // A plate dissolves under the top edge with its section, as the hairline it replaces did
+        // (`top_edge_alpha` at the section's top): a full-alpha plate under rows that are fading
+        // would leave a hard, cornerless band at the edge once its rounded top had been clipped.
         if self.carded {
             for (si, top, bottom) in self.card_spans() {
                 let card = Rect::new(frame.x, top0 + top - scroll, frame.w, bottom - top);
                 if card.y + card.h > vis_top && card.y < vis_bot {
-                    let p = self.group_painter(p, si);
+                    let fade = Self::top_edge_alpha(card.y + CARD_REACH, vis_top);
+                    let p = self.group_painter(p.alpha(fade), si);
                     p.rrect(card, CARD_RAD, CARD_RAD, theme::TABLE_CARD_FILL);
                     p.rring(card, CARD_RAD, 2.0, theme::TABLE_CARD_RIM);
                 }
@@ -2809,6 +2813,43 @@ mod tests {
             .into_iter().filter(|(_, r)| r.h == 2.0).count();
         assert_eq!(hairlines(&plain), 2, "premise: a plain table draws a hairline per break");
         assert_eq!(hairlines(&carded), 0);
+    }
+
+    /// **A card dissolves under the top edge with its section.** Scrolled so the second section's
+    /// top sits half a fade above the edge's fade band, its plate is drawn at the alpha the section's
+    /// own top gets (`top_edge_alpha`), not at full strength under rows that are fading; the card
+    /// below, clear of the band, stays whole.
+    #[test]
+    fn a_carded_tables_card_fades_with_its_section_under_the_top_edge() {
+        let _serial = plx_base::testlock::serial();
+        let frame = Rect::new(100.0, 50.0, 800.0, 700.0);
+        let sections = || vec![
+            Section::new("Playback").row(Row::new("Video")).row(Row::new("Audio")),
+            Section::new("System").row(Row::new("Language").value("English")).row(Row::new("Clock")),
+            Section::new("Support").row(Row::new("About")),
+        ];
+        let mut t = TableView::new();
+        t.board_metrics(true);
+        t.carded(true);
+        t.set_sections(sections(), 0, false);
+        let spans = t.card_spans();
+        // the second section's top, scrolled to half a fade band under the frame's top
+        let scroll = TOP_PAD + spans[1].1 + CARD_REACH - TOP_FADE_H * 0.5;
+        t.restore_sections(sections(), Some(4), scroll);
+        let m = &crate::fixture::FixtureMeasure;
+        let fills = crate::draw_census::capture_inks(|| t.draw(crate::Painter::recording(), frame, m));
+        let card_a = |si: usize| {
+            let (_, top, bottom) = t.card_spans()[si];
+            let y = frame.y + TOP_PAD + top - t.scroll.pos;
+            fills.iter().find(|(tag, r, _)| *tag == 2 && (r.y - y).abs() < 0.01 && (r.h - (bottom - top)).abs() < 0.01 && r.w == frame.w)
+                .map(|(_, _, a)| *a)
+        };
+        let full = theme::TABLE_CARD_FILL[3];
+        let second = card_a(1).expect("the second card is drawn");
+        let want = TableView::top_edge_alpha(frame.y + TOP_PAD + spans[1].1 + CARD_REACH - t.scroll.pos, frame.y);
+        assert!(want > 0.0 && want < 1.0, "premise: the section's top is inside the fade band ({want})");
+        assert!((second - full * want).abs() < 1e-4, "the card fades with its section: {second} vs {}", full * want);
+        assert!((card_a(2).expect("the third card") - full).abs() < 1e-4, "a card clear of the edge is whole");
     }
 
     // ---- the focused row's marquee -----------------------------------------------------------
