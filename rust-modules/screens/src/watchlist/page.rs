@@ -265,6 +265,9 @@ struct Page {
     cells: Vec<Cell>,
     /// Element to index in `tiles`. Derived, not logical state.
     index: HashMap<u32, usize>,
+    /// How many of `tiles` no server holds yet (coming soon, or on no server): counted once per
+    /// [`rebuild`](Page::rebuild), not per header question. Derived, not logical state.
+    unavailable: usize,
     /// The reachable server whose photo proxy fetches art for titles no server holds.
     art_server: Option<ServerId>,
     /// The tiles a landing is fading out, by `elem_key` (DS4): kept from the removal until the
@@ -326,6 +329,7 @@ impl Page {
     /// Re-derive the cells after the snapshot or the facts moved.
     fn rebuild(&mut self) {
         let elems = self.keys.assign(&self.tiles);
+        self.unavailable = self.tiles.iter().filter(|t| matches!(t.state, TileState::ComingSoon | TileState::NotOnAnyServer)).count();
         self.cells.clear();
         self.index.clear();
         for (i, (t, elem)) in self.tiles.iter().zip(elems).enumerate() {
@@ -430,16 +434,15 @@ impl Page {
 
     /// What the title block says: the list's size (the count's total, a Remove's hold included, so
     /// the pill moves on the frame the grid does) and, once every title of the unfiltered list is
-    /// read, how many no server holds yet (unreleased and on none, or released on none).
+    /// read, how many no server holds yet (unreleased and on none, or released on none; counted by
+    /// [`rebuild`](Self::rebuild), so this is constant-time for the header's per-question hash).
     fn title_counts(&self) -> header::TitleCounts {
         let total = self.count().map(|count| match count {
             Count::All(n) => n,
             Count::Of { total, .. } => total,
         });
         let whole = matches!(self.live_count(), Some(Count::All(n)) if n <= self.tiles.len());
-        let unavailable = whole.then(|| {
-            self.tiles.iter().filter(|t| matches!(t.state, TileState::ComingSoon | TileState::NotOnAnyServer)).count()
-        });
+        let unavailable = whole.then_some(self.unavailable);
         header::TitleCounts { total, unavailable }
     }
 
@@ -873,6 +876,7 @@ impl WatchlistScreen {
             keys: Keys::new(),
             cells: Vec::new(),
             index: HashMap::new(),
+            unavailable: 0,
             art_server: None,
             ghosts: HashMap::new(),
             count_hold: None,
