@@ -284,5 +284,8 @@
   "browse.clock.key_changed": "La clé de votre serveur a changé. Connectez la TV à internet une fois pour que l’application puisse la vérifier de nouveau.",
   "browse.detail.mark_episode_watched": "Marquer l’épisode comme vu",
   "browse.detail.mark_episode_unwatched": "Marquer l’épisode comme non vu",
-  "browse.detail.minutes_left": "{minutes} min restantes"
+  "browse.detail.minutes_left": "{minutes} min restantes",
+  "browse.detail.upcoming_airs": "Diffusion le {date}",
+  "browse.detail.upcoming_air_date_unknown": "Date de diffusion inconnue",
+  "browse.detail.upcoming_title_tba": "Titre à venir"
 }

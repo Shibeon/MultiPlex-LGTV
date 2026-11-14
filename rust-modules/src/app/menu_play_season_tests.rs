@@ -44,7 +44,7 @@ impl Rig {
         let sid = plx_plex::plex::register_for_test("menu-season", "127.0.0.1", port, "t", "c-menu-season");
         plx_plex::plex::client_for(sid).unwrap().set_link(plx_plex::plex::probe::Location::Local);
         let season = |rk: &str, index| Season {
-            rk: rk.into(), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0 };
+            rk: rk.into(), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0, guid: String::new() };
         plx_data::metadata::set_current_for_test(bridge.metadata_mut().state_mut(), Some(Detail {
             sid,
             rk: SHOW.into(),

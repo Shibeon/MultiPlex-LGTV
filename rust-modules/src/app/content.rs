@@ -1332,6 +1332,7 @@ mod library_publication_tests {
                 title: "Season 2".into(),
                 leaf_count: 1,
                 viewed_leaf_count: 0,
+                guid: String::new(),
             }],
             episodes: vec![plx_data::metadata::Episode {
                 rk: "episode-a".into(),

@@ -82,6 +82,7 @@ fn body(entry: EntryId, rk: &str) -> DetailScreen {
         refresh_gen: 0,
         scroll_target: 0.0, free: false, episode_free: false, episode_scroll: Spring::at(0.0), tab_scroll: Spring::at(0.0),
         episode_cells: episodes::Cells::new(),
+        upcoming: Default::default(),
             ep_want: Default::default(),
             strip_seat: Default::default(),
         about_card_lift: plx_ui::text_lift::TextLift::new(),
@@ -141,7 +142,7 @@ fn item(rk: &str, reverse: bool) -> Detail {
     let mut episodes = Vec::new();
     for i in 1..=2 {
         d.seasons.push(plx_data::metadata::Season { rk: format!("s{i}"), index: i,
-            title: format!("Season {i}"), leaf_count: 2, viewed_leaf_count: 0 });
+            title: format!("Season {i}"), leaf_count: 2, viewed_leaf_count: 0, guid: String::new() });
         episodes.push(plx_data::metadata::Episode { rk: format!("e{i}"), index: i,
             season: 1, title: format!("Episode {i}"), ..Default::default() });
         d.related.push(plx_data::pms::PmsMovie { sid: ServerId::UNSET, rk: format!("r{i}"), ..Default::default() });
@@ -482,7 +483,7 @@ fn every_app_owned_run_on_a_film_page_comes_from_the_catalog() {
 fn show(n: i64) -> Detail {
     let mut d = item("a", false);
     d.seasons = (1..=n).map(|i| plx_data::metadata::Season { rk: format!("s{i}"), index: i,
-        title: format!("Season {i}"), leaf_count: 2, viewed_leaf_count: 0 }).collect();
+        title: format!("Season {i}"), leaf_count: 2, viewed_leaf_count: 0, guid: String::new() }).collect();
     d
 }
 

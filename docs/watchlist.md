@@ -99,6 +99,16 @@ refused Watchlist or catalog read (reachable only after an in-process sign-in: a
 account seated makes no request at all) lands once as the unavailable read-out, never as an empty list,
 and is not re-asked on a timer.
 
+**The Detail page's upcoming episodes ride the same transport.** A season page reads the episodes
+the metadata provider announces for that season (`GET /library/metadata/<season hex>/children` on
+`account::metadata_provider()`, the season's hex from its `plex://season/` guid) as the seated
+profile's plex.tv identity, through `watchlist_transport`, so the dev-build read refusal and the
+stand-in apply to it unchanged: `metadata_provider()` is the real host only while Discover is, and the
+mock answers the route for the seasons of its bound shows. The store is
+`data/src/stores/upcoming.rs` (a read only, one per season per show visit, never a write); the strip
+appends the announced episodes the server lacks that have not aired as of the published day
+(`data/src/upcoming.rs`).
+
 **The live switch** is `plxnative-watchlist-live` in the install's runtime root (on the television
 `/tmp/app.multiplex.native.debug/plxnative-watchlist-live`). It is read once at boot, which logs
 `watchlist: LIVE writes enabled by trigger`; each write that goes out then logs

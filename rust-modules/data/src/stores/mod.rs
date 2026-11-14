@@ -78,6 +78,7 @@ pub mod paging;
 pub mod search;
 pub mod subsearch;
 pub mod tape;
+pub mod upcoming;
 pub mod viewreconcile;
 pub mod viewstate;
 pub mod watchlist;
@@ -104,6 +105,8 @@ pub struct Stores {
     pub watchlist: watchlist::WatchlistStore,
     /// The catalog page's discover record (`crate::catalog`). Appended last, like its `StoreId`.
     pub catalog: catalog::CatalogStore,
+    /// The Detail page's upcoming episodes (`crate::upcoming`). Appended last, like its `StoreId`.
+    pub upcoming: upcoming::UpcomingStore,
     /// The PMS notification feed's owner. Ships on for owned servers (`notify::NOTIFY_ENABLED`); no `StoreId`, no
     /// `StoreCmd`: the application pumps it and tells it the lifecycle (`Bridge::notify_*`).
     pub notify: notify::NotifyStore,
@@ -136,6 +139,7 @@ impl Default for Stores {
             reconcile: viewreconcile::ViewReconcileStore::default(),
             watchlist: watchlist::WatchlistStore::default(),
             catalog: catalog::CatalogStore::default(),
+            upcoming: upcoming::UpcomingStore::default(),
             notify: notify::NotifyStore::default(),
             notify_map: Default::default(),
             view_ledger: Default::default(),
@@ -298,6 +302,7 @@ pub fn person_pump(&mut self, input: &crate::person::PersonInput<'_>) -> bool {
             StoreId::Collection => self.collection.take_jobs(),
             StoreId::Person => self.person.take_jobs(),
             StoreId::Catalog => self.catalog.take_jobs(),
+            StoreId::Upcoming => self.upcoming.take_jobs(),
             StoreId::SubtitleSearch => self.subtitle_search.take_jobs(),
             StoreId::ViewReconcile => self.reconcile.take_jobs(),
             StoreId::Hubs => self.hubs.take_jobs(),
@@ -323,6 +328,7 @@ pub fn person_pump(&mut self, input: &crate::person::PersonInput<'_>) -> bool {
             StoreId::Collection => self.collection.has_jobs(),
             StoreId::Person => self.person.has_jobs(),
             StoreId::Catalog => self.catalog.has_jobs(),
+            StoreId::Upcoming => self.upcoming.has_jobs(),
             StoreId::SubtitleSearch => self.subtitle_search.has_jobs(),
             StoreId::ViewReconcile => self.reconcile.has_jobs(),
             StoreId::Hubs => self.hubs.has_jobs(),
@@ -685,6 +691,7 @@ pub fn person_pump(&mut self, input: &crate::person::PersonInput<'_>) -> bool {
             StoreId::ViewReconcile => self.reconcile.gen(),
             StoreId::Watchlist => self.watchlist.gen(),
             StoreId::Catalog => self.catalog.gen(),
+            StoreId::Upcoming => self.upcoming.gen(),
             // A landing gate slot only: the stop mailbox is not a store and has no generation.
             StoreId::ViewStop | StoreId::Notify => 0,
         }
@@ -754,6 +761,9 @@ pub enum StoreId {
     Catalog,
     /// Never recorded; appended without moving existing ordinals.
     Notify,
+    /// Appended for the same reason: the Detail page's upcoming episodes (`crate::upcoming`).
+    /// Never recorded.
+    Upcoming,
 }
 
 /// Route-scoped background work, distinct from a user command. Polling an idle store must not
@@ -808,6 +818,10 @@ pub enum StoreJob {
     /// the request id. It names no server and no client: a plex.tv read as the captured identity.
     /// One is out at a time.
     Catalog(plx_machine::job::Job<catalog::CatalogReq>, catalog::CatalogPort),
+    /// One read of a season's announced episodes from the metadata provider, emitted by the
+    /// upcoming store's `want` (and its pump's retry) and addressed by the request id. It names no
+    /// server and no client: a plex.tv read as the captured identity. Not on the tape.
+    Upcoming(plx_machine::job::Job<upcoming::UpcomingReq>, upcoming::UpcomingPort),
     /// One subtitle search, download or install poll, emitted by the subtitle-search pump and
     /// addressed by the search generation. One is out at a time. Not on the tape.
     SubtitleSearch(plx_machine::job::Job<crate::subsearch::SubSearchReq>, crate::subsearch::SubSearchPort),
@@ -917,6 +931,7 @@ impl StoreJob {
             Self::WatchlistList(..) | Self::WatchlistRematch(..) | Self::WatchlistDelta(..)
             | Self::WatchlistResolve(..) | Self::WatchlistWrite(..) | Self::NotifyStream(..)
             | Self::Catalog(..)
+            | Self::Upcoming(..)
             | Self::SubtitleSearch(..)
             | Self::ViewReconcile(..)
             | Self::Search(..)
@@ -942,6 +957,7 @@ impl StoreJob {
             Self::WatchlistList(..) | Self::WatchlistRematch(..) | Self::WatchlistDelta(..)
             | Self::WatchlistResolve(..) | Self::WatchlistWrite(..) => StoreId::Watchlist,
             Self::Catalog(..) => StoreId::Catalog,
+            Self::Upcoming(..) => StoreId::Upcoming,
             Self::SubtitleSearch(..) => StoreId::SubtitleSearch,
             Self::ViewReconcile(..) => StoreId::ViewReconcile,
             Self::Hubs(..) => StoreId::Hubs,
@@ -953,7 +969,7 @@ impl StoreJob {
 }
 
 impl StoreId {
-    pub const ALL: [StoreId; 13] = [
+    pub const ALL: [StoreId; 14] = [
         StoreId::Browse,
         StoreId::Hubs,
         StoreId::Metadata,
@@ -967,6 +983,7 @@ impl StoreId {
         StoreId::Watchlist,
         StoreId::Catalog,
         StoreId::Notify,
+        StoreId::Upcoming,
     ];
 
     /// The library's ordinal for this store (spec §5.1: the library never names `StoreId`).
@@ -993,6 +1010,7 @@ impl StoreId {
             StoreId::Watchlist => "watchlist",
             StoreId::Catalog => "catalog",
             StoreId::Notify => "notify",
+            StoreId::Upcoming => "upcoming",
         }
     }
 }
@@ -1486,7 +1504,9 @@ mod tests {
         }
         assert_eq!(StoreId::Notify.ord(), StoreOrd(12));
         assert_eq!(StoreId::Notify.name(), "notify");
-        assert_eq!(StoreId::from_ord(StoreOrd(13)), None);
+        assert_eq!(StoreId::Upcoming.ord(), StoreOrd(13));
+        assert_eq!(StoreId::Upcoming.name(), "upcoming");
+        assert_eq!(StoreId::from_ord(StoreOrd(14)), None);
         let original = ["browse", "hubs", "metadata", "search", "person", "viewstate",
             "collection", "subsearch", "viewreconcile", "viewstop", "watchlist", "catalog"];
         for (ord, name) in original.into_iter().enumerate() {

@@ -471,6 +471,60 @@ impl Bridge {
         self.watchlist_face(hex, kind, from_episode)
     }
 
+    /// Once a frame, route-unconditional: the upcoming-episodes store's landing pass, then, for the
+    /// show the loaded Detail is about (its selected season, once that season's episodes are the
+    /// ones loaded), the read of the season's announced episodes asked for and started in this
+    /// call, and the strip they make with the server's episodes as of today handed to every Detail
+    /// page on the stack (a page shows it only for the episode list it was computed against).
+    pub(crate) fn upcoming_feed(&mut self, d: &mut Dispatcher<AppHost>) {
+        let profile = Self::seated_profile();
+        let changed = { let _step = plx_base::step::StepScope::enter(); self.stores.upcoming.pump(&profile) };
+        if changed {
+            plx_machine::idle::invalidate();
+        }
+        let season = |d: &plx_data::metadata::Detail| {
+            d.seasons.get(d.cur_season).and_then(|s| plx_plex::plex::season_hex_of_guid(&s.guid))
+        };
+        let shown = {
+            let meta = self.stores.metadata.view();
+            meta.current()
+                .filter(|_| !meta.season_loading())
+                .filter(|d| d.is_show)
+                .and_then(|d| season(d).map(|hex| (hex, d.episodes.id())))
+        };
+        // Captured here, on the frame thread: the worker reads no interface language of its own.
+        let language = plx_platform::i18n::current().language().tag();
+        if let Some((hex, _)) = shown {
+            if self.stores.upcoming.wants(hex, language) {
+                let show: Vec<[u8; 12]> = self.stores.metadata.view().current()
+                    .map(|d| d.seasons.iter().filter_map(|s| plx_plex::plex::season_hex_of_guid(&s.guid)).collect())
+                    .unwrap_or_default();
+                let input = Self::watchlist_input();
+                let _step = plx_base::step::StepScope::enter();
+                self.stores.upcoming.want(hex, &show, &input, language);
+            }
+        }
+        self.start_store_jobs_of(StoreId::Upcoming);
+        let Some((hex, list)) = shown else { return };
+        let today = self.today.map(|[y, m, d]| format!("{y:04}-{m:02}-{d:02}"));
+        let strip = {
+            let meta = self.stores.metadata.view();
+            let Some(detail) = meta.current() else { return };
+            self.stores.upcoming.strip(hex, &detail.episodes, today.as_deref())
+        };
+        let entries: Vec<EntryId> = d.nav.tabs.stack.entries.iter()
+            .filter(|e| matches!(e.arg, AppArg::Content(plx_screens::registry::ContentArg::Detail { .. })))
+            .map(|e| e.id)
+            .collect();
+        for id in entries {
+            let Some(screen) = d.nav.entry_mut(id)
+                .and_then(|e| e.inst.as_mut())
+                .and_then(|i| i.screen.as_any_mut())
+                .and_then(|a| a.downcast_mut::<plx_screens::detail::DetailScreen>()) else { continue };
+            screen.set_upcoming(list, &strip);
+        }
+    }
+
     /// Once a frame, route-unconditional: the catalog store's landing pass, the catalog page's
     /// feed (open on mount, hand it the record, the membership and the art server), and the
     /// bookmark disc of every Detail page on the stack.

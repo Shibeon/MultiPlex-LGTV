@@ -272,5 +272,8 @@
   "browse.clock.key_changed": "Der Schlüssel deines Servers hat sich geändert. Verbinde den Fernseher einmal mit dem Internet, damit die App ihn neu prüfen kann.",
   "browse.detail.mark_episode_watched": "Episode als gesehen markieren",
   "browse.detail.mark_episode_unwatched": "Episode als ungesehen markieren",
-  "browse.detail.minutes_left": "Noch {minutes} Min."
+  "browse.detail.minutes_left": "Noch {minutes} Min.",
+  "browse.detail.upcoming_airs": "Ausstrahlung am {date}",
+  "browse.detail.upcoming_air_date_unknown": "Ausstrahlungsdatum unbekannt",
+  "browse.detail.upcoming_title_tba": "Titel wird noch bekannt gegeben"
 }

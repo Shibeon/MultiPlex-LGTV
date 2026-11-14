@@ -262,7 +262,7 @@ fn a_re_read_of_the_same_season_carries_the_pages_the_strip_reached() {
     let page = |p: usize, tag: &str| -> Vec<Episode> { (p * 60..(p + 1) * 60).map(|i| episode(&format!("{tag}{i}"))).collect() };
     let show = |total: usize, season: &str, pages: &[(usize, &str)]| {
         let mut d = Detail { sid: plx_plex::plex::ServerId::UNSET, rk: "show".into(), ..Default::default() };
-        d.seasons = vec![crate::metadata::Season { rk: season.into(), index: 1, title: String::new(), leaf_count: 0, viewed_leaf_count: 0 }];
+        d.seasons = vec![crate::metadata::Season { rk: season.into(), index: 1, title: String::new(), leaf_count: 0, viewed_leaf_count: 0, guid: String::new() }];
         d.episodes = EpisodeList::with_total(total);
         for &(p, tag) in pages { d.episodes.set_page(p, page(p, tag)); }
         d

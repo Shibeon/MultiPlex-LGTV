@@ -1103,6 +1103,12 @@ pub struct Season {
     pub leaf_count: i64,
     /// how many of those are watched (`viewedLeafCount`)
     pub viewed_leaf_count: i64,
+    /// The season's portable identity (`plex://season/<hex>`), empty when the server sent none: the
+    /// id the metadata provider lists the season's announced episodes under (`crate::upcoming`).
+    /// Not serialized while empty, so the committed replay recordings (which predate it) still
+    /// round-trip canonically.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub guid: String,
 }
 
 impl Season {
@@ -3350,6 +3356,7 @@ fn fetch_seasons(client: &'static plx_plex::plex::Client, rk: &str) -> Vec<Seaso
             title: x.title.clone(),
             leaf_count: x.leaf_count,
             viewed_leaf_count: x.viewed_leaf_count,
+            guid: x.guid.clone(),
         })
         .collect()
 }

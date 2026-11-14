@@ -2277,5 +2277,20 @@
       "minutes": "i64"
     },
     "description": "Remaining playback time on the hero facts line, under one hour. Keep the minute unit compact."
+  },
+  "browse.detail.upcoming_airs": {
+    "value": "Airs {date}",
+    "args": {
+      "date": "str"
+    },
+    "description": "Bottom line of an upcoming episode's card in a show's episode strip: an episode the Plex metadata provider announces that the server does not have yet. {date} is the episode's air date in the short localized date format used for episode air dates elsewhere on the page (for example 2/1/2027 in English). The line has about 30 characters of room."
+  },
+  "browse.detail.upcoming_air_date_unknown": {
+    "value": "Air date unknown",
+    "description": "Bottom line of an upcoming episode's card (an episode announced by Plex that the server does not have yet) when no air date is known yet; also written on the card's picture when there is no image. About 30 characters of room."
+  },
+  "browse.detail.upcoming_title_tba": {
+    "value": "Title to be announced",
+    "description": "Title of an upcoming episode's card when Plex has not named the episode yet (it sent nothing, or a placeholder such as TBA or Episode 7). Two lines of about 30 characters at most."
   }
 }

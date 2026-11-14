@@ -10,7 +10,7 @@ use plx_plex::plex::ServerId;
 
 fn show_on(store: &mut MetadataStore, sid: plx_plex::plex::ServerId) {
     let season = |index: i64| Season {
-        rk: format!("sk{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0,
+        rk: format!("sk{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0, guid: String::new(),
     };
     let mut episodes = EpisodeList::with_total(200);
     episodes.set_page(0, (0..EPISODE_PAGE).map(|i| episode(&format!("e{i}"))).collect());

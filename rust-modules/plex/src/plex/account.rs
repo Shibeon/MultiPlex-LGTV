@@ -77,6 +77,31 @@ const DISCOVER: &str = "https://discover.provider.plex.tv";
 #[cfg(test)]
 pub(super) const REAL_DISCOVER: &str = DISCOVER;
 
+/// The plex.tv **metadata provider's** real host: the catalogue the servers' own agent reads, and
+/// the one service that lists a season's episodes as Plex announces them, aired or not
+/// (`AccountClient::season_children` in `watchlist.rs`). Private and spelled once, like [`DISCOVER`]:
+/// a request is built on [`metadata_provider`], which a dev stand-in replaces, and
+/// `ci/check-plex-requests.py` fails on the host spelled anywhere else.
+const METADATA_PROVIDER: &str = "https://metadata.provider.plex.tv";
+
+/// The base [`metadata_provider`] answers for a resolved Discover base: the real metadata provider
+/// while Discover is the real service, else the SAME loopback stand-in (`tests/mock_pms.py` answers
+/// Discover, plex.tv and the metadata provider on one listener). A dev build that armed a stand-in
+/// for Discover therefore never reaches the real metadata provider either.
+fn metadata_base_of(resolved: &DiscoverBase) -> String {
+    match resolved.source {
+        DiscoverSource::Real => METADATA_PROVIDER.to_string(),
+        DiscoverSource::Trigger | DiscoverSource::FollowsPlexTv => resolved.base.clone(),
+    }
+}
+
+/// The metadata provider's base URL: [`METADATA_PROVIDER`], or, in a dev build, the loopback
+/// stand-in [`discover`] resolved to ([`metadata_base_of`]). A read through it is gated by the same
+/// [`discover_read_allowed`] rule as Discover's: a dev-token boot with no stand-in armed sends nothing.
+pub fn metadata_provider() -> String {
+    metadata_base_of(&discover_resolved())
+}
+
 /// Which rule decided the Discover base ([`discover`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiscoverSource {
@@ -1706,8 +1731,18 @@ pub struct HomeUser {
 #[cfg(test)]
 mod tests {
     use super::{endpoint_shape, pin_is_gone, AccountClient, Pin, Resource};
-    use super::{permit_read, resolve_discover, DiscoverSource, DISCOVER};
+    use super::{metadata_base_of, permit_read, resolve_discover, DiscoverSource, DISCOVER, METADATA_PROVIDER};
     use std::time::Duration;
+
+    /// The metadata provider follows Discover's resolution: the real host only while Discover is the
+    /// real service, and whichever loopback stand-in Discover took otherwise, never a foreign host.
+    #[test]
+    fn the_metadata_provider_follows_the_discover_stand_in() {
+        assert_eq!(metadata_base_of(&resolve_discover(None, None, false)), METADATA_PROVIDER);
+        assert_eq!(metadata_base_of(&resolve_discover(Some("http://127.0.0.1:9/"), None, false)), "http://127.0.0.1:9");
+        assert_eq!(metadata_base_of(&resolve_discover(None, Some("http://localhost:8"), true)), "http://localhost:8");
+        assert_eq!(metadata_base_of(&resolve_discover(Some("http://evil.example:9"), None, false)), METADATA_PROVIDER);
+    }
 
     #[test]
     fn discover_resolves_trigger_then_plex_tv_then_the_real_host() {

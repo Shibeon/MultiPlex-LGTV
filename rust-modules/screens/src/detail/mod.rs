@@ -300,6 +300,10 @@ pub struct DetailScreen {
     /// plate also shows for the still's pop — see `episodes::draw_cell`), keyed by episode so the
     /// state does not grow with the season.
     episode_cells: episodes::Cells,
+    /// The episodes Plex announces for the season that the server does not hold yet, drawn after
+    /// the season's own ([`Self::set_upcoming`]). Fed by the app every frame; not hashed, not in
+    /// [`SHAPE`] (an upcoming cell is keyed as a `Slot`, like any cell with no server identity).
+    upcoming: Upcoming,
     /// The About card's and the Languages column's focus lifts (`Located::About(0)` / `(1)`).
     about_card_lift: TextLift,
     about_lang_lift: TextLift,
@@ -453,11 +457,13 @@ struct LayoutStamp {
     n_col: u32,
     n_extras: u32,
     n_sea: u32,
+    /// The serial of the upcoming cells the strip appends (`DetailScreen::set_upcoming`).
+    upcoming: u64,
     flags: u8,
 }
 
 impl LayoutStamp {
-    fn of(d: &Detail) -> Self {
+    fn of(d: &Detail, upcoming: u64) -> Self {
         use std::hash::{Hash, Hasher};
         let hero = hero::hero_episode(d);
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -496,9 +502,24 @@ impl LayoutStamp {
             n_col: collection::len(d) as u32,
             n_extras: d.extras.len() as u32,
             n_sea: d.seasons.len() as u32,
+            upcoming,
             flags,
         }
     }
+}
+
+/// The upcoming episodes the app handed the page ([`DetailScreen::set_upcoming`]): the strip of
+/// the episode list `list` (`EpisodeList::id`), worded once as cells. A list the page no longer
+/// shows reads none ([`DetailScreen::upcoming_of`]).
+#[derive(Default)]
+struct Upcoming {
+    list: u64,
+    src: Option<std::sync::Arc<[plx_data::upcoming::UpcomingEpisode]>>,
+    cells: Vec<episodes::UpcomingCell>,
+    /// Moves with every change of `cells`: what the layout stamp keys on.
+    serial: u64,
+    /// The cells changed and the keys and layout have not caught up yet (the next tick does it).
+    dirty: bool,
 }
 
 /// One walk's hold on [`DetailScreen::layout`] (see [`DetailScreen::layout_pinned`]): the cache is
@@ -530,6 +551,30 @@ impl DetailScreen {
         if self.watchlist.set(membership) {
             plx_machine::idle::invalidate();
         }
+    }
+
+    /// The episodes Plex announces for the season on show that the server does not hold yet
+    /// (`plx_data::stores::upcoming`), for the episode list `list` (the `EpisodeList::id` they were
+    /// computed against). The strip draws them after the season's own once the page shows that
+    /// list; the same strip handed again changes nothing. The keys and the layout follow on the
+    /// next tick.
+    pub fn set_upcoming(&mut self, list: u64, strip: &std::sync::Arc<[plx_data::upcoming::UpcomingEpisode]>) {
+        let same = self.upcoming.list == list
+            && self.upcoming.src.as_ref().is_some_and(|s| std::sync::Arc::ptr_eq(s, strip) || **s == **strip);
+        if same {
+            return;
+        }
+        self.upcoming.list = list;
+        self.upcoming.src = Some(std::sync::Arc::clone(strip));
+        self.upcoming.cells = strip.iter().map(episodes::UpcomingCell::of).collect();
+        self.upcoming.serial = self.upcoming.serial.wrapping_add(1);
+        self.upcoming.dirty = true;
+        plx_machine::idle::invalidate();
+    }
+
+    /// The upcoming cells of `d`'s strip: none unless they were computed for the list it shows.
+    fn upcoming_of(&self, d: &Detail) -> &[episodes::UpcomingCell] {
+        if self.upcoming.list == d.episodes.id() { &self.upcoming.cells } else { &[] }
     }
 
     /// The membership the disc currently wears.
@@ -581,6 +626,7 @@ impl DetailScreen {
             episode_free: false,
             tab_scroll: Spring::at(0.0),
             episode_cells: episodes::Cells::new(),
+            upcoming: Upcoming::default(),
             ep_want: EpWant::default(),
             strip_seat: StripSeat::default(),
             about_card_lift: TextLift::new(),
@@ -681,6 +727,16 @@ impl DetailScreen {
                 for row in [episodes::Row::Still, episodes::Row::Text] {
                     if let Some(local) = episodes::elem(i, row) {
                         identities.push((local, DetailIdentity::Episode { sid: d.sid, rk: episode.rk.clone(), text: row == episodes::Row::Text }));
+                    }
+                }
+            }
+            // The upcoming cells after the season's own: no server identity, so each is keyed as a
+            // `Slot` of its place (the empty rating key below), focusable like any cell.
+            let n = d.episodes.len();
+            for k in 0..self.upcoming_of(d).len() {
+                for row in [episodes::Row::Still, episodes::Row::Text] {
+                    if let Some(local) = episodes::elem(n + k, row) {
+                        identities.push((local, DetailIdentity::Episode { sid: d.sid, rk: String::new(), text: row == episodes::Row::Text }));
                     }
                 }
             }
@@ -790,7 +846,15 @@ impl DetailScreen {
             Located::Collection(i) => collection::elem(ui_cards::clamp_slot(i, collection::len(d))?),
             Located::Extras(i) => extras::elem(ui_cards::clamp_slot(i, extras::len(d))?),
             Located::Cast(i) => cast::elem(ui_cards::clamp_slot(i, d.credits_len())?),
-            Located::Episode(i, row) => episodes::elem(d.episodes.nearest_loaded(i)?, row),
+            Located::Episode(i, row) => {
+                // Past the season's own episodes: the nearest upcoming cell, while there are any.
+                let (n, all) = (d.episodes.len(), episodes::len(d, self.upcoming_of(d)));
+                if i >= n && all > n {
+                    episodes::elem(i.min(all - 1), row)
+                } else {
+                    episodes::elem(d.episodes.nearest_loaded(i)?, row)
+                }
+            }
             _ => None,
         }?;
         self.engine_key(local)
@@ -929,6 +993,7 @@ impl DetailScreen {
             Some(Located::Episode(i, row)) => episodes::draw_focused(
                 f.painter,
                 d,
+                self.upcoming_of(d),
                 i,
                 row,
                 self.section_top(2, d, measure) - self.scroll.pos,
@@ -1032,7 +1097,7 @@ impl DetailScreen {
                 return c;
             }
         }
-        let stamp = LayoutStamp::of(d);
+        let stamp = LayoutStamp::of(d, self.upcoming.serial);
         if let Some(c) = self.layout.get() {
             if c.stamp == stamp {
                 return c;
@@ -1051,11 +1116,12 @@ impl DetailScreen {
     fn section_block_h(
         section: i32,
         d: &Detail,
+        upcoming: &[episodes::UpcomingCell],
         measure: &dyn plx_machine::machine::Measure,
     ) -> f32 {
         match section {
             1 => season::ROW_H,
-            2 => episodes::block_h(d, measure),
+            2 => episodes::block_h(d, upcoming, measure),
             3 => related::block_h(0.0),
             7 => collection::block_h(0.0),
             4 => cast::block_h(),
@@ -1126,7 +1192,7 @@ impl DetailScreen {
                 top[si] = y;
                 seen |= 1 << si;
             }
-            let h = Self::section_block_h(sec, d, measure);
+            let h = Self::section_block_h(sec, d, self.upcoming_of(d), measure);
             if si < section::SLOTS {
                 block[si] = h;
             }
@@ -1159,7 +1225,7 @@ impl DetailScreen {
                 out[n] = section::SectionId::Season.raw();
                 n += 1;
             }
-            if d.is_show && !d.episodes.is_empty() {
+            if d.is_show && episodes::len(d, self.upcoming_of(d)) > 0 {
                 out[n] = section::SectionId::Episode.raw();
                 n += 1;
             }
@@ -1259,7 +1325,7 @@ impl DetailScreen {
         if (1..section::SLOTS).contains(&si) && c.seen & (1 << si) != 0 {
             return c.block[si] + self.band_open(section);
         }
-        Self::section_block_h(section, d, measure) + self.band_open(section)
+        Self::section_block_h(section, d, self.upcoming_of(d), measure) + self.band_open(section)
     }
 
     fn locate(&self, elem: u32, meta: plx_data::metadata::MetadataView<'_>) -> Option<Located> {
@@ -1505,7 +1571,7 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
                 2 => out.push(GroupSpec {
                     id: episodes::EPISODES_GROUP,
                     kind: GroupKind::Grid {
-                        cols: d.episodes.len().max(1),
+                        cols: episodes::len(d, self.upcoming_of(d)).max(1),
                         holes: &[],
                     },
                     seat: Seat::Nearest,
@@ -1517,7 +1583,7 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
                         plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X,
                         self.block_h(2, d, measure),
                     ),
-                    len: d.episodes.len() * 2,
+                    len: episodes::len(d, self.upcoming_of(d)) * 2,
                     elem: ElemKind::Card,
                 }),
                 6 => out.push(GroupSpec {
@@ -1650,10 +1716,10 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
             // Left/Right stop at a hole: a page that has not landed has no cell to seat on, and the
             // press that reaches it is answered by the load the strip already asked for.
             Located::Episode(i, row) => match dir {
-                Dir::Left if i > 0 && self.detail(meta).is_some_and(|d| d.episodes.get(i - 1).is_some()) => {
+                Dir::Left if i > 0 && self.detail(meta).is_some_and(|d| episodes::cell(d, self.upcoming_of(d), i - 1).is_some()) => {
                     episodes::elem(i - 1, row)
                 }
-                Dir::Right if self.detail(meta).is_some_and(|d| d.episodes.get(i + 1).is_some()) => {
+                Dir::Right if self.detail(meta).is_some_and(|d| episodes::cell(d, self.upcoming_of(d), i + 1).is_some()) => {
                     episodes::elem(i + 1, row)
                 }
                 Dir::Down if row == episodes::Row::Still => episodes::elem(i, episodes::Row::Text),
@@ -1738,7 +1804,8 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
                 let base = match row {
                     episodes::Row::Still => episodes::still_rect(i, top, self.episode_scroll.pos),
                     episodes::Row::Text => {
-                        episodes::meta_rect(d.episodes.get(i)?, i, top, self.episode_scroll.pos, measure)
+                        let (ep, airs) = episodes::cell(d, self.upcoming_of(d), i)?;
+                        episodes::meta_rect(ep, airs, i, top, self.episode_scroll.pos, measure)
                     }
                 };
                 let drawn = if row == episodes::Row::Still {
@@ -1924,7 +1991,7 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
             let i = d.map(|d| d.cur_season.min(n.saturating_sub(1)));
             i.and_then(season::elem).unwrap_or(season::SEASON_ELEM_RANGE_START)
         } else if group == episodes::EPISODES_GROUP {
-            let n = d.map(|d| d.episodes.len()).unwrap_or(0);
+            let n = d.map(|d| episodes::len(d, self.upcoming_of(d))).unwrap_or(0);
             let i = ui_cards::column_near_x(
                 from.rect.cx(),
                 plx_ui::consts::MARGIN_X,
@@ -1934,8 +2001,9 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Focusable<H> f
                 n,
                 from_i,
             );
-            // column-from-x snaps to the nearest loaded index: a hole has no cell to seat on
-            let i = d.and_then(|d| d.episodes.nearest_loaded(i)).unwrap_or(i);
+            // column-from-x snaps to the nearest loaded index: a hole has no cell to seat on (an
+            // upcoming cell, past the season's own, is always there)
+            let i = d.and_then(|d| if i >= d.episodes.len() { Some(i) } else { d.episodes.nearest_loaded(i) }).unwrap_or(i);
             let row = if d.is_some_and(|d| {
                 from.rect.cy() > self.section_top_settled(2, d, measure) - self.scroll_target + self.block_h(2, d, measure)
             }) {
@@ -1989,7 +2057,7 @@ impl DetailScreen {
                 hero::focusable(c, self.full_trailer()) && hero::index_of(self.hero_set(meta), c).is_some()
             }
             Located::Season(i) => d.is_some_and(|d| i < d.seasons.len()),
-            Located::Episode(i, _) => d.is_some_and(|d| d.episodes.get(i).is_some()),
+            Located::Episode(i, _) => d.is_some_and(|d| episodes::cell(d, self.upcoming_of(d), i).is_some()),
             Located::Related(i) => d.is_some_and(|d| i < d.related.len()),
             Located::Extras(i) => d.is_some_and(|d| i < extras::len(d)),
             Located::Collection(i) => d.is_some_and(|d| i < collection::len(d)),
@@ -2195,14 +2263,13 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Machine<H> for
                     .current
                     .filter(|k| k.entry == self.entry)
                     .and_then(|k| self.locate(k.elem, meta))
-                    .is_some_and(|located| {
-                        matches!(
-                            located,
-                            Located::Season(_)
-                                | Located::Episode(_, episodes::Row::Still)
-                                | Located::Related(_)
-                                | Located::Collection(_)
-                        )
+                    .is_some_and(|located| match located {
+                        Located::Season(_) | Located::Related(_) | Located::Collection(_) => true,
+                        // An upcoming cell (past the season's own) has no item to open a menu on.
+                        Located::Episode(i, episodes::Row::Still) => {
+                            self.detail(meta).is_some_and(|d| d.episodes.get(i).is_some())
+                        }
+                        _ => false,
                     });
                 if supported {
                     self.content(fx, ContentReq::ItemMenu);
@@ -2583,6 +2650,7 @@ impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Screen<H> for 
                         episodes::draw(
                             below_hero,
                             d,
+                            self.upcoming_of(d),
                             top,
                             self.episode_scroll.pos,
                             match focus {
@@ -2761,6 +2829,14 @@ impl DetailScreen {
             intent.spot.clone(),
             intent.episode.clone(),
         ))
+    }
+
+    /// The upcoming cells the app last handed the page: the episode list they belong to, and each
+    /// cell's number, worded title and air line.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn upcoming_for_test(&self) -> (u64, Vec<(i64, String, String)>) {
+        let cells = self.upcoming.cells.iter().map(|c| (c.ep.index, c.ep.title.clone(), c.airs.clone())).collect();
+        (self.upcoming.list, cells)
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -3194,7 +3270,7 @@ impl DetailScreen {
             );
             // The cells on the axis (and one either side) register stops, as the strip paints only
             // those: the cost follows the screen, not the season's length.
-            for i in episodes::visible(self.episode_scroll.pos, d.episodes.len(), episodes::LEAD_CELLS) {
+            for i in episodes::visible(self.episode_scroll.pos, episodes::len(d, self.upcoming_of(d)), episodes::LEAD_CELLS) {
                 if let Some(e) = episodes::elem(i, episodes::Row::Still) {
                     elems.push((e, Activate::Press));
                 }
@@ -3559,7 +3635,7 @@ impl DetailScreen {
             };
             shelf.glide(dx, len);
         } else if sec == SectionId::Episode.raw() {
-            let len = d.episodes.len();
+            let len = episodes::len(d, self.upcoming_of(d));
             let viewport = plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X;
             let max = (len as f32 * (episodes::W + episodes::GAP) - episodes::GAP - viewport).max(0.0);
             self.episode_scroll.jump((self.episode_scroll.pos + dx).clamp(0.0, max));
@@ -3789,6 +3865,12 @@ impl DetailScreen {
 
     fn tick<H: ContentLike + crate::registry::MetadataLike + PlayerLike>(&mut self, t: Tick, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) {
         let meta = H::metadata(cx);
+        if std::mem::take(&mut self.upcoming.dirty) {
+            // The app handed new upcoming cells: key them (and let go of the ones that left)
+            // before anything below reads the strip.
+            self.sync_keys(meta);
+            self.prune_keys(&Self::held_keys(cx));
+        }
         self.refresh_spot_facts(meta);
         self.layout.set(None);
         let dt = t.dt();
@@ -3854,7 +3936,7 @@ impl DetailScreen {
                 let target = ui_cards::scroll_into_view(
                     self.episode_scroll.pos,
                     i,
-                    d.episodes.len(),
+                    episodes::len(d, self.upcoming_of(d)),
                     episodes::W,
                     episodes::GAP,
                     plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X,

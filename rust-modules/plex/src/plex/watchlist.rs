@@ -18,7 +18,8 @@
 //! `removeFromWatchlist`. Discover ratingKeys are 24-char hex, NOT PMS ratingKeys.
 use super::paging::{paged_path, PageReq};
 use super::account::{
-    discover, discover_read_allowed, endpoint_shape, note_response_contact, stand_in_armed, AccountClient,
+    discover, discover_read_allowed, endpoint_shape, metadata_provider, note_response_contact, stand_in_armed,
+    AccountClient,
 };
 use serde_json::Value;
 
@@ -87,6 +88,33 @@ pub struct CatalogItem {
     /// picture), an ABSOLUTE https URL the PMS photo transcoder renders. `None` when the answer has
     /// no usable one; the catalog page does not read it.
     pub cover_art: Option<String>,
+}
+
+/// One episode of a season as the metadata provider announces it
+/// ([`AccountClient::season_children`]). Every field but `index` tolerates absence.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProviderEpisode {
+    /// The episode's number in its season: what joins it to a server's copy.
+    pub index: i64,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    /// `originallyAvailableAt`, `YYYY-MM-DD`.
+    pub aired: Option<String>,
+    /// The still, an ABSOLUTE `http(s)` URL (the provider spells its images absolute) that a
+    /// reachable server's photo transcoder renders; `None` when the entry has no usable one.
+    pub thumb: Option<String>,
+}
+
+/// The entries of a provider `/children` container that carry an `index`, in wire order.
+fn provider_episodes(container: &Value) -> Vec<ProviderEpisode> {
+    let entries: &[Value] = container.get("Metadata").and_then(Value::as_array).map_or(&[], Vec::as_slice);
+    entries.iter().filter_map(|e| Some(ProviderEpisode {
+        index: int(e, "index")?,
+        title: text(e, "title"),
+        summary: text(e, "summary"),
+        aired: text(e, "originallyAvailableAt"),
+        thumb: text(e, "thumb").filter(|u| u.starts_with("https://") || u.starts_with("http://")),
+    })).collect()
 }
 
 /// Why a watchlist call did not produce its answer. HTTP statuses map to the named variants.
@@ -457,6 +485,27 @@ impl AccountClient {
         })
     }
 
+    /// The episodes the metadata provider lists for one season (`GET metadata.provider
+    /// /library/metadata/<season hex>/children`): every episode Plex announces, aired or not, with
+    /// its air date when one is known. `language` is the interface's language tag, sent as
+    /// `X-Plex-Language` so titles and summaries come back translated where the provider has them;
+    /// a tag that is not plain letters, digits and `-` is not sent. An entry with no `index` is
+    /// skipped (nothing could place it in the season); shape drift costs a field, never the list.
+    pub fn season_children(&self, hex: &str, language: Option<&str>, req: WatchTransport)
+        -> Result<Vec<ProviderEpisode>, WatchlistError>
+    {
+        if !is_hex_id(hex) {
+            return Err(WatchlistError::BadRequest);
+        }
+        let query = language
+            .filter(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+            .map(|l| format!("?X-Plex-Language={l}"))
+            .unwrap_or_default();
+        let response = call(req, "GET", format!("{}/library/metadata/{hex}/children{query}", metadata_provider()))?;
+        let body = parse(&response)?;
+        Ok(provider_episodes(container(&body)?))
+    }
+
     /// `PUT /actions/addToWatchlist?ratingKey=<hex>`.
     pub fn watchlist_add(&self, hex: &str, req: WatchTransport) -> Result<(), WatchlistError> {
         self.write_action("addToWatchlist", hex, req)
@@ -747,6 +796,42 @@ mod tests {
         assert_eq!(item.duration_ms, Some(5_400_000));
         let (out, _) = run(vec![ok(r#"{"MediaContainer":{"size":0}}"#)], |c, t| c.catalog_item(HEX, t));
         assert_eq!(out, Err(WatchlistError::Unreadable));
+    }
+
+    /// A provider `/children` answer: one GET on the metadata provider's base (in a host test, the
+    /// real host the stand-in replaces) carrying the language; every entry with an index, in wire
+    /// order, with the fields it has; a relative thumb is no thumb, and an entry with no index is
+    /// skipped. A bad id and a bad language never reach a URL.
+    #[test]
+    fn season_children_reads_the_announced_episodes_of_a_season() {
+        let body = r#"{"MediaContainer":{"size":4,"Metadata":[
+            {"ratingKey":"aa","type":"episode","index":1,"title":"Pilot","summary":"S","originallyAvailableAt":"2026-01-02",
+             "thumb":"https://metadata-static.plex.tv/e/1.jpg"},
+            {"type":"episode","index":"2","title":"","thumb":"/library/metadata/x/thumb"},
+            {"type":"episode","title":"No index"},
+            {"type":"episode","index":3,"originallyAvailableAt":"2031-05-01"}]}}"#;
+        let (out, seen) = run(vec![ok(body)], |c, t| c.season_children(HEX, Some("fr"), t));
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].method, "GET");
+        assert_eq!(seen[0].url, format!("{}/library/metadata/{HEX}/children?X-Plex-Language=fr", metadata_provider()));
+        assert!(seen[0].url.starts_with("https://metadata.provider.plex.tv/"), "{}", seen[0].url);
+        let eps = out.unwrap();
+        assert_eq!(eps.iter().map(|e| e.index).collect::<Vec<_>>(), [1, 2, 3]);
+        assert_eq!(eps[0], ProviderEpisode {
+            index: 1, title: Some("Pilot".into()), summary: Some("S".into()), aired: Some("2026-01-02".into()),
+            thumb: Some("https://metadata-static.plex.tv/e/1.jpg".into()) });
+        assert_eq!((eps[1].title.as_deref(), eps[1].thumb.as_deref(), eps[1].aired.as_deref()), (None, None, None));
+        assert_eq!(eps[2].aired.as_deref(), Some("2031-05-01"));
+        // An empty season is an answer; a body with no container is not.
+        let (out, _) = run(vec![ok(r#"{"MediaContainer":{"size":0}}"#)], |c, t| c.season_children(HEX, None, t));
+        assert_eq!(out, Ok(Vec::new()));
+        let (out, _) = run(vec![ok("{}")], |c, t| c.season_children(HEX, None, t));
+        assert_eq!(out, Err(WatchlistError::Unreadable));
+        let (out, seen) = run(vec![status(404)], |c, t| c.season_children(HEX, Some("pt&x=1"), t));
+        assert_eq!(out, Err(WatchlistError::NotFound));
+        assert!(!seen[0].url.contains('?'), "a language that is not a plain tag is not sent");
+        let (out, seen) = run(vec![], |c, t| c.season_children("../x", None, t));
+        assert_eq!((out, seen.len()), (Err(WatchlistError::BadRequest), 0));
     }
 
     const COVER: &str = "https://metadata-static.plex.tv/a/plex/ab4a4e0e-798b-42dc-bc10-65219fdc54d7.jpg";

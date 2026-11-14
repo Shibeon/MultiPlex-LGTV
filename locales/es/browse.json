@@ -284,5 +284,8 @@
   "browse.clock.key_changed": "La clave de tu servidor ha cambiado. Conecta el televisor a internet una vez para que la app pueda comprobarla de nuevo.",
   "browse.detail.mark_episode_watched": "Marcar episodio como visto",
   "browse.detail.mark_episode_unwatched": "Marcar episodio como no visto",
-  "browse.detail.minutes_left": "Quedan {minutes} min"
+  "browse.detail.minutes_left": "Quedan {minutes} min",
+  "browse.detail.upcoming_airs": "Se emite el {date}",
+  "browse.detail.upcoming_air_date_unknown": "Fecha de emisión desconocida",
+  "browse.detail.upcoming_title_tba": "Título por anunciar"
 }

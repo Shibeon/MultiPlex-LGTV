@@ -116,6 +116,7 @@ fn bare(sid: ServerId, rk: &str) -> DetailScreen {
         episode_scroll: Spring::at(0.0),
         tab_scroll: Spring::at(0.0),
         episode_cells: episodes::Cells::new(),
+        upcoming: Default::default(),
             ep_want: Default::default(),
             strip_seat: Default::default(),
         about_card_lift: plx_ui::text_lift::TextLift::new(),
@@ -186,6 +187,7 @@ fn fixture(sid: ServerId) -> Detail {
             title: "Season 1".into(),
             leaf_count: 12,
             viewed_leaf_count: 0,
+            guid: String::new(),
         }],
         episodes,
         related,
@@ -470,6 +472,7 @@ fn fixture_with_seasons(sid: ServerId, season_count: usize, cur_season: usize) -
             title: format!("Season {i}"),
             leaf_count: 12,
             viewed_leaf_count: 0,
+            guid: String::new(),
         })
         .collect();
     d.cur_season = cur_season;

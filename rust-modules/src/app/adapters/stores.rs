@@ -3,13 +3,13 @@
 //! A store's step asks for IO by pushing a typed job on its outbox; it starts no thread and reads
 //! no clock. The `Bridge` takes the jobs right after the step that emitted them
 //! (`Bridge::metadata_run`, `Bridge::person_pump`, `Bridge::collection_pump`,
-//! `Bridge::catalog_open`, `Bridge::catalog_pump`, `Bridge::subsearch_pump`, `Bridge::search_pump`,
+//! `Bridge::catalog_open`, `Bridge::catalog_pump`, `Bridge::upcoming_feed`, `Bridge::subsearch_pump`, `Bridge::search_pump`,
 //! `Bridge::reconcile_pump`, `Bridge::viewstate_run`, `Bridge::viewstate_pump`,
 //! `Bridge::browse_discover_pump`, or
 //! `Bridge::start_store_jobs` after a command run on the bare store)
 //! and hands each to [`StoreRunner::start`], which owns everything the data layer must not: the
 //! tape's admission record, the worker thread and the process-global client the request reads. A
-//! kind that is not on the tape (the catalog read, a plex.tv call that names no client; subtitle
+//! kind that is not on the tape (the catalog and upcoming-episodes reads, plex.tv calls that name no client; subtitle
 //! search; the Search screen's fetches and its recents writes; view reconcile; the Library's
 //! section-hubs, directory and page reads; the view-state writes; the Metadata season switch,
 //! episode-page window, Related window and alt-sources read) is started with no admission record, as its inline
@@ -71,6 +71,7 @@ use plx_data::metadata::{
 };
 use plx_data::person::{finish_person_job, PersonPort, PersonReq};
 use plx_data::stores::catalog::{finish_catalog_job, CatalogPort, CatalogReq};
+use plx_data::stores::upcoming::{finish_upcoming_job, UpcomingPort, UpcomingReq};
 use plx_data::stores::viewreconcile::{finish_reconcile_job, ReconcilePort, ReconcileReq};
 use plx_data::pms::{launch_hubs_job, HubRequest, HubsPort};
 use plx_data::stores::{Admission, StoreJob};
@@ -388,6 +389,7 @@ impl StoreRunner {
             StoreJob::Person(job, port) => self.start_person(job, port),
             StoreJob::Hubs(job, port) => self.start_hubs(job, port),
             StoreJob::Catalog(job, port) => self.start_catalog(job, port),
+            StoreJob::Upcoming(job, port) => self.start_upcoming(job, port),
             StoreJob::SubtitleSearch(job, port) => self.start_subsearch(job, port),
             StoreJob::ViewReconcile(job, port) => self.start_reconcile(job, port),
             StoreJob::BrowseHubs(job, port) => self.start_browse_hubs(job, port),
@@ -446,6 +448,7 @@ impl StoreRunner {
                 | StoreJob::Collection(..)
                 | StoreJob::Person(..)
                 | StoreJob::Catalog(..)
+                | StoreJob::Upcoming(..)
                 | StoreJob::SubtitleSearch(..)
                 | StoreJob::ViewReconcile(..)
                 | StoreJob::BrowseHubs(..)
@@ -548,6 +551,7 @@ impl StoreRunner {
                     | StoreJob::Person(..)
                     | StoreJob::Hubs(..)
                     | StoreJob::Catalog(..)
+                    | StoreJob::Upcoming(..)
                     | StoreJob::SubtitleSearch(..)
                     | StoreJob::ViewReconcile(..)
                     | StoreJob::BrowseHubs(..)
@@ -712,6 +716,33 @@ fn start_watchlist_stream(&mut self, job: StoreJob) {
             }
             #[cfg(test)]
             Self::Held { parked, .. } => parked.push(StoreJob::WatchlistWrite(job, port)),
+        }
+    }
+
+    /// The upcoming-episodes read is not on the tape and names no client (a plex.tv read as the
+    /// captured identity), so the launch is the whole decision, as for the catalog read. A launch
+    /// that did not happen is refused: the store's pump owes the season and asks again after its wait.
+    fn start_upcoming(&mut self, job: Job<UpcomingReq>, port: UpcomingPort) {
+        let addr = job.addr;
+        let refusal = port.clone();
+        if !self.launch_upcoming(job, port) {
+            refusal.refused(addr);
+        }
+    }
+
+    fn launch_upcoming(&mut self, job: Job<UpcomingReq>, port: UpcomingPort) -> bool {
+        match self {
+            Self::Live => {
+                let Job { addr, req } = job;
+                plx_base::task::spawn_small("upcoming-fetch", move || {
+                    finish_upcoming_job(&port, addr, req);
+                })
+            }
+            #[cfg(test)]
+            Self::Held { parked: held, .. } => {
+                held.push(StoreJob::Upcoming(job, port));
+                true
+            }
         }
     }
 
@@ -1353,6 +1384,7 @@ fn start_watchlist_stream(&mut self, job: StoreJob) {
                     }
                 }
                 StoreJob::Catalog(job, port) => finish_catalog_job(&port, job.addr, job.req),
+                StoreJob::Upcoming(job, port) => finish_upcoming_job(&port, job.addr, job.req),
                 StoreJob::SubtitleSearch(job, port) => {
                     // The registry may have moved on since the job was parked: a request whose
                     // client is gone is refused, as the launch would have refused it.
@@ -4222,7 +4254,7 @@ mod tests {
     fn show_on(store: &mut MetadataStore, sid: ServerId) {
         use plx_data::metadata::{Detail, Episode, EpisodeList, Season, EPISODE_PAGE};
         let season = |index: i64| Season {
-            rk: format!("sk{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0,
+            rk: format!("sk{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0, guid: String::new(),
         };
         let mut episodes = EpisodeList::with_total(200);
         episodes.set_page(0, (0..EPISODE_PAGE).map(|i| Episode { rk: format!("e{i}"), ..Default::default() }).collect());

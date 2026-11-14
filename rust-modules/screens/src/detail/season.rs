@@ -214,6 +214,7 @@ mod tests {
                     title: "Season 1".into(),
                     leaf_count: 1,
                     viewed_leaf_count: 0,
+                    guid: String::new(),
                 },
                 plx_data::metadata::Season {
                     rk: "s3".into(),
@@ -221,6 +222,7 @@ mod tests {
                     title: "Season 3".into(),
                     leaf_count: 1,
                     viewed_leaf_count: 0,
+                    guid: String::new(),
                 },
             ],
             ..Default::default()

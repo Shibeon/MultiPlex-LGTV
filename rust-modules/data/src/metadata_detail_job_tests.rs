@@ -108,7 +108,7 @@ fn a_detail_job_captures_the_season_the_page_shows_for_the_same_item_only() {
     let sid = plx_plex::plex::ServerId::UNSET;
     let mut store = MetadataStore::default();
     let season = |index| Season {
-        rk: format!("s{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0,
+        rk: format!("s{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0, guid: String::new(),
     };
     set_current_for_test(store.state_mut(), Some(Detail {
         sid, rk: "show".into(), is_show: true, seasons: vec![season(1), season(3)], cur_season: 1,

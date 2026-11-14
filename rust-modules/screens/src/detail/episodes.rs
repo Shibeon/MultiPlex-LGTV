@@ -3,6 +3,12 @@
 //! A filmstrip cell owns two element identities: the still plays (and may be held for its item
 //! menu), while the text block opens the episode's own detail page. Encoding the row in the key
 //! keeps both targets distinct through restoration and reconciliation.
+//!
+//! After the season's own episodes the strip draws the ones Plex announces that the server does not
+//! hold yet ([`UpcomingCell`], fed by `plx_data::upcoming`): they take the indices past the server's
+//! last, are keyed and focusable like any cell (so the strip scrolls through them), and do nothing
+//! on OK (no rating key, nothing to play or open). Their card says when they air instead of a
+//! length, and carries no progress or watched state.
 
 use std::ffi::CString;
 
@@ -75,6 +81,58 @@ pub enum Action {
     OpenDetail(plx_plex::plex::ServerId, String),
 }
 
+/// An announced episode the server does not hold, as the strip draws it after the season's own:
+/// the provider's facts in an [`Episode`] (no rating key, part, length or progress) with its title
+/// already worded ([`plx_data::upcoming::is_placeholder_title`]), and the air line in the viewer's
+/// language.
+#[derive(Clone)]
+pub struct UpcomingCell {
+    pub ep: Episode,
+    /// "Airs <date>", or that the date is not known yet.
+    pub airs: String,
+}
+
+impl UpcomingCell {
+    pub fn of(u: &plx_data::upcoming::UpcomingEpisode) -> Self {
+        use plx_platform::i18n::msg;
+        let title = if plx_data::upcoming::is_placeholder_title(&u.title) {
+            msg::browse_detail_upcoming_title_tba().to_string()
+        } else {
+            u.title.clone()
+        };
+        let date = u.aired.as_deref().map(|d| plx_ui::fmt::pretty_date(d, 0)).filter(|d| !d.is_empty());
+        let airs = match date {
+            Some(date) => msg::browse_detail_upcoming_airs(&date),
+            None => msg::browse_detail_upcoming_air_date_unknown().to_string(),
+        };
+        let ep = Episode {
+            index: u.index,
+            title,
+            summary: u.summary.clone(),
+            aired: u.aired.clone().unwrap_or_default(),
+            thumb: u.thumb.clone(),
+            ..Default::default()
+        };
+        Self { ep, airs }
+    }
+}
+
+/// How many cells the strip holds: the season's episodes, then the upcoming ones.
+pub fn len(d: &Detail, upcoming: &[UpcomingCell]) -> usize {
+    d.episodes.len() + upcoming.len()
+}
+
+/// Cell `i` of the strip: a server episode (`None` for its air line), or an upcoming one past the
+/// season's last. `None` for a server page that has not landed and past the strip's end.
+pub fn cell<'a>(d: &'a Detail, upcoming: &'a [UpcomingCell], i: usize) -> Option<(&'a Episode, Option<&'a str>)> {
+    let n = d.episodes.len();
+    if i < n {
+        d.episodes.get(i).map(|e| (e, None))
+    } else {
+        upcoming.get(i - n).map(|c| (&c.ep, Some(c.airs.as_str())))
+    }
+}
+
 pub fn action(d: &Detail, key: u32, loading: bool) -> Action {
     if loading {
         return Action::None;
@@ -82,6 +140,7 @@ pub fn action(d: &Detail, key: u32, loading: bool) -> Action {
     let Some((i, row)) = locate(key) else {
         return Action::None;
     };
+    // An upcoming cell (past the server's last episode) has no rating key: OK does nothing on it.
     let Some(ep) = d.episodes.get(i) else {
         return Action::None;
     };
@@ -122,7 +181,8 @@ fn meta_items(title_h: f32, summary_h: Option<f32>, has_row: bool) -> [Item; 3] 
     ]
 }
 
-pub fn meta_layout(ep: &Episode, measure: &dyn plx_machine::machine::Measure) -> (f32, f32, f32) {
+/// `airs` is an upcoming cell's air line, which takes the date row's place (always present).
+pub fn meta_layout(ep: &Episode, airs: Option<&str>, measure: &dyn plx_machine::machine::Measure) -> (f32, f32, f32) {
     let title_h = TextView::new(&ep.title, theme::size::BODY, theme::TEXT_PRIMARY)
         .bold()
         .with_measure(measure)
@@ -139,7 +199,8 @@ pub fn meta_layout(ep: &Episode, measure: &dyn plx_machine::machine::Measure) ->
             .max_lines(SUMMARY_MAX_LINES)
             .measure_h(TEXT_W)
     };
-    let items = meta_items(title_h, (!ep.summary.is_empty()).then_some(summary_h), !(ep.aired.is_empty() && ep.rating.is_empty()));
+    let has_row = airs.is_some() || !(ep.aired.is_empty() && ep.rating.is_empty());
+    let items = meta_items(title_h, (!ep.summary.is_empty()).then_some(summary_h), has_row);
     let stack = VStack::new(&items, theme::space::MD, Anchor::Top(TITLE_DY));
     // Where a summary WOULD stand (unread when there is none: the draw skips an empty one): the
     // same stack with a zero-high summary present.
@@ -150,8 +211,8 @@ pub fn meta_layout(ep: &Episode, measure: &dyn plx_machine::machine::Measure) ->
     (date_y, summary_y, bottom + META_BOTTOM_PAD)
 }
 
-pub fn meta_rect(ep: &Episode, i: usize, top: f32, scroll: f32, measure: &dyn plx_machine::machine::Measure) -> Rect {
-    let (_, _, h) = meta_layout(ep, measure);
+pub fn meta_rect(ep: &Episode, airs: Option<&str>, i: usize, top: f32, scroll: f32, measure: &dyn plx_machine::machine::Measure) -> Rect {
+    let (_, _, h) = meta_layout(ep, airs, measure);
     Rect::new(
         strip_x(i) - scroll - TEXT_PAD_X,
         top + H + META_TOP - TEXT_PAD_Y,
@@ -168,16 +229,13 @@ fn reserved_text_h() -> f32 {
     TITLE_DY + VStack::new(&items, theme::space::MD, Anchor::Top(TITLE_DY)).height() + META_BOTTOM_PAD
 }
 
-pub fn block_h(d: &Detail, measure: &dyn plx_machine::machine::Measure) -> f32 {
+pub fn block_h(d: &Detail, upcoming: &[UpcomingCell], measure: &dyn plx_machine::machine::Measure) -> f32 {
     if d.episodes.len() > plx_data::metadata::EPISODE_PAGE {
         return H + reserved_text_h() + META_TOP;
     }
-    H + d
-        .episodes
-        .iter_loaded()
-        .map(|(_, e)| meta_layout(e, measure).2)
-        .fold(0.0, f32::max)
-        + META_TOP
+    let server = d.episodes.iter_loaded().map(|(_, e)| meta_layout(e, None, measure).2);
+    let coming = upcoming.iter().map(|c| meta_layout(&c.ep, Some(&c.airs), measure).2);
+    H + server.chain(coming).fold(0.0, f32::max) + META_TOP
 }
 
 /// The episode indices whose cells reach the screen at strip scroll `scroll`, widened by `lead`
@@ -323,6 +381,7 @@ fn cell_rect(x: f32) -> Rect {
 pub fn draw(
     p: Painter,
     d: &Detail,
+    upcoming: &[UpcomingCell],
     top: f32,
     scroll: f32,
     focused: Option<(usize, Row)>,
@@ -343,12 +402,12 @@ pub fn draw(
     };
     let p = p.alpha(stale).translate(-scroll, top);
     let cap_top = kicker_cap_top();
-    for i in visible(scroll, d.episodes.len(), 0) {
+    for i in visible(scroll, len(d, upcoming), 0) {
         let x = strip_x(i);
         if !on_axis(x - scroll, W, plx_ui::consts::SCR_W, 0.0) {
             continue;
         }
-        let Some(ep) = d.episodes.get(i) else {
+        let Some((ep, airs)) = cell(d, upcoming, i) else {
             // A page that has not landed: the still's own skeleton, at the cell's own place.
             plx_ui::placeholder::skeleton(p, plx_ui::placeholder::Reason::CardSkeleton, "", cell_rect(x), CARD_RADIUS);
             continue;
@@ -356,7 +415,7 @@ pub fn draw(
         if left_out(i) {
             continue;
         }
-        draw_cell(p, d, i, ep, focused, scale(i), dip(i), &lift(i), cap_top, measure);
+        draw_cell(p, d, i, ep, airs, focused, scale(i), dip(i), &lift(i), cap_top, measure);
         if reloading {
             plx_ui::placeholder::note(p, plx_ui::placeholder::Reason::StaleEpisodes, &ep.rk);
             plx_ui::placeholder::stale_cover(p, cell_rect(x), CARD_RADIUS);
@@ -368,6 +427,7 @@ pub fn draw(
 pub fn draw_focused(
     p: Painter,
     d: &Detail,
+    upcoming: &[UpcomingCell],
     index: usize,
     row: Row,
     top: f32,
@@ -378,7 +438,7 @@ pub fn draw_focused(
     measure: &dyn plx_machine::machine::Measure,
     meta: plx_data::metadata::MetadataView<'_>,
 ) {
-    let Some(episode) = d.episodes.get(index) else {
+    let Some((episode, airs)) = cell(d, upcoming, index) else {
         return;
     };
     let reloading = meta.season_loading();
@@ -393,6 +453,7 @@ pub fn draw_focused(
         d,
         index,
         episode,
+        airs,
         Some((index, row)),
         scale,
         dip,
@@ -410,13 +471,16 @@ pub fn draw_focused(
 /// (the still is drawn at `scale * dip`; the pop that earns the label plate follows the spring
 /// alone, as a card's does, so a press does not blink the plate out); `lift` is the label block's
 /// own focus state (earned by the TEXT stop alone). The block's plate shows for either stop, at
-/// whichever of the two is further along.
+/// whichever of the two is further along. `airs` marks an upcoming cell: its air line stands in the
+/// date row, it has no footer (no length, no progress, no watched tick), and with no image its
+/// still says the air line instead.
 #[allow(clippy::too_many_arguments)]
 fn draw_cell(
     p: Painter,
     d: &Detail,
     i: usize,
     ep: &Episode,
+    airs: Option<&str>,
     focused: Option<(usize, Row)>,
     scale: f32,
     dip: f32,
@@ -434,63 +498,80 @@ fn draw_cell(
     let card = Rect::new(x, -theme::EP_CARD_FOCUS_LIFT * widgets::pop_factor(drawn_scale, theme::EP_CARD_FOCUS_SCALE), W, H);
     #[cfg(feature = "devtriggers")]
     plx_ui::card_probe::begin_card();
-    widgets::draw_card_peaked(
-        p,
-        card,
-        d.sid.raw(),
-        &ep.thumb,
-        (640, 360),
-        CARD_RADIUS,
-        focused_here,
-        drawn_scale,
-        theme::EP_CARD_FOCUS_SCALE,
-    );
     let drawn = if focused_here {
         card.scaled(drawn_scale)
     } else {
         card
     };
+    if airs.is_some() && ep.thumb.is_empty() {
+        // An upcoming episode the provider has no still for: ABSENCE, not a wait (nothing will
+        // arrive), so the uncounted absent plate and never the `Art::Thumb { key: "" }` ground.
+        widgets::absent_card(p, drawn, CARD_RADIUS);
+    } else {
+        widgets::draw_card_peaked(
+            p,
+            card,
+            d.sid.raw(),
+            &ep.thumb,
+            (640, 360),
+            CARD_RADIUS,
+            focused_here,
+            drawn_scale,
+            theme::EP_CARD_FOCUS_SCALE,
+        );
+    }
     // `plxnative-focusx`: the strip is not a `cards::Shelf`, so it reports its focused still itself.
     #[cfg(feature = "devtriggers")]
     if still_focused && !p.is_recording() {
         let at = p.to_screen(drawn).0;
         plx_ui::card_probe::focused(at.x, at.y, at.w, i, d.episodes.len(), i);
     }
-    let st = state(ep);
-    widgets::art_scrim(
-        p,
-        drawn,
-        CARD_RADIUS,
-        widgets::STILL_SCRIM_H_1,
-        widgets::STILL_SCRIM_A,
-    );
-    // The strip's footer: no show name (the page is inside one season of one show), no episode tag,
-    // and no focus cue (every cell plays, and the focus pop is the cue). Watched = the length and a
-    // muted tick; in progress = "Nm left" and the amber bar; not started = the length alone.
-    still_footer::draw_footer(
-        p,
-        drawn,
-        "",
-        &Footer {
-            tag: "",
-            status: &st.label,
-            right: match (st.progress, st.glyph) {
-                (Some(frac), _) => Right::Bar(frac),
-                (None, Glyph::Watched) => Right::Tick,
-                (None, _) => Right::None,
+    if let Some(airs) = airs.filter(|_| ep.thumb.is_empty()) {
+        // No image yet: the still's ground says when the episode airs, centred on the card.
+        let (cap_top, baseline) = plx_gfx::text::text_cap_band(theme::size::BODY, 0);
+        if let Ok(line) = CString::new(airs) {
+            let (cx, cy) = (drawn.x + drawn.w * 0.5, drawn.y + drawn.h * 0.5);
+            p.text(line.as_ptr(), cx, cy - (cap_top + baseline) * 0.5, theme::size::BODY, theme::TEXT_SECONDARY, 1, 0);
+        }
+    }
+    // An upcoming cell has no length, progress or watched state: no scrim and no footer.
+    if airs.is_none() {
+        let st = state(ep);
+        widgets::art_scrim(
+            p,
+            drawn,
+            CARD_RADIUS,
+            widgets::STILL_SCRIM_H_1,
+            widgets::STILL_SCRIM_A,
+        );
+        // The strip's footer: no show name (the page is inside one season of one show), no episode tag,
+        // and no focus cue (every cell plays, and the focus pop is the cue). Watched = the length and a
+        // muted tick; in progress = "Nm left" and the amber bar; not started = the length alone.
+        still_footer::draw_footer(
+            p,
+            drawn,
+            "",
+            &Footer {
+                tag: "",
+                status: &st.label,
+                right: match (st.progress, st.glyph) {
+                    (Some(frac), _) => Right::Bar(frac),
+                    (None, Glyph::Watched) => Right::Tick,
+                    (None, _) => Right::None,
+                },
+                cue: None,
+                focus: 0.0,
+                place: still_footer::Place::InArt,
             },
-            cue: None,
-            focus: 0.0,
-            place: still_footer::Place::InArt,
-        },
-        measure,
-    );
+            measure,
+        );
+    }
 
     // Every episode's label block draws in the same ink; focus is marked by the shared
     // `ui::text_lift` treatment. The plate shows while the still pops or the text is lifted; the
     // scale and shadow belong to the text stop alone, and the still above does not follow them.
     let text_top = H + META_TOP;
-    let (date_y, summary_y, content_h_with_pad) = meta_layout(ep, measure);
+    let (date_y, summary_y, content_h_with_pad) = meta_layout(ep, airs, measure);
     let text_x = x + PLATTER_PAD;
     let labels = |p: Painter| {
         if let Ok(kicker) = CString::new(plx_ui::fmt::episode_card_kicker(ep.index)) {
@@ -517,7 +598,10 @@ fn draw_cell(
             .max_lines(SUMMARY_MAX_LINES)
             .draw(p, Rect::new(text_x, text_top + summary_y, TEXT_W, 0.0));
         }
-        let date = plx_ui::fmt::pretty_date(&ep.aired, 0);
+        let date = match airs {
+            Some(airs) => airs.to_string(),
+            None => plx_ui::fmt::pretty_date(&ep.aired, 0),
+        };
         if let Ok(date) = CString::new(date) {
             let width = p.text(
                 date.as_ptr(),
@@ -690,7 +774,7 @@ mod tests {
         let d = Detail::default();
         let ep = Episode { dur_ms: 100, ..Default::default() };
         plx_ui::draw_census::capture(|| {
-            draw_cell(Painter::recording(), &d, 0, &ep, None, scale, 1.0, lift, kicker_cap_top(), &measure)
+            draw_cell(Painter::recording(), &d, 0, &ep, None, None, scale, 1.0, lift, kicker_cap_top(), &measure)
         })
     }
 
@@ -699,7 +783,7 @@ mod tests {
         let measure = plx_ui::fixture::FixtureMeasure;
         let d = Detail::default();
         plx_ui::draw_census::capture_text(|| {
-            draw_cell(Painter::recording(), &d, 0, ep, None, 1.0, 1.0, &TextLift::new(), kicker_cap_top(), &measure)
+            draw_cell(Painter::recording(), &d, 0, ep, None, None, 1.0, 1.0, &TextLift::new(), kicker_cap_top(), &measure)
         })
         .into_iter()
         .map(|(text, _)| text)
@@ -846,14 +930,14 @@ mod tests {
         let measure = plx_ui::fixture::FixtureMeasure;
         let md = theme::space::MD;
         let full = Episode { title: "Pilot".into(), summary: "word ".repeat(30), aired: "2020-01-01".into(), ..Default::default() };
-        let (date_y, summary_y, bottom) = meta_layout(&full, &measure);
+        let (date_y, summary_y, bottom) = meta_layout(&full, None, &measure);
         let title_h = summary_y - TITLE_DY - md;
         assert!(title_h >= TITLE_LEAD);
         assert!(date_y > summary_y + md, "a summary keeps its MD before the date");
         assert!((bottom - (date_y + theme::size::MICRO as f32 + META_BOTTOM_PAD)).abs() < 0.01);
         // (a) no summary, a date: one MD under the title.
         let dated = Episode { summary: String::new(), ..full.clone() };
-        let (date_y, _, bottom) = meta_layout(&dated, &measure);
+        let (date_y, _, bottom) = meta_layout(&dated, None, &measure);
         assert!((date_y - (TITLE_DY + title_h + md)).abs() < 0.01, "the date stands one MD under the title: {date_y}");
         assert!((bottom - (date_y + theme::size::MICRO as f32 + META_BOTTOM_PAD)).abs() < 0.01);
     }
@@ -863,9 +947,9 @@ mod tests {
     fn a_title_only_platter_has_no_trailing_md() {
         let measure = plx_ui::fixture::FixtureMeasure;
         let full = Episode { title: "Pilot".into(), summary: "word ".repeat(30), ..Default::default() };
-        let title_h = meta_layout(&full, &measure).1 - TITLE_DY - theme::space::MD;
+        let title_h = meta_layout(&full, None, &measure).1 - TITLE_DY - theme::space::MD;
         let title = Episode { title: "Pilot".into(), ..Default::default() };
-        let (_, _, bottom) = meta_layout(&title, &measure);
+        let (_, _, bottom) = meta_layout(&title, None, &measure);
         assert!((bottom - (TITLE_DY + title_h + META_BOTTOM_PAD)).abs() < 0.01, "no trailing MD: {bottom}");
     }
 
@@ -876,15 +960,35 @@ mod tests {
         let _g = plx_base::testlock::serial();
         let measure = plx_ui::fixture::FixtureMeasure;
         let ep = Episode { title: "Pilot".into(), rating: "TV-14".into(), ..Default::default() };
-        let (_, _, bottom) = meta_layout(&ep, &measure);
+        let (_, _, bottom) = meta_layout(&ep, None, &measure);
         let text_top = H + META_TOP;
         let platter_bottom = text_top + (bottom - META_BOTTOM_PAD) + PLATTER_PAD;
         let d = Detail::default();
         let runs = plx_ui::draw_census::capture_runs(|| {
-            draw_cell(Painter::recording(), &d, 0, &ep, None, 1.0, 1.0, &TextLift::new(), kicker_cap_top(), &measure)
+            draw_cell(Painter::recording(), &d, 0, &ep, None, None, 1.0, 1.0, &TextLift::new(), kicker_cap_top(), &measure)
         });
         let chip = runs.iter().find(|r| r.text == "TV-14").expect("the rating chip is drawn");
         assert!(chip.at.y + theme::size::MICRO as f32 <= platter_bottom + 0.5, "chip run at {} + MICRO past platter bottom {platter_bottom}", chip.at.y);
+    }
+
+    /// An upcoming episode with no still is absence, not a wait: its cell counts no placeholder
+    /// (a `key: ""` ground would be counted forever), while a server episode with no still still
+    /// counts its skeleton, as before.
+    #[test]
+    fn an_imageless_upcoming_cell_counts_no_placeholder() {
+        let _g = plx_base::testlock::serial();
+        let measure = plx_ui::fixture::FixtureMeasure;
+        let d = Detail::default();
+        let ep = Episode { index: 7, title: "Next".into(), ..Default::default() };
+        let draw = |airs: Option<&str>| {
+            plx_ui::placeholder::capture_declared(|| {
+                draw_cell(Painter::root(), &d, 0, &ep, airs, None, 1.0, 1.0, &TextLift::new(), kicker_cap_top(), &measure)
+            })
+            .1
+        };
+        let upcoming = draw(Some("Airs 2/1/2027"));
+        assert_eq!(upcoming.count, 0, "an upcoming cell with no still notes no placeholder: {:?}", upcoming.entries);
+        assert!(draw(None).count > 0, "the server episode's empty still is still counted");
     }
 }
 
@@ -906,6 +1010,6 @@ mod stack_tests {
         let measure = plx_ui::fixture::FixtureMeasure;
         let full = Episode { title: "Pilot".into(), summary: "word ".repeat(30), aired: "2020-01-01".into(), ..Default::default() };
         let none = Episode { summary: String::new(), ..full.clone() };
-        assert_eq!(meta_layout(&none, &measure).1, TITLE_DY + (meta_layout(&full, &measure).1 - TITLE_DY - theme::space::MD) + theme::space::MD);
+        assert_eq!(meta_layout(&none, None, &measure).1, TITLE_DY + (meta_layout(&full, None, &measure).1 - TITLE_DY - theme::space::MD) + theme::space::MD);
     }
 }

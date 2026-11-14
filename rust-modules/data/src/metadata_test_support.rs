@@ -112,6 +112,7 @@ pub(super) fn install_show_on(sid: plx_plex::plex::ServerId, rk: &str, cur: usiz
                 title: "Season 1".to_string(),
                 leaf_count: 0,
                 viewed_leaf_count: 0,
+                guid: String::new(),
             },
             Season {
                 rk: "sk2".to_string(),
@@ -119,6 +120,7 @@ pub(super) fn install_show_on(sid: plx_plex::plex::ServerId, rk: &str, cur: usiz
                 title: "Season 2".to_string(),
                 leaf_count: 0,
                 viewed_leaf_count: 0,
+                guid: String::new(),
             },
         ],
         episodes: eps.iter().map(|e| episode(e)).collect(),

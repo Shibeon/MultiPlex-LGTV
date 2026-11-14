@@ -3038,6 +3038,7 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         let endpoints = app.bridge.stops_pump();
         super::bridge::execute_endpoint_outcomes(&mut app.pages, endpoints);
         app.bridge.catalog_feed(&mut app.pages);
+        app.bridge.upcoming_feed(&mut app.pages);
         let endpoints = app.bridge.viewstate_pump();
         super::bridge::execute_endpoint_outcomes(&mut app.pages, endpoints);
         // …and the read-back it owes: what the server now says about the item(s) just written, on

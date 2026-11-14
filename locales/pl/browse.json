@@ -296,5 +296,8 @@
   "browse.clock.key_changed": "Klucz Twojego serwera się zmienił. Połącz raz TV z internetem, aby aplikacja mogła go ponownie sprawdzić.",
   "browse.detail.mark_episode_watched": "Oznacz odcinek jako obejrzany",
   "browse.detail.mark_episode_unwatched": "Oznacz odcinek jako nieobejrzany",
-  "browse.detail.minutes_left": "Pozostało: {minutes} min"
+  "browse.detail.minutes_left": "Pozostało: {minutes} min",
+  "browse.detail.upcoming_airs": "Emisja: {date}",
+  "browse.detail.upcoming_air_date_unknown": "Data emisji nieznana",
+  "browse.detail.upcoming_title_tba": "Tytuł zostanie ogłoszony"
 }

@@ -297,8 +297,8 @@ fn detail_names_an_untitled_season_zero_and_an_unnumbered_episode_by_their_ident
     let detail = Detail {
         sid, rk: "movie".into(), kind: "show".into(), is_show: true, title: "The Office".into(),
         seasons: vec![
-            Season { rk: "s0".into(), index: 0, title: String::new(), leaf_count: 2, viewed_leaf_count: 0 },
-            Season { rk: "s1".into(), index: 1, title: "Season 1".into(), leaf_count: 1, viewed_leaf_count: 0 },
+            Season { rk: "s0".into(), index: 0, title: String::new(), leaf_count: 2, viewed_leaf_count: 0, guid: String::new() },
+            Season { rk: "s1".into(), index: 1, title: "Season 1".into(), leaf_count: 1, viewed_leaf_count: 0, guid: String::new() },
         ],
         cur_season: 0,
         episodes,

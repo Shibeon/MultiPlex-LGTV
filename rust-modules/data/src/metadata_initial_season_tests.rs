@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 
 fn season(index: i64) -> Season {
-    Season { rk: format!("sk{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0 }
+    Season { rk: format!("sk{index}"), index, title: format!("Season {index}"), leaf_count: 0, viewed_leaf_count: 0, guid: String::new() }
 }
 
 fn on_deck(season: i64, index: i64) -> Episode {

@@ -1486,6 +1486,7 @@ mod tests {
                 title: "Season 1".into(),
                 leaf_count: 3,
                 viewed_leaf_count: 0,
+                guid: String::new(),
             }],
             on_deck: Some(Episode {
                 rk: "e1".into(),
@@ -1552,6 +1553,7 @@ mod tests {
                 title: "Season 1".into(),
                 leaf_count: 2,
                 viewed_leaf_count: 1,
+                guid: String::new(),
             }],
             on_deck: Some(Episode {
                 resume_ms: 600_000,

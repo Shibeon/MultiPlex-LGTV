@@ -32,7 +32,9 @@ section names it; a section for a site that no longer exists fails the gate as s
 
 The same gate also keeps the Discover host (`discover.provider.plex.tv`) at its one definition,
 `account.rs`'s private constant: every request site builds on `account::discover()`, the base a
-harness's stand-in replaces (`discover_host_problems`).
+harness's stand-in replaces (`discover_host_problems`). The metadata provider's host
+(`metadata.provider.plex.tv`) is kept the same way at its own definition there, behind
+`account::metadata_provider()`.
 
 Lexical, like the other structure gates (rust_test_modules.py's lexer, ~0.4 s). Test code is out
 of the enumeration: whole test files (rust_test_modules.wholly_test_files) and every
@@ -63,6 +65,10 @@ EVIDENCE_LINE = re.compile(r'(?P<path>[A-Za-z0-9_./-]+\.rs):(?P<line>[0-9]+)\Z')
 WORD = re.compile(r'[A-Za-z_][A-Za-z_0-9]*\Z')
 DISCOVER_HOST = 'discover.provider.plex.tv'
 DISCOVER_HOME = 'rust-modules/plex/src/plex/account.rs'
+METADATA_HOST = 'metadata.provider.plex.tv'
+# (host, what it is called in a finding, the door a request builds on), each defined once in DISCOVER_HOME.
+PROVIDER_HOSTS = ((DISCOVER_HOST, 'Discover', 'account::discover()'),
+                  (METADATA_HOST, 'metadata provider', 'account::metadata_provider()'))
 
 # The server client's request methods, which the rest of the plex layer calls from any receiver.
 CLIENT_DOORS = frozenset({
@@ -366,6 +372,9 @@ def discover_host_problems(repo=REPO):
     skips the stand-in, so a mock-armed simulator run would reach the real provider again while
     every other gate stayed green (the leak this gate exists for). Comments and `#[cfg(test)]` items
     are out of the scan, like the request sites; the definition is the single string in account.rs.
+
+    The metadata provider (`metadata.provider.plex.tv`) is held to the same rule with its own door,
+    `account::metadata_provider()`, which follows Discover's stand-in.
     """
     problems = []
     root = repo / 'rust-modules'
@@ -376,13 +385,14 @@ def discover_host_problems(repo=REPO):
             if path.resolve() in test_files: continue
             rel = path.relative_to(repo).as_posix()
             tokens = without_test_items(rust_test_modules.lex(path.read_text()))
-            spelled = sum(1 for kind, text in tokens if kind == 'string' and DISCOVER_HOST in text)
-            allowed = 1 if rel == DISCOVER_HOME else 0
-            if spelled > allowed:
-                problems.append(
-                    f'{rel} spells the Discover host ({DISCOVER_HOST}) {spelled} time(s) in non-test code, '
-                    f'{allowed} allowed: build the URL on account::discover() (the base the stand-in '
-                    f'replaces), and let {DISCOVER_HOME} keep the only definition')
+            for host, name, door in PROVIDER_HOSTS:
+                spelled = sum(1 for kind, text in tokens if kind == 'string' and host in text)
+                allowed = 1 if rel == DISCOVER_HOME else 0
+                if spelled > allowed:
+                    problems.append(
+                        f'{rel} spells the {name} host ({host}) {spelled} time(s) in non-test code, '
+                        f'{allowed} allowed: build the URL on {door} (the base the stand-in '
+                        f'replaces), and let {DISCOVER_HOME} keep the only definition')
     return problems
 
 

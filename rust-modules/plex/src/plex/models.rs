@@ -491,8 +491,20 @@ pub struct Metadata {
 /// an empty string: such an item has no Watchlist identity, so it gets no row and no disc.
 /// Decoded ONCE, where a row is built; nothing downstream re-parses the string.
 pub fn catalog_hex_of_guid(guid: &str) -> Option<[u8; 12]> {
-    let tail = guid.strip_prefix("plex://movie/").or_else(|| guid.strip_prefix("plex://show/"))?;
-    if tail.len() != 24 || !tail.is_ascii() {
+    hex24(guid.strip_prefix("plex://movie/").or_else(|| guid.strip_prefix("plex://show/"))?)
+}
+
+/// The 12 bytes of a SEASON's catalog id, from a `plex://season/<hex>` guid: the id the metadata
+/// provider lists the season's announced episodes under (`AccountClient::season_children`). `None`
+/// for any other scheme or a tail that is not exactly 24 hex digits (a legacy agent's season, a
+/// personal-media one): such a season has no announced episodes to read.
+pub fn season_hex_of_guid(guid: &str) -> Option<[u8; 12]> {
+    hex24(guid.strip_prefix("plex://season/")?)
+}
+
+/// Exactly 24 hex digits, as 12 bytes.
+fn hex24(tail: &str) -> Option<[u8; 12]> {
+    if tail.len() != 24 || !tail.bytes().all(|b| b.is_ascii_hexdigit()) {
         return None;
     }
     let mut out = [0u8; 12];
@@ -1279,10 +1291,24 @@ fn de_ultrablur<'de, D: serde::Deserializer<'de>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{catalog_hex_of_guid, resolve_catalog_hex, Envelope, MediaId};
+    use super::{catalog_hex_of_guid, resolve_catalog_hex, season_hex_of_guid, Envelope, MediaId};
 
     const HEX: &str = "5d7768264de0ee001fcc87e4";
     const BYTES: [u8; 12] = [0x5d, 0x77, 0x68, 0x26, 0x4d, 0xe0, 0xee, 0x00, 0x1f, 0xcc, 0x87, 0xe4];
+
+    /// A season's catalog id is the 24-hex tail of a `plex://season/` guid and of nothing else: a
+    /// show or movie guid, a legacy agent's, a short or non-hex tail all have none.
+    #[test]
+    fn a_season_guid_decodes_to_its_catalog_id_and_nothing_else_does() {
+        assert_eq!(season_hex_of_guid(&format!("plex://season/{HEX}")), Some(BYTES));
+        assert_eq!(season_hex_of_guid(&format!("plex://season/{}", HEX.to_uppercase())), Some(BYTES));
+        for other in [format!("plex://show/{HEX}"), format!("plex://episode/{HEX}"), "plex://season/abc".into(),
+            format!("plex://season/{HEX}0"), "plex://season/+d7768264de0ee001fcc87e4".into(),
+            "com.plexapp.agents.thetvdb://1/2".into(), String::new()] {
+            assert_eq!(season_hex_of_guid(&other), None, "{other}");
+        }
+        assert_eq!(catalog_hex_of_guid(&format!("plex://season/{HEX}")), None, "a season is no Watchlist title");
+    }
 
     #[test]
     fn guid_and_show_guid_decode_once_to_bytes_when_present() {

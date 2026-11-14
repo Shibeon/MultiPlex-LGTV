@@ -52,6 +52,27 @@ class DiscoverMock(unittest.TestCase):
         self.assertEqual(second["offset"], 5)
         self.assertEqual(call(pms, "GET", LIST + "&X-Plex-Container-Start=0&X-Plex-Container-Size=101")[0], 400)
 
+    def test_a_held_shows_season_lists_its_episodes_and_the_announced_ones(self):
+        pms = make()
+        show = next(it for it in pms.lib.items.values()
+                    if it["type"] == "show" and it["guid"].startswith("plex://show/"))
+        season = pms.lib.children(int(show["ratingKey"]))[0]
+        self.assertRegex(season["guid"], r"^plex://season/[0-9a-f]{24}$")
+        hx = season["guid"].rsplit("/", 1)[1]
+        path = f"/library/metadata/{hx}/children?X-Plex-Language=fr"
+        self.assertEqual(call(pms, "GET", path)[0], 401, "the provider wants a token")
+        status, _, data = pms.handle("GET", path, b"", {"X-Plex-Token": "t"})
+        self.assertEqual(status, 200)
+        rows = json.loads(data)["MediaContainer"]["Metadata"]
+        held = pms.lib.children(int(season["ratingKey"]))
+        self.assertEqual([r["index"] for r in rows],
+                         [e["index"] for e in held] + [len(held) + 1, len(held) + 2])
+        self.assertEqual(rows[-2]["originallyAvailableAt"], "2031-04-04")
+        self.assertNotIn("originallyAvailableAt", rows[-1])
+        self.assertTrue(all("thumb" not in r for r in rows[-2:]))
+        unknown = "/library/metadata/" + "0" * 24 + "/children"
+        self.assertEqual(pms.handle("GET", unknown, b"", {"X-Plex-Token": "t"})[0], 404)
+
     def test_ids_are_24_hex_and_guids_carry_them(self):
         for m in page(make())["Metadata"]:
             self.assertRegex(m["ratingKey"], r"^[0-9a-f]{24}$")

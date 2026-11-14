@@ -150,6 +150,7 @@ pub(super) fn bare_held(sid: ServerId, rk: &str) -> DetailScreen {
         episode_scroll: Spring::at(0.0),
         tab_scroll: Spring::at(0.0),
         episode_cells: episodes::Cells::new(),
+        upcoming: Default::default(),
             ep_want: Default::default(),
             strip_seat: Default::default(),
         about_card_lift: plx_ui::text_lift::TextLift::new(),
@@ -190,6 +191,7 @@ fn season(index: i64) -> plx_data::metadata::Season {
         title: format!("Season {index}"),
         leaf_count: 2,
         viewed_leaf_count: 0,
+        guid: String::new(),
     }
 }
 
@@ -840,8 +842,8 @@ fn apply_metadata_effects(effects: &[plx_machine::machine::Stamped<TestHost>]) {
 fn the_episode_text_highlight_fits_the_block_the_flow_already_reserves() {
     let d = detail(ServerId::UNSET, "show");
     for (i, ep) in d.episodes.iter_loaded() {
-        let r = episodes::meta_rect(ep, i, 0.0, 0.0, &plx_ui::fixture::FixtureMeasure);
-        assert!(r.y + r.h <= episodes::block_h(&d, &plx_ui::fixture::FixtureMeasure) + theme::space::SM);
+        let r = episodes::meta_rect(ep, None, i, 0.0, 0.0, &plx_ui::fixture::FixtureMeasure);
+        assert!(r.y + r.h <= episodes::block_h(&d, &[], &plx_ui::fixture::FixtureMeasure) + theme::space::SM);
     }
 }
 
@@ -4610,7 +4612,7 @@ fn a_hole_in_view_draws_a_skeleton_and_fills_on_landing_without_moving_the_focus
         let (_, frame) = plx_ui::placeholder::capture_declared(|| {
             let meta = test_store().view();
             let d = screen.detail(meta).unwrap();
-            episodes::draw(plx_ui::Painter::root(), d, 0.0, screen.episode_scroll.pos, None, |_| 1.0, |_| 1.0, |_| false, |_| Default::default(), &measure, meta);
+            episodes::draw(plx_ui::Painter::root(), d, &[], 0.0, screen.episode_scroll.pos, None, |_| 1.0, |_| 1.0, |_| false, |_| Default::default(), &measure, meta);
         });
         frame.of(plx_ui::placeholder::Reason::CardSkeleton)
     };
@@ -5709,3 +5711,6 @@ fn only_an_episode_page_gets_a_go_to_show_disc() {
 
 #[path = "hero_shade_tests.rs"]
 mod hero_shade;
+
+#[path = "upcoming_tests.rs"]
+mod upcoming;

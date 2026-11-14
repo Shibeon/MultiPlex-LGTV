@@ -2603,6 +2603,11 @@ class DiscoverFixture:
     which the app's Discover follows) never needs `discover.provider.plex.tv` for a person page.
     `/library/people/{id}/media` is the PMS's own route and falls through to it.
 
+    It also stands in for the metadata provider's season listing, `GET /library/metadata/<season
+    hex>/children` (401 without a token): `bind` gives the seasons of the held shows a
+    `plex://season/<24 hex>` guid, and the listing answers their held episodes plus two announced
+    ones past the last (`ANNOUNCED`), which the Detail page's strip shows as upcoming.
+
     Synthetic data only (a `demo-person-N` key carries a real actor's NAME and nothing else about them). 16 catalog titles, 14 of them on the list at the start (newest first):
 
       * 1-6   released, held by this mock PMS (guid matches a library item)      -> Available
@@ -2672,6 +2677,32 @@ class DiscoverFixture:
     def by_hex(self, hx):
         return next((c for c in self.catalog if c["hex"] == hx), None)
 
+    @staticmethod
+    def season_hex(show_hex, index):
+        """The catalog id `bind` gives season `index` of the held show `show_hex`: 24 hex digits."""
+        return hashlib.md5(f"season-{show_hex}-{index}".encode()).hexdigest()[:24]
+
+    # The episodes the metadata provider announces past a bound season's last held one:
+    # (title, date). A placeholder title and a far-future date, then a named one with no date yet.
+    ANNOUNCED = (("TBA", "2031-04-04"), ("A Synthetic Premiere", None))
+
+    def season_children(self, season, lib):
+        """The metadata provider's `GET /library/metadata/<season hex>/children` for a bound season:
+        the episodes the library holds (by index, with their own titles and dates), then
+        `ANNOUNCED` numbered after the last. Absolute image URLs only, as the provider spells them:
+        the mock serves none, so the announced ones carry no `thumb`."""
+        held = lib.children(int(season["ratingKey"]))
+        rows = [{"type": "episode", "index": e.get("index", 0), "title": e.get("title", ""),
+                 "originallyAvailableAt": e.get("originallyAvailableAt", "")} for e in held]
+        last = max((r["index"] for r in rows), default=0)
+        for n, (title, date) in enumerate(self.ANNOUNCED, start=1):
+            row = {"type": "episode", "index": last + n, "title": title,
+                   "summary": "A synthetic episode the mock metadata provider announces."}
+            if date:
+                row["originallyAvailableAt"] = date
+            rows.append(row)
+        return self._container(size=len(rows), Metadata=rows)
+
     def bind(self, lib):
         """Give the held titles a PMS twin: the first movies/shows of `lib` take the fixture guid,
         so `GET /library/all?type=&guid=` finds them. A library too small to hold them all just
@@ -2682,6 +2713,11 @@ class DiscoverFixture:
             wanted = [c for c in self.catalog if c["kind"] == kind and c["held"]]
             for row, c in zip(rows, wanted):
                 row["guid"] = c["guid"]
+                if kind == "show":
+                    # Its seasons take catalog ids too (`plex://season/<24 hex>`), the id the metadata
+                    # provider's `/children` route below lists their announced episodes under.
+                    for season in lib.children(int(row["ratingKey"])):
+                        season["guid"] = "plex://season/" + self.season_hex(c["hex"], season["index"])
 
     def _entry(self, c, added_at=None):
         e = {"ratingKey": c["hex"], "key": f"/library/metadata/{c['hex']}", "guid": c["guid"],
@@ -2726,6 +2762,19 @@ class DiscoverFixture:
                 return j({"error": "method not allowed"}, 405)
             png = self.art_image(segs[2], segs[3], q.get("width"), q.get("height"))
             return (200, "image/png", png) if png else (404, "text/plain", b"no image")
+        if len(segs) == 4 and segs[:2] == ["library", "metadata"] and segs[3] == "children" and hexid(segs[2]):
+            # The metadata provider's season listing (the app's upcoming episodes): the same
+            # listener stands in for `metadata.provider.plex.tv` (`account::metadata_provider`).
+            if method != "GET":
+                return j({"error": "method not allowed"}, 405)
+            if not (headers.get("X-Plex-Token") or q.get("X-Plex-Token")):
+                return j({"error": "Unauthorized", "message": "You must provide a token!"}, 401)
+            want = f"plex://season/{segs[2].lower()}"
+            season = next((it for it in lib.items.values()
+                           if it.get("type") == "season" and it.get("guid") == want), None)
+            if season is None:
+                return j({"Error": {"message": "Not Found"}}, 404)
+            return j(self.season_children(season, lib))
         if len(segs) >= 3 and segs[:2] == ["library", "metadata"] and hexid(segs[2]):
             c = self.by_hex(segs[2])
             if c is None:

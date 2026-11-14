@@ -296,5 +296,8 @@
   "browse.clock.key_changed": "Ключ сервера изменился. Подключите телевизор к интернету, чтобы приложение могло проверить его заново.",
   "browse.detail.mark_episode_watched": "Отметить серию просмотренной",
   "browse.detail.mark_episode_unwatched": "Отметить серию непросмотренной",
-  "browse.detail.minutes_left": "Осталось {minutes} мин"
+  "browse.detail.minutes_left": "Осталось {minutes} мин",
+  "browse.detail.upcoming_airs": "Выходит {date}",
+  "browse.detail.upcoming_air_date_unknown": "Дата выхода неизвестна",
+  "browse.detail.upcoming_title_tba": "Название будет объявлено"
 }

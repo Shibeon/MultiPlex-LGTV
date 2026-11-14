@@ -315,6 +315,16 @@ class CheckPlexRequests(unittest.TestCase):
         _, problems = self.tree(elsewhere).check()
         self.assertProblem(problems, 'rust-modules/data/src/person.rs')
 
+    def test_the_metadata_provider_host_is_allowed_only_at_its_one_definition(self):
+        host = 'https://metadata.provider.plex.tv'
+        account = BASE[f'{PLEX}/account.rs'] + f'const METADATA_PROVIDER: &str = "{host}";\n'
+        clean = {f'{PLEX}/account.rs': account}
+        self.assertEqual(self.tree(clean).check()[1], [])
+        leak = dict(clean, **{f'{PLEX}/watchlist.rs': f'pub fn base() -> &\'static str {{ "{host}/library" }}\n'})
+        _, problems = self.tree(leak).check()
+        self.assertProblem(problems, 'watchlist.rs', 'spells the metadata provider host',
+                           'account::metadata_provider()')
+
 
 if __name__ == '__main__':
     unittest.main()

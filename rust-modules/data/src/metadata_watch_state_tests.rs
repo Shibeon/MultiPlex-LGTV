@@ -104,6 +104,7 @@ fn an_optimistic_watch_flip_reaches_the_item_its_episodes_and_the_season_tabs_co
                 title: "S1".into(),
                 leaf_count: 3,
                 viewed_leaf_count: 3,
+                guid: String::new(),
             },
             Season {
                 rk: "sk2".into(),
@@ -111,6 +112,7 @@ fn an_optimistic_watch_flip_reaches_the_item_its_episodes_and_the_season_tabs_co
                 title: "S2".into(),
                 leaf_count: 3,
                 viewed_leaf_count: 1,
+                guid: String::new(),
             },
         ],
         episodes: vec![
@@ -486,6 +488,7 @@ fn a_season_is_watched_only_when_the_server_counted_episodes_and_all_of_them_are
         title: String::new(),
         leaf_count: leaf,
         viewed_leaf_count: viewed,
+        guid: String::new(),
     };
     assert!(season(10, 10).watched(), "every episode seen");
     assert!(!season(10, 1).watched(), "one episode in is not watched");
@@ -508,8 +511,8 @@ fn a_show_or_season_scoped_change_marks_the_loaded_shows_episodes_and_season_cou
         is_show: true,
         kind: "show".into(),
         seasons: vec![
-            Season { rk: "sk1".into(), index: 1, title: "S1".into(), leaf_count: 2, viewed_leaf_count: 0 },
-            Season { rk: "sk2".into(), index: 2, title: "S2".into(), leaf_count: 2, viewed_leaf_count: 0 },
+            Season { rk: "sk1".into(), index: 1, title: "S1".into(), leaf_count: 2, viewed_leaf_count: 0, guid: String::new() },
+            Season { rk: "sk2".into(), index: 2, title: "S2".into(), leaf_count: 2, viewed_leaf_count: 0, guid: String::new() },
         ],
         episodes: vec![
             Episode { rk: "e1".into(), season: 1, resume_ms: 5, ..Default::default() },
@@ -549,8 +552,8 @@ fn unmarking_one_season_of_a_watched_show_clears_the_shows_own_watched_flag() {
         kind: "show".into(),
         watched: true,
         seasons: vec![
-            Season { rk: "sk1".into(), index: 1, title: "S1".into(), leaf_count: 2, viewed_leaf_count: 2 },
-            Season { rk: "sk2".into(), index: 2, title: "S2".into(), leaf_count: 2, viewed_leaf_count: 2 },
+            Season { rk: "sk1".into(), index: 1, title: "S1".into(), leaf_count: 2, viewed_leaf_count: 2, guid: String::new() },
+            Season { rk: "sk2".into(), index: 2, title: "S2".into(), leaf_count: 2, viewed_leaf_count: 2, guid: String::new() },
         ],
         episodes: vec![
             Episode { rk: "e1".into(), season: 1, watched: true, ..Default::default() },
@@ -613,7 +616,7 @@ fn a_single_episode_flip_steps_the_season_count_and_the_re_read_overwrites_it_wi
         rk: "show".into(),
         is_show: true,
         kind: "show".into(),
-        seasons: vec![Season { rk: "sk1".into(), index: 1, title: "S1".into(), leaf_count: 3, viewed_leaf_count: viewed }],
+        seasons: vec![Season { rk: "sk1".into(), index: 1, title: "S1".into(), leaf_count: 3, viewed_leaf_count: viewed, guid: String::new() }],
         episodes: vec![Episode { rk: "e1".into(), season: 1, ..Default::default() }].into(),
         ..Default::default()
     };
