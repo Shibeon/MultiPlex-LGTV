@@ -58,19 +58,22 @@ fn detail_worst(
 fn the_hero_text_reads_over_bright_artwork() {
     use crate::detail_layout::{HeroRows, CREDIT_LEAD, TEXT_X};
     let hc = crate::detail_layout::hero_chain(
-        // a two-line blurb and a three-row credit table. Measuring is the one thing the host cannot
-        // do, so the height is quoted, not computed.
-        HeroRows { ratings: true, synopsis_h: Some(72.0), credits: 3, tech: true },
+        // a two-line blurb and a three-row credit table, under an episode's subtitle line (the
+        // tallest column). Measuring is the one thing the host cannot do, so the height is quoted,
+        // not computed.
+        HeroRows { subtitle: true, ratings: true, synopsis_h: Some(72.0), credits: 3, tech: true },
     );
     let col_r = TEXT_X + crate::detail_layout::HERO_TEXT_W; // the synopsis' wrap edge
     let shade = crate::landing_hero::detail_shade(1.0, 1.0, 1.0, 0.0);
     let syn = hc.syn_y.unwrap();
     let credits = hc.credits_y.unwrap();
     let ratings = hc.ratings_y.unwrap();
+    let subtitle = hc.subtitle_y.unwrap();
 
     // (label, x run, y span, ink, floor over BRIGHT art, floor over BLOWN WHITE)
-    let rows: [(&str, (f32, f32), (f32, f32), [f32; 4], f32, f32); 5] = [
+    let rows: [(&str, (f32, f32), (f32, f32), [f32; 4], f32, f32); 6] = [
         ("detail title", (TEXT_X, col_r), (detail_title_cap_top(), crate::detail_layout::TITLE_FOOT), theme::TEXT_PRIMARY, 3.0, 2.5),
+        ("detail subtitle", (TEXT_X, col_r), (subtitle, subtitle + theme::hero::SUBTITLE_H), theme::TEXT_PRIMARY, 3.0, 2.5),
         ("detail meta", (TEXT_X, TEXT_X + 600.0), (hc.meta_y, hc.meta_y + theme::hero::FACTS_H), crate::detail_layout::FACTS_INK, 3.0, 2.5),
         ("detail ratings", (TEXT_X, TEXT_X + 800.0), (ratings, ratings + RATING_MARK_D), theme::TEXT_PRIMARY, 3.0, 2.5),
         ("detail synopsis", (TEXT_X, col_r), (syn, syn + 72.0), theme::TEXT_READING, 3.0, 2.5),

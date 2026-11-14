@@ -1595,7 +1595,10 @@ pub struct Detail {
     pub guid: String,
     pub is_show: bool,
     pub kind: String, // this item's own type: movie | episode | show | season
-    pub show_title: String, // grandparentTitle — the show name, when this item is an episode
+    /// The show's name: an episode's `grandparentTitle`, a season's `parentTitle`; empty otherwise.
+    /// (Unlike [`Detail::show_rk`], a season carries its show's name: the hero names the show above
+    /// the season's own title, `detail::hero::hero_names`.)
+    pub show_title: String,
     pub show_rk: String, // grandparentRatingKey — the show's rk (episode → its show)
     /// A SEASON's show (`parentRatingKey`), else empty. Separate from [`Detail::show_rk`], which is
     /// the GRAND-parent key and so stays empty for a season: its readers (the resolve's language
@@ -2315,7 +2318,8 @@ fn fetch_detail(client: &'static plx_plex::plex::Client, sid: plx_plex::plex::Se
         guid: it.guid.clone(),
         is_show: it.kind == "show",
         kind: it.kind.clone(),
-        show_title: it.grandparent_title.clone(),
+        // an episode's show is its grandparent, a season's its parent
+        show_title: if it.kind == "season" { it.parent_title.clone() } else { it.grandparent_title.clone() },
         show_rk: it.grandparent_rating_key.clone(),
         parent_rk: if it.kind == "season" { it.parent_rating_key.clone() } else { String::new() },
         season: it.parent_index.unwrap_or(0),

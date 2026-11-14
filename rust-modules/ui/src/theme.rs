@@ -258,6 +258,12 @@ pub mod hero {
     pub const TITLE_LEAD: f32 = super::size::DISPLAY as f32 * 1.06;
     /// Facts are a CAPTION line box, including its optical air.
     pub const FACTS_H: f32 = super::size::CAPTION as f32;
+    /// The line under the title band naming what the page is when the logo names its show (an
+    /// episode's or a season's own title under the show's clearLogo, Plex mobile's detail page):
+    /// HEADLINE bold, smaller than any hero title rung, larger than the facts under it.
+    pub const SUBTITLE_SIZE: i32 = super::size::HEADLINE;
+    /// That line's box, the way [`FACTS_H`] is the facts': its size, cap band centred in it.
+    pub const SUBTITLE_H: f32 = SUBTITLE_SIZE as f32;
 
     /// Minimum Play/Resume capsule; translated labels may grow beyond it.
     pub const PLAY_MIN_W: f32 = 224.0;
