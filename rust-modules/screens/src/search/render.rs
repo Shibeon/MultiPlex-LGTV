@@ -54,11 +54,12 @@ impl Resources {
             };
             let (_, head) = run_and_head(q, caret);
             self.head = cstring(head);
-            self.run_w = cx.measure.width(&self.run, theme::size::HERO, true);
-            self.head_w = if q.trim().is_empty() {
+            let blank = q.trim().is_empty();
+            self.run_w = cx.measure.width(&self.run, layout::FIELD_TEXT_SIZE, !blank);
+            self.head_w = if blank {
                 0.0
             } else {
-                cx.measure.width(&self.head, theme::size::HERO, true)
+                cx.measure.width(&self.head, layout::FIELD_TEXT_SIZE, true)
             };
         }
         let scope = H::search(cx).scope();
@@ -70,7 +71,7 @@ impl Resources {
             self.scope_line = scope_text(scope.sources()).map(|line| {
                 cstring(&elide(
                     &line,
-                    layout::FIELD.w,
+                    layout::FIELD_TEXT_W,
                     theme::size::CAPTION,
                     false,
                     cx.measure,
@@ -181,7 +182,7 @@ pub(super) fn draw<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '
 
 fn field<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '_, H>, p: Painter) {
     let data = &screen.render;
-    let rect = Rect::new(
+    let plate = Rect::new(
         layout::FIELD.x,
         layout::FIELD.y - screen.stack.scroll(),
         layout::FIELD.w,
@@ -189,6 +190,9 @@ fn field<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '_, H>, p: 
     );
     let blank = data.query.trim().is_empty();
     let hot = screen.hot.pos;
+    plx_ui::page_header::draw_field_plate(p, plate, hot);
+    // the words' box: inside the capsule's round ends
+    let rect = Rect::new(plate.x + layout::FIELD_INSET, plate.y, layout::FIELD_TEXT_W, plate.h);
     let ink = if blank {
         theme::cross(theme::TEXT_TERTIARY, theme::TEXT_SECONDARY, hot)
     } else {
@@ -200,19 +204,21 @@ fn field<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '_, H>, p: 
         rect.w,
         screen.editing,
     );
-    let (cap_top, cap_base) = plx_gfx::text::text_cap_band(theme::size::HERO, 1);
+    let size = layout::FIELD_TEXT_SIZE;
+    let (cap_top, cap_base) = plx_gfx::text::text_cap_band(size, 1);
     let pad = descent_pad(
         rect.h,
-        plx_gfx::text::text_height(theme::size::HERO, 1),
+        plx_gfx::text::text_height(size, 1),
         cap_top,
         cap_base,
     );
     {
         let _clip = f.clip(p, Rect::new(rect.x, rect.y, rect.w, rect.h + pad));
-        Label::new(data.run.as_ptr(), theme::size::HERO, ink)
-            .bold()
-            .draw(p, Rect::new(rect.x + run_dx, rect.y, rect.w, rect.h));
-        let text_y = plx_gfx::text::text_vcenter_y(theme::size::HERO, 1, rect.cy());
+        // the typed words bold, the placeholder regular (the web field's grey prompt)
+        let words = Label::new(data.run.as_ptr(), size, ink);
+        let words = if blank { words } else { words.bold() };
+        words.draw(p, Rect::new(rect.x + run_dx, rect.y, rect.w, rect.h));
+        let text_y = plx_gfx::text::text_vcenter_y(size, 1, rect.cy());
         if caret_shown(screen.editing, screen.blink_us < super::BLINK_US) {
             p.rect(
                 Rect::new(
@@ -228,7 +234,7 @@ fn field<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '_, H>, p: 
             );
         }
         if ghost_shown(&data.query) {
-            let y = plx_gfx::text::baseline_y(theme::size::BODY, 0, theme::size::HERO, 1, text_y);
+            let y = plx_gfx::text::baseline_y(theme::size::BODY, 0, size, 1, text_y);
             p.text(
                 plx_platform::i18n::msg::browse_search_one_more_c().as_ptr(),
                 rect.x + caret_dx + CARET_W + GHOST_GAP,
@@ -635,6 +641,24 @@ mod tests {
         assert_eq!(msg::browse_search_partial_in(&es, "Biblioteca A", "Servidor B"),
             "No se puede conectar con Servidor B · solo hay resultados de Biblioteca A");
         assert_eq!(msg::browse_search_placeholder_c_in(&be).to_str().unwrap(), "Пошук у вашай бібліятэцы");
+    }
+
+    /// The capsule holds its prompt whole: the placeholder at the field's own size fits between
+    /// the pill's round ends in every shipped language, so no blank field shows a clipped prompt.
+    #[test]
+    fn the_capsule_holds_its_placeholder_in_every_shipped_language() {
+        use plx_base::fontcov::advances::ShippedMeasure;
+        use plx_platform::i18n::{language_on_this_thread_for_test, msg, SHIPPED};
+        let mut bad = Vec::new();
+        for lang in SHIPPED {
+            let _g = language_on_this_thread_for_test(lang);
+            let w = plx_machine::machine::Measure::width(&ShippedMeasure, msg::browse_search_placeholder_c(), layout::FIELD_TEXT_SIZE, false)
+                / plx_ui::fit::HEADROOM;
+            if w > layout::FIELD_TEXT_W - CARET_W - CARET_GAP {
+                bad.push(format!("{lang:?}: {w:.0}px"));
+            }
+        }
+        assert!(bad.is_empty(), "the placeholder overflows the capsule: {bad:?}");
     }
 
     use plx_data::search::{Item, Kind, State};

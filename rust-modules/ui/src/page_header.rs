@@ -780,6 +780,17 @@ fn draw_chip(p: Painter, plate: Rect, chip: Chip) {
     }
 }
 
+/// **A text field's plate** (the MultiPlex web app's search capsule): a pill at `rect` in
+/// [`theme::FIELD_PLATE_FILL`] under a [`CHIP_RIM_W`] rim that crosses from
+/// [`theme::FIELD_PLATE_RIM`] to [`theme::FIELD_PLATE_RIM_HOT`] as `hot` (the field's focus spring,
+/// 0..=1) rises. The outline chip's plate, so a field and the header's chips read as one family; the
+/// fill never changes with focus.
+pub fn draw_field_plate(p: Painter, rect: Rect, hot: f32) {
+    let rad = rect.h * 0.5;
+    p.rrect(rect, rad, rad, theme::FIELD_PLATE_FILL);
+    p.rring(rect, rad, CHIP_RIM_W, theme::cross(theme::FIELD_PLATE_RIM, theme::FIELD_PLATE_RIM_HOT, hot.clamp(0.0, 1.0)));
+}
+
 /// The title block's height ([`draw_title`]).
 pub const TITLE_H: f32 = 80.0;
 /// The air between the title block and the row of controls under it.

@@ -434,8 +434,9 @@ pub const CONTROL_SPENT_FILL: [f32; 4] = mix(COOL_0, NEUTRAL_500, 1.0 - CONTROL_
 
 /// The Search query field's **editing** ink — the bright endpoint of the `hot` cross-fade in
 /// `search::field::draw` (idle end: `TEXT_SECONDARY`) while the television's keyboard is up. Its own
-/// role because it names the JOB: the design system's `SearchField` contract forbids a rim or rule
-/// on this control, so ink is the only focus signal editing ever gets, and one stop (`TEXT_HEADING`)
+/// role because it names the JOB: the field never FILLS on focus (its plate,
+/// [`FIELD_PLATE_FILL`], is the same at rest and hot; only its rim brightens), so ink carries the
+/// words' half of the focus signal, and one stop (`TEXT_HEADING`)
 /// was too little from the couch (owner feedback, 2026-09-02). Lands on `TEXT_PRIMARY`, the
 /// brightest ink stop short of pure white.
 ///
@@ -455,6 +456,17 @@ pub const FIELD_EDITING_INK: [f32; 4] = TEXT_PRIMARY;
 /// `ink_target` is the one place that picks between this and [`FIELD_EDITING_INK`], on `editing`
 /// alone — never a second spring.
 pub const FIELD_WAITING_INK: [f32; 4] = WHITE;
+
+/// A text field's resting plate (`page_header::draw_field_plate`, the Search query field): the
+/// MultiPlex web app's search capsule, at the header chip's weight ([`HEADER_CHIP_FILL`]) so it reads
+/// as a control at rest without ever becoming the flat white plate the owner rejected (2026-09-04).
+pub const FIELD_PLATE_FILL: [f32; 4] = HEADER_CHIP_FILL;
+/// The plate's rim at rest: the outline chip's ([`HEADER_CHIP_RIM`]).
+pub const FIELD_PLATE_RIM: [f32; 4] = HEADER_CHIP_RIM;
+/// The plate's rim once the field is hot (focused or editing): pure white, the web capsule's focused
+/// edge. The words keep their own focus ink ([`FIELD_WAITING_INK`], [`FIELD_EDITING_INK`]); the plate
+/// never fills.
+pub const FIELD_PLATE_RIM_HOT: [f32; 4] = WHITE;
 
 /// The idle plate of a page's PRIMARY action ([`ControlStyle::Primary`](crate::widgets::ControlStyle::Primary)):
 /// near-white, so the main action reads first among the row's dark controls.
