@@ -839,8 +839,9 @@ mod tests {
     ///
     /// **The allowance: the stream-pill row of the compact states, and nothing else.** The row under the title
     /// (resolution, HDR or SDR, audio, left of the info disc, as the web player draws it) is a hugging `facts` op
-    /// whose price is one op plus one capsule and one glyph run per pill: 4 draw ops and 3 glyph runs, which
-    /// takes the compact states to 16 and 11 against the television's 13 and 9. It is admitted HERE ONLY, for
+    /// whose price is one op plus one capsule and one glyph run per pill, and the sound's pill at its dearest (the
+    /// surround mark before a Dolby / DTS label, the unsure "?" after it) one more of each: 5 draw ops and 4 glyph
+    /// runs, which takes the compact states to 17 and 12 against the television's 13 and 9. It is admitted HERE ONLY, for
     /// compact states only, by exactly that op's weight ([`stream_row_allowance`]), and the global ceilings
     /// (which every dropped package is held to) do not move. This is the owner's decision pending a frame-time
     /// measurement on the television (`ARM_PROFILE=release`, the `profile-tv` skill: Mali HWCNT and a sched trace
@@ -858,8 +859,9 @@ mod tests {
                 let mut c = ceiling(class);
                 let allowance = stream_row_allowance(s.state);
                 if class == Class::Compact {
-                    // the row exists in every compact state, and its weight is the three pills' and no more
-                    assert_eq!((allowance.draw_ops, allowance.glyph_runs), (4, 3), "{}: the stream row", state_name(s.key));
+                    // the row exists in every compact state, and its weight is the three pills' (the sound's with its
+                    // surround mark and "?") and no more
+                    assert_eq!((allowance.draw_ops, allowance.glyph_runs), (5, 4), "{}: the stream row", state_name(s.key));
                     c.draw_ops += allowance.draw_ops;
                     c.glyph_runs += allowance.glyph_runs;
                 }

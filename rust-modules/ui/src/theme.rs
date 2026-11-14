@@ -1452,13 +1452,13 @@ pub const TECH_AUDIO_INK: [f32; 4] = VIOLET_300;
 /// Accessibility tracks (CC, SDH, AD): neutral, the secondary text stop.
 pub const TECH_ACCESS_INK: [f32; 4] = COOL_300;
 
-// ── The player's stream pills (the MultiPlex HUD's `facts.stream` run, `widgets::BadgeStyle::Solid`
-// and `Rimmed`; the web player's `.ptech` pills) ──────────────────────────────────────────────────────
+// ── The player's stream pills (the MultiPlex HUD's `facts.stream` run, `widgets::BadgeStyle::Solid`,
+// `Rimmed` and `Dashed`; the web player's `.ptech` pills) ──────────────────────────────────────────────────────
 // Facts about THIS session's stream standing on the picture: the resolution as the one solid amber
 // capsule (the picture's hue, [`TECH_VIDEO_INK`]'s stop); the others on one dark neutral ground, so a
 // bright picture never tints them, told apart by their rim: an HDR kind in the picture's blue, SDR in a
-// quiet white, the sound in its indigo; a pill the TV cannot verify under the unsure rim (the web
-// player's dashed outline, one pass here).
+// quiet white, the sound in its indigo; a pill the TV cannot verify under the dashed unsure rim with a
+// small "?" (the web player's dashed outline, one pass here).
 /// The resolution pill's fill: the picture's amber, [`TECH_VIDEO_INK`]'s stop.
 pub const STREAM_RES_FILL: [f32; 4] = AMBER_300;
 /// The resolution pill's label on that fill: the amber family's near-black.
@@ -1468,7 +1468,7 @@ pub const STREAM_PILL_INK: [f32; 4] = COOL_0;
 /// The neutral stream pills' ground: the controls' idle surface ([`CONTROL_IDLE_FILL`]), dark and nearly
 /// opaque, so the picture behind cannot tint it.
 pub const STREAM_PILL_FILL: [f32; 4] = CONTROL_IDLE_FILL;
-/// An HDR pill's rim (`HDR`, `Dolby Vision`): the web player's HDR blue (`#3ecbff`).
+/// An HDR pill's rim (`HDR10`, `HLG`, `Dolby Vision`): the web player's HDR blue (`#3ecbff`).
 pub const STREAM_HDR_RIM: [f32; 4] = SKY_400;
 /// An HDR pill's label: the lighter stop of the same blue (`#6fd8ff`).
 pub const STREAM_HDR_INK: [f32; 4] = SKY_300;
@@ -1479,11 +1479,18 @@ pub const STREAM_SDR_RIM: [f32; 4] = with_a(WHITE, 0.40);
 pub const STREAM_SDR_INK: [f32; 4] = with_a(WHITE, 0.85);
 /// The audio pill's rim: the web player's sound indigo (`#6c8cff`).
 pub const STREAM_AUDIO_RIM: [f32; 4] = INDIGO_400;
-/// An unsure pill's rim (deduced, not verifiable on the TV): the web player's dashed 45 % white, as one
-/// solid keyline.
+/// An unsure pill's rim (deduced, not verifiable on the TV): the web player's dashed 45 % white
+/// ([`crate::widgets::BadgeStyle::Dashed`]).
 pub const STREAM_UNSURE_RIM: [f32; 4] = with_a(WHITE, 0.45);
 /// An unsure pill's label: the web player dims the whole pill to 85 %.
 pub const STREAM_UNSURE_INK: [f32; 4] = with_a(WHITE, 0.85);
+/// The unsure pill's trailing "?" ([`crate::widgets::BadgeTail`]): the web player's `<i>` at 75 % of
+/// the pill's own 85 %.
+pub const STREAM_UNSURE_MARK_INK: [f32; 4] = with_a(WHITE, 0.85 * 0.75);
+/// A dashed chip rim's `[period, dash]` in px ([`crate::widgets::BadgeStyle::Dashed`]): a 6 px dash and
+/// a 4 px gap at the chip's 2 px stroke, about what a browser draws for the web pill's dashed outline. The
+/// shader stretches the period a little so whole dashes meet at the chip's axes.
+pub const BADGE_DASH: [f32; 2] = [10.0, 6.0];
 /// The drained state, for both a hollow tomato and a negated crowd — `COOL_400`, the same stop
 /// [`TEXT_TERTIARY`] resolves to, because the negation is literally "this has the weight of a
 /// caption now". Its own role ON that stop rather than an alias OF the text token: a verdict mark

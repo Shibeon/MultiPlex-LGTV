@@ -1318,6 +1318,33 @@ impl Painter {
             self.out_rgb(),
         );
     }
+    /// [`rect_rimmed_w`](Self::rect_rimmed_w) with the rim cut into DASHES along its perimeter —
+    /// `dash = [period, dash]` in layout px, the shader stretching the period so whole dashes meet
+    /// at every axis (`fs_src.frag`'s `u_dash`). One fill, one colour, one pass: the dashes are the
+    /// rim's coverage, never a draw apiece. The player's unsure stream pill ([`widgets::BadgeStyle::Dashed`]).
+    pub fn rect_dashed(self, r: Rect, rad: f32, fill: [f32; 4], rim: [f32; 4], rim_w: f32, dash: [f32; 2]) {
+        if self.declare(r, 27, |data| {
+            use frame::backdrop::Value;
+            rad.record(data);
+            fill.record(data);
+            rim.record(data);
+            rim_w.record(data);
+            dash[0].record(data);
+            dash[1].record(data);
+        }) { return; }
+        if self.records() { return; }
+        let (f, rim) = (self.c(fill), self.c(rim));
+        let m = self.place(r);
+        plx_gfx::gfx::draw_rect_dashed(
+            m.x, m.y, m.w, m.h,
+            self.px(rad),
+            f.as_ptr(),
+            self.px(rim_w),
+            rim.as_ptr(),
+            self.out_rgb(),
+            [self.px(dash[0]), self.px(dash[1])],
+        );
+    }
     /// A CONTROL FACE: [`rect_rimmed_w`](Self::rect_rimmed_w) plus the two things only a control
     /// wears — the **CAPSULE OUTLINE** (three blended arcs per corner rather than a stadium,
     /// [`crate::pill`]) and the focused face's inner glow, both in the same pass. `pill` is

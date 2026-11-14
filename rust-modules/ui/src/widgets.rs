@@ -8878,9 +8878,23 @@ pub enum BadgeStyle {
     /// player's outlined stream pills ([`theme::STREAM_PILL_FILL`] under [`theme::STREAM_HDR_RIM`],
     /// [`theme::STREAM_SDR_RIM`], [`theme::STREAM_AUDIO_RIM`] or [`theme::STREAM_UNSURE_RIM`]): a dark ground keeps the
     /// label legible over a bright picture, and the rim is
-    /// what tells the pills apart. The web player's unsure pill is dashed; a dash is a draw call each (some thirty a
-    /// pill, every frame), so the unsure rim stands for it at one.
+    /// what tells the pills apart.
     Rimmed { fill: [f32; 4], rim: [f32; 4], ink: [f32; 4] },
+    /// [`BadgeStyle::Rimmed`] with the rim cut into DASHES ([`theme::BADGE_DASH`], one pass:
+    /// [`Painter::rect_dashed`]) — the player's UNSURE stream pill, the web player's
+    /// `outline: dashed` ([`theme::STREAM_UNSURE_RIM`]).
+    Dashed { fill: [f32; 4], rim: [f32; 4], ink: [f32; 4] },
+}
+
+/// A chip's TRAILING MARK: a short word after the label, one rung smaller ([`theme::size::MICRO`])
+/// and in its own quieter `ink` — the unsure stream pill's "?" (the web player's `<i>?</i>` at
+/// `.75em`, held at the couch floor's smallest product rung rather than below it). It shares the
+/// label's baseline ([`plx_gfx::text::baseline_y`]) and stands [`BADGE_ICON_GAP`] after it, inside
+/// the chip's own width ([`badge_w_tailed`]).
+#[derive(Clone, Copy)]
+pub struct BadgeTail<'a> {
+    pub text: &'a str,
+    pub ink: [f32; 4],
 }
 /// [`BadgeStyle::Ring`]'s corner radius and stroke: the PLEX PASS capsule's outline geometry, so
 /// the two outlined capsule families on the Detail hero share one silhouette.
@@ -8894,7 +8908,7 @@ pub const BADGE_H: f32 = 34.0;
 /// relationship [`rating_group`]'s verdict mark has to its score. Deliberately smaller than
 /// [`Button`]'s `sz * BTN_ICON_RATIO`: this chip is half a button's height, so a button-proportioned
 /// glyph would fill it edge to edge.
-const BADGE_ICON: f32 = theme::size::CAPTION as f32;
+pub const BADGE_ICON: f32 = theme::size::CAPTION as f32;
 /// Glyph → label air. They are one run, so the tightest rung (as in [`rating_group`]).
 const BADGE_ICON_GAP: f32 = theme::space::XS;
 
@@ -9018,6 +9032,17 @@ pub fn badge_w(
     icon: Option<crate::icons::Icon>,
     measure: &dyn plx_machine::machine::Measure,
 ) -> f32 {
+    badge_w_tailed(text, icon, None, measure)
+}
+
+/// [`badge_w`] with a trailing mark's text ([`BadgeTail`]) inside the chip: its MICRO advance and
+/// the gap before it, added outside the short-tag floor like the leading glyph's band.
+pub fn badge_w_tailed(
+    text: &str,
+    icon: Option<crate::icons::Icon>,
+    tail: Option<&str>,
+    measure: &dyn plx_machine::machine::Measure,
+) -> f32 {
     const PAD: f32 = 12.0;
     const MIN_W: f32 = 56.0;
     let lead = if icon.is_some() {
@@ -9025,7 +9050,12 @@ pub fn badge_w(
     } else {
         0.0
     };
-    (measure.width_str(text, theme::size::CAPTION, true) + 2.0 * PAD).max(MIN_W) + lead
+    (measure.width_str(text, theme::size::CAPTION, true) + 2.0 * PAD).max(MIN_W) + lead + tail_w(tail, measure)
+}
+
+/// A trailing mark's band: the gap before it and its own MICRO advance (0 with none).
+fn tail_w(tail: Option<&str>, measure: &dyn plx_machine::machine::Measure) -> f32 {
+    tail.map_or(0.0, |t| BADGE_ICON_GAP + measure.width_str(t, theme::size::MICRO, true))
 }
 /// Draw one chip with its LEFT edge at `x`, vertically centred on `cy`; returns its width.
 pub fn badge(
@@ -9037,12 +9067,28 @@ pub fn badge(
     style: BadgeStyle,
     measure: &dyn plx_machine::machine::Measure,
 ) -> f32 {
+    badge_tailed(p, x, cy, text, icon, None, style, measure)
+}
+
+/// [`badge`] with a trailing mark after the label ([`BadgeTail`]); `None` is exactly [`badge`].
+#[allow(clippy::too_many_arguments)]
+pub fn badge_tailed(
+    p: Painter,
+    x: f32,
+    cy: f32,
+    text: &str,
+    icon: Option<crate::icons::Icon>,
+    tail: Option<BadgeTail<'_>>,
+    style: BadgeStyle,
+    measure: &dyn plx_machine::machine::Measure,
+) -> f32 {
     let lc = match std::ffi::CString::new(text) {
         Ok(c) => c,
         Err(_) => return 0.0,
     };
+    let tail = tail.and_then(|t| std::ffi::CString::new(t.text).ok().map(|c| (t, c)));
     let sz = theme::size::CAPTION;
-    let w = badge_w(text, icon, measure);
+    let w = badge_w_tailed(text, icon, tail.as_ref().map(|(t, _)| t.text), measure);
     let r = Rect::new(x, cy - BADGE_H * 0.5, w, BADGE_H);
     let ink = match style {
         BadgeStyle::Outlined { col, border, bg } => {
@@ -9077,6 +9123,10 @@ pub fn badge(
             p.rect_rimmed_w(r, RING_RAD, fill, fill, rim, 0.0, RING_STROKE);
             ink
         }
+        BadgeStyle::Dashed { fill, rim, ink } => {
+            p.rect_dashed(r, RING_RAD, fill, rim, RING_STROKE, theme::BADGE_DASH);
+            ink
+        }
     };
     let ty = plx_gfx::text::text_vcenter_y(sz, 1, cy);
     // [glyph + gap + label] centred in the chip as ONE run — the same composition `Button::draw`
@@ -9088,7 +9138,8 @@ pub fn badge(
         0.0
     };
     let tw = measure.width(&lc, sz, true);
-    let gl = r.cx() - (lead + tw) * 0.5;
+    let trail = tail_w(tail.as_ref().map(|(t, _)| t.text), measure);
+    let gl = r.cx() - (lead + tw + trail) * 0.5;
     if let Some(i) = icon {
         crate::icons::draw(
             p,
@@ -9098,6 +9149,11 @@ pub fn badge(
         );
     }
     p.text(lc.as_ptr(), gl + lead, ty, sz, ink, 0, 1); // left-aligned after the glyph
+    if let Some((t, c)) = tail {
+        let small = theme::size::MICRO;
+        let y = plx_gfx::text::baseline_y(small, 1, sz, 1, ty);
+        p.text(c.as_ptr(), gl + lead + tw + BADGE_ICON_GAP, y, small, t.ink, 0, 1);
+    }
     w
 }
 

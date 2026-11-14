@@ -154,6 +154,9 @@ pub struct HudMotion {
     /// show and which one is in flight. Stepped where that art is probed, in the draw ([`super::render::draw`]); see
     /// [`crate::scrub_preview`].
     pub(super) preview: crate::scrub_preview::ScrubPreview,
+    /// **The trailing head controls' shift across a pending play** ([`super::trail::TrailHold`]): a render memo,
+    /// settled by the draw and read by the screen's geometry report.
+    pub(super) trail: super::trail::TrailHold,
     /// The knob's return to the playhead when a scrub is cancelled ([`crate::knob_spring`]).
     pub(super) spring: KnobSpring,
     /// **The chapters strip's Shelf** ([`super::strip`]): its pop, scroll and caption springs are LOGICAL state
@@ -222,6 +225,7 @@ impl HudMotion {
             play_at: None,
             pause_seen: None,
             preview: crate::scrub_preview::ScrubPreview::new(),
+            trail: super::trail::TrailHold::default(),
             spring: KnobSpring::new(),
             strip: None,
             appear: [PopoverMotion::at(0.0); 2],

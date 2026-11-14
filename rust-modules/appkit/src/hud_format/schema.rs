@@ -780,7 +780,7 @@ pub static BINDINGS: &[Binding] = &[
     Binding { name: "clock.now", since: V1_2, doc: "The wall-clock time, in the TV's 12- or 24-hour format (app text, never elides: like `label.*` it takes no `w` and no `max_lines`). The app supplies it once a frame; the HUD reads no clock." },
     Binding { name: "label.video", since: V1_2, doc: "The playback details panel's picture heading, in capitals (app text, localized; like `label.info` it takes no `w` and no `max_lines`)." },
     Binding { name: "label.audio", since: V1_2, doc: "The playback details panel's sound heading, in capitals (app text, localized; no `w`, no `max_lines`)." },
-    Binding { name: "stream.video_source", since: V1_2, doc: "\"Source: \" and the picture the file carries (\"1080p HDR\"), or a dash. Composed from server facts, may elide." },
+    Binding { name: "stream.video_source", since: V1_2, doc: "\"Source: \" and the picture the file carries (\"1080p HDR10\"), or a dash. Composed from server facts, may elide." },
     Binding { name: "stream.video_output", since: V1_2, doc: "\"Output: \" and the picture the TV is shown (\"720p SDR\"), or a dash. May elide." },
     Binding { name: "stream.audio_source", since: V1_2, doc: "\"Source: \" and the sound the file carries (\"Dolby Digital 5.1\"), or a dash. May elide." },
     Binding { name: "stream.audio_output", since: V1_2, doc: "\"Output: \" and the sound that reaches the TV (\"AAC Stereo\"), or a dash. May elide." },
@@ -1354,7 +1354,7 @@ pub static CELL_FACTS: Node = Node {
         Field::opt(
             "stream",
             Ty::EnumList(&["resolution", "dynamic_range", "stream_mode", "audio_codec"]),
-            "The stream pills, after the badges: what THIS session's stream is, the web player's way (the picture's resolution as a solid amber pill, its dynamic range outlined, `Transcoding` on the neutral fill while the server re-encodes the picture and nothing otherwise, the sound as codec and channels in one pill). A pill the TV cannot verify wears the unsure rim and a `?`. An ordered subset; a fact the stream does not state draws no pill.",
+            "The stream pills, after the badges: what THIS session's stream is, the web player's way (the picture's resolution as a solid amber pill, its dynamic range outlined, `Transcoding` on the neutral fill while the server re-encodes the picture and nothing otherwise, the sound as codec and channels in one pill). A pill the TV cannot verify wears the dashed unsure rim and a small `?`; a Dolby or DTS sound leads with the surround mark. An ordered subset; a fact the stream does not state draws no pill.",
         )
         .default("[]")
         .at(V1_2),

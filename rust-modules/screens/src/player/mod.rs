@@ -2291,7 +2291,8 @@ impl PlayerScreen {
         let bits = self.hud.sections.bits();
         if let Some((state, skip)) = player_hud::geometry::frame_state_content(&self.compiled, bits, self.eff_slot(), chapters, self.model.is_episode, self.model.paused) {
             let state = state.skip_variant(skip);
-            player_hud::trail::shift(&mut geo, state, player_hud::trail::trail_dx(state, meta, H::session(cx), cx.measure));
+            let dx = player_hud::trail::trail_dx(state, meta, H::session(cx), self.model.paused, cx.measure, &self.row);
+            player_hud::trail::shift(&mut geo, state, dx);
         }
         geo
     }
@@ -2768,9 +2769,15 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Screen<H> for PlayerScreen {
     fn links(&self, out: &mut Vec<Link>) {
         let order = self.travel_order(self.model.chapters);
         if self.hud.sections.any() && self.modal() {
-            if let Some(latest) = self.hud.sections.latest() {
-                out.push(Link { from: GROUP_TABS, dir: order.toward_page(), to: Sections::group_of(latest) });
+            // A modal page is entered from the tabs and left toward them, and that link comes FIRST (the first link
+            // from a group in a direction wins). Only toward a page that has a stop: a link to an empty group stops
+            // the key there instead of letting the next one answer it.
+            if let Some(page) = self.hud.sections.latest().map(Sections::group_of).filter(|g| order.has(*g)) {
+                out.push(Link { from: GROUP_TABS, dir: order.toward_page(), to: page });
             }
+            // The head beside the title (format 1.2) stays on screen over a modal page, and so do the tabs: they
+            // still reach each other (MultiPlex's ⓘ disc, Down, to its More pill with the panel open, and Up back).
+            order.link_pair(GROUP_HEAD, GROUP_TABS, out);
             return;
         }
         order.links(out);

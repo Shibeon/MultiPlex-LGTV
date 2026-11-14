@@ -471,6 +471,7 @@ impl Chaptered {
                 markers: Vec::new(),
                 chapters: (1..=count).map(chapter).collect(),
                 hdr: false,
+                hdr_kind: Default::default(),
             }
         ))));
         Chaptered
@@ -3324,6 +3325,51 @@ mod multiplex {
         Run::boot_in(Occupant::Plain, plx_appkit::player_hud::loaded::multiplex_for_test(), true)
     }
 
+    /// A film playing with one AAC stereo track over a resolved stream, installed in the test thread's metadata store
+    /// and removed on drop: what the stream pills (and so where the ⓘ disc trails them) are read from.
+    struct Streaming {
+        ps: plx_media::route::PlaybackSession,
+    }
+    impl Streaming {
+        fn install() -> Streaming {
+            plx_data::metadata::set_current_for_test(test_store().state_mut(), Some(plx_data::metadata::Detail {
+                rk: "rk".into(),
+                kind: "movie".into(),
+                title: "A".into(),
+                ..Default::default()
+            }));
+            let audio = vec![plx_data::metadata::Stream { id: 7, codec: "aac".into(), channels: 2, default: true, ..Default::default() }];
+            assert!(test_store().run(plx_data::stores::metadata::MetadataCmd::InstallPlaying(Some(plx_data::metadata::PlayingItem {
+                sid: plx_plex::plex::ServerId::from_raw(0),
+                rk: "rk".into(),
+                duration_ms: None,
+                show_rk: String::new(),
+                kind: "movie".into(),
+                audio,
+                subs: Vec::new(),
+                video_fps: 0.0,
+                width: 1920,
+                height: 1080,
+                bitrate: 0,
+                dovi: Default::default(),
+                markers: Vec::new(),
+                chapters: Vec::new(),
+                hdr: false,
+                hdr_kind: Default::default(),
+            }))));
+            let mut ps = super::super::playback_session(0, 0);
+            plx_media::route::set_url(&mut ps, "http://pms.invalid/library/parts/1/file.mkv");
+            plx_media::route::set_stream_acodec(&mut ps, "aac");
+            Streaming { ps }
+        }
+    }
+    impl Drop for Streaming {
+        fn drop(&mut self) {
+            let _ = test_store().run(plx_data::stores::metadata::MetadataCmd::InstallPlaying(None));
+            plx_data::metadata::set_current_for_test(test_store().state_mut(), None);
+        }
+    }
+
     /// The head's controls in the compiled order: the back chevron first, the Info disc second.
     const EXIT: u32 = 0;
     const INFO: u32 = 1;
@@ -3373,11 +3419,27 @@ mod multiplex {
         let mut run = run();
         run.walk("UU");
         assert_eq!(run.held_now(), Some(head_elem(INFO)));
-        let disc = run.screen().geometry_for(false).head[INFO as usize];
+        // the disc where the stops and the pointer read it: trailing a resolved stream's pills
+        let streaming = Streaming::install();
+        let reported = |run: &mut Run| {
+            let cx: Cx<'_, TestHost> = Cx {
+                views: &streaming.ps,
+                tick: plx_machine::machine::Tick::default(),
+                measure: &FixtureMeasure,
+                focus: Default::default(),
+                press: Default::default(),
+                owner: InputOwner::Entry(ENTRY),
+            };
+            run.screen().hud_geometry(&cx).head[INFO as usize]
+        };
+        let disc = reported(&mut run);
+        let compiled = run.screen().geometry_for(false).head[INFO as usize];
+        assert!(disc.zip(compiled).is_some_and(|(d, c)| d.x < c.x), "the disc trails the pills, not its compiled room: {disc:?} vs {compiled:?}");
         run.step('K');
         assert_eq!(run.screen().hud.sections.iter().collect::<Vec<_>>(), vec![Section::Info], "OK opens the panel");
         assert_eq!(run.held_now(), Some(head_elem(INFO)), "the focus stays on the disc");
-        assert_eq!(run.screen().geometry_for(false).head[INFO as usize], disc, "the disc does not move when the panel opens");
+        assert_eq!(reported(&mut run), disc, "the disc does not move when the panel opens");
+        drop(streaming);
         run.step('R');
         assert_eq!(run.group_now(), GROUP_HEAD.0, "Right on the disc stays in the head");
         run.step('L');
@@ -3386,7 +3448,10 @@ mod multiplex {
         run.step('R');
         assert_eq!(run.held_now(), Some(head_elem(INFO)), "Right from the chevron: the disc");
         run.step('D');
-        assert_eq!(run.held_now(), Some(head_elem(INFO)), "the panel has no stop and a modal page links nothing else: Down stays on the disc");
+        assert_eq!((run.group_now(), run.held_now()), (GROUP_TABS.0, Some(ELEM_TAB_BASE + 2)), "Down from the disc over the open panel: the More pill");
+        assert_eq!(run.screen().hud.sections.iter().collect::<Vec<_>>(), vec![Section::Info], "the panel stays open");
+        run.step('U');
+        assert_eq!(run.held_now(), Some(head_elem(INFO)), "Up from More: back on the disc");
         run.step('K');
         assert_eq!(run.screen().hud.sections.bits(), 0, "OK again closes the panel");
         assert_eq!(run.held_now(), Some(head_elem(INFO)));

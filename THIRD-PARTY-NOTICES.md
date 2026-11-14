@@ -194,7 +194,10 @@ used by the top bar and the Detail hero's star row so this client matches the ot
 The path data is copied unchanged from the MultiPlex web app's icon set (`apps/web/src/ui.tsx`),
 which is distributed under the **MIT** licence (`licenses/MIT.txt`). Where that path data
 originally comes from was **not established**. *Modified*: wrapped as standalone SVG files with a
-white fill; the arc flags of `tv.svg` were written out in full for the SVG parser.
+white fill; the arc flags of `tv.svg` were written out in full for the SVG parser. The `surround`
+mark (`assets/icons/surround.svg`, the player's Dolby / DTS stream pill) is that app's
+`SurroundMark` (`apps/web/src/playerui.tsx`), same licence: the circle and arcs unchanged, moved
+4 units down from its 24×16 box into a 24×24 viewBox, with a white fill and stroke.
 
 The remaining icons in the application are original work by the PlxNative author and the MultiPlex contributors. See section 4
 for a trademark note that applies to some of them.

@@ -244,15 +244,7 @@ pub(crate) fn stream_input(ps: &plx_media::route::PlaybackSession, item: Option<
         return None;
     }
     let (transcoding, remux) = (route::is_transcoding(ps), route::is_remux(ps));
-    let src_range = item.and_then(|i| {
-        if i.dovi.present {
-            Some(SourceRange::DolbyVision)
-        } else if i.hdr {
-            Some(SourceRange::Hdr)
-        } else {
-            None
-        }
-    });
+    let src_range = item.and_then(|i| SourceRange::of(i.hdr_kind, i.dovi.present, i.hdr));
     let sid = route::cur_audio_sid(ps);
     let track = item.and_then(|i| i.audio.iter().find(|s| s.id == sid && sid != 0).or_else(|| i.audio.iter().find(|s| s.default)).or_else(|| i.audio.first()));
     let src_audio = track.map(|t| AudioFacts { codec: t.codec.clone(), channels: t.channels, profile: t.profile.clone(), title: t.title.clone(), atmos: t.has_atmos() });
@@ -277,18 +269,39 @@ pub(crate) fn stream_input(ps: &plx_media::route::PlaybackSession, item: Option<
     })
 }
 
-/// The dynamic range the source file carries (`PlayingItem::dovi`, `PlayingItem::hdr`).
+/// The dynamic range the source file carries (`PlayingItem::hdr_kind`), named as the web player names it
+/// (`packages/core/src/playback.ts`, `hdrKind`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SourceRange {
     DolbyVision,
+    Hdr10,
+    Hlg,
+    /// HDR whose format the record does not say: an item built from a recording made before
+    /// `hdr_kind` existed
     Hdr,
 }
 
 impl SourceRange {
+    /// The source's range from the item's [`metadata::HdrKind`], its Dolby Vision record and its HDR flag;
+    /// `None` for SDR.
+    fn of(kind: metadata::HdrKind, dovi: bool, hdr: bool) -> Option<SourceRange> {
+        use metadata::HdrKind as K;
+        match kind {
+            K::DolbyVision => Some(SourceRange::DolbyVision),
+            K::Hdr10 => Some(SourceRange::Hdr10),
+            K::Hlg => Some(SourceRange::Hlg),
+            K::Sdr if dovi => Some(SourceRange::DolbyVision),
+            K::Sdr if hdr => Some(SourceRange::Hdr),
+            K::Sdr => None,
+        }
+    }
+
     /// The pill's label, the web player's: a format name, never translated.
     fn label(self) -> &'static str {
         match self {
             SourceRange::DolbyVision => "Dolby Vision",
+            SourceRange::Hdr10 => "HDR10",
+            SourceRange::Hlg => "HLG",
             SourceRange::Hdr => "HDR",
         }
     }
@@ -794,10 +807,30 @@ mod stream_output_tests {
         let kept = StreamOutput::derive(&StreamInput { src_range: Some(SourceRange::DolbyVision), ..input() });
         assert_eq!(kept.range.as_ref().map(|p| (p.label.as_str(), p.kind)), Some(("Dolby Vision", K::Hdr)));
         assert_eq!(kept.video_output, "1080p Dolby Vision");
-        let tone = StreamOutput::derive(&StreamInput { src_range: Some(SourceRange::Hdr), video_kept: false, ..input() });
+        let tone = StreamOutput::derive(&StreamInput { src_range: Some(SourceRange::Hdr10), video_kept: false, ..input() });
         assert_eq!(tone.range.as_ref().map(|p| (p.label.as_str(), p.kind)), Some(("SDR", K::Sdr)));
-        assert_eq!(tone.video_source, "1080p HDR");
-        assert!(tone.notes.contains(&note(&msg::player_stream_to_sdr("HDR"))), "{:?}", tone.notes);
+        assert_eq!(tone.video_source, "1080p HDR10");
+        assert!(tone.notes.contains(&note(&msg::player_stream_to_sdr("HDR10"))), "{:?}", tone.notes);
+    }
+
+    /// The range is named the web player's way (`hdrKind`): HDR10 for PQ, HLG, Dolby Vision, and plain
+    /// HDR only for an item whose record predates the format.
+    #[test]
+    fn the_range_names_hdr10_hlg_and_dolby_vision() {
+        use metadata::HdrKind as H;
+        let label = |kind, dovi, hdr| SourceRange::of(kind, dovi, hdr).map(SourceRange::label);
+        assert_eq!(label(H::Hdr10, false, true), Some("HDR10"));
+        assert_eq!(label(H::Hlg, false, true), Some("HLG"));
+        assert_eq!(label(H::DolbyVision, true, true), Some("Dolby Vision"));
+        assert_eq!(label(H::Sdr, true, true), Some("Dolby Vision"), "a Dolby Vision record names it");
+        assert_eq!(label(H::Sdr, false, true), Some("HDR"), "a record from before the format");
+        assert_eq!(label(H::Sdr, false, false), None);
+        assert_eq!(H::of("smpte2084", false), H::Hdr10);
+        assert_eq!(H::of("arib-std-b67", false), H::Hlg);
+        assert_eq!(H::of("smpte2084", true), H::DolbyVision);
+        assert_eq!(H::of("bt709", false), H::Sdr);
+        let kept = StreamOutput::derive(&StreamInput { src_range: Some(SourceRange::Hlg), ..input() });
+        assert_eq!(kept.range.as_ref().map(|p| p.label.as_str()), Some("HLG"));
     }
 
     #[test]

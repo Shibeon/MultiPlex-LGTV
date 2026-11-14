@@ -45,9 +45,15 @@ type Rgba = [f32; 4];
 /// The shared frame predicate for live paint: pause and the actual real-episode identity. A strip card
 /// adds its own `item.*` predicates to these parent values.
 pub(super) fn holds<'a>(f: &'a Frame<'_>) -> impl Fn(&str) -> bool + Copy + 'a {
+    holds_in(f.model.paused, f.meta)
+}
+
+/// [`holds`] from its two reads, for a caller with no [`Frame`] (the screen's geometry report, through
+/// [`super::trail::trail_dx`]): the same predicates, so a keyed value resolves alike in the draw and the report.
+pub(crate) fn holds_in(paused: bool, meta: plx_data::metadata::MetadataView<'_>) -> impl Fn(&str) -> bool + Copy + '_ {
     move |name| match name {
-        "transport.paused" => f.model.paused,
-        "title.is_episode" => f.meta.now_playing().is_some_and(|n| n.is_real_episode),
+        "transport.paused" => paused,
+        "title.is_episode" => meta.now_playing().is_some_and(|n| n.is_real_episode),
         _ => false,
     }
 }
@@ -157,6 +163,12 @@ pub(super) fn is_section_text(bind: &str) -> bool {
     )
 }
 
+/// Does `bind`'s text break at its newlines ([`TextView::hard_breaks`])? Only the playback details panel's notes,
+/// which the app writes one to a line; every other bind (a server's summary above all) wraps its newlines as spaces.
+pub(super) fn hard_breaks(bind: &str) -> bool {
+    bind == "stream.notes"
+}
+
 /// The frame a [`TextView`] draws a line box into so the box's top lands on `top`: the view takes the CAP
 /// top, the compile places the box top ([`module doc`](self)).
 pub(super) fn line_frame(rect: Rect, size: i32, bold: bool) -> Rect {
@@ -190,7 +202,7 @@ pub(super) fn text(
 ) {
     let Some(content) = text_of(f, bind) else { return };
     let bold = bold.at(holds(f));
-    let view = text_view(&content, size, bold, ink.at(holds(f)), max_lines, leading);
+    let view = text_view(&content, size, bold, ink.at(holds(f)), max_lines, leading).hard_breaks(hard_breaks(bind));
     // The clock's room is its WIDEST time (`compile::text_label`): it stands against the room's end, so the
     // time does not drift sideways as its digits change.
     let view = if bind == "clock.now" { view.h(plx_ui::label::HAlign::Right) } else { view };
@@ -348,9 +360,9 @@ pub(super) fn group_for<T: AsRef<DrawOp>>(
             continue;
         }
         let (body, h) = match child_ops.as_slice() {
-            [DrawOp::Text { rect, size, bold, ink, alpha, max_lines, leading, .. }] => {
+            [DrawOp::Text { bind, rect, size, bold, ink, alpha, max_lines, leading }] => {
                 let text = content.as_deref().unwrap_or("");
-                let view = text_view(text, *size, bold.at(predicates), ink.at(predicates), *max_lines, *leading).h(align);
+                let view = text_view(text, *size, bold.at(predicates), ink.at(predicates), *max_lines, *leading).h(align).hard_breaks(hard_breaks(bind));
                 // a block with nothing to say takes no room; a heading keeps its line
                 let h = (!text.is_empty() || (*max_lines == 1 && content.is_some())).then(|| view.measure_h(rect.w));
                 (Body::Text { view, rect: *rect, alpha: *alpha, op: child_ops[0] }, h)

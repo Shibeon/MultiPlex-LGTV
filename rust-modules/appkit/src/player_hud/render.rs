@@ -663,7 +663,7 @@ fn walk<H: Host>(
                 DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink, hug } => {
                     let right = sections::facts(f, q, *rect, order, badges, stream, *genres_max, *playback_fact, *size, bold, ink);
                     if *hug {
-                        trail_dx = right - (rect.x + rect.w);
+                        trail_dx = row.trail.settle(right - (rect.x + rect.w), plx_media::route::play_pending());
                     }
                 }
                 DrawOp::Strip { .. } => sections::strip(f, df, row, q, op, moved, compiled),

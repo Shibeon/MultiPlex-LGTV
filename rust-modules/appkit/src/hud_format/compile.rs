@@ -2677,8 +2677,17 @@ pub(crate) fn weigh(op: &DrawOp) -> Contributor {
         DrawOp::Rule { rect, ink } => c.blended_px = if translucent(ink) { area(*rect) } else { 0 },
         DrawOp::Facts { order, badges, stream, .. } => {
             c.glyph_runs = order.len() + badges.len() + stream.len();
-            // each stream pill (format 1.2) also paints its capsule, one pass apiece (`BadgeStyle::Solid` or `Rimmed`)
+            // each stream pill (format 1.2) also paints its capsule, one pass apiece (`BadgeStyle::Solid`, `Rimmed`
+            // or `Dashed`)
             c.draw_ops += stream.len();
+            // the sound's pill at its dearest: the surround mark before a Dolby / DTS label (an icon, one draw and
+            // its texture) and the unsure "?" after it (a second, smaller run) — `chip_row::StreamPill::icon`
+            if stream.iter().any(|s| s == "audio_codec") {
+                let icon = plx_ui::widgets::BADGE_ICON;
+                c.draw_ops += 1;
+                c.glyph_runs += 1;
+                c.texture_bytes = 4 * (icon * icon).round() as u64;
+            }
         }
         DrawOp::Playbar { track, track_ink, .. } => {
             c.glyph_runs = 2;

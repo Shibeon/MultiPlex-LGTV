@@ -399,7 +399,7 @@
         },
         "stream": {
           "default": [],
-          "description": "The stream pills, after the badges: what THIS session's stream is, the web player's way (the picture's resolution as a solid amber pill, its dynamic range outlined, `Transcoding` on the neutral fill while the server re-encodes the picture and nothing otherwise, the sound as codec and channels in one pill). A pill the TV cannot verify wears the unsure rim and a `?`. An ordered subset; a fact the stream does not state draws no pill.",
+          "description": "The stream pills, after the badges: what THIS session's stream is, the web player's way (the picture's resolution as a solid amber pill, its dynamic range outlined, `Transcoding` on the neutral fill while the server re-encodes the picture and nothing otherwise, the sound as codec and channels in one pill). A pill the TV cannot verify wears the dashed unsure rim and a small `?`; a Dolby or DTS sound leads with the surround mark. An ordered subset; a fact the stream does not state draws no pill.",
           "items": {
             "enum": [
               "resolution",

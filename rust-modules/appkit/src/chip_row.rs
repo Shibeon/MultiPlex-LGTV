@@ -9,7 +9,8 @@
 
 use plx_ui::hstack::{Align, HStack, Item};
 use plx_ui::theme;
-use plx_ui::widgets::{badge, badge_w, BadgeStyle, DottedRun};
+use plx_ui::icons::Icon;
+use plx_ui::widgets::{badge, badge_tailed, badge_w, badge_w_tailed, BadgeStyle, BadgeTail, DottedRun};
 use plx_ui::Painter;
 use std::os::raw::c_int;
 
@@ -58,17 +59,17 @@ pub enum ChipKind {
     Run { parts: Vec<String>, lead_dot: bool, size: c_int, bold: c_int, col: [f32; 4] },
     /// An outlined capability badge ([`meta_badge`]) saying this.
     Badge(String),
-    /// One of the player's stream pills, styled by what it is about and whether it is unsure; the label
-    /// already carries the unsure "?" ([`stream_label`]).
-    Stream(String, StreamPill, bool),
+    /// One of the player's stream pills: its label, what it is about, whether it is unsure (the dashed rim and
+    /// the small "?", [`STREAM_UNSURE_MARK`]) and the glyph it leads with ([`StreamPill::icon`]).
+    Stream { label: String, pill: StreamPill, unsure: bool, icon: Option<Icon> },
 }
 
 /// **What a stream pill is about**, which picks its look (`facts.stream`, the MultiPlex HUD's stream row,
 /// the web player's `.ptech` pills): the resolution the one solid amber capsule; the others on one dark ground
 /// told apart by their rim (an HDR kind in the picture's blue, SDR in a quiet white, the sound in its indigo),
-/// "Transcoding" plain. An UNSURE pill (deduced, not verifiable on this TV) wears the quiet unsure rim in place
-/// of its own and a "?" after its label ([`stream_label`]). Each is one pass and one label. The look is the ONE
-/// place they differ.
+/// "Transcoding" plain. An UNSURE pill (deduced, not verifiable on this TV) wears the dashed unsure rim in place
+/// of its own and a small "?" after its label ([`STREAM_UNSURE_MARK`]); a Dolby or DTS sound leads with the
+/// surround mark ([`StreamPill::icon`]). The capsule is one pass. The look is the ONE place they differ.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StreamPill {
     Resolution,
@@ -79,11 +80,11 @@ pub enum StreamPill {
 }
 
 impl StreamPill {
-    /// The shared badge leaf's style for this pill; `unsure` swaps its rim for the unsure one.
+    /// The shared badge leaf's style for this pill; `unsure` swaps its rim for the dashed unsure one.
     pub fn style(self, unsure: bool) -> BadgeStyle {
         let rimmed = |rim, ink| BadgeStyle::Rimmed { fill: theme::STREAM_PILL_FILL, rim, ink };
         if unsure && self != StreamPill::Resolution {
-            return rimmed(theme::STREAM_UNSURE_RIM, theme::STREAM_UNSURE_INK);
+            return BadgeStyle::Dashed { fill: theme::STREAM_PILL_FILL, rim: theme::STREAM_UNSURE_RIM, ink: theme::STREAM_UNSURE_INK };
         }
         match self {
             StreamPill::Resolution => BadgeStyle::Solid { fill: theme::STREAM_RES_FILL, ink: theme::STREAM_RES_INK },
@@ -95,13 +96,23 @@ impl StreamPill {
     }
 }
 
-/// A stream pill's label as drawn: an unsure pill says so with a "?" after it (the web player's `<i>?</i>`).
-pub fn stream_label(label: &str, unsure: bool) -> String {
-    if unsure {
-        format!("{label} ?")
-    } else {
-        label.to_owned()
+impl StreamPill {
+    /// The glyph a pill leads with: the surround mark before a Dolby or DTS sound (the web player's
+    /// `SurroundMark`, shown for an audio label matching `/^(Dolby|DTS)/`), nothing otherwise. The labels are
+    /// the codecs' own names (`plx_media::lang::friendly_codec`), never translated, so the test is the web's.
+    pub fn icon(self, label: &str) -> Option<Icon> {
+        let multichannel = label.starts_with("Dolby") || label.starts_with("DTS");
+        (self == StreamPill::Audio && multichannel).then_some(Icon::Surround)
     }
+}
+
+/// What an unsure pill says after its label (the web player's `<i>?</i>`), drawn smaller and quieter as the
+/// badge's trailing mark ([`BadgeTail`]).
+pub const STREAM_UNSURE_MARK: &str = "?";
+
+/// The unsure pill's trailing mark, or none.
+fn unsure_tail(unsure: bool) -> Option<BadgeTail<'static>> {
+    unsure.then_some(BadgeTail { text: STREAM_UNSURE_MARK, ink: theme::STREAM_UNSURE_MARK_INK })
 }
 
 impl Chip {
@@ -147,9 +158,9 @@ impl Chip {
 
     /// A stream pill ([`StreamPill`]): the badge leaf's width, its look by kind.
     pub(crate) fn stream(pill: &crate::info_panel::Pill, measure: &dyn plx_machine::machine::Measure) -> Self {
-        let label = stream_label(&pill.label, pill.unsure);
-        let w = badge_w(&label, None, measure);
-        Self { kind: ChipKind::Stream(label, pill.kind, pill.unsure), w }
+        let icon = pill.kind.icon(&pill.label);
+        let w = badge_w_tailed(&pill.label, icon, unsure_tail(pill.unsure).map(|t| t.text), measure);
+        Self { kind: ChipKind::Stream { label: pill.label.clone(), pill: pill.kind, unsure: pill.unsure, icon }, w }
     }
 }
 
@@ -204,7 +215,7 @@ impl ChipRow {
         }
         let item = Item::new(chip.w).priority(CHIP_PRIORITY);
         self.items[self.n] = match chip.kind {
-            ChipKind::Badge(_) | ChipKind::Stream(..) => item.after(theme::space::XS),
+            ChipKind::Badge(_) | ChipKind::Stream { .. } => item.after(theme::space::XS),
             ChipKind::Run { .. } => item,
         };
         self.chips[self.n] = Some(chip);
@@ -237,8 +248,8 @@ pub fn draw_chip_row(
             ChipKind::Badge(label) => {
                 meta_badge(p, placed.x, my, label, measure);
             }
-            ChipKind::Stream(label, pill, unsure) => {
-                badge(p, placed.x, my, label, None, pill.style(*unsure), measure);
+            ChipKind::Stream { label, pill, unsure, icon } => {
+                badge_tailed(p, placed.x, my, label, *icon, unsure_tail(*unsure), pill.style(*unsure), measure);
             }
         }
     }
@@ -418,6 +429,42 @@ mod tests {
         assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["2019", "Direct Play"]);
         let first = m.width_str("2019", sz, true);
         assert!((runs[1].at.x - (runs[0].at.x + first) - space::SM).abs() < 0.5, "two runs stand one SM apart");
+    }
+
+    /// **The web player's stream pill, piece by piece**: an unsure Dolby sound leads with the surround mark, its
+    /// capsule's rim is DASHED (one pass, the dashed command), and the "?" after the label is a second run one rung
+    /// smaller in the quieter mark ink, on the label's baseline and inside the chip's measured width. A sure AAC pill
+    /// has none of the three.
+    #[test]
+    fn an_unsure_dolby_pill_has_the_surround_mark_a_dashed_rim_and_a_small_question_mark() {
+        use super::StreamPill;
+        use plx_ui::icons::Icon;
+        use plx_ui::theme;
+        let m = FixtureMeasure;
+        let pill = |label: &str, unsure: bool| crate::info_panel::Pill { label: label.into(), kind: StreamPill::Audio, unsure };
+        let draw_of = |p: &crate::info_panel::Pill| {
+            let chips = row_of([Chip::stream(p, &m)]);
+            let w = chips.chips[0].as_ref().map(|c| c.w).unwrap_or_default();
+            let draw = || draw_chip_row(plx_ui::Painter::recording(), &chips, chips.row(100.0), 600.0, &m);
+            (w, plx_ui::draw_census::capture_runs(draw), plx_ui::draw_census::capture_icons(draw), plx_ui::draw_census::capture(draw))
+        };
+        let dolby = pill("Dolby Digital 5.1", true);
+        let (w, runs, icons, cmds) = draw_of(&dolby);
+        assert_eq!(icons.iter().map(|(i, _)| *i).collect::<Vec<_>>(), [Icon::Surround], "the surround mark leads");
+        assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["Dolby Digital 5.1", "?"]);
+        let (label, mark) = (&runs[0], &runs[1]);
+        assert!(icons[0].1.x < label.at.x, "the mark stands before the label");
+        assert_eq!((mark.size, mark.ink), (theme::size::MICRO, theme::STREAM_UNSURE_MARK_INK), "the ? is one rung smaller and quieter");
+        assert!(mark.at.x > label.at.x + label.at.w, "after the label");
+        assert!(mark.at.x + mark.at.w <= 100.0 + w, "inside the chip");
+        assert!(cmds.iter().any(|(tag, _)| *tag == 27), "the dashed capsule: {cmds:?}");
+        let tail = plx_ui::widgets::badge_w_tailed("Dolby Digital 5.1", Some(Icon::Surround), Some("?"), &m);
+        assert_eq!(w, tail, "measured as drawn");
+
+        let (_, runs, icons, cmds) = draw_of(&pill("AAC 2.0", false));
+        assert!(icons.is_empty(), "no mark before a plain codec");
+        assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["AAC 2.0"]);
+        assert!(cmds.iter().all(|(tag, _)| *tag != 27), "a sure pill's rim is solid");
     }
 
     /// One slot-free fit case through the drawn row: dropping the tail removes its runs from the
