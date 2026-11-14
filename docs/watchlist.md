@@ -208,9 +208,15 @@ blanked). Detail, Home hero and catalog controls draw the outline face when memb
 row is omitted when there is no face to offer, and a press flips then reverts. Reproduce with
 `/tmp/plxnative-nowan` or the failing-closure tests.
 
-**The count (Q7, decided: option D; reshaped onto the Library's header row).** The page header is the
-Library's one row (`plx_ui::page_header::PageHeader`; `watchlist/header.rs`): the title "Watchlist" as
-plain text at the left, and at the right the Library's own sort control (`HeaderItem::sort_control`):
+**The count (Q7, decided: option D; reshaped onto the Library's header row, then the MultiPlex web
+page's head).** The page header is the Library's title block and one row (`plx_ui::page_header`;
+`watchlist/header.rs`): the big title "My list" at y 148 (`page_header::draw_title_noted`) with the
+Library's muted count pill beside it (the list's total, the Library's grouped number) and, over the
+whole unfiltered list, a quiet note after the pill, "· 7 not available yet"
+(`watchlist.page.unavailable`: the Coming soon and Not on your servers tiles, `Page::title_counts`);
+under the title the web page's lead sentence on its own band at y 236
+(`watchlist.page.subtitle`, BODY in `TEXT_SECONDARY`); and on the title's line at the right the
+Library's own sort control (`HeaderItem::sort_control`):
 the sort icon, the chosen sort ("Date added") and a quiet down chevron, with "Sort & Filter" as its
 name (the item carries it; it is never drawn). The criterion is the SORT alone, a Type or Show filter
 never changes it (the read-out below says "N of M"), and it has no reserved slot: the control ends on the
@@ -233,17 +239,20 @@ the row's `TabStrip` and `CtlPop`, which `WatchlistScreen::SHAPE` carries and it
 panel is as wide as its longest label or as the control's focused pill, whichever is wider
 (`TableView::menu_panel_width_from`, the rule the Library's Sort & Filter hangs by too).
 
-**The grid and its captions follow the Library.** Six columns of 250 x 375 posters from x 96, 285
-apart (the last column ends on the row's right text edge, x 1771), the first row at y 244, a focused
-row below the first resting at y 244 too. The caption under a poster is the global Under posters setting (Settings >
-Libraries; `plx_ui::caption_policy`): the Title switch (default off) and the Movie / TV show details pickers (each a set of up to four ticked parts, shown in a fixed order), and only
-the focused row opens its band (0 / 80 / 112 px). A Watchlist row itself carries a title, a year and a
+**The grid and its captions follow the Library.** Seven columns of 2:3 posters from x 96, 16 px
+apart (`page::COLS`, `GRID_CARD_W`; the last column ends on the row's right text edge, x 1771), the
+first row at y 332 (`page::GRID_TOP`, the Library's `LIBRARY_GRID_TOP`), a focused row below the first
+resting at y 332 too. EVERY card is named, as on the web wall and the Library's grid
+(`GridSpec::every_caption`): the title line always on (`caption::every_policy`) over the details line
+of the global Under posters setting (Settings > Libraries; `plx_ui::caption_policy`: the Movie / TV
+show details pickers, each a set of up to four ticked parts, shown in a fixed order), every block
+held to its own tile (`caption::every_label`), one fixed band under every row. A Watchlist row itself carries a title, a year and a
 kind; the rest of what a caption words is the matched copy's, as the guid lookup's row said it
 (`ListingFacts`, `app/watchlist.rs`), so a playable title reads like any poster ("2001 · 1h 40m",
 "Drama", "4K · HDR", "PG-13 · 7.8", "2019 · 3 seasons") and a title with no copy falls to its year (or,
 under a picker the row has nothing for, to its kind). An unplayable title's state sentence ("Coming soon", "Not on your servers", "Server
 offline") takes the details line whatever the pickers show, an empty set included (the status words are the tile's own; the band opens one line for them under an empty set, and an available title with no ticked part has an empty second line there).
-A focused row below the first rests with its posters at the first row's y, 244 (`GridSpec::resting`,
+A focused row below the first rests with its posters at the first row's y, 332 (`GridSpec::resting`,
 `poster_grid::rest_scroll`: the Library's rule, one function for both pages), and the last rows of a
 long list rest lower because the document's end holds them. So the first scrolled rest is a whole row
 down. The page owns one `plx_ui::scroll_chrome::Handoff` (the Library's, one rule for both pages): it is
