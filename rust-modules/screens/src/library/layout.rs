@@ -25,8 +25,9 @@ pub(super) const LIBRARY_ROW_H: f32 = HEADER_BLOCK_H;
 /// Screen y of the first grid row's tile top at rest.
 #[cfg(test)]
 pub(super) const LIBRARY_GRID_TOP: f32 = HEADER_Y + HEADER_BLOCK_H;
-/// The air between two poster columns.
-pub(super) const GRID_GAP: f32 = theme::space::SM;
+/// The air between two poster columns: the shared poster wall's.
+#[cfg(test)]
+pub(super) const GRID_GAP: f32 = plx_ui::cards::POSTER_WALL_GAP;
 /// A collapsed poster row's pitch (every card named).
 #[cfg(test)]
 pub(super) const GRID_PITCH: f32 = GRID_CARD_W * (RowStyle::HOME.h / RowStyle::HOME.w) + plx_ui::cards::EVERY_CAPTION_ROW_GAP;
@@ -40,10 +41,7 @@ pub(super) const RAIL_BAND: f32 = RAIL_TRACK_W + theme::space::XS;
 pub(super) const GRID_RIGHT: f32 = SCR_W - MARGIN_X - RAIL_BAND;
 /// A poster's width: [`COLS`] posters and their gaps fill the band before the rail.
 #[cfg(test)]
-pub(super) const GRID_CARD_W: f32 = poster_w(COLS);
-
-/// The width of a poster when `cols` of them and their gaps fill the band before the rail.
-const fn poster_w(cols: usize) -> f32 { (GRID_RIGHT - MARGIN_X - (cols as f32 - 1.0) * GRID_GAP) / cols as f32 }
+pub(super) const GRID_CARD_W: f32 = plx_ui::cards::poster_wall_w(MARGIN_X, GRID_RIGHT, COLS);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Block {
@@ -142,25 +140,18 @@ impl Layout {
     pub(super) fn every(&self) -> bool { !self.episodes && !self.value_line }
 
     /// The grid keeps the shared episode treatment and gap, fitting four stills in the band
-    /// before the alphabet rail; posters are [`COLS`] of the shared poster aspect across the same
-    /// band ([`VALUE_COLS`] while they show sort values), [`GRID_GAP`] apart. Its height follows the shared aspect, so the grid's hit boxes,
+    /// before the alphabet rail; posters are the shared poster wall
+    /// ([`RowStyle::poster_wall`], My list's too): [`COLS`] across the same band ([`VALUE_COLS`]
+    /// while they show sort values). Its height follows the shared aspect, so the grid's hit boxes,
     /// scroll window and draws all describe the same cards. Named posters hang their block
     /// [`plx_ui::cards::EVERY_CAPTION_DROP`] under the poster, every line from its left edge.
     pub(super) fn style(&self) -> RowStyle {
-        let style = if self.episodes {
-            let base = RowStyle::EPISODE;
-            let w = (GRID_RIGHT - MARGIN_X - (EPISODE_COLS - 1) as f32 * base.gap)
-                / EPISODE_COLS as f32;
-            RowStyle { w, h: w * base.h / base.w, ..base }
-        } else {
-            let base = RowStyle::HOME;
-            let w = poster_w(self.cols());
-            RowStyle { w, h: w * base.h / base.w, gap: GRID_GAP, ..base }
-        };
-        let style = if self.every() {
-            style.with_label_drop(plx_ui::cards::EVERY_CAPTION_DROP).with_leading_labels()
-        } else { style };
-        style.with_right_reserve(SCR_W - GRID_RIGHT)
+        if !self.episodes {
+            return RowStyle::poster_wall(MARGIN_X, GRID_RIGHT, self.cols(), self.every());
+        }
+        let base = RowStyle::EPISODE;
+        let w = (GRID_RIGHT - MARGIN_X - (EPISODE_COLS - 1) as f32 * base.gap) / EPISODE_COLS as f32;
+        RowStyle { w, h: w * base.h / base.w, ..base }.with_right_reserve(SCR_W - GRID_RIGHT)
     }
 
     pub(super) fn card_w(&self) -> f32 { self.style().w }

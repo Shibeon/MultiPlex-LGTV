@@ -46,8 +46,7 @@ fn the_episodes_listings_caption_clears_the_next_row_under_every_setting() {
 /// Nothing) leaves by the growth the grid documents for each band (`poster_grid::growth_before_for`:
 /// 72 px for a two-line band, 40 for a one-line one, 0 for none), and the caption's lines end inside
 /// that gap, so the label drawn and the room reserved for it cannot disagree. The page's first
-/// poster holds focus; the page is a Library grid, the Collections page, the Watchlist or the
-/// Collection screen's members (`World::poster_cell`).
+/// poster holds focus; the page is the Collection screen's members (`World::poster_cell`).
 fn grade_grid_bands(w: &mut World, surface: &str) {
     use plx_ui::caption_policy::{band_h, CaptionPolicy};
     use plx_screens::registry::caption_policy_of;
@@ -60,23 +59,12 @@ fn grade_grid_bands(w: &mut World, surface: &str) {
             .unwrap_or_else(|| panic!("{surface}: premise: the grid holds a second row"))
     };
     let gap = |w: &World| below(w).y - (w.poster_cell(0).y + w.poster_cell(0).h);
-    // The Watchlist's tiles carry their own status words, so its band is reserved by
-    // `captions::status_policy`: an empty set of parts still opens the one line the status takes
-    // (`Nothing` opens 40 px, two lines 72 with the Title On), never the closed band of the others.
-    let status = surface == "Watchlist";
     set(w, false, Details::None);
-    let closed = gap(w) - if status { 40.0 } else { 0.0 };
+    let closed = gap(w);
     for (title, details, band, want) in [(true, Details::YearLength, 112.0, 72.0), (false, Details::YearLength, 80.0, 40.0),
         (true, Details::None, 80.0, 40.0), (false, Details::None, 0.0, 0.0)] {
-        // an empty set on the Watchlist: the status line is the details line (112 / 72 with the title, 80 / 40 without)
-        let (band, want) = match (status && details == Details::None, title) {
-            (true, true) => (112.0, 72.0),
-            (true, false) => (80.0, 40.0),
-            _ => (band, want),
-        };
         set(w, title, details);
-        let mut policy: CaptionPolicy = caption_policy_of(plx_plex::plex::session::UnderPosters { title, details: details.movie_parts(), show_details: details.show_parts(), sort_value: false });
-        if status { policy = plx_screens::registry::captions::status_policy(&policy); }
+        let policy: CaptionPolicy = caption_policy_of(plx_plex::plex::session::UnderPosters { title, details: details.movie_parts(), show_details: details.show_parts(), sort_value: false });
         assert_eq!(band_h(&policy), band, "{surface}: premise: the policy's band");
         let (card, next) = (w.poster_cell(0), below(w));
         let opened = gap(w) - closed;
@@ -85,10 +73,7 @@ fn grade_grid_bands(w: &mut World, surface: &str) {
         let under: Vec<_> = drawn.runs.iter()
             .filter(|run| run.at.y >= card.y + card.h && run.at.y < next.y && run.at.x < card.x + card.w && run.at.x + run.at.w > card.x)
             .collect();
-        // (the Watchlist's focused first tile has no status, so under an empty set its open band holds no line)
-        if !(status && details == Details::None && !title) {
-            assert_eq!(!under.is_empty(), band > 0.0, "{surface}: premise: the focused poster draws a caption exactly when a band is open ({title}, {details:?})");
-        }
+        assert_eq!(!under.is_empty(), band > 0.0, "{surface}: premise: the focused poster draws a caption exactly when a band is open ({title}, {details:?})");
         for line in under {
             assert!(line.at.y + line.at.h.max(line.size as f32) <= next.y,
                 "{surface}: {:?} ends under the next row (title {title}, {details:?})", line.text);
@@ -158,11 +143,11 @@ fn the_collections_page_names_every_card_and_opens_no_band() {
     grade_every_caption(&mut w, "Collections");
 }
 
-/// The Watchlist's titles are posters in the same grid.
+/// The Watchlist's wall names every card too (the MultiPlex web watchlist, the Library's grid).
 #[test]
-fn the_watchlist_opens_the_band_its_setting_asks_for() {
+fn the_watchlist_names_every_card_and_opens_no_band() {
     let mut w = World::watchlist("band-watchlist");
-    grade_grid_bands(&mut w, "Watchlist");
+    grade_every_caption(&mut w, "Watchlist");
 }
 
 /// The Collection screen's members are posters in the same grid.

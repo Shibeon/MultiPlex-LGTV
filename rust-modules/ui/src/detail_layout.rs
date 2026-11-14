@@ -2,8 +2,9 @@
 //!
 //! **The Detail hero is two columns** (MultiPlex web's detail page): the item's poster card on the
 //! left ([`POSTER_X`], [`POSTER_TOP`], [`POSTER_W`] × [`POSTER_H`]) and a text column to its right
-//! ([`TEXT_X`]) that grows DOWN from the title's foot ([`TITLE_FOOT`]): the meta line (date, runtime,
-//! content rating), the ratings row (the providers' scores, then the viewer's five stars), the
+//! ([`TEXT_X`]) that grows DOWN from the title's foot ([`TITLE_FOOT`]): on an episode's or a season's
+//! page the subtitle (its own title, under its show's logo), the meta line (on an episode's page
+//! its season and episode first, "S1 · E1", then date, runtime, content rating), the ratings row (the providers' scores, then the viewer's five stars), the
 //! action row (the wide Play/Resume capsule and the round More disc), the synopsis, the two-column
 //! credit table and the technical pills. [`hero_chain`] is that ladder; absent rows leave no gap.
 use super::{consts::{MARGIN_X, MARGIN_Y}, theme, widgets};
@@ -71,6 +72,9 @@ pub const PREVIEW_LOGO_MAX_W: f32 = 480.0;
 /// have is `None` and takes no room.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HeroChain {
+    /// The subtitle line: an episode's or a season's own title under its show's logo
+    /// ([`HeroRows::subtitle`]).
+    pub subtitle_y: Option<f32>,
     /// The meta line (date · runtime · content rating, and how it plays).
     pub meta_y: f32,
     /// The ratings row: the providers' groups and the viewer's stars.
@@ -89,6 +93,9 @@ pub struct HeroChain {
 /// What the text column holds, measured: each row that is present, by the height it draws.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct HeroRows {
+    /// The title band names the item's show and the page's own title stands on its own line under
+    /// it ([`theme::hero::SUBTITLE_H`]), the facts a small rung below.
+    pub subtitle: bool,
     pub ratings: bool,
     /// The synopsis' measured height; `None` (or nothing to say) takes no room.
     pub synopsis_h: Option<f32>,
@@ -104,7 +111,8 @@ pub fn hero_chain(rows: HeroRows) -> HeroChain {
     let cd = widgets::StatusOverlay::CTRL_H;
     let items = [
         // the first row's air is the anchor's: a stack ignores `before` on its first item
-        Item::new(theme::hero::FACTS_H),
+        if rows.subtitle { Item::new(theme::hero::SUBTITLE_H) } else { Item::absent() },
+        Item::new(theme::hero::FACTS_H).before(theme::space::XS),
         if rows.ratings { Item::new(widgets::RATING_MARK_D).before(theme::space::MD) } else { Item::absent() },
         Item::new(cd).before(theme::space::LG),
         rows.synopsis_h.filter(|h| *h > 0.0).map_or(Item::absent(), |h| Item::new(h).before(theme::space::LG)),
@@ -119,12 +127,13 @@ pub fn hero_chain(rows: HeroRows) -> HeroChain {
     let y = |i| stack.span(i).map(|(y, _)| y);
     let text_foot = stack.placed().last().map_or(TITLE_FOOT, |s| s.y + s.h);
     HeroChain {
-        meta_y: y(0).unwrap_or(TITLE_FOOT),
-        ratings_y: y(1),
-        btn_y: y(2).unwrap_or(TITLE_FOOT),
-        syn_y: y(3),
-        credits_y: y(4),
-        tech_y: y(5),
+        subtitle_y: y(0),
+        meta_y: y(1).unwrap_or(TITLE_FOOT),
+        ratings_y: y(2),
+        btn_y: y(3).unwrap_or(TITLE_FOOT),
+        syn_y: y(4),
+        credits_y: y(5),
+        tech_y: y(6),
         foot: text_foot.max(POSTER_TOP + POSTER_H),
     }
 }
@@ -149,7 +158,8 @@ mod tests {
 
     #[test]
     fn the_text_column_stacks_down_from_the_title_foot() {
-        let full = hero_chain(HeroRows { ratings: true, synopsis_h: Some(72.0), credits: 2, tech: true });
+        let full = hero_chain(HeroRows { ratings: true, synopsis_h: Some(72.0), credits: 2, tech: true, ..HeroRows::default() });
+        assert_eq!(full.subtitle_y, None, "no subtitle: the facts lead the column");
         assert_eq!(full.meta_y, TITLE_FOOT + theme::space::SM);
         let ratings = full.ratings_y.unwrap();
         assert_eq!(ratings, full.meta_y + theme::hero::FACTS_H + theme::space::MD);
@@ -162,6 +172,23 @@ mod tests {
         assert_eq!(tech, credits + 2.0 * CREDIT_LEAD + theme::space::MD);
         assert_eq!(full.foot, tech + widgets::BADGE_H);
         assert!(full.foot < SCR_H, "the whole hero stands on the first screen");
+    }
+
+    /// An episode's (or a season's) own title stands on its own line under the show's logo, the
+    /// facts one small rung below it, and everything under them moves down by exactly that line.
+    #[test]
+    fn the_subtitle_line_stands_between_the_title_band_and_the_facts() {
+        let rows = HeroRows { ratings: true, synopsis_h: Some(72.0), credits: 2, tech: true, ..HeroRows::default() };
+        let plain = hero_chain(rows);
+        let sub = hero_chain(HeroRows { subtitle: true, ..rows });
+        assert_eq!(sub.subtitle_y, Some(TITLE_FOOT + theme::space::SM));
+        assert_eq!(sub.meta_y, TITLE_FOOT + theme::space::SM + theme::hero::SUBTITLE_H + theme::space::XS);
+        let shift = sub.meta_y - plain.meta_y;
+        assert_eq!(shift, theme::hero::SUBTITLE_H + theme::space::XS);
+        assert_eq!(sub.btn_y, plain.btn_y + shift);
+        assert_eq!(sub.tech_y.unwrap(), plain.tech_y.unwrap() + shift);
+        assert!(theme::hero::SUBTITLE_SIZE < theme::size::DISPLAY, "smaller than any hero title");
+        assert!(theme::hero::SUBTITLE_SIZE > theme::hero::IDENTITY_SIZE, "larger than the facts");
     }
 
     #[test]

@@ -489,6 +489,9 @@ impl LayoutStamp {
         if !d.ratings.is_empty() {
             flags |= 2;
         }
+        if hero::hero_names(d).1.is_some() {
+            flags |= 4;
+        }
         Self {
             episodes: d.episodes.id() as usize,
             ep_rev: if paged { d.episodes.rev() } else { 0 },
@@ -1082,6 +1085,7 @@ impl DetailScreen {
                 .measure_h(plx_ui::detail_layout::HERO_TEXT_W)
         });
         plx_ui::detail_layout::hero_chain(plx_ui::detail_layout::HeroRows {
+            subtitle: d.is_some_and(|d| hero::hero_names(d).1.is_some()),
             // the viewer's stars stand on the row whether or not a provider has scored the item
             ratings: d.is_some(),
             synopsis_h,
@@ -2985,6 +2989,10 @@ impl DetailScreen {
         let prose = p.alpha(self.preview_chrome * self.preview_prose);
         self.draw_poster(prose, d);
         if let Some(d) = d {
+            // the page's own title under its show's logo (an episode's, a season's)
+            if let (Some(sub), Some(y)) = (hero::hero_names(d).1, chain.subtitle_y) {
+                hero::draw_subtitle(chrome, sub, y, cx.measure);
+            }
             hero::draw_facts(chrome, d, chain.meta_y, cx.measure);
             if let Some(y) = chain.ratings_y {
                 self.draw_ratings(prose, d, y, cx.measure);
@@ -3021,10 +3029,12 @@ impl DetailScreen {
         );
     }
 
-    /// The title the hero shows (a logo's fallback text): the item's own, else the selection's;
-    /// `None` while no item has landed (the caller names that "Loading").
+    /// The title the hero shows (a logo's fallback text): the item's own name for its title band
+    /// ([`hero::hero_names`]: an episode's or a season's is its show's), else the selection's by the
+    /// same rule ([`hero::selection_band_name`]), so the band does not change names when the item
+    /// lands; `None` while neither is known (the caller names that "Loading").
     fn hero_title<'a>(&'a self, d: Option<&'a Detail>) -> Option<&'a str> {
-        d.map(|d| d.title.as_str()).or_else(|| self.selected().map(|m| m.title.as_str()))
+        d.map(|d| hero::hero_names(d).0).or_else(|| self.selected().map(hero::selection_band_name))
     }
 
     /// **Where the hero's logo stands this frame**, in page coordinates: interpolated continuously
@@ -3222,7 +3232,7 @@ impl DetailScreen {
             return;
         }
         let band = plx_ui::hero_logo::band_h(LogoRung::Compact);
-        HeroLogo::new(d.sid.raw(), d.logo.as_deref().unwrap_or(&d.rk), &d.title, LogoRung::Compact)
+        HeroLogo::new(d.sid.raw(), d.logo.as_deref().unwrap_or(&d.rk), hero::hero_names(d).0, LogoRung::Compact)
             .align(HAlign::Center)
             .draw(
                 p.alpha(alpha),

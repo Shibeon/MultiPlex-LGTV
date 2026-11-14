@@ -400,6 +400,13 @@ const DIV_H: f32 = 24.0; // gap + hairline between sections
 /// hairline with 12px of margin above AND below it (`TableView.jsx`: `height: 2, margin: "12px
 /// 32px"`), 26 in all.
 const BOARD_DIV_H: f32 = 26.0;
+/// The page left between two cards of a [`TableView::carded`] table: the scale's smallest rung.
+const CARD_GAP: f32 = theme::space::XS;
+/// How far a card reaches past its section into the break around it: the break less the gap.
+const CARD_REACH: f32 = (BOARD_DIV_H - CARD_GAP) * 0.5;
+/// A card's corner radius: the focus pill's, grown by the pill's inset from the card's edge, so
+/// the two corners are concentric.
+const CARD_RAD: f32 = PILL_RAD + SIDE;
 /// The gap between the runs of a [`TableView::board_metrics`] row's trailing stack (read-out, badge
 /// run, icon BOX): the design system's cell is a flex row with `gap: var(--space-sm)`.
 const BOARD_TRAIL_GAP: f32 = theme::space::SM;
@@ -679,6 +686,8 @@ pub struct TableView {
     tall: bool,
     /// see [`TableView::board_metrics`]. Layout configuration like `min_panel_w`, not motion.
     board: bool,
+    /// see [`TableView::carded`]. Drawing only: layout is the board's.
+    carded: bool,
     /// Semantic ink for section labels. Ambient routes can raise this role for contrast without
     /// replacing the shared table header renderer or changing row/detail hierarchy.
     pub header_ink: [f32; 4],
@@ -714,7 +723,7 @@ impl TableView {
     /// The owner records its row data separately. These fields determine layout, the selected
     /// face and subsequent motion; no text/texture cache or renderer pointer is traversed.
     pub fn write_motion(&self, c: &mut plx_machine::machine::Canon) {
-        let Self { sections: _, sel, list_focused, compact, tall, board: _, header_ink, hl_top, hl_bot, scroll, title: _, min_panel_w: _, rev: _, empty_text: _ } = self;
+        let Self { sections: _, sel, list_focused, compact, tall, board: _, carded: _, header_ink, hl_top, hl_bot, scroll, title: _, min_panel_w: _, rev: _, empty_text: _ } = self;
         c.u32(*sel as u32).bool(*list_focused).bool(*compact).bool(*tall);
         for component in header_ink { c.f32(*component); }
         for spring in [hl_top, hl_bot, scroll] { c.f32(spring.pos).f32(spring.vel); }
@@ -742,6 +751,32 @@ impl TableView {
     ///   ink, ends on the content edge ([`trailing_items`]).
     pub fn board_metrics(&mut self, v: bool) {
         self.board = v;
+    }
+    /// **Each section on its own card** (the MultiPlex web app's settings page): a rounded plate
+    /// ([`theme::TABLE_CARD_FILL`] under a [`theme::TABLE_CARD_RIM`] edge) behind a section's header
+    /// and rows, in place of the hairline between sections. Drawing only, so a carded table lays
+    /// out, scrolls and hits exactly as the same table without it: each plate reaches
+    /// [`CARD_REACH`] into the section break above and below (a [`CARD_GAP`] of page between two
+    /// cards), and its corners are concentric with the focus pill inside it ([`CARD_RAD`]).
+    /// Opt-in per table, on a [`board_metrics`](Self::board_metrics) table (the Settings root).
+    pub fn carded(&mut self, v: bool) {
+        self.carded = v;
+    }
+    /// Every non-empty section's card in content coordinates (top, bottom), [`Self::walk`]'s own
+    /// positions with [`CARD_REACH`] added: `(section, top, bottom)`.
+    fn card_spans(&self) -> Vec<(usize, f32, f32)> {
+        let mut spans: Vec<(usize, f32, f32)> = Vec::new();
+        self.walk(|y, gi, si| {
+            if gi == WALK_TITLE || gi == WALK_DIVIDER {
+                return;
+            }
+            let bottom = if gi >= 0 { y + self.row_height(gi) } else { y + HDR_H };
+            match spans.last_mut() {
+                Some(span) if span.0 == si => span.2 = bottom,
+                _ => spans.push((si, y, bottom)),
+            }
+        });
+        spans.into_iter().map(|(si, top, bottom)| (si, top - CARD_REACH, bottom + CARD_REACH)).collect()
     }
     /// The gap between two sections: [`DIV_H`], or the board's.
     fn div_h(&self) -> f32 {
@@ -781,6 +816,7 @@ impl TableView {
             compact: false,
             tall: false,
             board: false,
+            carded: false,
             header_ink: theme::TEXT_TERTIARY,
             min_panel_w: MENU_MIN_W,
             hl_top: Spring::at(0.0),
@@ -1644,6 +1680,22 @@ impl TableView {
         let content_x = frame.x + SIDE + CONTENT_PAD;
         let text_right = frame.x + frame.w - SIDE - CONTENT_PAD;
 
+        // ---- the cards (under everything): one plate per section on a carded table ----
+        // A plate dissolves under the top edge with its section, as the hairline it replaces did
+        // (`top_edge_alpha` at the section's top): a full-alpha plate under rows that are fading
+        // would leave a hard, cornerless band at the edge once its rounded top had been clipped.
+        if self.carded {
+            for (si, top, bottom) in self.card_spans() {
+                let card = Rect::new(frame.x, top0 + top - scroll, frame.w, bottom - top);
+                if card.y + card.h > vis_top && card.y < vis_bot {
+                    let fade = Self::top_edge_alpha(card.y + CARD_REACH, vis_top);
+                    let p = self.group_painter(p.alpha(fade), si);
+                    p.rrect(card, CARD_RAD, CARD_RAD, theme::TABLE_CARD_FILL);
+                    p.rring(card, CARD_RAD, 2.0, theme::TABLE_CARD_RIM);
+                }
+            }
+        }
+
         // ---- sliding pill (under the rows) — warm off-white; top/bottom edges morph independently ----
         // It follows its GROUP's dim: the focused row of an unreachable server must not be the one
         // bright thing in a panel that is telling you the server is unreachable.
@@ -1682,9 +1734,10 @@ impl TableView {
             let p = self.event_painter(p, gi, si);
             if gi == WALK_DIVIDER {
                 // the hairline between this section and the one above, headed or not, centred in
-                // the `DIV_H` gap; it fades with the group like everything else in it
+                // the `DIV_H` gap; it fades with the group like everything else in it. A carded
+                // table's cards are the break: no hairline.
                 let y = sy + self.divider_dy();
-                if y + 2.0 > vis_top && y < vis_bot {
+                if !self.carded && y + 2.0 > vis_top && y < vis_bot {
                     // dissolves with the section it heads, a hair before its caps
                     p.alpha(Self::top_edge_alpha(sy, vis_top)).rect(
                         Rect::new(content_x, y, frame.w - 2.0 * (SIDE + CONTENT_PAD), 2.0),
@@ -2712,6 +2765,91 @@ mod tests {
         assert!(narrow.iter().any(|i| i.role == FitRole::Title), "a long title must be reported: {narrow:?}");
         let wide = t.fit_report(t.menu_panel_width(&M).max(t.measured_width(&M)), &M, HEADROOM);
         assert!(wide.iter().all(|i| i.role != FitRole::Title), "a panel sized from measured_width fits its title: {wide:?}");
+    }
+
+    // ---- carded sections ------------------------------------------------------------------------
+
+    /// **A carded table puts each section on its own card and changes nothing else**: one plate per
+    /// section, concentric with the focus pill, reaching into the section breaks so a small gap of
+    /// page stays between two cards; no hairline between them; every row exactly where the same
+    /// table without cards puts it.
+    #[test]
+    fn a_carded_table_draws_one_card_per_section_and_lays_out_as_before() {
+        let _serial = plx_base::testlock::serial();
+        let frame = Rect::new(100.0, 50.0, 800.0, 700.0);
+        let build = |carded: bool| {
+            let mut t = TableView::new();
+            t.board_metrics(true);
+            t.carded(carded);
+            t.set_sections(vec![
+                Section::new("Playback").row(Row::new("Video")).row(Row::new("Audio")),
+                Section::new("System").row(Row::new("Language").value("English")),
+                Section::new("Support").row(Row::new("About")),
+            ], 0, false);
+            t
+        };
+        let (plain, carded) = (build(false), build(true));
+        let m = &crate::fixture::FixtureMeasure;
+        let rings = crate::draw_census::capture_rings(|| carded.draw(crate::Painter::recording(), frame, m));
+        let cards: Vec<Rect> = rings.iter().filter(|(_, rad)| *rad == CARD_RAD).map(|(r, _)| *r).collect();
+        assert_eq!(cards.len(), 3, "one card per section: {rings:?}");
+        assert!(crate::draw_census::capture_rings(|| plain.draw(crate::Painter::recording(), frame, m))
+            .iter().all(|(_, rad)| *rad != CARD_RAD), "no card on a plain table");
+        for pair in cards.windows(2) {
+            let gap = pair[1].y - (pair[0].y + pair[0].h);
+            assert!((gap - CARD_GAP).abs() < 0.01, "a {CARD_GAP}px gap of page between two cards: {gap}");
+        }
+        for card in &cards {
+            assert_eq!((card.x, card.w), (frame.x, frame.w), "a card spans the table's width");
+        }
+        // every row inside its card, where the plain table puts it
+        for i in 0..plain.n_rows() {
+            let (a, b) = (plain.row_rect(frame, i).unwrap(), carded.row_rect(frame, i).unwrap());
+            assert_eq!(a, b, "row {i} moved");
+            assert!(cards.iter().any(|c| c.y <= b.y && b.y + b.h <= c.y + c.h), "row {i} sits on a card");
+        }
+        // the hairlines between sections give way to the cards
+        let hairlines = |t: &TableView| crate::draw_census::capture(|| t.draw(crate::Painter::recording(), frame, m))
+            .into_iter().filter(|(_, r)| r.h == 2.0).count();
+        assert_eq!(hairlines(&plain), 2, "premise: a plain table draws a hairline per break");
+        assert_eq!(hairlines(&carded), 0);
+    }
+
+    /// **A card dissolves under the top edge with its section.** Scrolled so the second section's
+    /// top sits half a fade above the edge's fade band, its plate is drawn at the alpha the section's
+    /// own top gets (`top_edge_alpha`), not at full strength under rows that are fading; the card
+    /// below, clear of the band, stays whole.
+    #[test]
+    fn a_carded_tables_card_fades_with_its_section_under_the_top_edge() {
+        let _serial = plx_base::testlock::serial();
+        let frame = Rect::new(100.0, 50.0, 800.0, 700.0);
+        let sections = || vec![
+            Section::new("Playback").row(Row::new("Video")).row(Row::new("Audio")),
+            Section::new("System").row(Row::new("Language").value("English")).row(Row::new("Clock")),
+            Section::new("Support").row(Row::new("About")),
+        ];
+        let mut t = TableView::new();
+        t.board_metrics(true);
+        t.carded(true);
+        t.set_sections(sections(), 0, false);
+        let spans = t.card_spans();
+        // the second section's top, scrolled to half a fade band under the frame's top
+        let scroll = TOP_PAD + spans[1].1 + CARD_REACH - TOP_FADE_H * 0.5;
+        t.restore_sections(sections(), Some(4), scroll);
+        let m = &crate::fixture::FixtureMeasure;
+        let fills = crate::draw_census::capture_inks(|| t.draw(crate::Painter::recording(), frame, m));
+        let card_a = |si: usize| {
+            let (_, top, bottom) = t.card_spans()[si];
+            let y = frame.y + TOP_PAD + top - t.scroll.pos;
+            fills.iter().find(|(tag, r, _)| *tag == 2 && (r.y - y).abs() < 0.01 && (r.h - (bottom - top)).abs() < 0.01 && r.w == frame.w)
+                .map(|(_, _, a)| *a)
+        };
+        let full = theme::TABLE_CARD_FILL[3];
+        let second = card_a(1).expect("the second card is drawn");
+        let want = TableView::top_edge_alpha(frame.y + TOP_PAD + spans[1].1 + CARD_REACH - t.scroll.pos, frame.y);
+        assert!(want > 0.0 && want < 1.0, "premise: the section's top is inside the fade band ({want})");
+        assert!((second - full * want).abs() < 1e-4, "the card fades with its section: {second} vs {}", full * want);
+        assert!((card_a(2).expect("the third card") - full).abs() < 1e-4, "a card clear of the edge is whole");
     }
 
     // ---- the focused row's marquee -----------------------------------------------------------

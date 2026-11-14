@@ -1471,6 +1471,8 @@ impl RootPage {
         let keep = self.form.selected_id().cloned();
         self.form.table.compact = false;
         self.form.table.board_metrics(true);
+        // the MultiPlex web settings page: each section on its own card
+        self.form.table.carded(true);
         self.form.table.header_ink = theme::TEXT_READING;
         self.form.set(form, keep.as_ref());
         self.form.table.list_focused = true;

@@ -1,4 +1,4 @@
-0x53454100 Row { wrap: false } seat=First edge=[Geometric, Geometric, Stop, Stop] len=1 elem=Bare extent=[96.0 138.0 1728.0 80.0]
+0x53454100 Row { wrap: false } seat=First edge=[Geometric, Geometric, Stop, Stop] len=1 elem=Bare extent=[96.0 148.0 864.0 80.0]
 0x53454200 Row { wrap: false } seat=Projected edge=[Geometric, Geometric, Stop, Stop] len=9 elem=Card extent=[96.0 360.0 250.0 375.0]
 0x53454201 Row { wrap: false } seat=Projected edge=[Geometric, Geometric, Stop, Stop] len=3 elem=Card extent=[96.0 835.0 250.0 375.0]
 0x53454202 Row { wrap: false } seat=Projected edge=[Geometric, Geometric, Stop, Stop] len=7 elem=Card extent=[96.0 1310.0 420.0 236.0]
@@ -42,7 +42,7 @@ r4c1: up=- down=- left=r4c0 right=r4c2
 r4c2: up=- down=- left=r4c1 right=r4c3
 r4c3: up=- down=- left=r4c2 right=-
 --
-field: rect=[96.0 138.0 1728.0 80.0] rest=[96.0 138.0 1728.0 80.0] clip=[0.0 130.0 1920.0 950.0] index=Some(0)
+field: rect=[96.0 148.0 864.0 80.0] rest=[96.0 148.0 864.0 80.0] clip=[0.0 130.0 1920.0 950.0] index=Some(0)
 r0c0: rect=[96.0 360.0 250.0 375.0] rest=[84.8 343.1 272.5 408.8] clip=[0.0 130.0 1920.0 950.0] index=Some(0)
 r0c1: rect=[376.0 360.0 250.0 375.0] rest=[364.8 343.1 272.5 408.8] clip=[0.0 130.0 1920.0 950.0] index=Some(1)
 r0c2: rect=[656.0 360.0 250.0 375.0] rest=[644.8 343.1 272.5 408.8] clip=[0.0 130.0 1920.0 950.0] index=Some(2)

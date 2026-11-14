@@ -108,10 +108,10 @@ fn the_summary_is_the_sort_and_only_the_sort() {
 #[test]
 fn the_control_draws_the_criterion_alone_and_never_its_name() {
     let _g = language_on_this_thread_for_test(Preference::En);
-    let row = header::Row::new(&ShippedMeasure, "Date added", None);
+    let row = header::Row::new(&ShippedMeasure, "Date added", None, Default::default());
     let runs = plx_ui::draw_census::capture_runs(|| row.draw(plx_ui::Painter::recording(), 0.0, &plx_ui::widgets::TabStrip::new(), 1.0, false, &HeaderSwap::new()));
     let words: Vec<&str> = runs.iter().map(|r| r.text.as_str()).collect();
-    assert_eq!(words, [msg::watchlist_page_title(), "Date added"], "the title and the criterion: no name, no separator");
+    assert_eq!(words, [msg::watchlist_page_title(), msg::watchlist_page_subtitle(), "Date added"], "the title, the lead line and the criterion: no name, no separator");
     assert_eq!(msg::watchlist_page_sort_filter(), "Sort & Filter", "the name is still the catalog's");
     let item = &row.sort_item();
     assert_eq!(item.label, msg::watchlist_page_sort_filter(), "the item carries the name (the identity the row's swap knows it by)");
@@ -128,8 +128,8 @@ fn the_control_ends_on_the_text_edge_with_its_icon_criterion_and_quiet_chevron()
     let _g = language_on_this_thread_for_test(Preference::En);
     // The painter that records the census measures with the legacy advances; the row is laid out
     // with the same ones so that what is drawn is compared with what was placed.
-    let row = header::Row::new(&plx_ui::widgets::LegacyMeasure, "Date added", None);
-    let at = row.items()[1].text;
+    let row = header::Row::new(&plx_ui::widgets::LegacyMeasure, "Date added", None, Default::default());
+    let at = row.items()[0].text;
     assert!((at.x + at.w - header::GRID_RIGHT).abs() < 0.01, "the control ends on the right text edge: {at:?}");
     let runs = plx_ui::draw_census::capture_runs(|| row.draw(plx_ui::Painter::recording(), 0.0, &plx_ui::widgets::TabStrip::new(), 1.0, false, &HeaderSwap::new()));
     let criterion = runs.iter().find(|r| r.text == "Date added").expect("the criterion is drawn");
@@ -144,8 +144,8 @@ fn the_control_ends_on_the_text_edge_with_its_icon_criterion_and_quiet_chevron()
 fn the_control_keeps_its_right_edge_whatever_the_criterion_is() {
     let _g = language_on_this_thread_for_test(Preference::En);
     let edge = |summary: &str| {
-        let row = header::Row::new(&ShippedMeasure, summary, Some(Count::Of { shown: 6, total: 14 }));
-        let control = row.items()[2].text;
+        let row = header::Row::new(&ShippedMeasure, summary, Some(Count::Of { shown: 6, total: 14 }), Default::default());
+        let control = row.items()[1].text;
         (control.x, control.x + control.w)
     };
     let (short, long) = (edge("Title"), edge("Date added"));
@@ -157,7 +157,7 @@ fn the_control_keeps_its_right_edge_whatever_the_criterion_is() {
 
 fn open_menu() -> (OptionsMenu, Rect, WatchlistOptionsState) {
     let state = default_state();
-    let pill = header::Row::new(&ShippedMeasure, &state.summary(), None).pill();
+    let pill = header::Row::new(&ShippedMeasure, &state.summary(), None, Default::default()).pill();
     let mut m = OptionsMenu::new();
     m.open(pill, &state);
     (m, pill, state)
@@ -254,68 +254,98 @@ fn the_panel_hangs_clear_of_the_lit_pill_in_every_language() {
 
 // ---- header ----
 
-/// **The row is the Library's**: container left 76 / right 129, top 148, 56 tall, text edges x 96
-/// and x 1771; the control is right-aligned on the text edge, the title stands on the left edge.
+/// **The head is the Library's**: the big title block at the shared top 148, with the row of
+/// controls on its line (container left 76 / right 129, top 148, 56 tall, text edges x 96 and
+/// x 1771, the control right-aligned on the right one), the lead line under it at 236 leading on the
+/// left text edge, and the grid's first row 96 under the lead line's band (332).
 #[test]
-fn the_row_is_the_librarys_geometry() {
-    let row = header::Row::new(&FixtureMeasure, "Date added", None);
-    let title = row.title_box();
-    assert_eq!((title.x, title.y, title.h), (76.0, 148.0, 56.0), "the title's box: text at x 96, the room a plate would take overhangs 20");
+fn the_head_is_the_librarys_geometry() {
+    let row = header::Row::new(&FixtureMeasure, "Date added", None, Default::default());
+    let lead = row.lead_box();
+    assert_eq!((lead.x, lead.y, lead.h), (96.0, 236.0, 56.0), "the lead line leads on the row's left text edge");
     let plate = row.plate();
-    assert_eq!((plate.y, plate.h), (148.0, 56.0));
+    assert_eq!((plate.y, plate.h), (148.0, 56.0), "the control stands on the title block's line");
     assert_eq!(plate.x + plate.w, 1771.0 + 20.0, "the control's text ends on x 1771; its plate overhangs");
     let pill = row.pill();
     assert_eq!(pill.cy(), plate.cy());
     assert!((pill.w - plate.w - 2.0 * plx_ui::widgets::PILL_FOCUS_OUTSET).abs() < 1.0e-4, "the focused pill is the plate and its outset");
     assert_eq!(header::GRID_RIGHT, 1771.0);
-    assert_eq!(header::HEADER_TOP + header::BLOCK_H, 244.0);
+    assert_eq!(header::ROW_Y, 236.0);
+    assert_eq!(header::HEADER_TOP + header::BLOCK_H, 332.0);
+    assert_eq!(crate::watchlist::page::GRID_TOP, 332.0);
 }
 
 /// **S10: the Watchlist's title is plain text.** The selection plate means "current among
 /// siblings" and the white pill means "focusable", and the title is neither: it is the page's name,
 /// so it stands at full white on the bare ground with no plate under it, whatever the focus does
-/// (the design review's S10: "Watchlist" sat on a plate that no sibling shared).
+/// (the design review's S10: "Watchlist" sat on a plate that no sibling shared). It is the big title
+/// of the MultiPlex list page now, at the title rung, bold.
 #[test]
 fn the_title_is_plain_text_with_no_plate_under_it() {
     use plx_machine::machine::EntryId;
     use plx_ui::widgets::{CtlPop, TabStrip};
     let _g = plx_base::testlock::serial();
-    let row = header::Row::new(&ShippedMeasure, "Default", None);
+    let row = header::Row::new(&ShippedMeasure, "Default", None, Default::default());
     let (mut capsules, mut pop) = (TabStrip::new(), CtlPop::<1>::new());
     for _ in 0..180 { row.step(EntryId(1), None, &mut capsules, &mut pop, 1.0 / 60.0); }
-    let title = row.title_box();
-    let plates = plx_ui::draw_census::capture(|| row.draw(plx_ui::Painter::recording(), 0.0, &capsules, 1.0, false, &HeaderSwap::new()));
-    let under_title: Vec<_> = plates.iter().filter(|(tag, r)| *tag == 2 && r.x <= title.x + title.w && r.x + r.w >= title.x).collect();
-    assert!(under_title.is_empty(), "a plate is drawn under the title: {under_title:?}");
     let runs = plx_ui::draw_census::capture_runs(|| row.draw(plx_ui::Painter::recording(), 0.0, &capsules, 1.0, false, &HeaderSwap::new()));
     let name = runs.iter().find(|r| r.text == msg::watchlist_page_title()).expect("the title is drawn");
     assert_eq!(name.ink, [1.0, 1.0, 1.0, 1.0], "the title is full white, not a resting control's 65%");
+    assert_eq!(name.at.x, 96.0, "the title leads on the left text edge");
+    let title = name.at;
+    let plates = plx_ui::draw_census::capture(|| row.draw(plx_ui::Painter::recording(), 0.0, &capsules, 1.0, false, &HeaderSwap::new()));
+    let under_title: Vec<_> = plates.iter()
+        .filter(|(tag, r)| *tag == 2 && r.x <= title.x + title.w && r.x + r.w >= title.x && r.y <= title.y + title.h && r.y + r.h >= title.y)
+        .collect();
+    assert!(under_title.is_empty(), "a plate is drawn under the title: {under_title:?}");
+}
+
+/// **The title block counts the list** (the MultiPlex list page: "My list  [3]  · 3 not available
+/// yet"): the pill is the list's size, grouped as the locale groups; the note says how many titles
+/// no server holds yet, and is not drawn while that is none or not known.
+#[test]
+fn the_title_block_counts_the_list_and_what_is_not_available_yet() {
+    let _g = language_on_this_thread_for_test(Preference::En);
+    let counts = header::TitleCounts { total: Some(1284), unavailable: Some(3) };
+    let row = header::Row::new(&ShippedMeasure, "Default", None, counts);
+    let (pill, note) = row.title_parts();
+    assert_eq!(pill.map(|c| c.to_str().unwrap()), Some("1,284"));
+    assert_eq!(note.map(|c| c.to_str().unwrap()), Some("· 3 not available yet"));
+    let runs = plx_ui::draw_census::capture_runs(|| row.draw(plx_ui::Painter::recording(), 0.0, &plx_ui::widgets::TabStrip::new(), 1.0, false, &HeaderSwap::new()));
+    let at = |t: &str| runs.iter().find(|r| r.text == t).unwrap_or_else(|| panic!("{t} is drawn")).at;
+    let (title, count, words) = (at(msg::watchlist_page_title()), at("1,284"), at("· 3 not available yet"));
+    assert!(title.x + title.w < count.x && count.x + count.w < words.x, "title, pill, note, left to right");
+    for none in [header::TitleCounts { total: Some(4), unavailable: Some(0) }, header::TitleCounts { total: Some(4), unavailable: None }] {
+        assert_eq!(header::Row::new(&ShippedMeasure, "Default", None, none).title_parts().1, None, "{none:?}: no note");
+    }
+    assert_eq!(header::Row::new(&ShippedMeasure, "Default", None, Default::default()).title_parts(), (None, None), "nothing known, nothing drawn");
 }
 
 /// **A count is a filter read-out and nothing else** (the Library's rule): "6 of 14" while a filter
-/// narrows the list, one row gap ahead of the control, and no "14 titles" at rest.
+/// narrows the list, one row gap ahead of the control, and no "14 titles" on the row at rest (the
+/// list's size is the title block's pill).
 #[test]
 fn the_row_carries_a_readout_only_while_a_filter_narrows_the_list() {
-    let plain = header::Row::new(&FixtureMeasure, "Default", Some(Count::All(14)));
-    assert_eq!(plain.items().len(), 2, "the title and the control: nothing else at rest");
-    let narrowed = header::Row::new(&FixtureMeasure, "Default", Some(Count::Of { shown: 6, total: 14 }));
-    assert_eq!(narrowed.items().len(), 3);
-    let readout = narrowed.items()[1];
-    let control = narrowed.items()[2];
+    let plain = header::Row::new(&FixtureMeasure, "Default", Some(Count::All(14)), Default::default());
+    assert_eq!(plain.items().len(), 1, "the control: nothing else at rest");
+    let narrowed = header::Row::new(&FixtureMeasure, "Default", Some(Count::Of { shown: 6, total: 14 }), Default::default());
+    assert_eq!(narrowed.items().len(), 2);
+    let readout = narrowed.items()[0];
+    let control = narrowed.items()[1];
     assert_eq!(control.text.x - (readout.text.x + readout.text.w), plx_ui::page_header::GAP);
     assert!(!readout.focusable && control.focusable);
     assert_eq!(narrowed.plate(), plain.plate(), "the control does not move for the read-out");
     let log = plx_ui::draw_census::capture(|| narrowed.draw(plx_ui::Painter::recording(), 0.0, &plx_ui::widgets::TabStrip::new(), 1.0, false, &HeaderSwap::new()));
-    assert_eq!(log.iter().filter(|(t, _)| *t == 100).count(), 3, "the title, the read-out and the criterion");
+    assert_eq!(log.iter().filter(|(t, _)| *t == 100).count(), 4, "the title, the lead line, the read-out and the criterion");
 }
 
 /// A lifted control (the Sort & Filter menu is its owner now) is left out of the page's pass, and
 /// the row's scroll offset moves everything with the page.
 #[test]
 fn a_lifted_control_is_left_out_and_the_row_rides_the_scroll() {
-    let row = header::Row::new(&FixtureMeasure, "Date added", None);
+    let row = header::Row::new(&FixtureMeasure, "Date added", None, Default::default());
     let at = |dy: f32, lifted: bool| plx_ui::draw_census::capture(|| row.draw(plx_ui::Painter::recording(), dy, &plx_ui::widgets::TabStrip::new(), 1.0, lifted, &HeaderSwap::new()));
-    assert_eq!(at(0.0, true).iter().filter(|(t, _)| *t == 100).count(), 1, "the title alone");
+    assert_eq!(at(0.0, true).iter().filter(|(t, _)| *t == 100).count(), 2, "the title and the lead line alone");
     let (rest, scrolled) = (at(0.0, false), at(-100.0, false));
     for (a, b) in rest.iter().zip(&scrolled) {
         assert!((a.1.y - 100.0 - b.1.y).abs() < 1.0e-3);
@@ -410,6 +440,18 @@ fn each_readout_has_its_own_verdict_and_only_the_list_ones_have_a_body() {
 
 // ---- text fit, every shipped language, the device's own advances ----
 
+/// The title block's drawn width (the title, the count pill, the note), by the device's advances
+/// with the fit headroom.
+fn title_block_w(row: &header::Row) -> f32 {
+    use plx_ui::page_header::{COUNT_PAD, TITLE_COUNT_GAP, TITLE_NOTE_GAP, TITLE_NOTE_SIZE, TITLE_SIZE};
+    let w = |c: &std::ffi::CStr, sz, bold| plx_machine::machine::Measure::width(&ShippedMeasure, c, sz, bold) / HEADROOM;
+    let title = std::ffi::CString::new(msg::watchlist_page_title()).unwrap();
+    let (pill, note) = row.title_parts();
+    w(&title, TITLE_SIZE, true)
+        + pill.map_or(0.0, |c| TITLE_COUNT_GAP + w(c, theme::size::CAPTION, false) + 2.0 * COUNT_PAD)
+        + note.map_or(0.0, |c| TITLE_NOTE_GAP + w(c, TITLE_NOTE_SIZE, false))
+}
+
 #[test]
 fn the_menu_pill_and_readouts_fit_in_every_shipped_language() {
     let mut bad = Vec::new();
@@ -436,16 +478,29 @@ fn the_menu_pill_and_readouts_fit_in_every_shipped_language() {
             let mut long = default_state();
             long.sort = sort;
             for count in [Count::All(88888), Count::Of { shown: 88888, total: 88888 }] {
-                let row = header::Row::new(&ShippedMeasure, &long.summary(), Some(count));
-                let (title_end, cluster) = (row.title_box().x + row.title_box().w, row.cluster_left());
+                let row = header::Row::new(&ShippedMeasure, &long.summary(), Some(count), Default::default());
+                // The title block shares the control's line: at its widest (the widest pill and
+                // note) it ends a cluster gap before the cluster. The note is only counted over the
+                // whole list (`Page::title_counts`), so a filtered read-out never stands beside it.
+                let unavailable = matches!(count, Count::All(_)).then_some(88888);
+                let wide = header::Row::new(&ShippedMeasure, &long.summary(), Some(count), header::TitleCounts { total: Some(88888), unavailable });
+                let (title_end, cluster) = (plx_ui::page_header::TEXT_X0 + title_block_w(&wide), wide.cluster_left());
                 if cluster < title_end + plx_ui::page_header::CLUSTER_GAP {
-                    bad.push(format!("{tag} {sort:?} {count:?}: the cluster starts at x {cluster:.0}, the title's plate ends {title_end:.0}"));
+                    bad.push(format!("{tag} {sort:?} {count:?}: the cluster starts at x {cluster:.0}, the title block ends {title_end:.0}"));
                 }
                 // The control has no slot: whatever the sort is called, it ends on the text edge.
                 let control = row.items().last().expect("the control").text;
                 if (control.x + control.w - header::GRID_RIGHT).abs() > 0.01 {
                     bad.push(format!("{tag} {sort:?} {count:?}: the control ends at x {:.1}, not {}", control.x + control.w, header::GRID_RIGHT));
                 }
+            }
+        }
+        // The lead line has the band under the title to itself: one line between the text edges.
+        {
+            let row = header::Row::new(&ShippedMeasure, "Default", None, Default::default());
+            let w = plx_machine::machine::Measure::width(&ShippedMeasure, row.lead(), theme::size::BODY, false) / HEADROOM;
+            if w > header::GRID_RIGHT - plx_ui::page_header::TEXT_X0 {
+                bad.push(format!("{tag}: the lead line is {w:.0}px"));
             }
         }
         // Verdicts: one line inside the page margins; bodies in the reason's two-line slot.

@@ -780,6 +780,17 @@ fn draw_chip(p: Painter, plate: Rect, chip: Chip) {
     }
 }
 
+/// **A text field's plate** (the MultiPlex web app's search capsule): a pill at `rect` in
+/// [`theme::FIELD_PLATE_FILL`] under a [`CHIP_RIM_W`] rim that crosses from
+/// [`theme::FIELD_PLATE_RIM`] to [`theme::FIELD_PLATE_RIM_HOT`] as `hot` (the field's focus spring,
+/// 0..=1) rises. The outline chip's plate, so a field and the header's chips read as one family; the
+/// fill never changes with focus.
+pub fn draw_field_plate(p: Painter, rect: Rect, hot: f32) {
+    let rad = rect.h * 0.5;
+    p.rrect(rect, rad, rad, theme::FIELD_PLATE_FILL);
+    p.rring(rect, rad, CHIP_RIM_W, theme::cross(theme::FIELD_PLATE_RIM, theme::FIELD_PLATE_RIM_HOT, hot.clamp(0.0, 1.0)));
+}
+
 /// The title block's height ([`draw_title`]).
 pub const TITLE_H: f32 = 80.0;
 /// The air between the title block and the row of controls under it.
@@ -800,17 +811,42 @@ pub const TITLE_COUNT_GAP: f32 = theme::space::MD;
 /// `top + TITLE_H + TITLE_ROW_GAP` ([`PageHeader::layout_at`]). The two are placed by one
 /// [`HStack`], measured by the painter that draws them.
 pub fn draw_title(p: Painter, top: f32, title: &CStr, count: Option<&CStr>) {
+    draw_title_noted(p, top, title, count, None);
+}
+
+/// The air between the count pill (or the title) and a [`draw_title_noted`] note.
+pub const TITLE_NOTE_GAP: f32 = theme::space::MD;
+/// A note's size: the body rung, regular.
+pub const TITLE_NOTE_SIZE: std::ffi::c_int = theme::size::BODY;
+
+/// [`draw_title`] with a quiet NOTE after the count pill (the MultiPlex list page's
+/// "My list  [3]  · 3 not available yet"): [`TITLE_NOTE_SIZE`] regular in
+/// [`theme::COUNT_FILTERED_INK`], one [`TITLE_NOTE_GAP`] after the pill, on the block's middle like
+/// the rest. The note's words are the caller's, punctuation included. `None` (or an empty note)
+/// draws exactly [`draw_title`].
+pub fn draw_title_noted(p: Painter, top: f32, title: &CStr, count: Option<&CStr>, note: Option<&CStr>) {
     let cy = top + TITLE_H * 0.5;
     let t = title;
     let title_w = p.text_width_tracked(t.as_ptr(), TITLE_SIZE, 1, 0.0);
     let count_c = count.filter(|count| !count.is_empty());
     let count_w = count_c.map(|c| p.text_width_tracked(c.as_ptr(), theme::size::CAPTION, 0, 0.0));
-    // One or two spans on the stack, from a fixed array: a frame allocates nothing for them.
-    let items = [Item::new(title_w), Item::new(count_w.unwrap_or(0.0) + 2.0 * COUNT_PAD).before(TITLE_COUNT_GAP)];
-    let stacked = if count_w.is_some() { 2 } else { 1 };
+    let note_c = note.filter(|note| !note.is_empty());
+    let note_w = note_c.map(|n| p.text_width_tracked(n.as_ptr(), TITLE_NOTE_SIZE, 0, 0.0));
+    // Up to three spans on the stack, from a fixed array: a frame allocates nothing for them.
+    let mut items = [Item::new(title_w), Item::new(0.0), Item::new(0.0)];
+    let mut stacked = 1;
+    if let Some(w) = count_w {
+        items[stacked] = Item::new(w + 2.0 * COUNT_PAD).before(TITLE_COUNT_GAP);
+        stacked += 1;
+    }
+    if let Some(w) = note_w {
+        items[stacked] = Item::new(w).before(TITLE_NOTE_GAP);
+        stacked += 1;
+    }
     let mut placed = HStack::new(&items[..stacked], 0.0, Align::Leading(TEXT_X0)).placed();
     let title_x = placed.next().map_or(TEXT_X0, |span| span.x);
-    let count_span = placed.next();
+    let count_span = count_c.and(placed.next());
+    let note_span = note_c.and(placed.next());
     let title_y = plx_gfx::text::text_vcenter_y(TITLE_SIZE, 1, cy);
     p.text(t.as_ptr(), title_x, title_y, TITLE_SIZE, theme::CONTROL_IDLE_INK, 0, 1);
     if let (Some(c), Some(span)) = (count_c, count_span) {
@@ -818,6 +854,10 @@ pub fn draw_title(p: Painter, top: f32, title: &CStr, count: Option<&CStr>) {
         p.rrect(pill, COUNT_H * 0.5, COUNT_H * 0.5, theme::HEADER_CHIP_FILL);
         let y = plx_gfx::text::text_vcenter_y(theme::size::CAPTION, 0, cy);
         p.text(c.as_ptr(), span.x + COUNT_PAD, y, theme::size::CAPTION, theme::PAGE_COUNT_INK, 0, 0);
+    }
+    if let (Some(n), Some(span)) = (note_c, note_span) {
+        let y = plx_gfx::text::text_vcenter_y(TITLE_NOTE_SIZE, 0, cy);
+        p.text(n.as_ptr(), span.x, y, TITLE_NOTE_SIZE, theme::COUNT_FILTERED_INK, 0, 0);
     }
 }
 

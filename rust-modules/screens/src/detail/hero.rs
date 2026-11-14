@@ -845,22 +845,66 @@ fn facts_flow(
     flow.end()
 }
 
-/// What leads the meta line before the date: the edition, and on an episode's own page its show
-/// and its SxEy ordinal.
+/// **The hero's two names**: the text the title band stands for (the logo's fallback when there is
+/// no clearLogo) and the subtitle line under it ([`plx_ui::detail_layout::HeroRows::subtitle`]).
+/// An episode's or a season's page whose show is known stands under the SHOW's name (its logo is
+/// the show's) with its own title on the line below, Plex mobile's detail page: "The Show" /
+/// "The Episode". Every other page, and one whose own title is its show's, names itself once.
+pub fn hero_names(d: &Detail) -> (&str, Option<&str>) {
+    band_names(matches!(d.kind.as_str(), "episode" | "season"), &d.title, &d.show_title)
+}
+
+/// The title band's name for the SELECTION a page was opened on, before its [`Detail`] lands: the
+/// same rule as [`hero_names`]`.0`, read off the browse row (`PmsMovie::kind`/`show_title`), so an
+/// episode whose show has no clearLogo names the show from the first frame instead of swapping its
+/// own title for the show's when the item lands.
+pub fn selection_band_name(m: &plx_data::pms::PmsMovie) -> &str {
+    use plx_data::pms::{KIND_EPISODE, KIND_SEASON};
+    band_names(matches!(m.kind, KIND_EPISODE | KIND_SEASON), &m.title, &m.show_title).0
+}
+
+/// [`hero_names`]' rule on its three inputs: an item that stands under a show (`under_show_kind`)
+/// whose show is known and whose own title is non-empty and not the show's is named by the show,
+/// with its own title as the subtitle; anything else names itself once.
+fn band_names<'a>(under_show_kind: bool, title: &'a str, show_title: &'a str) -> (&'a str, Option<&'a str>) {
+    let under_show = under_show_kind && !show_title.is_empty();
+    match under_show.then_some(title).filter(|own| !own.is_empty() && *own != show_title) {
+        Some(own) => (show_title, Some(own)),
+        None => (title, None),
+    }
+}
+
+/// What leads the meta line before the date: the edition, and on an episode's own page its season
+/// and its episode number as two runs ("S1 · E1"). The show is not repeated here: the title band
+/// above names it ([`hero_names`]).
 fn facts_lead(d: &Detail) -> Vec<String> {
+    use plx_platform::i18n::msg;
     let mut lead = Vec::new();
     if !d.edition.is_empty() {
         lead.push(d.edition.clone());
     }
     if d.kind == "episode" {
-        if !d.show_title.is_empty() {
-            lead.push(d.show_title.clone());
+        // a number that is not positive is no number (`fmt::episode_ordinal`'s rule)
+        if d.season > 0 {
+            lead.push(msg::core_season(d.season));
         }
-        if d.season > 0 && d.index > 0 {
-            lead.push(plx_ui::fmt::episode_ordinal(d.season, d.index));
+        if d.index > 0 {
+            lead.push(msg::core_episode(d.index));
         }
     }
     lead
+}
+
+/// Draw the subtitle line ([`hero_names`]) at `y` in the text column: one HEADLINE bold line in the
+/// title's ink, elided to the reading column.
+pub fn draw_subtitle(p: Painter, text: &str, y: f32, measure: &dyn plx_machine::machine::Measure) {
+    let size = theme::hero::SUBTITLE_SIZE;
+    let line = plx_gfx::text::elide_by(text, HERO_TEXT_W, false, |t| measure.width_str(t, size, true));
+    if let Ok(line) = CString::new(line) {
+        plx_ui::label::Label::new(line.as_ptr(), size, theme::TEXT_PRIMARY)
+            .bold()
+            .draw(p, Rect::new(TEXT_X, y, HERO_TEXT_W, theme::hero::SUBTITLE_H));
+    }
 }
 
 /// The meta line's runs in order; an empty one is skipped by [`facts_flow`].
@@ -874,7 +918,7 @@ fn facts_line<'a>(lead: &'a [String], date: &'a str, extent: &'a str, rating: &'
     v
 }
 
-/// Draw the meta line at `y` in the text column: (edition · show · SxEy ·) date · runtime or extent
+/// Draw the meta line at `y` in the text column: (edition · Sx · Ey ·) date · runtime or extent
 /// · content rating, then how it plays and who shares it. Returns the width drawn from the column.
 pub fn draw_facts(p: Painter, d: &Detail, y: f32, measure: &dyn plx_machine::machine::Measure) -> f32 {
     let (date, extent) = hero_facts(d);

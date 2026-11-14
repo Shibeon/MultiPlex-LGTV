@@ -23,5 +23,12 @@
   "watchlist.empty.filtered_body": "Zmień opcje w menu „Sortuj i filtruj”, aby zobaczyć resztę listy do obejrzenia.",
   "watchlist.empty.unreachable": "Nie można wczytać listy do obejrzenia",
   "watchlist.detail.trailer": "Zwiastun",
-  "watchlist.page.debug_write_blocked": "Debug: zapis listy do obejrzenia zablokowany"
+  "watchlist.page.debug_write_blocked": "Debug: zapis listy do obejrzenia zablokowany",
+  "watchlist.page.subtitle": "Twoja lista Plex do obejrzenia: tytuły, które chcesz obejrzeć, dostępne lub jeszcze nie.",
+  "watchlist.page.unavailable": {
+    "one": "· jeszcze niedostępne: {count}",
+    "few": "· jeszcze niedostępne: {count}",
+    "many": "· jeszcze niedostępne: {count}",
+    "other": "· jeszcze niedostępne: {count}"
+  }
 }

@@ -340,7 +340,7 @@ fn the_grid_asks_for_ghosts_first_and_the_focused_card_last() {
 /// same rule as a filter.
 #[test]
 fn a_reorder_moves_within_a_row_and_crossfades_across_rows() {
-    let mut h = Harness::new(tiles(14));
+    let mut h = Harness::new(tiles(17));
     h.run(60);
     let rest: std::collections::HashMap<String, Rect> = h.screen.drawn_probe(None).into_iter().map(|d| (d.guid, d.rect)).collect();
     h.screen.input(WatchlistIn::Rows(reversed(h.screen.tiles())));

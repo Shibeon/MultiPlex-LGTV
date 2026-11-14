@@ -974,3 +974,93 @@ fn related_cards_are_named_in_head_then_listing_order() {
     assert_eq!(global(&slid, cards::Which::Related, 26), 38);
     assert_eq!(global(&slid, cards::Which::Cast, 26), 26, "other shelves hold their listing whole");
 }
+
+/// Every text run the mounted page draws in one frame, in draw order (English). The page opens
+/// rk "a" ([`boot_over`]), so `detail` carries that key.
+fn drawn_runs(detail: Detail) -> Vec<String> {
+    use plx_ui::screen::DrawFrame;
+    let _en = plx_platform::i18n::language_on_this_thread_for_test(plx_platform::i18n::Preference::En);
+    let (mut d, _rig) = boot_with(detail);
+    plx_gfx::text::capture_text_runs_for_test(|| {
+        let entry = d.nav.tabs.stack.top_mut().expect("detail page");
+        let owner = InputOwner::Entry(entry.id);
+        let inst = entry.inst.as_mut().expect("mounted detail");
+        let measure = FixtureMeasure;
+        let cx = Cx::<TestHost> { views: (), tick: tick(32), measure: &measure,
+            press: Default::default(), focus: Default::default(), owner };
+        let mut f = DrawFrame::new(&cx, plx_ui::Painter::recording());
+        plx_gfx::gfx::without_frame_clear(|| inst.screen.draw(&mut f));
+    })
+}
+
+/// **An episode's page reads like Plex mobile's**: the title band names the SHOW (its clearLogo,
+/// here its text fallback, since the fixture has no logo art), the episode's own title stands on
+/// its own line under it, and the meta line starts "S2 · E3" with no second copy of either name
+/// in the hero.
+#[test]
+fn an_episodes_title_stands_under_its_shows_name_and_leaves_the_meta_line() {
+    let _guard = plx_base::testlock::serial();
+    let episode = Detail {
+        sid: ServerId::UNSET, rk: "a".into(), kind: "episode".into(), title: "Pilotzzz".into(),
+        show_title: "Showzzz".into(), show_rk: "show".into(), season: 2, index: 3,
+        aired: "2003-01-01".into(), ..Default::default()
+    };
+    // the hero's runs: everything drawn before its action row (the About section names it again)
+    let mut runs = drawn_runs(episode);
+    runs.truncate(runs.iter().position(|r| r == "Play").expect("the action row"));
+    let at = |word: &str| runs.iter().position(|r| r == word);
+    let count = |word: &str| runs.iter().filter(|r| r.contains(word)).count();
+    assert_eq!(count("Showzzz"), 1, "the show is named once, by the title band: {runs:?}");
+    assert_eq!(count("Pilotzzz"), 1, "the episode is named once, on its own line: {runs:?}");
+    let (show, own) = (at("Showzzz").expect("the show's name"), at("Pilotzzz").expect("the episode's own line"));
+    assert!(show < own, "the title band first, then the episode's line: {runs:?}");
+    let (s, e) = (at("S2").expect("the season run"), at("E3").expect("the episode run"));
+    assert!(own < s && s < e, "the meta line under the subtitle leads with S2 · E3: {runs:?}");
+    test_store().run(MetadataCmd::Clear);
+}
+
+/// A season's page names its show above the season's own title the same way; a film names itself
+/// once and has no subtitle line.
+#[test]
+fn a_season_stands_under_its_show_and_a_film_names_itself_once() {
+    let _guard = plx_base::testlock::serial();
+    let season = Detail {
+        sid: ServerId::UNSET, rk: "a".into(), kind: "season".into(), title: "Season 2".into(),
+        show_title: "Showzzz".into(), parent_rk: "show".into(), index: 2, ..Default::default()
+    };
+    assert_eq!(hero::hero_names(&season), ("Showzzz", Some("Season 2")));
+    let runs = drawn_runs(season);
+    let show = runs.iter().position(|r| r == "Showzzz").expect("the show's name");
+    let own = runs.iter().position(|r| r == "Season 2").expect("the season's own line");
+    assert!(show < own, "{runs:?}");
+    test_store().run(MetadataCmd::Clear);
+    let film = Detail { sid: ServerId::UNSET, rk: "a".into(), kind: "movie".into(), title: "Filmzzz".into(), ..Default::default() };
+    assert_eq!(hero::hero_names(&film), ("Filmzzz", None));
+    let orphan = Detail { kind: "episode".into(), title: "Lonezzz".into(), ..Default::default() };
+    assert_eq!(hero::hero_names(&orphan), ("Lonezzz", None), "no show known: the episode names itself in the band");
+    let mut runs = drawn_runs(film);
+    runs.truncate(runs.iter().position(|r| r == "Play").expect("the action row"));
+    assert_eq!(runs.iter().filter(|r| r.contains("Filmzzz")).count(), 1, "{runs:?}");
+    test_store().run(MetadataCmd::Clear);
+}
+
+/// **The band names the same thing before and after the item lands.** A page opened on an episode
+/// (or a season) row shows the selection's name until its [`Detail`] arrives; that name follows
+/// [`hero::hero_names`]' rule, so an episode whose show has no clearLogo reads "Showzzz" from the
+/// first frame instead of "Pilotzzz" swapping to "Showzzz" on landing.
+#[test]
+fn the_title_band_names_the_show_from_the_selection_as_it_will_once_landed() {
+    use plx_data::pms::{PmsMovie, KIND_EPISODE, KIND_MOVIE, KIND_SEASON};
+    let row = |kind, title: &str, show: &str| PmsMovie { kind, title: title.into(), show_title: show.into(), ..Default::default() };
+    let landed = |kind: &str, title: &str, show: &str| Detail { kind: kind.into(), title: title.into(), show_title: show.into(), ..Default::default() };
+    for (k, kind, title, show) in [
+        (KIND_EPISODE, "episode", "Pilotzzz", "Showzzz"),
+        (KIND_SEASON, "season", "Season 2", "Showzzz"),
+        (KIND_EPISODE, "episode", "Lonezzz", ""),
+        (KIND_MOVIE, "movie", "Filmzzz", ""),
+    ] {
+        let d = landed(kind, title, show);
+        assert_eq!(hero::selection_band_name(&row(k, title, show)), hero::hero_names(&d).0, "{kind} {title:?}");
+    }
+    assert_eq!(hero::selection_band_name(&row(KIND_EPISODE, "Pilotzzz", "Showzzz")), "Showzzz");
+}

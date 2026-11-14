@@ -8,12 +8,25 @@ use plx_ui::Rect;
 /// `pub`, alongside this module itself (`screens/search/mod.rs`'s `pub mod layout`)
 /// so `ui::consts`'s overscan-rects audit can reach it as `crate::search::layout::FIELD`
 /// — the deleted legacy Search renderer's own `FIELD`/`CONTENT_TOP` this replaces.
+///
+/// The MultiPlex web app's search capsule: a pill from the left margin to the screen's middle (the
+/// web field ends about half way across), its plate drawn by `page_header::draw_field_plate`. Its
+/// top stands where every other page's head does ([`plx_ui::page_header::TOP`], the Library's and My
+/// list's title block), so the capsule keeps the same air under the nav bar.
 pub const FIELD: Rect = Rect {
     x: MARGIN_X,
-    y: 138.0,
-    w: SCR_W - 2.0 * MARGIN_X,
+    y: plx_ui::page_header::TOP,
+    w: SCR_W * 0.5 - MARGIN_X,
     h: 80.0,
 };
+/// The words' inset inside [`FIELD`] each side: the pill's own end radius, so the first letter
+/// starts where the round end meets the straight edge.
+pub(super) const FIELD_INSET: f32 = FIELD.h * 0.5;
+/// The words' box inside the capsule: [`FIELD`] less [`FIELD_INSET`] each side.
+pub(super) const FIELD_TEXT_W: f32 = FIELD.w - 2.0 * FIELD_INSET;
+/// The query's size: the web field's words are body copy, not a hero line; TITLE keeps them
+/// readable from the couch inside an 80px capsule.
+pub(super) const FIELD_TEXT_SIZE: i32 = plx_ui::theme::size::TITLE;
 pub(super) const SCOPE_Y: f32 = FIELD.y + FIELD.h + 12.0;
 /// See [`FIELD`]'s doc: also reachable as `crate::search::CONTENT_TOP`. Value pinned at
 /// 300.0 — the overscan audit and the page's `Head` section height (`Stack` stacks the shelves

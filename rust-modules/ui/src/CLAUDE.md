@@ -497,9 +497,11 @@ presentation in a design pass.
 
 5. **Read the DS contract before inventing a control state.** Focus, hover and selected treatments
    come from the component's `.d.ts` in the design system, not from a lane's judgement. The Search
-   field is the standing example: its focus is carried by INK ALONE — no capsule, rim, rule, plate
-   or focus pop — and an accent underline was rejected on sight. A punch-list line like "make focus
-   more visible" is satisfied WITHIN the contract (widen the ink step), never with a new primitive.
+   field is the standing example: its focus never FILLS and never pops — a white fill and an accent
+   underline were both rejected on sight. Since the MultiPlex web redesign it stands on the web
+   app's capsule (`page_header::draw_field_plate`, a constant film whose rim whitens on focus) and
+   its words carry the rest (`docs/search.md`, "Focus never fills"). A punch-list line like "make
+   focus more visible" is satisfied WITHIN the contract (widen the ink step), never with a new primitive.
 
    **A table row has one DISABLED state** (`Row::disabled`, Settings v2 HUD boards 4.4 / 4.5), beside
    focused, selected and dim: focus can land on it, the pill under it is the faint GHOST

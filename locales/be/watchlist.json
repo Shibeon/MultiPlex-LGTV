@@ -23,5 +23,12 @@
   "watchlist.empty.filtered_body": "Змяніце «Сартаванне і фільтр», каб убачыць астатнюю частку спісу для прагляду.",
   "watchlist.empty.unreachable": "Не ўдалося атрымаць доступ да спісу для прагляду",
   "watchlist.detail.trailer": "Трэйлер",
-  "watchlist.page.debug_write_blocked": "Наладка: запіс у спіс заблакіраваны"
+  "watchlist.page.debug_write_blocked": "Наладка: запіс у спіс заблакіраваны",
+  "watchlist.page.subtitle": "Ваш спіс Plex: што вы хочаце паглядзець, даступнае ці яшчэ не.",
+  "watchlist.page.unavailable": {
+    "one": "· пакуль недаступна: {count}",
+    "few": "· пакуль недаступна: {count}",
+    "many": "· пакуль недаступна: {count}",
+    "other": "· пакуль недаступна: {count}"
+  }
 }

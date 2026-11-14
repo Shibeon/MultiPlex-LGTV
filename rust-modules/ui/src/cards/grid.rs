@@ -144,6 +144,12 @@ impl GridSpec {
         Self { landings: on, ..self }
     }
 
+    /// Name every card ([`Self::every_caption`]) from the start, for a grid that always does (the
+    /// Watchlist's wall); a grid that switches at run time calls [`Grid::set_every_caption`].
+    pub const fn every_caption(self, on: bool) -> Self {
+        Self { every_caption: on, ..self }
+    }
+
     fn geom(&self) -> Geom {
         Geom { value_line: self.value_line, every_caption: self.every_caption, ..Geom::of(self.cols, self.left, &self.style) }
     }
@@ -1106,6 +1112,9 @@ impl Grid {
         let _ = focused;
         if self.spec.value_line { return; }
         if self.spec.names_every() {
+            // An arriving card that has not begun to fade in shows no block yet: its leaving copy
+            // carries it where it stood ([`draw_leaving`](Self::draw_leaving)).
+            if paint.p.opacity() <= 0.0 { return; }
             // Every card's block, whole (no band reveals it): the focused card's glides where it
             // does not fit, every other card's is elided and still.
             src.with_label(i, |label| {
@@ -1224,7 +1233,8 @@ impl Grid {
     }
 
     /// The cards a landing moved to another row, fading out where they stood (at rest, never
-    /// captioned or registered: the card itself is fading in at its new slot).
+    /// registered, captioned only when the grid names every card: the card itself is fading in at
+    /// its new slot).
     fn draw_leaving<H: Host, S: CardSource<H>>(&self, f: &DrawFrame<'_, '_, H>, p: Painter, src: &S, bands: &[GridBand]) {
         for (i, (dx, dy), a) in self.landing.leaving(src.len()) {
             if a <= 0.0 || !src.loaded(i) || super::lifted_out(f, self.entry, src, i) {
@@ -1238,6 +1248,11 @@ impl Grid {
             let pr = p.alpha(a);
             card_row::draw_tile(pr, src.art(i), rect, 1.0, &self.spec.style, src.progress(i));
             src.overlay(pr, i, &Tile { rect, scale: 1.0, radius: self.spec.style.tile_radius(rect, 1.0), focused: false, pop: 0.0 }, f.measure);
+            // With every card named, the copy keeps its caption block where it stood, fading with it:
+            // the arriving card's block fades in at its new cell ([`card_paint`](Self::card_paint)).
+            if self.spec.names_every() {
+                self.draw_caption(f, src, i, &CardPaint { rect, p: pr, label: None }, 1.0, false);
+            }
         }
     }
 

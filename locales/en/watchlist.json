@@ -101,5 +101,19 @@
   "watchlist.page.debug_write_blocked": {
     "value": "Debug: watchlist write blocked",
     "description": "Developer builds only, never shown to users: a line under the Watchlist title saying the last add or remove was not sent, because a test build does not write to the real account."
+  },
+  "watchlist.page.subtitle": {
+    "value": "Your Plex watchlist: titles you want to watch, available yet or not.",
+    "description": "The quiet line under the Watchlist page's big title, at the left of the row that holds the Sort & Filter control: what the page lists. One sentence that must fit one line beside that control."
+  },
+  "watchlist.page.unavailable": {
+    "value": {
+      "one": "· {count} not available yet",
+      "other": "· {count} not available yet"
+    },
+    "args": {
+      "count": "i64"
+    },
+    "description": "The quiet note after the Watchlist page's count pill (My list  [12]  · 3 not available yet): how many titles on the list are on none of the user's servers yet (unreleased, or released but on no server). Starts with a middle dot that separates it from the pill."
   }
 }

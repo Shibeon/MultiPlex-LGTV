@@ -5,9 +5,8 @@
 //! at most four, shown in a fixed order and joined with " · "). Only the FOCUSED row opens its band: 80 px for one line, 112 px for two,
 //! nothing when the policy shows nothing; non-focused rows keep their 40 px spacing. (Recommended's Continue Watching
 //! poster deck is one shelf handed a different policy: its progress line is always shown, so under Nothing
-//! it is handed `registry::captions::deck_policy` and keeps its one line; the Watchlist is the other:
-//! its tiles' own status words show with no part ticked, so its band is reserved by
-//! `registry::captions::status_policy` and opens 80 px under an empty set.)
+//! it is handed `registry::captions::deck_policy` and keeps its one line. The Library's grid and the
+//! Watchlist's wall are not banded at all: they name every card, `cards::GridSpec::every_caption`.)
 //!
 //! **A line the setting turns on is never drawn empty**, whatever the tile is. The title line is the
 //! name a reader knows the tile by (a season by its SHOW, an episode by its own title). The details

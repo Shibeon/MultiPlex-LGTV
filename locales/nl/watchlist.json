@@ -23,5 +23,10 @@
   "watchlist.empty.filtered_body": "Pas Sorteren & filteren aan om de rest van jouw Kijklijst te zien.",
   "watchlist.empty.unreachable": "Kan jouw Kijklijst niet bereiken",
   "watchlist.detail.trailer": "Trailer",
-  "watchlist.page.debug_write_blocked": "Debug: schrijven naar Kijklijst geblokkeerd"
+  "watchlist.page.debug_write_blocked": "Debug: schrijven naar Kijklijst geblokkeerd",
+  "watchlist.page.subtitle": "Je Plex-kijklijst: titels die je wilt kijken, al beschikbaar of nog niet.",
+  "watchlist.page.unavailable": {
+    "one": "· {count} nog niet beschikbaar",
+    "other": "· {count} nog niet beschikbaar"
+  }
 }

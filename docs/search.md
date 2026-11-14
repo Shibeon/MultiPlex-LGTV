@@ -77,7 +77,8 @@ the first shelf's heading and that shelf's full row of posters are sized to land
 Both of those numbers have moved since this section was first written, and in opposite directions:
 the keyboard turned out to be 56px shorter than the guess, and `CONTENT_TOP` moved down twice — once
 with the top bar, and once when the field stopped being an 820×60 capsule and became a full-width
-`size::HERO` line with its scope block underneath. What did not move is the rule, and
+`size::HERO` line with its scope block underneath (it is an 864×80 capsule again since the web
+redesign, at `size::TITLE`, and `CONTENT_TOP` did not move). What did not move is the rule, and
 `layout.rs`'s `the_first_shelfs_whole_row_clears_the_raised_keyboard` is where the arithmetic is
 graded rather than described.
 
@@ -91,7 +92,7 @@ four rows fit above the raised keyboard.
 
 ### The caret and the one-character hint stay in the field
 
-`screens/search/render.rs` states it: the caret is 5px wide, one HERO cap band tall and **blinks** in
+`screens/search/render.rs` states it: the caret is 5px wide, one cap band of the field's words tall and **blinks** in
 530ms phases while the television's keyboard is up. That is intentional device feedback: the
 solid bar specified by the design component read on the couch as a field that was not accepting
 input. The implementation still obeys `ui::idle` — the whole-frame present gate cannot see a clock
@@ -104,7 +105,7 @@ placeholder is chrome nobody is editing, so it supplies no insertion point of it
 (owner-reported 2026-09-03; `field.rs`'s blank branch feeds `run_layout` a `caret_w` of zero rather
 than the placeholder's own measured width).
 
-### Focus is ink only — two bright endpoints, never a fill
+### Focus never fills — a rim and two bright ink endpoints
 
 For one day (2026-09-03, issue 22) the field had THREE visual states, not two: idle and editing
 drew no plate, but **focused-but-not-yet-editing** lit up with a flat `theme::ACCENT`/
@@ -119,10 +120,17 @@ proof that no fill can ever reappear under a different name or shape — the act
 plain-English one above, upheld by review and device/simulator verification each time this control
 changes.
 
-Focus is carried by **ink alone**, permanently — the design system's `SearchField` contract, which
-forbids a rim, rule or capsule OUTLINE and was never actually license for a fill either. What
-answers the couch-legibility problem the plate was trying to solve is two DIFFERENT bright ink
-endpoints instead of one, picked by `editing` alone (`field::draw`'s `ink_target`, never a second
+The field NEVER fills on focus. Since the MultiPlex web redesign (step 5, 2026-11) it does stand
+on a plate, the web app's search capsule: `page_header::draw_field_plate` paints a pill from the
+left margin to the screen's middle (`layout::FIELD`, its top at `page_header::TOP`, where every
+other page's head stands under the nav bar) in `theme::FIELD_PLATE_FILL`, the header chip's
+.07 white film, the same at rest and hot, under a 2px rim that crosses from
+`theme::FIELD_PLATE_RIM` to `theme::FIELD_PLATE_RIM_HOT` (pure white) on the `hot` spring — the web
+field's own focused edge. The words sit inside the pill's round ends (`FIELD_INSET`) at
+`size::TITLE`, the query bold and the placeholder regular. This reverses the older `SearchField`
+contract's "no rim, no capsule outline" on purpose, to match the web reference; the white-FILL
+rejection above still stands. The words keep their half of the focus signal: two DIFFERENT bright
+ink endpoints instead of one, picked by `editing` alone (`field::draw`'s `ink_target`, never a second
 spring, riding the field's existing `hot` spring either way): **focused, not yet editing** — no
 caret, no keyboard, nothing else on screen to say "the remote is on this" — crosses to
 `theme::FIELD_WAITING_INK`, a genuinely pure white; **editing** drops back one stop to

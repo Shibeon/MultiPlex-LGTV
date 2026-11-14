@@ -23,5 +23,12 @@
   "watchlist.empty.filtered_body": "Измените порядок и фильтры, чтобы увидеть остальные записи списка просмотра.",
   "watchlist.empty.unreachable": "Не удалось загрузить список просмотра",
   "watchlist.detail.trailer": "Трейлер",
-  "watchlist.page.debug_write_blocked": "Отладка: запись в список просмотра заблокирована"
+  "watchlist.page.debug_write_blocked": "Отладка: запись в список просмотра заблокирована",
+  "watchlist.page.subtitle": "Ваш список просмотра Plex: то, что вы хотите посмотреть, доступное и ещё нет.",
+  "watchlist.page.unavailable": {
+    "one": "· пока недоступно: {count}",
+    "few": "· пока недоступно: {count}",
+    "many": "· пока недоступно: {count}",
+    "other": "· пока недоступно: {count}"
+  }
 }
