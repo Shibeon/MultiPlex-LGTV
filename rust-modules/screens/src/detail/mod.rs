@@ -3030,10 +3030,11 @@ impl DetailScreen {
     }
 
     /// The title the hero shows (a logo's fallback text): the item's own name for its title band
-    /// ([`hero::hero_names`]: an episode's or a season's is its show's), else the selection's;
-    /// `None` while no item has landed (the caller names that "Loading").
+    /// ([`hero::hero_names`]: an episode's or a season's is its show's), else the selection's by the
+    /// same rule ([`hero::selection_band_name`]), so the band does not change names when the item
+    /// lands; `None` while neither is known (the caller names that "Loading").
     fn hero_title<'a>(&'a self, d: Option<&'a Detail>) -> Option<&'a str> {
-        d.map(|d| hero::hero_names(d).0).or_else(|| self.selected().map(|m| m.title.as_str()))
+        d.map(|d| hero::hero_names(d).0).or_else(|| self.selected().map(hero::selection_band_name))
     }
 
     /// **Where the hero's logo stands this frame**, in page coordinates: interpolated continuously

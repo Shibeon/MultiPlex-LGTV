@@ -1043,3 +1043,24 @@ fn a_season_stands_under_its_show_and_a_film_names_itself_once() {
     assert_eq!(runs.iter().filter(|r| r.contains("Filmzzz")).count(), 1, "{runs:?}");
     test_store().run(MetadataCmd::Clear);
 }
+
+/// **The band names the same thing before and after the item lands.** A page opened on an episode
+/// (or a season) row shows the selection's name until its [`Detail`] arrives; that name follows
+/// [`hero::hero_names`]' rule, so an episode whose show has no clearLogo reads "Showzzz" from the
+/// first frame instead of "Pilotzzz" swapping to "Showzzz" on landing.
+#[test]
+fn the_title_band_names_the_show_from_the_selection_as_it_will_once_landed() {
+    use plx_data::pms::{PmsMovie, KIND_EPISODE, KIND_MOVIE, KIND_SEASON};
+    let row = |kind, title: &str, show: &str| PmsMovie { kind, title: title.into(), show_title: show.into(), ..Default::default() };
+    let landed = |kind: &str, title: &str, show: &str| Detail { kind: kind.into(), title: title.into(), show_title: show.into(), ..Default::default() };
+    for (k, kind, title, show) in [
+        (KIND_EPISODE, "episode", "Pilotzzz", "Showzzz"),
+        (KIND_SEASON, "season", "Season 2", "Showzzz"),
+        (KIND_EPISODE, "episode", "Lonezzz", ""),
+        (KIND_MOVIE, "movie", "Filmzzz", ""),
+    ] {
+        let d = landed(kind, title, show);
+        assert_eq!(hero::selection_band_name(&row(k, title, show)), hero::hero_names(&d).0, "{kind} {title:?}");
+    }
+    assert_eq!(hero::selection_band_name(&row(KIND_EPISODE, "Pilotzzz", "Showzzz")), "Showzzz");
+}

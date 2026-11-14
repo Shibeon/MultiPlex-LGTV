@@ -851,10 +851,26 @@ fn facts_flow(
 /// the show's) with its own title on the line below, Plex mobile's detail page: "The Show" /
 /// "The Episode". Every other page, and one whose own title is its show's, names itself once.
 pub fn hero_names(d: &Detail) -> (&str, Option<&str>) {
-    let under_show = matches!(d.kind.as_str(), "episode" | "season") && !d.show_title.is_empty();
-    match under_show.then_some(d.title.as_str()).filter(|own| !own.is_empty() && *own != d.show_title) {
-        Some(own) => (d.show_title.as_str(), Some(own)),
-        None => (d.title.as_str(), None),
+    band_names(matches!(d.kind.as_str(), "episode" | "season"), &d.title, &d.show_title)
+}
+
+/// The title band's name for the SELECTION a page was opened on, before its [`Detail`] lands: the
+/// same rule as [`hero_names`]`.0`, read off the browse row (`PmsMovie::kind`/`show_title`), so an
+/// episode whose show has no clearLogo names the show from the first frame instead of swapping its
+/// own title for the show's when the item lands.
+pub fn selection_band_name(m: &plx_data::pms::PmsMovie) -> &str {
+    use plx_data::pms::{KIND_EPISODE, KIND_SEASON};
+    band_names(matches!(m.kind, KIND_EPISODE | KIND_SEASON), &m.title, &m.show_title).0
+}
+
+/// [`hero_names`]' rule on its three inputs: an item that stands under a show (`under_show_kind`)
+/// whose show is known and whose own title is non-empty and not the show's is named by the show,
+/// with its own title as the subtitle; anything else names itself once.
+fn band_names<'a>(under_show_kind: bool, title: &'a str, show_title: &'a str) -> (&'a str, Option<&'a str>) {
+    let under_show = under_show_kind && !show_title.is_empty();
+    match under_show.then_some(title).filter(|own| !own.is_empty() && *own != show_title) {
+        Some(own) => (show_title, Some(own)),
+        None => (title, None),
     }
 }
 

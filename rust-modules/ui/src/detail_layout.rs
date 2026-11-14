@@ -3,8 +3,8 @@
 //! **The Detail hero is two columns** (MultiPlex web's detail page): the item's poster card on the
 //! left ([`POSTER_X`], [`POSTER_TOP`], [`POSTER_W`] × [`POSTER_H`]) and a text column to its right
 //! ([`TEXT_X`]) that grows DOWN from the title's foot ([`TITLE_FOOT`]): on an episode's or a season's
-//! page the subtitle (its own title, under its show's logo), the meta line (date, runtime,
-//! content rating), the ratings row (the providers' scores, then the viewer's five stars), the
+//! page the subtitle (its own title, under its show's logo), the meta line (on an episode's page
+//! its season and episode first, "S1 · E1", then date, runtime, content rating), the ratings row (the providers' scores, then the viewer's five stars), the
 //! action row (the wide Play/Resume capsule and the round More disc), the synopsis, the two-column
 //! credit table and the technical pills. [`hero_chain`] is that ladder; absent rows leave no gap.
 use super::{consts::{MARGIN_X, MARGIN_Y}, theme, widgets};
