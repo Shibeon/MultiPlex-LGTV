@@ -141,14 +141,15 @@ fn the_title_stands_at_148_the_row_at_236_and_the_grid_starts_at_332() {
 /// **The title names the library's kind and counts its items**, plural-aware and localized.
 #[test]
 fn the_title_names_the_kind_and_counts_the_items() {
-    use plx_platform::i18n::{language_on_this_thread_for_test, Preference};
+    use plx_platform::i18n::{language_on_this_thread_for_test, SHIPPED};
     let _guard = plx_base::testlock::serial();
-    for (language, items) in [(Preference::En, "36 items"), (Preference::Fr, "36 éléments")] {
+    for language in SHIPPED {
         let _language = language_on_this_thread_for_test(language);
         let (_, page, _) = grid_page(2);
         let (title, count) = page.probe_title();
         assert_eq!(title, plx_platform::i18n::msg::browse_kind_movies(), "{}", language.tag());
-        assert_eq!(count, items, "{}", language.tag());
+        assert_eq!(count, plx_platform::i18n::msg::library_header_items(36), "{}", language.tag());
+        assert!(count.contains("36"), "{}: the count names the number: {count}", language.tag());
     }
 }
 
