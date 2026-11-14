@@ -685,7 +685,8 @@ fn a_matched_titles_caption_reads_its_copys_facts_under_every_details_pick() {
     assert_eq!(w.bridge.watchlist_for_test().view().tile_state_of(&[1; 12]), Some(TileState::Available),
         "premise: a reachable server holds the title");
     // the focused poster's block as the frame DREW it (not the production label): Down brings focus onto
-    // the one title, then each pick words its details line alone (the Title switch is off)
+    // the one title, then each pick words its details line (the wall names every card, so the title
+    // line stands above it whatever the Title switch says)
     set(&mut w, false, Details::YearLength);
     for _ in 0..4 {
         if !w.drawn().caption_lines().is_empty() { break; }
@@ -698,6 +699,8 @@ fn a_matched_titles_caption_reads_its_copys_facts_under_every_details_pick() {
         (Details::AgeRatingScore, "PG-13 \u{b7} 7.8"),
     ] {
         set(&mut w, false, details);
-        assert_eq!(w.drawn().caption_lines(), [want.to_string()], "{details:?}");
+        let lines = w.drawn().caption_lines();
+        assert_eq!(lines.len(), 2, "the title line, then the details line: {lines:?} ({details:?})");
+        assert_eq!(lines.last(), Some(&want.to_string()), "{details:?}");
     }
 }

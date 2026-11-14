@@ -1,8 +1,13 @@
-//! The focus caption (plan §1.9, boards Watchlist and TileStates): what the focused tile's band shows.
+//! The caption (plan §1.9, boards Watchlist and TileStates): what the words under a tile say.
 //!
-//! **Under posters.** The band is the global Under posters setting's, the one the Library reads
-//! ([`policy`]): the Title switch (default Off) opens the title line, the Details picker the second,
-//! and the band is 0 / 80 / 112 px tall by what it will show (`Stack::caption_policy`); the lines are
+//! **Every card is named** (the MultiPlex web watchlist, the Library's wall): the page's grid is an
+//! `every_caption` grid, so every card carries its block in one fixed band whatever has focus, its title
+//! line always on ([`every_policy`]) and held to its own tile ([`every_label`]).
+//!
+//! **Under posters.** The details line is the global Under posters setting's, the one the Library reads
+//! ([`policy`]): the Details picker words the second line (the Title switch no longer decides the
+//! title line here: the wall always names its titles; [`band_policy`] is what the page still hands
+//! the stack as its policy, `Stack::caption_policy`); the lines are
 //! built by the one builder the poster screens share ([`crate::registry::captions::label`]). A Watchlist row
 //! carries a title, a year and a kind; the rest of what a caption words (genre, video, age rating and
 //! score, length, season and episode counts) is the MATCHED COPY's, as the guid lookup's row said it
