@@ -807,10 +807,17 @@ class HudSimulatorRelease(unittest.TestCase):
         self.assertIn("github.event_name != 'pull_request'",attach)
         self.assertIn("inputs.publish_development",attach)
         self.assertIn("--development",attach)
-        self.assertIn("if: inputs.release_tag != ''",attach)
         self.assertNotIn("continue-on-error",attach)
         self.assertRegex(code("hud-simulator.yml"),r"publish_development:[\s\S]*?default: false")
         self.assertNotIn("contents: write",job_body("hud-simulator.yml","build"))
+
+    def test_no_registry_is_notified_after_a_release(self):
+        # The fork has no HUD registry: nothing dispatches to one, and no secret is needed for it.
+        workflow = code("hud-simulator.yml")
+        self.assertNotIn("repository_dispatch", workflow)
+        self.assertNotIn("dispatch_probe", workflow)
+        self.assertNotIn("HUD_REGISTRY_DISPATCH_TOKEN", workflow)
+        self.assertFalse((ROOT / "tools/hud_registry_dispatch.py").exists())
 
 
 class ReleaseMainPushKey(unittest.TestCase):

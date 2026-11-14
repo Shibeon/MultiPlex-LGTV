@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registry HUD preview matrix through the app's shared synthetic screenshot driver.
+"""HUD preview matrix through the app's shared synthetic screenshot driver.
 
 The app compiler supplies each reachable section combination and the actual opener geometry.
 No server/account credentials, TV, screen-local renderer or duplicated HUD layout is involved.

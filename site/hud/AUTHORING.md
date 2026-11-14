@@ -27,8 +27,8 @@ No Rust build or real Plex account is needed. Native previews use the licensed s
 
 Findings name the archive member in `file` and a document-local JSON pointer in `path`; SVG and
 archive failures use an empty pointer. Fix all findings and inspect every generated state.
-Do not shorten app translations or remove commands to hide a fit error. The registry applies
-measured per-rung TV headroom; the television still compiles with its own native text widths.
+Do not shorten app translations or remove commands to hide a fit error. The television compiles
+with its own native text widths, so leave some width to spare rather than fitting to the pixel.
 
 Keep theme tokens, size rungs, commands and shared native menus. Preserve condition-object order.
 The native packer writes canonical STORE ZIP32 entries and preserves the payload bytes exactly.
@@ -69,17 +69,17 @@ when its `version` is higher than the installed one. The comparator reads `MAJOR
 (no pre-release part), so the tool raises the patch of the copy it serves by the seconds since 2026-01-01: it is
 higher after every change and after a restart of the tool, and never below your own version. Your files, including
 `manifest.json`, are never touched. Play on a row does something only for a package installed from a development
-address; a registry or drop-folder install has no such action.
+address; a drop-folder install has no such action.
 
-**Remove the dev install before installing the registry one.** A dev build's patch number (millions, growing by one a
+**Remove the dev install before installing the published one.** A dev build's patch number (millions, growing by one a
 second) is above any release that only raises the patch: a dev build installed as `1.0.26000000` makes the published
 `1.0.4` "not newer", so the TV refuses it and does not treat it as an update. Before you install the published
 version, open the Player HUD page and use the row named after your HUD whose detail reads "Remove" (the page's existing
-way to remove a package), then install from the gallery. The TV also records the dev address in its installed list. A
+way to remove a package), then install the published archive (drop folder or *Install from address*). The TV also records the dev address in its installed list. A
 MultiPlex build older than this feature reads that whole list as read-only: it does not list the dev HUD and cannot
 remove it, so remove the dev install on a newer build before you go back to an older one.
 
-Submit the source folder, attribution README and maintainer contact to
-https://github.com/GLinnik21/multiplex-huds . CI builds once and binds linting, all-language/native
-previews and publication to the same archive hash. The initial format has no compatibility reader
+There is no central HUD registry to submit to: publish the packed `.plxhud` yourself (a GitHub
+release asset named `hud.plxhud` is what a `gh:owner/repo[@tag]` address installs) with its source folder and attribution
+README. The initial format has no compatibility reader
 for standalone JSON, scripts, fonts, bitmap artwork or plugin-localized labels.

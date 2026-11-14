@@ -32,7 +32,7 @@ def attach(directory, source, tag="", development=False):
             raise RuntimeError(existing.stderr)
         subprocess.run(["gh","release","create",tag,"--target",source,"--prerelease",
                         "--title","Player HUD authoring simulator (development)","--notes",
-                        f'Development utility for HUD registry validation. Source: {source}. Target app: {pin["app_version"]}-dev.'],check=True)
+                        f'Development HUD authoring simulator. Source: {source}. Target app: {pin["app_version"]}-dev.'],check=True)
         names = set()
     else:
         names = {item["name"] for item in json.loads(existing.stdout)["assets"]}

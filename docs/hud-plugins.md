@@ -1,5 +1,10 @@
 # Player-HUD plugins: format, renderer, registry, sideload, trust, PR breakdown
 
+> **This fork has no HUD registry.** The registry, its CI and the in-app gallery (D16, PR12 to PR14) are the
+> upstream project's design record and were removed here ("Registry" below): packages arrive only from the drop
+> folder or a typed address. Where this document describes registry CI, a registry job or a registry repository,
+> it describes the upstream design, not anything this repository runs.
+
 ## Problem
 
 Users want player HUDs that look different from the built-in one. The owner wants them to be able
@@ -880,7 +885,8 @@ what it sees, a file and the simulator it pins; it cannot see a sideload, a TV's
 app sees all three at the moment it would draw, so the app is the enforcement point and the same compiler runs in
 three places:
 1. `multiplex-sim --hud-lint --lang all`, locally or in a model's lint loop (LLM authoring);
-2. registry CI, through the simulator pinned to an app release, as a required check that refuses the merge;
+2. registry CI, through the simulator pinned to an app release, as a required check that refuses the merge (upstream
+   only: this fork has no registry);
 3. the TV, which compiles when a package becomes the resolved selection, never at install (an install only runs
    `admit`), with its OWN `Measure` for its language. The language is fixed for a process (`run.rs`), so a changed
    language takes effect at the next launch, whose process compiles for it. It keeps one entry, keyed by (package
@@ -906,8 +912,9 @@ Refresh, an install) tries them again, with no second line. The selection is kep
 restores it, at the next launch.
 
 The gap: an app release can lengthen a translation or add a language, so a package that passed can fail later.
-- (a) Re-lint on every app release: YES. A job in `multiplex-huds`, triggered by a `repository_dispatch` from this
-  repo's release workflow and also weekly as a backstop (a missed dispatch must not leave the index stale), re-lints
+- (a) Re-lint on every app release: NOT IN THIS FORK, which has no registry to re-lint and dispatches nothing. The
+  upstream design: a job in the upstream's registry repository, triggered by a `repository_dispatch` from the
+  upstream's release workflow and also weekly as a backstop (a missed dispatch must not leave the index stale), re-lints
   the latest version of every entry with the new release's simulator in all eleven languages. Per entry it records the
   result in the index as `unfit: [{"from": "<app release>", "langs": [...]}]`; when every language fails, or a
   non-text invariant does, it writes `app.max` = the last release that passed, the field Versioning already defines.
@@ -940,7 +947,7 @@ pins FreeType 2.15.0 only in the `libass` group (`:38-44`; static inside libass,
 entry (`grep -n -i '"id": "sdl' ci/dependencies.json` finds nothing). So widths may differ by hinting and advance
 rounding. PR12 measured 12,276 app-text samples across all eleven languages, nine rungs and both
 weights. The ceiling of the worst positive difference is 4–9 px per rung; the source-bound reports,
-font identities and exact table live in the registry's `calibration/`. New translation corpora carry
+font identities and exact table lived in the upstream registry's `calibration/`. New translation corpora carry
 that empirical margin only with matching font, renderer-library and type-scale identities; their
 profile retains the original measurement provenance. The TV's compile remains the authority.
 
@@ -1667,7 +1674,7 @@ authoring exercise; the other external comparisons below remain design notes.
 1. Schema.
 - Where: `https://plxnative.com/hud/schema/{manifest,hud}/1.N.json`, the address the upstream served from this repo's `site/`
   (static Pages, F40). This fork publishes no site, but the URL stays the schema's identifier: a package's `$schema`
-  must equal it exactly (`E0401`), so changing it would refuse every package already written; the registry mirrors it under `schema/`. A package's schema-URL key names it; the
+  must equal it exactly (`E0401`), so changing it would refuse every package already written. A package's schema-URL key names it; the
   strict parser checks its document kind and version. The manifest URL follows `package_format` and the HUD URL follows `hud.format`.
 - One schema per document kind and MAJOR.MINOR. Each declared version keeps its published contract when later minors extend it.
 - One source: `hud_format::schema` holds a descriptor table (per key: type, closed values, numeric range,
@@ -1725,7 +1732,7 @@ at the ITEM, through the `oneOf`, where the parser names the key). The schema is
   a DTCG-shaped palette entry -> the flat hex form.
 
 3. Examples and a guide.
-- Published beside the schema (`site/hud/examples/`, mirrored in the registry's `examples/`):
+- Published beside the schema (`site/hud/examples/`):
   `reference.plxhud` (above); `classic.plxhud`, exported with `--hud-export builtin:classic --out classic.plxhud` from the
   embedded canonical archive and checked against the authored source directory; small variants `minimal` (the smallest valid package: a playbar and a `more`
   disc), `hero-center` (a `toggle_play` hero), `tabs` (openers as pills), `palette`. Each invalid fixture of the
@@ -1734,7 +1741,7 @@ at the ITEM, through the `oneOf`, where the parser names the key). The schema is
 - `AUTHORING.md` (one page, for humans and models): the mental model (bands, cells, segments, controls with an
   id and a command, sections, states), each closed vocabulary in one line, every invariant with its lint code,
   a writing order (skeleton, rows, sections, palette last), and the lint loop.
-- Registry entry points: `AGENTS.md` (run lint, read `AUTHORING.md`, never hand-edit `index.json`) and
+- Registry entry points (upstream only): `AGENTS.md` (run lint, read `AUTHORING.md`, never hand-edit `index.json`) and
   `llms.txt` (a markdown index of schema URL, guide, examples and lint command; a 2024 proposal of uncertain
   adoption, UNVERIFIED, costing one static file). Registry authors never need the app repo.
 - Acceptance measure, manual and not CI: before submissions open the owner can give a model the guide, the

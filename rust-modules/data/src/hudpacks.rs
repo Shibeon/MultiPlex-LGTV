@@ -207,8 +207,8 @@ impl Semver {
     }
 }
 
-/// Where a package came from. A sideload and a drop are unreviewed; the registry is the only reviewed
-/// source and sets itself (PR13).
+/// Where a package came from. A drop and an address are unreviewed; `Registry` is only read back from an
+/// `installed.json` an earlier build wrote, since this fork has no registry to install from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Source {
@@ -239,8 +239,8 @@ impl Source {
     }
 }
 
-/// How far a package is vouched for. Every tier passes the format invariants; only the registry's is
-/// reviewed.
+/// How far a package is vouched for. Every tier passes the format invariants; only the former registry's
+/// packages were reviewed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Trust {
     /// Compiled in.
@@ -489,7 +489,7 @@ pub struct Entry {
 pub struct OfferView {
     pub sha: Sha,
     pub meta: Meta,
-    /// The verified fetch source; the prompt distinguishes registry review from an address install.
+    /// The verified fetch source (a drop or an address; nothing fetches from the former registry).
     pub source: Source,
     /// The address the bytes came from.
     pub from: Option<address::Address>,
