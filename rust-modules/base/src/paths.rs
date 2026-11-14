@@ -272,7 +272,52 @@ fn macos_app_support() -> Option<PathBuf> {
     if home.is_empty() {
         return None;
     }
-    Some(PathBuf::from(home).join("Library/Application Support/MultiPlex"))
+    let home = PathBuf::from(home);
+    migrate_legacy_support_dir(&home);
+    Some(home.join(SUPPORT_DIR))
+}
+
+/// The bundled app's support directory, under `$HOME`.
+const SUPPORT_DIR: &str = "Library/Application Support/MultiPlex";
+/// Where a bundle built before the plxnative -> multiplex rename kept the same files (its
+/// `auth.json`, settings and caches): read once, by being moved, on the first launch of a renamed
+/// bundle. Kept as a literal because it names data already written on people's Macs.
+const LEGACY_SUPPORT_DIR: &str = "Library/Application Support/PlxNative";
+
+/// What the one-time support-directory migration does, decided from facts alone so the rule is
+/// tested without a filesystem: move the old directory into place only when the new one does not
+/// exist yet and the old one is a real directory (never a symlink, which a co-resident process
+/// could have planted to steer the move). Once moved, the old name no longer exists, so a later
+/// launch decides `None`: the migration runs at most once.
+#[derive(Debug, PartialEq, Eq)]
+enum SupportMove {
+    None,
+    Rename,
+}
+
+fn support_move(new_exists: bool, old_is_real_dir: bool) -> SupportMove {
+    if !new_exists && old_is_real_dir {
+        SupportMove::Rename
+    } else {
+        SupportMove::None
+    }
+}
+
+/// Carry out [`support_move`] under `home`. Silent and best-effort for the reason
+/// [`ensure_runtime_dir`] gives: it runs inside [`runtime_dir`]'s initializer, before any log can be
+/// opened, and it must run there, ahead of the first file the new root is asked for (`src/main.c`
+/// opens its logs through [`plx_runtime_path`] before any other Rust runs). A failed rename leaves
+/// both names as they were and the bundle starts with an empty root: the old directory stays on
+/// disk for the person to move by hand.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn migrate_legacy_support_dir(home: &Path) {
+    let new = home.join(SUPPORT_DIR);
+    let old = home.join(LEGACY_SUPPORT_DIR);
+    let new_exists = std::fs::symlink_metadata(&new).is_ok();
+    let old_is_real_dir = std::fs::symlink_metadata(&old).is_ok_and(|m| m.file_type().is_dir());
+    if support_move(new_exists, old_is_real_dir) == SupportMove::Rename {
+        let _ = std::fs::rename(&old, &new);
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1119,6 +1164,47 @@ mod tests {
             super::resolve_runtime_dir(Some("/run/sim-a".into()), Some(sup), super::STABLE_APP_ID),
             std::path::Path::new("/run/sim-a")
         );
+    }
+
+    /// The one-time move of a pre-rename bundle's support directory: only into an absent new
+    /// directory, only from a real directory, and never twice.
+    #[test]
+    fn the_legacy_support_directory_moves_once_and_only_into_an_absent_new_one() {
+        use super::{support_move, SupportMove};
+        assert_eq!(support_move(false, true), SupportMove::Rename);
+        assert_eq!(support_move(true, true), SupportMove::None, "an existing new root is never replaced");
+        assert_eq!(support_move(false, false), SupportMove::None, "nothing to move");
+        assert_eq!(support_move(true, false), SupportMove::None);
+
+        let home = crate::testscratch::process_dir("legacy-support-move");
+        let old = home.join(super::LEGACY_SUPPORT_DIR);
+        let new = home.join(super::SUPPORT_DIR);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("auth.json"), b"{}").unwrap();
+        super::migrate_legacy_support_dir(&home);
+        assert_eq!(std::fs::read(new.join("auth.json")).unwrap(), b"{}", "the old files are in the new root");
+        assert!(std::fs::symlink_metadata(&old).is_err(), "the old name is gone, so the move cannot run again");
+
+        // A new root that exists wins, and an old one that reappears is left alone.
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("auth.json"), b"old").unwrap();
+        super::migrate_legacy_support_dir(&home);
+        assert_eq!(std::fs::read(new.join("auth.json")).unwrap(), b"{}");
+        assert_eq!(std::fs::read(old.join("auth.json")).unwrap(), b"old");
+    }
+
+    /// A symlink at the old name is never followed into the new root.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_legacy_support_directory_is_not_moved() {
+        let home = crate::testscratch::process_dir("legacy-support-symlink");
+        let target = home.join("elsewhere");
+        std::fs::create_dir_all(&target).unwrap();
+        let old = home.join(super::LEGACY_SUPPORT_DIR);
+        std::fs::create_dir_all(old.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&target, &old).unwrap();
+        super::migrate_legacy_support_dir(&home);
+        assert!(std::fs::symlink_metadata(home.join(super::SUPPORT_DIR)).is_err());
     }
 
     /// The bundle detector must answer on SHAPE — `…/Contents/MacOS/<exe>` — and must not be
