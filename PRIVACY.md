@@ -5,7 +5,7 @@ Applies to PlxNative 0.6.0. Last updated 9 November 2026.
 ## Who is responsible for PlxNative data
 
 Gleb Linnik is responsible only for data PlxNative stores locally and for optional reports you
-choose to share. Contact: `support@plxnative.com`.
+choose to share.
 
 ## Plex services
 
@@ -376,16 +376,14 @@ either category, so it asks neither question and Settings → Privacy & data sho
 neither example report and neither identifier: the page lists only this policy and Delete all
 local data.
 
-To ask what a category holds for your installation, or to have it deleted, write to the contact
-below and quote the identifier Settings shows for that category — the Crash report ID for crash
-and error reports, the Analytics ID for product analytics. Each identifier is the only handle its
-reports carry, so a request without it cannot be matched to anything. A one-off sign-in problem
-report is sent only when you press Send report; quote the Report ID it showed to ask about it.
+The identifier Settings shows for each category (the Crash report ID for crash and error reports,
+the Analytics ID for product analytics) is the only handle that category's reports carry. A one-off
+sign-in problem report is sent only when you press Send report.
 
-## Contact and non-affiliation
+## Security reports and non-affiliation
 
-Privacy questions may be sent to `support@plxnative.com`. Security vulnerabilities may be reported
-privately through GitHub Security Advisories for `GLinnik21/plx-native`.
+Security vulnerabilities may be reported privately through GitHub Security Advisories for
+`Shibeon/MultiPlex-LGTV`.
 
 PlxNative is an independent, unofficial application. It is not produced by, endorsed by, or
 affiliated with Plex, Inc. or LG Electronics Inc.

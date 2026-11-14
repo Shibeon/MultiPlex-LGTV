@@ -511,11 +511,11 @@
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.retention_body"
   },
   "settings.legal.privacy.choices": {
-    "value": "YOUR CHOICES AND HOW TO ASK",
+    "value": "YOUR CHOICES",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.choices"
   },
   "settings.legal.privacy.choices_body": {
-    "value": "Both optional reports are off until you turn them on, and either can be turned off again at any time in Settings. A one-off sign-in problem report is sent only when you press Send report. Delete all local data removes what MultiPlex stored on this television; it does not reach anything already sent. To ask what crash reports or product analytics hold for your installation, or to have them deleted, write to the contact below and quote your Crash report ID or Analytics ID from Settings, or the Report ID shown after a one-off report. Each identifier is the only handle its reports carry. Turning a category off deletes its identifier from this television, and so does signing out; reports already sent keep the old one, so copy it down first if you intend to ask for their deletion.",
+    "value": "Both optional reports are off until you turn them on, and either can be turned off again at any time in Settings. A one-off sign-in problem report is sent only when you press Send report. Delete all local data removes what MultiPlex stored on this television; it does not reach anything already sent. Each identifier is the only handle its reports carry. Turning a category off deletes its identifier from this television, and so does signing out; reports already sent keep the old one.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.choices_body"
   },
   "settings.legal.privacy.processing": {
