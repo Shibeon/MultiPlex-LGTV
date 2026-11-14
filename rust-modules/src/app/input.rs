@@ -1611,6 +1611,9 @@ fn sweep_local_files(persistent: impl IntoIterator<Item = std::path::PathBuf>,
         }
     }
     failures.extend(erase_runtime_logs(runtime_root));
+    // Logs and recordings a pre-rename build wrote under `plxnative-*`: boot removes them too, but
+    // a sweep must not rely on the boot having run since an older build last wrote one.
+    failures.extend(plx_base::paths::remove_legacy_runtime_files(runtime_root));
     failures
 }
 
@@ -1705,6 +1708,25 @@ mod delete_all_tests {
         let leftovers = sweep_local_files(persistent.clone(), &tv.runtime());
         assert_eq!(leftovers.len(), persistent.len() + 2, "{leftovers:?}");
         assert!(persistent.iter().chain([&log, &rec]).all(|p| p.exists()));
+    }
+
+    #[test]
+    fn delete_all_local_data_sweeps_the_pre_rename_logs_and_recordings() {
+        let root = std::env::temp_dir().join(format!(".plx-delete-legacy-runtime-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir(&root).unwrap();
+        for name in plx_base::paths::legacy_runtime_file::LOGS {
+            std::fs::write(root.join(name), name.as_bytes()).unwrap();
+        }
+        let recordings = root.join(plx_base::paths::legacy_runtime_file::RECORDINGS);
+        std::fs::create_dir(&recordings).unwrap();
+        std::fs::write(recordings.join("segment-0"), b"frames").unwrap();
+
+        let leftovers = sweep_local_files(Vec::new(), &root);
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        assert!(plx_base::paths::legacy_runtime_file::LOGS.iter().all(|name| !root.join(name).exists()));
+        assert!(!recordings.exists());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
