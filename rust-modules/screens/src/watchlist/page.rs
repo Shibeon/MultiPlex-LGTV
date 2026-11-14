@@ -137,23 +137,33 @@ pub enum WatchlistIn {
 
 // ── Geometry: `Watchlist.dc.html`, a 1920 x 1080 stage.
 
-/// The grid's first row of posters: 96 under the header row's top, as the Library's (244).
-pub const GRID_TOP: f32 = plx_ui::page_header::GRID_TOP;
-/// Six columns of 250 posters from the row's text edge, 285 apart: the gap that puts the last
-/// column's right edge on the row's right text edge.
-const COLS: usize = 6;
-const GRID_GAP: f32 = (header::GRID_RIGHT - MARGIN_X - COLS as f32 * CARD_W) / (COLS as f32 - 1.0);
+/// The grid's first row of posters: 96 under the header row's top, as the Library's (332), under the
+/// title block and the row of controls.
+pub const GRID_TOP: f32 = header::HEADER_TOP + header::BLOCK_H;
+/// Seven columns across, the Library's poster wall (the MultiPlex list page's): from the row's left
+/// text edge to its right one, [`GRID_GAP`] apart.
+pub(crate) const COLS: usize = 7;
+/// The air between two poster columns: the Library's.
+const GRID_GAP: f32 = theme::space::SM;
+/// A poster's width: [`COLS`] posters and their gaps fill the row's text band.
+pub(crate) const GRID_CARD_W: f32 = (header::GRID_RIGHT - MARGIN_X - (COLS as f32 - 1.0) * GRID_GAP) / COLS as f32;
 
-/// The grid's cards: the shared home poster, at the Library's gap.
+/// The grid's cards: the shared home poster at the poster aspect, [`GRID_CARD_W`] wide, at the
+/// Library's gap, each with its title and details line hung under it from its left edge (every card
+/// is named, `GridSpec::every_caption`), as the Library's wall.
 fn grid_style() -> plx_ui::cards::RowStyle {
-    plx_ui::cards::RowStyle { gap: GRID_GAP, ..plx_ui::cards::RowStyle::HOME }
+    let base = plx_ui::cards::RowStyle::HOME;
+    plx_ui::cards::RowStyle { w: GRID_CARD_W, h: GRID_CARD_W * base.h / base.w, gap: GRID_GAP, ..base }
+        .with_label_drop(plx_ui::cards::EVERY_CAPTION_DROP)
+        .with_leading_labels()
 }
 
 /// The grid's spec: top, columns. Its rows REST, as the Library's do: a focused row below the first
-/// comes to rest with its posters at the first row's y (`GRID_TOP`, 244), held by the document's end
-/// (`GridSpec::resting`).
+/// comes to rest with its posters at the first row's y (`GRID_TOP`, 332), held by the document's end
+/// (`GridSpec::resting`). Every card is named (the MultiPlex wall: a title and a details line under
+/// each), so no row opens a band on focus.
 fn grid_spec() -> GridSpec {
-    GridSpec::resting(GRID_TOP).columns(COLS, grid_style(), MARGIN_X)
+    GridSpec::resting(GRID_TOP).columns(COLS, grid_style(), MARGIN_X).every_caption(true)
 }
 
 /// The pill's focus element, below the card keys.
@@ -308,7 +318,7 @@ impl Page {
     /// facts of its matched copy.
     fn label(&self, i: usize) -> TileLabel {
         match self.tiles.get(i).zip(self.cells.get(i)) {
-            Some((t, c)) => caption::label(&t.row, t.state, &caption::policy(), &c.listing),
+            Some((t, c)) => caption::every_label(&t.row, t.state, &c.listing),
             None => TileLabel::default(),
         }
     }
@@ -386,9 +396,11 @@ impl Page {
         (std::ptr::from_ref(plx_platform::i18n::current()) as usize).hash(&mut h);
         self.options.hash(&mut h);
         header::Count::narrowed(count).hash(&mut h);
+        let counts = self.title_counts();
+        counts.hash(&mut h);
         self.header_rows.get_replacing(
             h.finish(),
-            || header::Row::new(measure, &self.options.summary(), count),
+            || header::Row::new(measure, &self.options.summary(), count, counts),
             |old, new| new.begin_swap(old, &mut self.header_swap.borrow_mut()),
         )
     }
@@ -414,6 +426,21 @@ impl Page {
             return Some(hold.count);
         }
         self.live_count()
+    }
+
+    /// What the title block says: the list's size (the count's total, a Remove's hold included, so
+    /// the pill moves on the frame the grid does) and, once every title of the unfiltered list is
+    /// read, how many no server holds yet (unreleased and on none, or released on none).
+    fn title_counts(&self) -> header::TitleCounts {
+        let total = self.count().map(|count| match count {
+            Count::All(n) => n,
+            Count::Of { total, .. } => total,
+        });
+        let whole = matches!(self.live_count(), Some(Count::All(n)) if n <= self.tiles.len());
+        let unavailable = whole.then(|| {
+            self.tiles.iter().filter(|t| matches!(t.state, TileState::ComingSoon | TileState::NotOnAnyServer)).count()
+        });
+        header::TitleCounts { total, unavailable }
     }
 
     /// [`count`](Self::count) from the current list, ignoring a hold.
@@ -600,7 +627,7 @@ impl<H: ContentLike> CardSource<H> for GhostTitles<'_> {
     /// Read only for the focused card's ghost, which keeps its caption until the landing steps.
     fn label(&self, i: usize) -> TileLabel {
         match self.tiles.get(i).copied().flatten() {
-            Some((t, c)) => caption::label(&t.row, t.state, &caption::policy(), &c.listing),
+            Some((t, c)) => caption::every_label(&t.row, t.state, &c.listing),
             None => TileLabel::default(),
         }
     }
@@ -917,6 +944,12 @@ impl WatchlistScreen {
     /// Q7: the count just left of the pill.
     pub fn count(&self) -> Option<Count> {
         self.page.count()
+    }
+
+    /// What the title block says beside the page's name: the list's size and how many titles no
+    /// server holds yet.
+    pub fn title_counts(&self) -> header::TitleCounts {
+        self.page.title_counts()
     }
 
     /// The focused tile's index in the shown order, if there is one.

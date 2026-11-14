@@ -23,5 +23,11 @@
   "watchlist.empty.filtered_body": "Canvia les opcions d'ordenació i filtratge per veure la resta de la llista de seguiment.",
   "watchlist.empty.unreachable": "No es pot accedir a la teva llista de seguiment",
   "watchlist.detail.trailer": "Tràiler",
-  "watchlist.page.debug_write_blocked": "Depuració: escriptura a la llista bloquejada"
+  "watchlist.page.debug_write_blocked": "Depuració: escriptura a la llista bloquejada",
+  "watchlist.page.subtitle": "La teva llista de Plex: títols per veure, disponibles o encara no.",
+  "watchlist.page.unavailable": {
+    "one": "· {count} encara no disponible",
+    "many": "· {count} encara no disponibles",
+    "other": "· {count} encara no disponibles"
+  }
 }

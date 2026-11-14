@@ -308,7 +308,7 @@ fn the_control_is_one_rect_for_paint_focus_and_anchor() {
     let focus = Focusable::<super::cards_harness::WatchHost>::place(&h.screen, &PILL_ELEM, &cx, At::Drawn)
         .expect("the control is a focus stop")
         .rect;
-    let row = header::Row::new(&plx_ui::fixture::FixtureMeasure, &h.screen.options().summary(), None);
+    let row = header::Row::new(&plx_ui::fixture::FixtureMeasure, &h.screen.options().summary(), None, h.screen.title_counts());
     assert_eq!(focus, row.plate(), "the focus rect is the drawn plate");
     assert_eq!(h.screen.pill_rect(&plx_ui::fixture::FixtureMeasure), row.pill(), "the menu grows out of the focused pill");
     assert_eq!(focus.x + focus.w, 1771.0 + plx_ui::page_header::OVERHANG, "text on the right text edge, the plate overhangs");
@@ -568,12 +568,12 @@ fn a_reserved_cell_keeps_its_place_when_its_row_lands() {
         panic!("DOWN from the last loaded row reaches the reserved cells")
     };
     let at = CardSource::<H>::index_of(&h.screen.cards_for_test(), &below);
-    assert_eq!(at, Some(105), "DOWN goes one row down, into the reserved cells");
+    assert_eq!(at, Some(99 + COLS), "DOWN goes one row down, into the reserved cells");
     h.focus_elem(below, By::Dir);
     h.run(60);
     h.screen.take_skeleton_draws();
     h.draw();
-    assert!(h.screen.take_skeleton_draws().contains(&105), "the focused reserved cell is drawn as a skeleton");
+    assert!(h.screen.take_skeleton_draws().contains(&(99 + COLS)), "the focused reserved cell is drawn as a skeleton");
 
     // A cell further down, scrolled to: its skeleton is drawn too.
     let far = CardSource::<H>::elem(&h.screen.cards_for_test(), 150);
@@ -860,7 +860,12 @@ fn a_remove_changes_nothing_on_the_grid_until_the_landing_starts() {
         h.cards().into_iter().map(|e| (e, h.drawn_rect(e, 1.0).unwrap(), h.scale(e).unwrap())).collect();
     let removed = h.focused().unwrap();
     // every word the frame draws and where: the focus caption (title and year line) among them
-    let words_before = h.draw_texts();
+    // (in a stable order: the wall names every card, and the landing's draw ORDER is its own)
+    let sorted = |mut words: Vec<(String, plx_ui::Rect)>| {
+        words.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.y.total_cmp(&b.1.y)).then(a.1.x.total_cmp(&b.1.x)));
+        words
+    };
+    let words_before = sorted(h.draw_texts());
     assert!(words_before.iter().any(|(w, _)| w == "2002"), "premise: the removed title's caption is drawn: {words_before:?}");
     set_veil(1.0);
     let guid = h.screen.tiles()[h.screen.index_of(removed).unwrap()].row.guid.clone();
@@ -870,7 +875,7 @@ fn a_remove_changes_nothing_on_the_grid_until_the_landing_starts() {
         h.reconcile();
         let now = h.focused().unwrap();
         assert_ne!(now, removed, "premise: focus reconciled off the removed tile");
-        assert_eq!(h.draw_texts(), words_before, "frame {frame}: the caption (text and anchor) is as drawn before the commit");
+        assert_eq!(sorted(h.draw_texts()), words_before, "frame {frame}: the captions (text and anchor) are as drawn before the commit");
         let leaving = h.screen.leaving_probe();
         for (e, rect, scale) in &before {
             if *e == removed || rect.y > 1080.0 {
@@ -945,8 +950,8 @@ fn the_harness_sizes_its_band_from_its_own_pin_not_from_the_live_setting() {
     };
     let default = settled(UnderPosters::DEFAULT);
     let two_lines = settled(UnderPosters { title: true, details: UnderPostersLadder::Genre.movie_parts(), show_details: UnderPostersLadder::Genre.show_parts(), sort_value: false });
-    assert_eq!(default.0, Some(80.0), "premise: the default opens one line of band");
-    assert_eq!(two_lines, default, "the live cell held two lines (112 px) and the harness followed it: (band, y of a lower card)");
+    assert_eq!(default.0, Some(plx_ui::cards::EVERY_CAPTION_BAND_H), "premise: the wall names every card, so no row opens a band");
+    assert_eq!(two_lines, default, "the live cell held two lines and the harness followed it: (band, y of a lower card)");
 }
 
 #[test]
@@ -1054,27 +1059,39 @@ fn a_filter_never_passes_the_wash_through_neutral_or_another_title() {
 /// One row down: the first scrolled rest of the grid (a whole pitch, since a focused row rests at the
 /// first row's y), where the header has scrolled off.
 fn row_pitch() -> f32 {
-    plx_ui::consts::CARD_H + plx_ui::cards::LABEL_BAND_COLLAPSED + plx_ui::consts::UNDER_LABEL_AIR
+    card_h() + plx_ui::cards::EVERY_CAPTION_ROW_GAP
 }
 
-/// **The grid is the Library's**: six 250 x 375 posters from x 96, 285 apart (the last column ends on
-/// the header row's right text edge, x 1771), the first row at y 244 (the header row's foot), and
-/// the next row a poster and the collapsed caption band (40 px of air) lower.
+/// A poster's height on the wall: the poster aspect at [`super::page::GRID_CARD_W`].
+fn card_h() -> f32 {
+    let base = plx_ui::cards::RowStyle::HOME;
+    super::page::GRID_CARD_W * base.h / base.w
+}
+
+/// The grid's columns.
+const COLS: usize = super::page::COLS;
+
+/// **The grid is the Library's wall**: seven posters from x 96, [`theme::space::SM`] apart (the last
+/// column ends on the header row's right text edge, x 1771), the first row at y 332 (the header
+/// row's foot, under the title block), and the next row a poster and the every-caption gap lower
+/// (every card is named, so no row opens on focus).
 #[test]
-fn the_grid_is_the_librarys_six_columns_at_pitch_285_from_y_244() {
+fn the_grid_is_the_librarys_seven_columns_from_y_332() {
     use plx_ui::cards::conformance::CardHarness;
-    let h = Harness::new(tiles(8));
+    let h = Harness::new(tiles(9));
     let cards = h.cards();
     let rect = |i: usize| h.drawn_rect(cards[i], 1.0).expect("a drawn stop");
-    for c in 0..6 {
+    let w = super::page::GRID_CARD_W;
+    for c in 0..COLS {
         let r = rect(c);
-        assert_eq!((r.w, r.h), (250.0, 375.0), "column {c}");
-        assert!((r.x - (96.0 + 285.0 * c as f32)).abs() < 0.01, "column {c} at {}", r.x);
-        assert_eq!(r.y, 244.0, "the first row stands at the header row's foot");
+        assert!((r.w - w).abs() < 0.01 && (r.h - card_h()).abs() < 0.01, "column {c}: {r:?}");
+        assert!((r.x - (96.0 + (w + theme::space::SM) * c as f32)).abs() < 0.01, "column {c} at {}", r.x);
+        assert_eq!(r.y, 332.0, "the first row stands at the header row's foot");
     }
-    assert!((rect(5).x + rect(5).w - 1771.0).abs() < 0.01, "the last column ends on the row's right text edge");
-    let second = rect(6);
-    assert_eq!((second.x, second.y), (96.0, 244.0 + 375.0 + plx_ui::cards::LABEL_BAND_COLLAPSED + plx_ui::consts::UNDER_LABEL_AIR));
+    assert!((rect(COLS - 1).x + rect(COLS - 1).w - 1771.0).abs() < 0.01, "the last column ends on the row's right text edge");
+    let second = rect(COLS);
+    assert_eq!(second.x, 96.0);
+    assert!((second.y - (332.0 + row_pitch())).abs() < 0.01, "{second:?}");
 }
 
 /// **A scrolled page tucks the top chrome**, as the Library does: untucked at rest, fully tucked
@@ -1089,35 +1106,35 @@ fn the_top_chrome_tucks_once_the_header_has_scrolled_off() {
 }
 
 /// **A focused row below the first rests where the first row does** (owner finding 13): its
-/// posters' top at the first row's resting y (244), the row above still drawn over the top edge
+/// posters' top at the first row's resting y (332), the row above still drawn over the top edge
 /// under the fade, as on the Library. The document's end clamps it: the last row of a long list
 /// cannot rest above the line, but it sits lower rather than scrolling past the end. Measured on an
 /// UNFOCUSED poster of the row, whose cell carries no focus pop.
 #[test]
-fn a_focused_row_below_the_first_rests_with_its_posters_at_244() {
+fn a_focused_row_below_the_first_rests_with_its_posters_at_332() {
     use plx_ui::cards::conformance::CardHarness;
     let mut h = Harness::new(tiles(40));
     let cards = h.cards();
     let at = |h: &Harness, i: usize| h.drawn_rect(cards[i], 1.0).expect("a drawn stop");
     let first_row_y = at(&h, 0).y;
-    assert_eq!(first_row_y, 244.0, "premise: the first row stands at the header row's foot");
-    for row in [1, 2, 5] {
-        h.focus_index(row * 6 + 1);
+    assert_eq!(first_row_y, 332.0, "premise: the first row stands at the header row's foot");
+    for row in [1, 2, 4] {
+        h.focus_index(row * COLS + 1);
         h.run(300);
-        let y = at(&h, row * 6).y;
+        let y = at(&h, row * COLS).y;
         assert!((y - first_row_y).abs() < 0.5, "row {row} rests with its posters at {first_row_y}, not {y} (scroll {})", h.screen.scroll());
     }
-    h.focus_index(5 * 6 + 1);
+    h.focus_index(4 * COLS + 1);
     h.run(300);
-    let above = at(&h, 4 * 6);
-    assert!(above.y < 0.0 && above.y + above.h > 0.0, "the row above is still drawn over the top edge: {above:?}");
+    let above = at(&h, 3 * COLS);
+    assert!(above.y < first_row_y && above.y + above.h > 0.0, "the row above is still drawn over the top edge: {above:?}");
 
-    let last = 6;
-    h.focus_index(last * 6 + 1);
+    let last = 5;
+    h.focus_index(last * COLS + 1);
     h.run(300);
-    let y = at(&h, last * 6).y;
+    let y = at(&h, last * COLS).y;
     assert!(y > first_row_y + 0.5, "the last row of the list sits lower than the line, the end clamps: {y}");
-    assert!(y + plx_ui::consts::CARD_H <= plx_ui::consts::SCR_H - plx_ui::consts::MARGIN_Y + 0.5, "and it is whole above the foot margin: {y}");
+    assert!(y + card_h() <= plx_ui::consts::SCR_H - plx_ui::consts::MARGIN_Y + 0.5, "and it is whole above the foot margin: {y}");
     assert!(h.screen.scroll() < last as f32 * row_pitch(), "the end holds the scroll below the unclamped rest: {}", h.screen.scroll());
 }
 
@@ -1148,7 +1165,7 @@ fn a_scrolled_watchlist_draws_the_top_fade_and_no_capsule() {
 }
 
 /// **No scrolled rest shows the header under the chrome.** Walking down to the second row rests the
-/// page a whole row down (the row at the first row's y, 244): the header row leaves with the top
+/// page a whole row down (the row at the first row's y, 332): the header row leaves with the top
 /// chrome on the handoff's clock (`plx_ui::scroll_chrome`), so by that first rest it has gone and the
 /// strip has tucked. Frame by frame it only ever fades out on the way down (monotone, in several
 /// frames, not cut), and it is the chrome's own alpha: the two are one value.
@@ -1157,7 +1174,7 @@ fn a_scrolled_rest_leaves_no_header_under_the_chrome() {
     use plx_ui::screen::Screen;
     let mut h = Harness::new(tiles(24));
     assert_eq!(h.screen.head_alpha(), 1.0);
-    h.focus_index(6);
+    h.focus_index(COLS);
     let mut seen = vec![h.screen.head_alpha()];
     for _ in 0..240 {
         h.run(1);
@@ -1189,7 +1206,7 @@ fn the_returning_chrome_never_draws_over_the_header_row_still_arriving() {
     use plx_ui::screen::{chrome_lift, Screen};
     let _g = plx_base::testlock::serial();
     let mut h = Harness::new(tiles(24));
-    h.focus_index(6);
+    h.focus_index(COLS);
     h.run(240);
     let tuck = |h: &Harness| Screen::<super::cards_harness::WatchHost>::chrome_tuck(&h.screen);
     assert!(tuck(&h) > 0.99, "premise: tucked at the second row's rest");
@@ -1284,7 +1301,7 @@ fn a_picked_sort_swaps_the_criterion_in_the_page_pass_and_through_the_lift() {
 /// focus questions, its placement, its motion and its paint, many times a frame; it is built when
 /// the options, the narrowed count or the locale change and held otherwise, by the one rule the
 /// Library's and the Recommended page's rows are held by (`plx_ui::page_header::SharedRow`). A list
-/// that grows or shrinks unfiltered changes nothing the row draws, so it builds nothing.
+/// that grows or shrinks changes the title block's count pill, so it builds the row once.
 #[test]
 fn the_header_row_is_built_once_per_key_not_once_per_question() {
     let mut h = Harness::new(tiles(3));
@@ -1302,12 +1319,12 @@ fn the_header_row_is_built_once_per_key_not_once_per_question() {
     h.screen.input(WatchlistIn::List(ListState::Ready { total: 4 }));
     h.run(5);
     h.draw();
-    assert_eq!(h.screen.probe_header_builds(), built, "an unfiltered count is never drawn, so a new one builds nothing");
+    assert_eq!(h.screen.probe_header_builds(), built + 1, "a new count rewords the title's pill: one build");
     h.screen.input(WatchlistIn::Options(WatchlistOptionsState { sort: super::options::SortKey::Title, ..Default::default() }));
     h.run(5);
     h.draw();
-    assert_eq!(h.screen.probe_header_builds(), built + 1, "a new sort rewords the pill: one build");
+    assert_eq!(h.screen.probe_header_builds(), built + 2, "a new sort rewords the control: one build");
     h.run(30);
     h.draw();
-    assert_eq!(h.screen.probe_header_builds(), built + 1, "and the frames after it build none");
+    assert_eq!(h.screen.probe_header_builds(), built + 2, "and the frames after it build none");
 }

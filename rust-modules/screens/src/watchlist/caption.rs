@@ -77,3 +77,13 @@ pub fn label(row: &WatchRow, state: TileState, policy: &CaptionPolicy, copy: &Li
     };
     crate::registry::captions::label_with_states(policy, &facts, state_sentence(state, row.release.as_deref()))
 }
+
+/// The policy the page's wall words every card by: the setting's, with the title line always on
+/// (the wall is read by its titles, as the Library's: `library::parts::every_policy`).
+pub fn every_policy() -> CaptionPolicy { CaptionPolicy { title: true, ..policy() } }
+
+/// A card's label on the page's wall, where every card is named ([`every_policy`]): [`label`] held to
+/// its own tile (`TileLabel::within_tile`), so a long title never reaches into a neighbour's words.
+pub fn every_label(row: &WatchRow, state: TileState, copy: &ListingFacts) -> TileLabel {
+    TileLabel { within_tile: true, ..label(row, state, &every_policy(), copy) }
+}

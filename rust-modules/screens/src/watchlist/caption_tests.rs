@@ -1,6 +1,6 @@
 //! The Watchlist's captions follow the global Under posters setting, the one the Library reads: the
-//! Title switch opens the title line, the Details picker the second, and the focused band is 0 / 80 /
-//! 112 px by what it will show. (Owner, on a TV: the page showed "Missing Link / 2019" with the Title
+//! Title switch opens the title line, the Details picker the second. The page's wall names every
+//! card (its title always on, the setting's details line under it) and opens no band on focus. (Owner, on a TV: the page showed "Missing Link / 2019" with the Title
 //! switch Off.)
 use plx_data::watchlist::model::TileState;
 use plx_plex::plex::session::{UnderPosters, UnderPostersLadder};
@@ -51,18 +51,24 @@ fn a_state_sentence_takes_the_details_line_and_survives_an_empty_set() {
     assert_eq!(lines(TileState::NotOnAnyServer), (Some("1".into()), Some("Not on your servers".into())));
 }
 
+/// **The wall names every card** (the MultiPlex list page): whatever the Under posters setting
+/// says, every row keeps the every-caption gap and no row opens a band on focus; the setting still
+/// words the details line, and the title line is always on.
 #[test]
-fn the_focused_band_is_the_settings_80_or_112_and_opens_for_the_status_line_under_an_empty_set() {
-    for (title, details, want) in [
-        (false, UnderPostersLadder::None, 80.0),
-        (false, UnderPostersLadder::YearLength, 80.0),
-        (true, UnderPostersLadder::None, 112.0),
-        (true, UnderPostersLadder::YearLength, 112.0),
+fn the_wall_keeps_one_band_under_every_setting_and_always_names_the_title() {
+    for (title, details) in [
+        (false, UnderPostersLadder::None),
+        (false, UnderPostersLadder::YearLength),
+        (true, UnderPostersLadder::None),
+        (true, UnderPostersLadder::YearLength),
     ] {
         set(title, details);
         let mut h = Harness::new(vec![tile(1), tile(2)]);
         h.run(2);
-        assert_eq!(h.screen.band_h(), Some(want), "title={title} details={details:?}");
+        assert_eq!(h.screen.band_h(), Some(plx_ui::cards::EVERY_CAPTION_BAND_H), "title={title} details={details:?}");
+        let label = caption::every_label(&row(1), TileState::Available, &ListingFacts::default());
+        assert!(label.within_tile, "a wall caption stays under its own tile");
+        assert_eq!(label.title.as_ref().map(|c| c.to_string_lossy().into_owned()).as_deref(), Some("1"), "title={title} details={details:?}: the title line is always on");
     }
     let _ = WatchlistScreen::WORD;
 }
