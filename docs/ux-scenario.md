@@ -366,7 +366,7 @@ everyone gets **Privacy & data**, **Legal notices** and **About PlxNative**.
   discards the draft. Playback diagnostics remain a playback action rather than a global setting.
 - **Legal notices** contains six readable documents: **Privacy policy**, **Open-source licences**,
   **FFmpeg & source offer**, **PlxNative source code**, **Trademarks & non-affiliation**, and
-  **Privacy & security contact**. UP/DOWN scrolls a notice; BACK leaves it.
+  **Security contact**. UP/DOWN scrolls a notice; BACK leaves it.
 
 ### 5.8 Detail
 

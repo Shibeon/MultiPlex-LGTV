@@ -395,7 +395,7 @@
     "description": "Settings, account, onboarding or privacy UI: settings.legal.trademarks.title"
   },
   "settings.legal.contact.title": {
-    "value": "Privacy & security contact",
+    "value": "Security contact",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.contact.title"
   },
   "settings.legal.privacy.subtitle": {
@@ -419,7 +419,7 @@
     "description": "Settings, account, onboarding or privacy UI: settings.legal.trademarks.subtitle"
   },
   "settings.legal.contact.subtitle": {
-    "value": "How to ask a privacy question or report a vulnerability.",
+    "value": "How to report a security vulnerability.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.contact.subtitle"
   },
   "settings.legal.section": {
@@ -526,14 +526,6 @@
     "value": "Removing MultiPlex removes the application, but webOS gives an application no way to run code as it is removed, so anything kept outside the application’s own directory can survive. Your sign-in is deliberately kept there so that reinstalling does not sign you out. Your optional-reporting answers and their Crash report ID and Analytics ID are kept with that sign-in, so that a decision you have already made is not put to you again after a reinstall. Your app language preference is also kept there. Use Delete all local data BEFORE uninstalling if you want nothing of MultiPlex left on this television.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.uninstall_body"
   },
-  "settings.legal.privacy.contact": {
-    "value": "CONTACT",
-    "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.contact"
-  },
-  "settings.legal.privacy.contact_body": {
-    "value": "Privacy questions: support@plxnative.com",
-    "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.contact_body"
-  },
   "settings.legal.ffmpeg.body": {
     "value": "This software uses libraries from the FFmpeg project under the LGPLv2.1. FFmpeg is copyright (c) the FFmpeg developers; MultiPlex does not own FFmpeg.\n\nThe FFmpeg libraries are unmodified and loaded dynamically, and may be replaced with an interface-compatible build. The complete corresponding FFmpeg 9.0 source, exact configure line and build script are published with every MultiPlex release.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.ffmpeg.body"
@@ -543,7 +535,7 @@
     "description": "Settings, account, onboarding or privacy UI: settings.legal.trademarks.body"
   },
   "settings.legal.contact.body": {
-    "value": "Privacy questions may be sent to support@plxnative.com.\n\nSecurity vulnerabilities may be reported privately through GitHub Security Advisories for Shibeon/MultiPlex-LGTV. Please do not include Plex tokens, server addresses or personal media information in a report.",
+    "value": "Security vulnerabilities may be reported privately through GitHub Security Advisories for Shibeon/MultiPlex-LGTV. Please do not include Plex tokens, server addresses or personal media information in a report.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.contact.body"
   },
   "settings.legal.opensource.body": {

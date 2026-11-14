@@ -24,9 +24,9 @@ use super::registry::word;
 
 
 
-/// **The one contact address the application prints.**
-/// `every_document_prints_only_the_one_contact_address` scans the documents for stray `@`s;
-/// `screens::consent` imports it.
+/// **The one contact address the application prints**, on the Privacy & data page's two
+/// identifier documents only (`screens::consent` imports it); no Legal document names it.
+/// `every_document_prints_only_the_one_contact_address` scans the documents for stray `@`s.
 pub const CONTACT_EMAIL: &str = "support@plxnative.com";
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -111,9 +111,7 @@ static PRIVACY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| [
     plx_platform::i18n::msg::settings_legal_privacy_processing(),
     plx_platform::i18n::msg::settings_legal_privacy_processing_body(),
     plx_platform::i18n::msg::settings_legal_privacy_uninstall(),
-    plx_platform::i18n::msg::settings_legal_privacy_uninstall_body(),
-    plx_platform::i18n::msg::settings_legal_privacy_contact(),
-    plx_platform::i18n::msg::settings_legal_privacy_contact_body()
+    plx_platform::i18n::msg::settings_legal_privacy_uninstall_body()
 ].join("\n\n"));
 static OPEN_SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("{}\n\n{}", plx_platform::i18n::msg::settings_legal_opensource_body(), include_str!("../../../LICENSE")));
 static FFMPEG: std::sync::LazyLock<&'static str> = std::sync::LazyLock::new(plx_platform::i18n::msg::settings_legal_ffmpeg_body);

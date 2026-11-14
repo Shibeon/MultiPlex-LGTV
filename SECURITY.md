@@ -5,11 +5,10 @@
 Report privately, **not** as a public issue:
 
 - **GitHub Security Advisories** — <https://github.com/Shibeon/MultiPlex-LGTV/security/advisories/new>
-  (preferred: it is private, it threads, and it produces a CVE if one is warranted)
-- or e-mail **support@plxnative.com** with `PlxNative security` in the subject.
+  (it is private, it threads, and it produces a CVE if one is warranted).
 
 This is a one-person unpaid project, so the honest service level is: acknowledged within **7 days**,
-an assessment within **30**. If you have not heard back in a week, assume the mail was lost and open
+an assessment within **30**. If you have not heard back in a week, assume the report was lost and open
 a public issue saying only *"sent a security report on <date>, no reply"* — with no details.
 
 Please give me a reasonable window to ship a fix before disclosing. There is no bounty; I will credit
