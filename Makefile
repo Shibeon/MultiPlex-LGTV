@@ -1330,6 +1330,13 @@ deploy: pkg/multiplex pkg/multiplex-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STA
 	@$(SSH) 'test -d $(SERVICEDIR)' || { \
 	  echo "$(SERVICEDIR) does not exist on the TV — the storage helper was never installed for the $(FLAVOR) flavour."; \
 	  echo "install it once:  make FLAVOR=$(FLAVOR)$(if $(RELEASE), RELEASE=1,) install"; exit 1; }
+	# An install made before the plxnative -> multiplex rename registered `plxnative-storage` in its
+	# `services.json`, so LS2 would keep exec'ing the OLD helper whatever `deploy` copies beside it,
+	# and its app directory still holds the old `plxnative` binary. `deploy` only updates binaries a
+	# matching install already registered; re-registering is `make install`'s job, so name it.
+	@$(SSH) 'grep -q "\"executable\": \"multiplex-storage\"" $(SERVICEDIR)/services.json && test ! -e $(APPDIR)/plxnative' || { \
+	  echo "the $(FLAVOR) install on the TV predates the plxnative -> multiplex rename (its services.json does not name multiplex-storage, or $(APPDIR)/plxnative exists)."; \
+	  echo "reinstall it once:  make FLAVOR=$(FLAVOR)$(if $(RELEASE), RELEASE=1,) install"; exit 1; }
 	# The descriptor and the directory it lands in must name the same app: `paths::app_id` reads
 	# the DIRECTORY, so a mismatch means the running binary and its own appinfo disagree about
 	# which install this is — and every id-keyed thing (SAM's launch, closeByAppId, the session
@@ -1461,6 +1468,8 @@ verify-deploy: tv-lock-require
 # `fuser -k $(APPDIR)/multiplex` is INODE-scoped where `closeByAppId` is ID-scoped, and with two
 # installs that difference is the point: both binaries are named `multiplex`, so a name-based kill
 # (`pidof`, `killall`) would take down the OTHER install too. Keep it addressed by path.
+# `$(APPDIR)/plxnative` is the same binary under its name before the plxnative -> multiplex rename:
+# an install made then still runs it until `make install` replaces the package, so it is killed too.
 #
 # `mkdir -p` + `chmod 1777` on the runtime root before anything writes into it: two uids write here
 # and neither can be made to go second — this shell is root, the app is jailed under its own uid.
@@ -1469,7 +1478,7 @@ verify-deploy: tv-lock-require
 # reports as "no line found", i.e. exactly like a total regression. A no-op for the stable flavour,
 # whose root is `/tmp` itself (already 1777).
 CLOSE_SH = (luna-send -i "luna://com.webos.applicationManager/closeByAppId" "{\"id\":\"$(APPID)\"}" >/dev/null 2>&1 & P=$$!; sleep 2; kill $$P 2>/dev/null); \
-	  fuser -k $(APPDIR)/multiplex 2>/dev/null;
+	  fuser -k $(APPDIR)/multiplex 2>/dev/null; fuser -k $(APPDIR)/plxnative 2>/dev/null;
 BOOT_SH = $(CLOSE_SH) \
 	  mkdir -p $(RUNDIR) && chmod 1777 $(RUNDIR); \
 	  rm -f $(EVENTLOG) $(RUNDIR)/multiplex-gputime.jsonl $(RUNDIR)/multiplex-hwcnt.jsonl; \
