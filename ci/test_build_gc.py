@@ -675,18 +675,18 @@ class BuildGcTests(unittest.TestCase):
             return path
 
         old_files = [
-            touch("plxnative_modules-aaaaaaaaaaaaaaaa", old, executable=True),
-            touch("plxnative_modules-aaaaaaaaaaaaaaaa.d", old),
-            touch("plxnative_modules-aaaaaaaaaaaaaaaa.codehash-cgu.00.rcgu.o", old),
-            touch("plxnative_modules-aaaaaaaaaaaaaaaa.codehash-cgu.01.rcgu.o", old),
+            touch("multiplex_modules-aaaaaaaaaaaaaaaa", old, executable=True),
+            touch("multiplex_modules-aaaaaaaaaaaaaaaa.d", old),
+            touch("multiplex_modules-aaaaaaaaaaaaaaaa.codehash-cgu.00.rcgu.o", old),
+            touch("multiplex_modules-aaaaaaaaaaaaaaaa.codehash-cgu.01.rcgu.o", old),
         ]
         newest_core = [
-            touch("plxnative_modules-bbbbbbbbbbbbbbbb", fresh, executable=True),
-            touch("plxnative_modules-bbbbbbbbbbbbbbbb.d", fresh),
+            touch("multiplex_modules-bbbbbbbbbbbbbbbb", fresh, executable=True),
+            touch("multiplex_modules-bbbbbbbbbbbbbbbb.d", fresh),
         ]
         newest_stale_objects = [
-            touch("plxnative_modules-bbbbbbbbbbbbbbbb.codehash-cgu.00.rcgu.o", old),
-            touch("plxnative_modules-bbbbbbbbbbbbbbbb.codehash-cgu.01.rcgu.o", old),
+            touch("multiplex_modules-bbbbbbbbbbbbbbbb.codehash-cgu.00.rcgu.o", old),
+            touch("multiplex_modules-bbbbbbbbbbbbbbbb.codehash-cgu.01.rcgu.o", old),
         ]
         return fixture, old_files, newest_core, newest_stale_objects
 
@@ -696,8 +696,8 @@ class BuildGcTests(unittest.TestCase):
         diagnostic = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, diagnostic)
         self.assertIn("would remove", diagnostic)
-        self.assertIn("plxnative_modules-aaaaaaaaaaaaaaaa (4 files)", diagnostic)
-        self.assertIn("plxnative_modules-bbbbbbbbbbbbbbbb rcgu.o objects (2 files)", diagnostic)
+        self.assertIn("multiplex_modules-aaaaaaaaaaaaaaaa (4 files)", diagnostic)
+        self.assertIn("multiplex_modules-bbbbbbbbbbbbbbbb rcgu.o objects (2 files)", diagnostic)
         for p in old_files + newest_core + newest_stale_objects:
             self.assertTrue(p.exists(), "-n deleted a file: " + diagnostic)
 
@@ -720,7 +720,7 @@ class BuildGcTests(unittest.TestCase):
         fixture, old_files, newest_core, newest_stale_objects = self._stale_deps_fixture()
         repo, env, _, _ = fixture
         deps = repo / "rust-modules/target/debug/deps"
-        young_but_superseded = deps / "plxnative_modules-cccccccccccccccc"
+        young_but_superseded = deps / "multiplex_modules-cccccccccccccccc"
         young_but_superseded.write_bytes(b"")
         young_but_superseded.chmod(0o755)
         recent = time.time() - 2 * 3600
@@ -1387,20 +1387,20 @@ def copy_tree(src, dst):
 
     def test_the_disk_report_says_whether_the_hourly_agent_is_loaded(self):
         for system, launchctl, expect in (
-                ("Darwin", "exit 0", "com.plxnative.build-gc is loaded"),
-                ("Darwin", "exit 113", "com.plxnative.build-gc is NOT loaded"),
+                ("Darwin", "exit 0", "com.multiplex.build-gc is loaded"),
+                ("Darwin", "exit 113", "com.multiplex.build-gc is NOT loaded"),
                 ("Linux", "exit 113", None)):
             with self.subTest(system=system, launchctl=launchctl):
                 fixture = self.fixture(0, 0)
                 self.stub_command(fixture, "uname", "#!/bin/sh\n"
                                   'case "$1" in -s) echo %s ;; *) echo %s ;; esac\n' % (system, system))
-                self.stub_command(fixture, "launchctl", '#!/bin/sh\n[ "$1 $2" = "list com.plxnative.build-gc" ] || exit 64\n'
+                self.stub_command(fixture, "launchctl", '#!/bin/sh\n[ "$1 $2" = "list com.multiplex.build-gc" ] || exit 64\n'
                                   + launchctl + "\n")
                 result = self.run_gc(fixture)
                 text = result.stdout + result.stderr
                 self.assertEqual(result.returncode, 0, text)
                 if expect is None:
-                    self.assertNotIn("com.plxnative.build-gc", text, "the agent line is macOS only")
+                    self.assertNotIn("com.multiplex.build-gc", text, "the agent line is macOS only")
                     continue
                 self.assertIn(expect, text)
                 if "NOT" in expect:
@@ -1412,7 +1412,7 @@ def copy_tree(src, dst):
     # captures. By hand that is the human's call (the preview lists them); unattended (`--auto`, hourly and from the
     # SessionEnd hook, and now reaching squash-merged lanes) a lane is removed only when everything ignored in it is
     # build output `make` regenerates.
-    DERIVED_ONLY = ("rust-modules/target/sentinel", "rust-modules/target-sim/debug/x", "pkg/plxnative",
+    DERIVED_ONLY = ("rust-modules/target/sentinel", "rust-modules/target-sim/debug/x", "pkg/multiplex",
                     "pkg/.build-config", "vendor/downloads/ffmpeg.tar.xz", "tools/__pycache__/x.cpython-312.pyc",
                     ".DS_Store", "src/starfish.o")
     UNDER_PRESSURE = {"PLX_GC_TEST_FREE_KIB": "1", "PLX_GC_MIN_FREE_GIB": "999999", "PLX_GC_IDLE_MIN": "30"}
@@ -1444,7 +1444,7 @@ def copy_tree(src, dst):
         self.assertRegex(out, r"private +%s" % re.escape(str(lane)))
         self.assertIn("src/config.local.h", out)
         self.assertNotRegex(out, r"dirty|recently active", "the lane was kept for another reason: " + out)
-        for rel in ("rust-modules/target", "pkg/plxnative", "__pycache__", ".DS_Store"):
+        for rel in ("rust-modules/target", "pkg/multiplex", "__pycache__", ".DS_Store"):
             self.assertNotIn(rel, out, "build output was listed as what kept the lane: " + out)
         log = Path(fixture[1]["PLX_GC_LOG"]).read_text()
         self.assertIn("src/config.local.h", log, "the log does not say which path kept the lane")
@@ -1494,7 +1494,7 @@ def copy_tree(src, dst):
         self.assertIn("would remove  %s  (landed)" % lane, out)     # the line `--auto`'s counter reads, unchanged
         for rel in ("src/config.local.h", "pkg/auth.json"):
             self.assertIn(rel, out, "the preview does not say %s goes with the lane" % rel)
-        self.assertNotIn("pkg/plxnative", out)
+        self.assertNotIn("pkg/multiplex", out)
         self.assertTrue(lane.exists())
         # a human typing `--worktrees` is asking for the removal, private files and all, and is told what went
         result = self.run_gc(fixture, "--worktrees")
@@ -1514,7 +1514,7 @@ def copy_tree(src, dst):
         kept_patterns = {"src/config.local.h", "local.env", "tests/manifest.local.json", ".claude/worktrees/",
                          "sysroot/", "rust-poc/", ".abi-cache/", ".webos-ndk/", ".tv-mac", ".tv-host",
                          ".tv-dpad-pass", ".tv-remote-url", "pkg/diagnostics/", "pkg/auth.json", "pkg/lab.json",
-                         "pkg/telemetry.local.json", "tests/fixtures/softfloat/arm.tbl", "**/plxnative-recordings/",
+                         "pkg/telemetry.local.json", "tests/fixtures/softfloat/arm.tbl", "**/multiplex-recordings/",
                          "fuzz/artifacts/", "/.empryo/"}
         derived, kept = {}, {rel: rel for rel in guard.PRIVATE_FILES}      # listed form -> file to create
         for line in (ROOT / ".gitignore").read_text().splitlines():
@@ -1903,7 +1903,7 @@ def copy_tree(src, dst):
         (tmp_tree / "CACHEDIR.TAG").write_text("Signature: 8a477f597d28d172789f06886806bc55\n")
         deps = tmp_tree / "debug/deps"
         deps.mkdir(parents=True)
-        (deps / "plxnative_modules-0123456789abcdef.d").write_text("ours\n")
+        (deps / "multiplex_modules-0123456789abcdef.d").write_text("ours\n")
         self.age(tmp_tree, 5 * 86400)
         plan = self.write_plan(fixture, [("evict", 0, "tree", 8, "-", 1440, "normal", tmp_tree)])
         young = self.run_evict(fixture, plan)
@@ -1926,7 +1926,7 @@ def copy_tree(src, dst):
         holder = self.make_tree(Path(env["PLX_GC_TMP_ROOTS"]) / "cargo-target-holder")
         (holder / "CACHEDIR.TAG").write_text("Signature: 8a477f597d28d172789f06886806bc55\n")
         (holder / "debug/deps").mkdir(parents=True)
-        (holder / "debug/deps/plxnative_modules-0123456789abcdef.d").write_text("ours\n")
+        (holder / "debug/deps/multiplex_modules-0123456789abcdef.d").write_text("ours\n")
         nested = holder / "nested-lane"
         self.git(fixture, fixture[0], "worktree", "add", "-q", "-b", "nested-lane", str(nested))
         plan = self.write_plan(fixture, [("evict", 0, "tree", 8, "-", 1440, "normal", holder)])
@@ -2075,8 +2075,8 @@ def copy_tree(src, dst):
         deps = repo / "rust-modules/target/debug/deps"
         deps.mkdir(parents=True)
         old = time.time() - 30 * 3600
-        superseded = [deps / "plxnative_modules-aaaaaaaaaaaaaaaa", deps / "plxnative_modules-aaaaaaaaaaaaaaaa.d"]
-        newest = [deps / "plxnative_modules-bbbbbbbbbbbbbbbb", deps / "plxnative_modules-bbbbbbbbbbbbbbbb.d"]
+        superseded = [deps / "multiplex_modules-aaaaaaaaaaaaaaaa", deps / "multiplex_modules-aaaaaaaaaaaaaaaa.d"]
+        newest = [deps / "multiplex_modules-bbbbbbbbbbbbbbbb", deps / "multiplex_modules-bbbbbbbbbbbbbbbb.d"]
         for p in superseded:
             p.write_bytes(b"")
             os.utime(p, (old, old))
@@ -2147,7 +2147,7 @@ class InstallDiskWatchTests(unittest.TestCase):
         result = run_guarded(["sh", str(lane / "tools" / "install-disk-watch.sh")], lane, env)
         diagnostic = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, diagnostic)
-        plist = home / "Library/LaunchAgents/com.plxnative.build-gc.plist"
+        plist = home / "Library/LaunchAgents/com.multiplex.build-gc.plist"
         self.assertTrue(plist.exists(), diagnostic)
         contents = plist.read_text()
         self.assertIn(str(main / "tools/build-gc.sh"), contents,

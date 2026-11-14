@@ -6,7 +6,7 @@
 //!
 //! A file refused by the version gate carries no parsed package, so its facts (`id`, `name`, `version`,
 //! `format`) are read from the strict JSON tree directly: enough to list it as "Made for a newer
-//! PlxNative" or "Uses an older HUD format" and to keep it on disk. The id is checked against the same
+//! MultiPlex" or "Uses an older HUD format" and to keep it on disk. The id is checked against the same
 //! reverse-DNS pattern a parsed package's is, so a hostile file cannot put anything else in the list.
 
 use plx_ui::rec::strict_json::{decode_ordered, Ordered};

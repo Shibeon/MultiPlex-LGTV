@@ -358,7 +358,7 @@ pub type DemuxSessionProvider = fn(AttemptId, u32) -> Box<dyn plx_playback_contr
 #[derive(Clone, Copy)]
 pub struct StartHooks {
     pub demux_session: DemuxSessionProvider,
-    /// The reader of the `plxnative-playurl` dev trigger (`None` in a build without `devtriggers`).
+    /// The reader of the `multiplex-playurl` dev trigger (`None` in a build without `devtriggers`).
     pub play_url: plx_playback_contract::playurl::PlayUrlSource,
 }
 
@@ -429,7 +429,7 @@ pub struct PlayerAdapter {
     /// once the Load actually launches (`None`: no preview start is queued). Admission is taken
     /// when the queued start runs, never when it is merely queued.
     preview_admission: Option<bool>,
-    /// The URI-mode probe's session (issue #1064, dev trigger `plxnative-uriprobe`): the probe plays
+    /// The URI-mode probe's session (issue #1064, dev trigger `multiplex-uriprobe`): the probe plays
     /// through `com.webos.media` instead of an [`Engine`], so it lives BESIDE the engine slot and
     /// never in it. [`is_live`](Self::is_live) stays Engine-only: the Engine paths (`pump`, the
     /// HUD, the stop ritual's `take`) must never see a probe. Owned here, not by a static, for the
@@ -1030,7 +1030,7 @@ impl PlayerAdapter {
         self.start_hooks.map(|hooks| (hooks.demux_session)(attempt, native_epoch))
     }
 
-    /// This boot's `plxnative-playurl` declaration, if one was armed (see
+    /// This boot's `multiplex-playurl` declaration, if one was armed (see
     /// [`plx_playback_contract::playurl`]); `None` with no Feed composition installed.
     pub(super) fn play_url(&self) -> Option<Result<plx_playback_contract::playurl::PlayUrl, String>> {
         self.start_hooks.and_then(|hooks| (hooks.play_url)())
@@ -2095,7 +2095,7 @@ impl PlayerAdapter {
         self.uri_probe.as_ref().is_some_and(|probe| probe.native_slot_available())
     }
 
-    /// The launch the installed probe arms for a `plxnative-uriprobe` trigger text; `None` when it
+    /// The launch the installed probe arms for a `multiplex-uriprobe` trigger text; `None` when it
     /// arms none (or nothing is installed).
     #[cfg(feature = "devtriggers")]
     pub fn uri_probe_armed(&self, text: &str) -> Option<Box<dyn super::uriprobe_drive::ProbeLaunch>> {

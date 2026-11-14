@@ -38,7 +38,7 @@ class PinContract(unittest.TestCase):
                     "supported_formats": [{"package": "1.0", "hud": "1.0"}],
                     "schemas": {"manifest": {"1.0": "manifest-id"}, "hud": {"1.0": "hud-id"}},
                     "limits": {"package": {"1.0": {"artifact_bytes": 2097152}}},
-                    "development": True, "files": {"bin/plxnative-sim": "b" * 64}}
+                    "development": True, "files": {"bin/multiplex-sim": "b" * 64}}
         pin = hud_bundle.pin_contract(manifest)
         self.assertIs(type(pin["protocol"]), int)
         self.assertEqual(pin["protocol"], 1)

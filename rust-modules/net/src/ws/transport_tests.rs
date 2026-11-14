@@ -115,7 +115,7 @@ fn certificate(alpn: &[&[u8]]) -> (Arc<rustls::ServerConfig>, Pem) {
         .unwrap();
     config.alpn_protocols = alpn.iter().map(|protocol| protocol.to_vec()).collect();
     let path = std::env::temp_dir().join(format!(
-        "plxnative-ws-{}-{:?}.pem",
+        "multiplex-ws-{}-{:?}.pem",
         std::process::id(),
         thread::current().id()
     ));
@@ -556,7 +556,7 @@ fn autobahn_client_cases() {
     let _serial = plx_base::testlock::serial();
     assert!(curl_ready(), "libcurl did not load");
     let base = std::env::var("AUTOBAHN").expect("AUTOBAHN=ws://host:port");
-    let agent = "plxnative";
+    let agent = "multiplex";
     let cases = AtomicUsize::new(0);
     let (_outbox, inbox) = channel().unwrap();
     let end = go(plain(&format!("{base}/getCaseCount")), inbox, &mut |event| {

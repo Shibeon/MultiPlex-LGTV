@@ -24,7 +24,7 @@ MultiPlex features (themes, My list, Watch together, ...) are being brought over
 ### Installing
 
 The television must be rooted, with Homebrew Channel. Every push to `main` builds a debug
-package (`.ipk`) in this repository's GitHub Actions (CI run, artifact `plxnative-<commit>`).
+package (`.ipk`) in this repository's GitHub Actions (CI run, artifact `multiplex-<commit>`).
 Install it with Homebrew Channel or `ares-install`. The detailed steps are in
 [docs/install-and-verify.md](docs/install-and-verify.md).
 

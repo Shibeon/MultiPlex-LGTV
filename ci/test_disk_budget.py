@@ -6,10 +6,10 @@ inventories and reads the answer. The properties pinned here are the ones whose 
 tree that something needed once the eviction PR acts on these verdicts: the order of the ladder (LRU
 within a rung), stopping at the line instead of at zero, refusing only when the whole ladder cannot
 free the build's estimate plus the reserve, and NEVER planning the current checkout below rung 6 (and
-there never the tree being built), a live tree, a tracked file, `pkg/`, a tree that is not PlxNative's,
+there never the tree being built), a live tree, a tracked file, `pkg/`, a tree that is not MultiPlex's,
 or another volume. The second half builds real
 directories and a real git repository in a temp dir and checks the I/O: private-byte accounting under
-hard links, the PlxNative marker, `/tmp` discovery, `origin/main` merged detection (squash merges, a
+hard links, the MultiPlex marker, `/tmp` discovery, `origin/main` merged detection (squash merges, a
 local `main` that is behind, and that detecting one writes nothing into the repository), and that
 `report` leaves the disk exactly as it found it.
 """
@@ -219,7 +219,7 @@ class NeverPlanned(unittest.TestCase):
         self.assertEqual(actions, [])
         self.assertIn("tracks", why)
 
-    def test_a_cargo_tree_without_a_plxnative_marker_is_never_planned_even_under_pressure(self):
+    def test_a_cargo_tree_without_a_multiplex_marker_is_never_planned_even_under_pressure(self):
         t = tree("/tmp/rs-matter-target", kind="tmp", gib=9, age=100, plx=False)
         pl = run_plan(inv(t), free=1 * GIB)
         self.assertEqual(pl.actions, ())
@@ -491,7 +491,7 @@ NOW_REAL = __import__("time").time()
 
 
 def cargo_tree(path, ours=True, incr=0, size=64 * 1024, hours=5):
-    """A cargo target dir: CACHEDIR.TAG, debug/{deps,.fingerprint,incremental}, PlxNative-named artifacts."""
+    """A cargo target dir: CACHEDIR.TAG, debug/{deps,.fingerprint,incremental}, MultiPlex-named artifacts."""
     prefix = "libplx_base" if ours else "librs_matter"
     write(os.path.join(path, "CACHEDIR.TAG"), 16)
     write(os.path.join(path, "debug", "deps", prefix + "-aaaa.rlib"), size, None)
@@ -1844,8 +1844,8 @@ class ParkCommand(Repo):
 
     def test_a_pretend_emergency_over_the_default_cold_store_config_is_refused(self):
         config_home = os.path.join(self.tmp, "xdg")
-        os.makedirs(os.path.join(config_home, "plxnative"))
-        with open(os.path.join(config_home, "plxnative", "cold-store"), "w") as fh:
+        os.makedirs(os.path.join(config_home, "multiplex"))
+        with open(os.path.join(config_home, "multiplex", "cold-store"), "w") as fh:
             fh.write("root=%s\n" % os.path.join(self.tmp, "das", "cold"))
         env = {**clean_env(), **self.env, "PLX_GC_TEST_FREE_KIB": "1", "HOME": self.tmp,
                "PYTHONDONTWRITEBYTECODE": "1", "XDG_CONFIG_HOME": config_home}

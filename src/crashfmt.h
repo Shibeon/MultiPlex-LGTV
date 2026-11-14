@@ -1,4 +1,4 @@
-/* PlxNative — an unofficial native Plex client for LG webOS.
+/* MultiPlex — an unofficial native Plex client for LG webOS.
  * Copyright © 2026 Gleb Linnik. Licensed under GPL-3.0-or-later; see LICENSE at the repository root.
  *
  * crashfmt.h — the PURE half of the crash tracer: formatting a fault record and deciding what a
@@ -24,10 +24,10 @@
  *     the app dir is itself named ...app.multiplex.native/, so a bare substring test also matches
  *     libraries deployed beside the binary (libturbojpeg.so.0)
  *
- * It does not. The needle is `/plxnative`, with the slash, and the directory component is
+ * It does not. The needle is `/multiplex`, with the slash, and the directory component is
  * `/app.multiplex.native` — slash, then `c`. Measured rather than reasoned: a bare
- * `strstr(line, "/plxnative")` answers no on `…/app.multiplex.native/libturbojpeg.so.0` and yes on
- * `…/app.multiplex.native/plxnative`, which is the right answer for the wrong reason. What the
+ * `strstr(line, "/multiplex")` answers no on `…/app.multiplex.native/libturbojpeg.so.0` and yes on
+ * `…/app.multiplex.native/multiplex`, which is the right answer for the wrong reason. What the
  * separator test actually buys is the two cases below, and the test file asserts those and not the
  * one that was written down.
  *
@@ -101,23 +101,23 @@ static inline const char *plx_parse_hex(const char *s, unsigned long *out) {
 
 /* Does `line` name our executable?
  *
- * A TOKEN test: `/plxnative` has to be followed by end-of-line, a space or the end of the buffer.
+ * A TOKEN test: `/multiplex` has to be followed by end-of-line, a space or the end of the buffer.
  * Two things turn on that separator, and neither is the one main.c used to claim (see the header
  * comment above — the libturbojpeg story is false and was measured false):
  *
- *   * **a sibling whose name merely STARTS with ours.** `plxnative-sim` is the host simulator and
- *     `plxnative.new` is the name `make deploy` scp's to before renaming over the running binary,
- *     and a bare `strstr(line, "/plxnative")` matches both. Neither is mapped into a television's
+ *   * **a sibling whose name merely STARTS with ours.** `multiplex-sim` is the host simulator and
+ *     `multiplex.new` is the name `make deploy` scp's to before renaming over the running binary,
+ *     and a bare `strstr(line, "/multiplex")` matches both. Neither is mapped into a television's
  *     address space today, which is precisely why this is worth a test rather than a hope: the
  *     cost of the guard is one comparison and the cost of losing it is silent.
  *   * **`(deleted)`**, which the kernel appends once the file has been replaced under a running
  *     process — which `make deploy`'s tmp+mv dance does on every single iteration. So the
  *     space-terminated spelling is the NORMAL one while developing, not an edge case, and a test
- *     for `"/plxnative\n"` alone would fail to find our own binary exactly when it is being
+ *     for `"/multiplex\n"` alone would fail to find our own binary exactly when it is being
  *     worked on. The old code got this right with two `strstr` needles; this keeps it.
  */
 static inline int plx_names_our_binary(const char *line, size_t n) {
-    static const char TOK[] = "/plxnative";
+    static const char TOK[] = "/multiplex";
     const size_t t = sizeof TOK - 1;
     if (n < t) return 0;
     for (size_t i = 0; i + t <= n; i++) {
@@ -199,7 +199,7 @@ static inline size_t plx_fmt_time(char *out, size_t cap, unsigned long secs) {
 
 /* The record's thread line: WHICH thread took the fault.
  *
- *     thread: tid=4242 main=1 name=plxnative
+ *     thread: tid=4242 main=1 name=multiplex
  *
  * `tid` is `gettid()`, `main` is 1 when it equals the process id (the main thread), and `name` is
  * the kernel's `comm` (`prctl(PR_GET_NAME)`, at most 15 bytes) keeping only `[A-Za-z0-9_.-]`: any

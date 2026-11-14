@@ -225,7 +225,7 @@ impl TrackMemoryEntry {
     /// The largest entry the list can hold, the `n`th of its profile: EVERY string at its bound, the
     /// widest digits, a sixteen-digit show key. Sixty-four of them for one profile are the household
     /// budget's size (`one_profile_keeps_64_worst_case_entries`), which is what the budget tests build
-    /// and what the harness's `plxnative-trackmemory=fill` writes to read the DB8 write cost at the
+    /// and what the harness's `multiplex-trackmemory=fill` writes to read the DB8 write cost at the
     /// budget. Built through [`TrackMemoryEntry::new`], like any other.
     pub fn worst_case(n: u32) -> Self {
         let audio = AudioMemo {

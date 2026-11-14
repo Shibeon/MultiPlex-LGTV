@@ -171,7 +171,7 @@ pub fn session_seek_mode(
 ///   stale-segment stall, about 48 s later), which is why the release is gated to the one tested.
 /// - Any other layout-unknown library (webOS 2, an old-ABI 4.x build, an unknown release) and no
 ///   video plane (`VP_NONE`) -> [`SeekMode::Reload`], as before.
-/// `dev` is the `plxnative-seekmode` dev trigger and wins when present, so a webOS 4.5 set can
+/// `dev` is the `multiplex-seekmode` dev trigger and wins when present, so a webOS 4.5 set can
 /// exercise `NativeSeek`.
 pub fn select_seek_mode(
     layout_known: bool,
@@ -193,7 +193,7 @@ pub fn select_seek_mode(
     }
 }
 
-/// `/tmp/plxnative-seekmode`: `native`, `segment` or `reload`. `None` without the `devtriggers`
+/// `/tmp/multiplex-seekmode`: `native`, `segment` or `reload`. `None` without the `devtriggers`
 /// feature (`devtrig::read` folds away), so a release build cannot be steered.
 fn dev_seek_mode() -> Option<SeekMode> {
     match plx_base::devtrig::read("seekmode")?.trim() {

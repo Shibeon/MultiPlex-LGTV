@@ -10,7 +10,7 @@ use super::*;
 use super::test_support::*;
 use crate::net::user_agent_tests::{install_wire_user_agent, user_agents, WIRE_USER_AGENT};
 
-/// The plaintext path used to hard-code `User-Agent: plxnative/0.1`, so a Plex server reached
+/// The plaintext path used to hard-code `User-Agent: multiplex/0.1`, so a Plex server reached
 /// over plain HTTP logged the player under a name nothing else in the process used, and a host
 /// that installed its own name with `set_user_agent` still had this one go out. The request must
 /// carry the installed value, the same one every curl request sends.

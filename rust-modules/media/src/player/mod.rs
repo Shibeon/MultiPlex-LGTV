@@ -51,7 +51,7 @@ pub mod recovery; // the failed-open ladder (pure machine); `pump` drives it
 pub mod release; // the native object's off-frame release lifecycle (pure machine); `engine` runs it
 mod route_start; // common transaction admission and release-queued start policy
 #[cfg(feature = "devtriggers")]
-pub mod uriprobe_drive; // the URI-mode probe's route half and its port (issue #1064, dev trigger `plxnative-uriprobe`): the route-start settle and the adapter slot; the probe itself is the application's (`dev::uriprobe`), over the play-uri crate's `uriprobe`
+pub mod uriprobe_drive; // the URI-mode probe's route half and its port (issue #1064, dev trigger `multiplex-uriprobe`): the route-start settle and the adapter slot; the probe itself is the application's (`dev::uriprobe`), over the play-uri crate's `uriprobe`
 pub mod attempt_metrics; // pure logical-request and physical-attempt measurement reducer
 mod pump; // gated: the per-frame tick reads and drives `FEED_SHARED`/`FEED_TX` and `plx_play_feed::feed_pump`
 pub mod report;
@@ -70,7 +70,7 @@ mod subtitle_bitmap;
 use shared_resources::{AudioSwitch, Shared, Transport, AUDIO_PICK_WINDOW_MS};
 pub mod sidecar;
 pub mod sub_charset; // legacy-encoding text subtitles (GBK, Big5, Shift_JIS, ...) read as UTF-8; decided once per track
-pub mod subside; // the media half of the side subtitle reader (the thread is `plx_play_feed::side_reader`; dev trigger `plxnative-subside`)
+pub mod subside; // the media half of the side subtitle reader (the thread is `plx_play_feed::side_reader`; dev trigger `multiplex-subside`)
 pub(crate) mod subtitle_cue; // embedded/side-reader cue bridge; caption stores remain common. Gated: it calls `push/close_subtitle_bitmap_for_generation` and `ass_source::begin_inventory`, which exist only with the Feed
 pub mod text_ass; // text subtitles to ASS: dialect converter, synthesized header, sidecar scripts (pure)
 pub mod text_style; // the viewer's size/position picks as the numbers that converter and the screen's lift use (pure)
@@ -98,10 +98,10 @@ pub(crate) fn plane() -> &'static plx_platform::tv::plane::PlaneOwner {
     plx_platform::tv::plane::installed()
 }
 
-/// `/tmp/plxnative-tracknames[=<audio>;<subs>]` — **stand in for the container's own track names**,
+/// `/tmp/multiplex-tracknames[=<audio>;<subs>]` — **stand in for the container's own track names**,
 /// which nothing off-device can read.
 ///
-/// It exists for the same reason `/tmp/plxnative-personbio` does, and the shape of the problem is
+/// It exists for the same reason `/tmp/multiplex-personbio` does, and the shape of the problem is
 /// identical: the data comes from a source no automated or host run can reach, so without a seed
 /// every headless look at the screen shows the degenerate state. Here the source is the DEMUXER —
 /// `ff::track_names` publishes these when it opens a part — and the desktop simulator has no
@@ -149,7 +149,7 @@ pub fn seed_dev_track_names() {
     let (audio, subs) = (list(a), list(sub));
     #[cfg(feature = "devtriggers")]
     plx_base::eventlog::log(&format!(
-        "player: DEV track names seeded (a={} s={}) — /tmp/plxnative-tracknames",
+        "player: DEV track names seeded (a={} s={}) — /tmp/multiplex-tracknames",
         audio.len(),
         subs.len()
     ));
@@ -623,7 +623,7 @@ fn acb_playstate_ready(stage: plx_playback_contract::feed::Stage) -> bool {
 /// deliberately — one definition of "the plane is really ours", not two. Buffer-feed ownership
 /// clears when its Engine is removed.
 ///
-/// A URI-mode probe session (`uriprobe_drive`, dev trigger `plxnative-uriprobe`) has no Engine and
+/// A URI-mode probe session (`uriprobe_drive`, dev trigger `multiplex-uriprobe`) has no Engine and
 /// so no Engine ACB stage: its observation starts with service `playing`, or with the controlled
 /// ACB experiment's first bind call. It remains latched through logical stop until release is
 /// acknowledged. The ACB experiment retains plane ownership through bus release until app exit,
@@ -908,7 +908,7 @@ pub fn state(ps: &crate::route::PlaybackSession) -> PlaybackState {
 }
 
 /// The one line that makes a phone photograph of the failure read-out a complete report:
-/// `PlxNative 0.6.0-dev · webOS 4.10.2 · 43LM6300PVB · m3r · tv_pipeline`. It exists because
+/// `MultiPlex 0.6.0-dev · webOS 4.10.2 · 43LM6300PVB · m3r · tv_pipeline`. It exists because
 /// issue #63 arrived as a title, a model name and nothing else — no version, no reason — and the
 /// only surface carrying those facts (Stats for nerds) is reachable from the player's overflow
 /// menu alone and is force-closed on leaving playback, so a failed session had no way to show them.
@@ -1545,7 +1545,7 @@ fn accept_server_stop(ps: &mut crate::route::PlaybackSession) -> bool {
 const FAILTEST_VERDICT: &str =
     "Cannot convert this item. Implementation for video encoder 'hevc' not found.";
 
-/// dev: `/tmp/plxnative-failtest=<arm>` — force one variant of the failure read-out.
+/// dev: `/tmp/multiplex-failtest=<arm>` — force one variant of the failure read-out.
 ///
 /// The read-out is the one screen in the app that **cannot be reached on purpose**: it needs a
 /// server that refuses, which is exactly the state a working setup does not have. It is also the
@@ -1554,7 +1554,7 @@ const FAILTEST_VERDICT: &str =
 /// audience. So the arms are selectable, and there is no other way to grade them on a panel.
 ///
 /// Arms: `verdict` (the pre-flight refusal, with the server's own sentence quoted), `audio` (the
-/// audio-only transcode — pair with `/tmp/plxnative-nopass` for the PLEX PASS capsule), `novideo`
+/// audio-only transcode — pair with `/tmp/multiplex-nopass` for the PLEX PASS capsule), `novideo`
 /// (an audio-only file that direct-played), `stream` (no usable media), `connection` (an interrupted
 /// transfer), `tv` (the native pipeline refused Load), `jail` (this device's jail is missing
 /// `/dev/rtkmem` — forces [`jail_error_shape`] regardless of the real device probe, since most
@@ -1564,7 +1564,7 @@ const FAILTEST_VERDICT: &str =
 /// `player_hud::busy` has the other half — the state itself — for the same reason.
 ///
 /// The subscription comes from [`playing_subscription`], the same reader the real path uses, so the
-/// arm being photographed is the real resolver on real state. `/tmp/plxnative-nopass` is what makes
+/// arm being photographed is the real resolver on real state. `/tmp/multiplex-nopass` is what makes
 /// the capsule reachable and it applies to EVERY server, so the pairing `docs/agent-reference.md`
 /// documents is unaffected — but note the arm still has to be looked at from the player route,
 /// i.e. after a play, which is when `route::cur_sid` names a server at all.
@@ -1597,7 +1597,7 @@ fn failtest_arm(ps: &crate::route::PlaybackSession) -> Option<ErrorShape> {
         ),
     })
 }
-/// dev: the `policy` arm of `/tmp/plxnative-failtest` stands for a Force Direct Play session, so
+/// dev: the `policy` arm of `/tmp/multiplex-failtest` stands for a Force Direct Play session, so
 /// the action table sees the Force the arm's shape claims.
 fn failtest_forced() -> bool {
     plx_base::devtrig::read("failtest").is_some_and(|a| a.trim() == "policy")
@@ -1605,7 +1605,7 @@ fn failtest_forced() -> bool {
 
 /// Publish the jail read-out fixture on the same session fact the owned confirmation reads.
 /// Only ordinary development scenarios call this; controlled replay never reads this trigger.
-/// It lives beside [`failtest_arm`], the other reader of `/tmp/plxnative-failtest`, because it
+/// It lives beside [`failtest_arm`], the other reader of `/tmp/multiplex-failtest`, because it
 /// only reads that trigger and writes a `PlaybackSession` field — nothing of the app's.
 pub fn failure_fixture(session: &mut crate::route::PlaybackSession) {
     if plx_base::devtrig::read("failtest").is_some_and(|arm| arm.trim() == "jail") {
@@ -2091,7 +2091,7 @@ pub fn set_play_rate(
     true
 }
 plx_base::devtrig::latched_flag!(
-    /// `/tmp/plxnative-noaudio` — a video-only Load (`needAudio:false`, no audio ES fed), the dev A/B
+    /// `/tmp/multiplex-noaudio` — a video-only Load (`needAudio:false`, no audio ES fed), the dev A/B
     /// that isolates the audio path. Latched: [`speed_offer`] runs every frame while the More menu
     /// is open and the pump's speed check every tick, and a `devtrig::flag` read is a `stat(2)`
     /// syscall per call.

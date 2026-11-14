@@ -75,11 +75,11 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_hud_*.py' -v
       - name: Assemble the relocatable, source-bound artifact
         run: |
-          python3 tools/hud_bundle.py --bin rust-modules/target-sim-video/release/plxnative-sim --out out/plxnative-hud-simulator-linux-x86_64.tar.gz
+          python3 tools/hud_bundle.py --bin rust-modules/target-sim-video/release/multiplex-sim --out out/multiplex-hud-simulator-linux-x86_64.tar.gz
           mkdir -p "$RUNNER_TEMP/relocated simulator"
-          tar -xzf out/plxnative-hud-simulator-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated simulator"
-          "$RUNNER_TEMP/relocated simulator/bin/plxnative-sim" --hud-info
-          "$RUNNER_TEMP/relocated simulator/bin/plxnative-sim" --hud-lint "$RUNNER_TEMP/relocated simulator/corpus/canonical.plxhud" --lang all --format json > out/reference-lint.json
+          tar -xzf out/multiplex-hud-simulator-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated simulator"
+          "$RUNNER_TEMP/relocated simulator/bin/multiplex-sim" --hud-info
+          "$RUNNER_TEMP/relocated simulator/bin/multiplex-sim" --hud-lint "$RUNNER_TEMP/relocated simulator/corpus/canonical.plxhud" --lang all --format json > out/reference-lint.json
       - name: Save simulator and measurement evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -123,7 +123,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           test -n "$GH_TOKEN" || { echo "::error::HUD_REGISTRY_DISPATCH_TOKEN is required for the registry release check"; exit 1; }
-          python3 tools/hud_registry_dispatch.py --pin out/plxnative-hud-simulator-linux-x86_64.tar.pin.json --release-tag "$RELEASE_TAG"
+          python3 tools/hud_registry_dispatch.py --pin out/multiplex-hud-simulator-linux-x86_64.tar.pin.json --release-tag "$RELEASE_TAG"
   dispatch-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.dispatch_probe
     runs-on: ubuntu-24.04

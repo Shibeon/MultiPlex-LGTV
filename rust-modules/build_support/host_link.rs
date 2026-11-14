@@ -63,7 +63,7 @@ pub fn emit(repo: &Path) {
 /// `ci/deps.py` returns at once when every header is already there and matches its sha256 in
 /// `ci/dependencies.json` (offline, whatever `vendor/downloads` holds). Otherwise it takes them from
 /// `vendor/downloads`, then from the machine-wide store under `$PLX_BUILD_CACHE` (default
-/// `~/.cache/plxnative`) that every worktree shares, and only then downloads them at the pinned
+/// `~/.cache/multiplex`) that every worktree shares, and only then downloads them at the pinned
 /// commit, checking each against its sha256 and filling both caches.
 /// Several build scripts (this crate's, `plx_gfx`'s, ...) can run it at once: every write is a
 /// rename of a private file, so none sees another's partial download. The directory is relative to

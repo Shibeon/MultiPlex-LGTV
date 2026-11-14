@@ -16,9 +16,9 @@ class Attachment(unittest.TestCase):
         self.root=Path(self.temporary.name)
         self.sha="a"*40
         self.pin={"source_sha":self.sha,"app_version":"0.10.0","development":False}
-        self.pin_path=self.root/"plxnative-hud-simulator-linux-x86_64.tar.pin.json"
+        self.pin_path=self.root/"multiplex-hud-simulator-linux-x86_64.tar.pin.json"
         self.pin_path.write_text(json.dumps(self.pin))
-        self.archive=self.root/"plxnative-hud-simulator-linux-x86_64.tar.gz"
+        self.archive=self.root/"multiplex-hud-simulator-linux-x86_64.tar.gz"
         self.archive.write_bytes(b"archive")
         self.assets={self.archive.name:self.archive.read_bytes()}
         self.uploads=[]

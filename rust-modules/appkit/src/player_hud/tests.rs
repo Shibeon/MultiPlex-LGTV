@@ -885,7 +885,7 @@ fn a_cold_start_and_a_reload_both_own_the_whole_panel() {
         busy_surface_with(&ps, S::Buffering, false, false),
         Busy::Readout(StatusKind::Working, c"Buffering\u{2026}")
     );
-    // tapping RIGHT during pre-roll (or `/tmp/plxnative-autoseek`): no picture to mark up
+    // tapping RIGHT during pre-roll (or `/tmp/multiplex-autoseek`): no picture to mark up
     assert_eq!(
         busy_surface(&ps, S::Seeking, false),
         Busy::Readout(StatusKind::Working, c"Seeking\u{2026}")

@@ -135,7 +135,7 @@ whole `SDL_*TextInput*` family.
 Two preconditions, and neither is in the `--help` text.
 
 **1. A ~317 MB firmware inventory database, fetched ONCE.** `ensure_db` runs before every mode —
-`--inventory` and `--lib` included — and looks for `~/.cache/plxnative/fwsym/data`. If that is
+`--inventory` and `--lib` included — and looks for `~/.cache/multiplex/fwsym/data`. If that is
 absent it downloads `webosbrew-toolbox-fw-symbols_0.4.0-1_arm64.deb` from GitHub (pinned, with its sha256, in
 `ci/dependencies.json` as entry `webosbrew-toolbox`, so a database refresh is a visible commit rather than a
 silent change of verdict) and unpacks it. **So the first invocation on a machine needs the
@@ -168,10 +168,10 @@ grep -rn '#\[link\|extern "C"\|__asm__("' rust-modules/src rust-modules/media/sr
 
 ### 1. Decide, out loud, whether you are grading an ELF or grading source
 
-There is a built binary at `pkg/plxnative` or there is not, and **which one you did changes what
+There is a built binary at `pkg/multiplex` or there is not, and **which one you did changes what
 your verdict is worth**. Say which, in the first line of the output.
 
-`pkg/plxnative` is **gitignored** (`.gitignore` line 9), so which branch you land on is decided by
+`pkg/multiplex` is **gitignored** (`.gitignore` line 9), so which branch you land on is decided by
 the checkout you were launched in rather than by luck: the maintainer's main tree normally carries
 one from the last `make deploy`, and a fresh clone or a freshly cut worktree — the usual home of a
 parallel lane — has none at all. Do not build one; see the constraints below.
@@ -189,7 +189,7 @@ parallel lane — has none at all. Do not build one; see the constraints below.
 Check the staleness rather than assuming it:
 
 ```sh
-ls -l pkg/plxnative
+ls -l pkg/multiplex
 git -C <repo> diff --name-only HEAD | xargs -I{} ls -l {} 2>/dev/null
 ```
 
@@ -238,7 +238,7 @@ check exists to catch. That is what `LC_ALL=C` in the check is for.
 ### 4. Run the matrix — only if step 1 said you have a current ELF
 
 ```sh
-tools/fwcompat.py --min-release 4.4.2       # defaults to pkg/plxnative
+tools/fwcompat.py --min-release 4.4.2       # defaults to pkg/multiplex
 tools/fwcompat.py --release 5.3.1           # ONE release, and then the full missing list prints
 ./ci/check-elf.sh                           # the artifact assertions CI runs
 ```
@@ -300,7 +300,7 @@ webosbrew-ipk-verify --details --format markdown --fw-releases '>=4.0' pkg/*.ipk
 
 # "firmware load matrix" — our own tool, all 14 releases, and THIS one gates
 ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data \
-    --min-release 4.4.2 pkg/plxnative
+    --min-release 4.4.2 pkg/multiplex
 ```
 
 `>=4.0` and `--min-release 4.4.2` select the same set, because 4.4.2 is the lowest 4.x in the
@@ -387,7 +387,7 @@ infer past.)
 * **Never bare `make` or `make all`.** It cross-compiles FFmpeg and grows `rust-modules/target`
   (14 GB on this checkout, per feature set, per worktree). Worse for your own job: any make
   invocation that is not a **pure query** and whose feature configuration differs from the stamp
-  **deletes `pkg/plxnative` at parse time** — so `make RELEASE=1 <anything>` would destroy the very
+  **deletes `pkg/multiplex` at parse time** — so `make RELEASE=1 <anything>` would destroy the very
   binary you were about to grade. The side-effect-free goals are the `SIDE_EFFECT_FREE` list
   (`grep '^SIDE_EFFECT_FREE' Makefile`: the `print-*` queries, `release-guard`, `make disk`,
   `make check-nodef` and a few more); `make -s print-appdir` is safe, `make -p` is never (it prints unexpanded
@@ -397,7 +397,7 @@ infer past.)
   `make check`. **`make check` is NOT in `SIDE_EFFECT_FREE`** (the Makefile line starting
   `SIDE_EFFECT_FREE =` is the exact set), so on a checkout whose last
   build was `RELEASE=1`, a plain `make check` rewrites `pkg/.build-config` at parse time and takes
-  `pkg/plxnative` and the staged `.so` files with it: the binary you were about to grade, gone
+  `pkg/multiplex` and the staged `.so` files with it: the binary you were about to grade, gone
   before cargo has started. **Grade the ELF first and run host checks after**, or invoke
   `cargo check` inside `rust-modules/` directly, which never touches the stamp.
 
@@ -407,7 +407,7 @@ Lead with the two facts a reader needs before any conclusion, then the findings:
 
 ```
 VERDICT: <PASS | REGRESSION | SOURCE-ONLY, ELF UNGRADED>
-GRADED:  <pkg/plxnative, built <mtime>, newer than the diff> | <source only — no current ELF>
+GRADED:  <pkg/multiplex, built <mtime>, newer than the diff> | <source only — no current ELF>
 ```
 
 Then, in order:

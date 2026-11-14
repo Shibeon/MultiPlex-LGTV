@@ -40,12 +40,12 @@ JAIL = "/var/palm/jail/app.multiplex.native.debug"
 # app (jailed, so its exe has the jail prefix), 60 the STABLE app (its path is a prefix of the debug
 # one's directory name, not a suffix match), 50 the compositor, 70 an unrelated process.
 PROCS = {
-    100: (f"{JAIL}{APPDIR}/plxnative", "plxnative", {100: "plxnative", 101: "mali-event-hnd", 102: "mali-renderer"}),
-    60: (f"/var/palm/jail/app.multiplex.native{STABLE_DIR}/plxnative", "plxnative", {60: "plxnative", 61: "mali-event-hnd"}),
+    100: (f"{JAIL}{APPDIR}/multiplex", "multiplex", {100: "multiplex", 101: "mali-event-hnd", 102: "mali-renderer"}),
+    60: (f"/var/palm/jail/app.multiplex.native{STABLE_DIR}/multiplex", "multiplex", {60: "multiplex", 61: "mali-event-hnd"}),
     50: ("/usr/sbin/surface-manager", "surface-manager", {50: "surface-manager", 51: "mali-event-hnd"}),
     70: ("/bin/busybox", "sh", {70: "sh"}),
 }
-TABLE_100 = ["# plx-task tgid=100 tid=100 comm=plxnative", "# plx-task tgid=100 tid=101 comm=mali-event-hnd",
+TABLE_100 = ["# plx-task tgid=100 tid=100 comm=multiplex", "# plx-task tgid=100 tid=101 comm=mali-event-hnd",
              "# plx-task tgid=100 tid=102 comm=mali-renderer"]
 TABLE_SM = ["# plx-task tgid=50 tid=50 comm=surface-manager", "# plx-task tgid=50 tid=51 comm=mali-event-hnd"]
 
@@ -229,7 +229,7 @@ class ReadBack(unittest.TestCase):
     def test_app_matches_an_unjailed_exe_too(self):
         rig = self.rig(0)
         (rig.proc / "100" / "exe").unlink()
-        os.symlink(f"{APPDIR}/plxnative", rig.proc / "100" / "exe")
+        os.symlink(f"{APPDIR}/multiplex", rig.proc / "100" / "exe")
         r = rig.run("--app", "--secs", "1")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("pid 100", r.stderr)
@@ -252,7 +252,7 @@ class ReadBack(unittest.TestCase):
     def test_app_names_a_process_that_still_runs_a_replaced_binary(self):
         rig = self.rig(0)
         (rig.proc / "100" / "exe").unlink()
-        os.symlink(f"{JAIL}{APPDIR}/plxnative (deleted)", rig.proc / "100" / "exe")
+        os.symlink(f"{JAIL}{APPDIR}/multiplex (deleted)", rig.proc / "100" / "exe")
         r = rig.run("--app", "--secs", "1")
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertEqual(len(r.stderr.strip().splitlines()), 1, r.stderr)
@@ -260,7 +260,7 @@ class ReadBack(unittest.TestCase):
 
     def test_app_refuses_two_matches(self):
         rig = self.rig(0)
-        fake_proc(rig.proc, {90: (f"{JAIL}{APPDIR}/plxnative", "plxnative", {90: "plxnative"})})
+        fake_proc(rig.proc, {90: (f"{JAIL}{APPDIR}/multiplex", "multiplex", {90: "multiplex"})})
         r = rig.run("--app", "--secs", "1")
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertEqual(len(r.stderr.strip().splitlines()), 1, r.stderr)
@@ -270,7 +270,7 @@ class ReadBack(unittest.TestCase):
         self.assertFalse((rig.root / "out.gz").exists())
         r = rig.run("--secs", "1", "--tid", "90")   # --tid names the one to trace and goes through
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("# plx-task tgid=90 tid=90 comm=plxnative", rig.trace()[0])
+        self.assertIn("# plx-task tgid=90 tid=90 comm=multiplex", rig.trace()[0])
 
 
 if __name__ == "__main__":

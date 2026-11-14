@@ -84,7 +84,7 @@ fn acb_init_with(mt: &MainThread, display: &dyn DisplaySink, owner: &PlaneOwner)
 }
 
 /// The player type Feed's handle is initialized with: [`DEFAULT_PLAYER_TYPE`], or what the
-/// `/tmp/plxnative-ptype` developer trigger says (the URI probe's controlled arms set it).
+/// `/tmp/multiplex-ptype` developer trigger says (the URI probe's controlled arms set it).
 #[cfg(feature = "play-feed")]
 fn feed_player_type() -> c_int {
     let mut pt = DEFAULT_PLAYER_TYPE;
@@ -251,7 +251,7 @@ fn demux_session(attempt: plx_playback_contract::AttemptId, native_epoch: u32)
 }
 
 /// What the player's start path calls of the Feed: the demux session of an attempt and the
-/// `plxnative-playurl` dev trigger's reader (`None` in a build without `devtriggers`).
+/// `multiplex-playurl` dev trigger's reader (`None` in a build without `devtriggers`).
 #[cfg(feature = "play-feed")]
 const START_HOOKS: StartHooks = StartHooks {
     demux_session,

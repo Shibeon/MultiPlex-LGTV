@@ -164,11 +164,11 @@
    },
    "settings": "root",
    "triggers": [
-    "plxnative-app-init",
-    "plxnative-rec",
-    "plxnative-focus",
-    "plxnative-noidle",
-    "plxnative-settings"
+    "multiplex-app-init",
+    "multiplex-rec",
+    "multiplex-focus",
+    "multiplex-noidle",
+    "multiplex-settings"
    ],
    "version": 1
   },
@@ -178,10 +178,10 @@
  "schema": 3,
  "state_fp": 15834642128357272210,
  "triggers": [
-  "plxnative-app-init",
-  "plxnative-rec",
-  "plxnative-focus",
-  "plxnative-noidle",
-  "plxnative-settings"
+  "multiplex-app-init",
+  "multiplex-rec",
+  "multiplex-focus",
+  "multiplex-noidle",
+  "multiplex-settings"
  ]
 }

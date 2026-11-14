@@ -150,7 +150,7 @@ space. Prefer coherent surfaces (a bar, a sheet, a card) and measure each new ge
 **A modal costs its host page every frame, and on this GPU that is the whole cost of having one up.**
 Measured 2026-09-02 on the debug install, detail page 2012 with the track-information panel open and
 paging with DOWN: every presented frame `draw≈83 ms`, `loop=41`, `fps=9`. The same page with no
-panel presents at 60 with worst frames ≈29 ms. The draw-class bisect (`/tmp/plxnative-drawmask`)
+panel presents at 60 with worst frames ≈29 ms. The draw-class bisect (`/tmp/multiplex-drawmask`)
 priced it as fill and nothing else.
 
 `ui::popover::host` is the answer, and it applies to every popover that asks for it rather than to
@@ -359,7 +359,7 @@ length with the language, so no strip drops to the flat capsule for being wide (
 ~672 px cap that silently took the glass from the Belarusian bar); a strip past `TAB_VIEW_MAX`
 scrolls inside a track that stays glass, and the profile chip is a pill inside that track
 (`TabFace::Avatar`), so the bar is one glass surface.
-It ships, and `/tmp/plxnative-flattabs` is the way back to the flat capsule for a comparison.
+It ships, and `/tmp/multiplex-flattabs` is the way back to the flat capsule for a comparison.
 Its density is not a constant — see §6.
 
 **No:** anything on the player route (§1), and a second far-away glass cluster that the frame walk merges

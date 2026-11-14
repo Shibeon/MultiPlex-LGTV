@@ -52,7 +52,7 @@ pub enum SettingsPage {
     Privacy,
     /// The Legal index.
     Legal,
-    /// About PlxNative, a document pushed straight from the root.
+    /// About MultiPlex, a document pushed straight from the root.
     About,
     /// One Legal document, by index into `screens::legal`'s page list.
     Document(u8),
@@ -139,7 +139,7 @@ impl SettingsPage {
         }
     }
 
-    /// The pages a boot target asks the surface to stand on, root first: `plxnative-settings=picker-…` and
+    /// The pages a boot target asks the surface to stand on, root first: `multiplex-settings=picker-…` and
     /// `player-hud` name root → Playback → the page (root → the picker for a root row's; root → Under posters → a
     /// `under-posters-movie` / `-show` details picker), the stack an interactive visit
     /// builds. `RouteSurface::new` issues one request per page and the inner stack keeps only the newest request, so

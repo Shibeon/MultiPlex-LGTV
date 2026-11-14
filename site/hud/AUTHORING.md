@@ -9,16 +9,16 @@ Use `schema/manifest/1.0.json` for metadata and resource declarations and `schem
 hud.json. To declare the optional playbar end-time lane, set `hud.format` to `"1.1"` and use
 `schema/hud/1.1.json`. Format `"1.2"` (`schema/hud/1.2.json`) adds the `exit` command, the `title.name`,
 `title.subtitle` and `clock.now` bindings, a facts row's `stream` pills, an item's `caption`, the `plate` rest face, `playbar.remaining` and four icons; the
-app's default HUD, `builtin:multiplex` (`plxnative-sim --hud-export builtin:multiplex`), is a worked example of
+app's default HUD, `builtin:multiplex` (`multiplex-sim --hud-export builtin:multiplex`), is a worked example of
 each, and it passes `--hud-lint --lang all` (cost ceilings included) as shipped. Resource IDs refer to ordinary package-relative SVG files, never inline data or URLs.
 
 Build and validate using the same immutable artifact:
 
 ```sh
-plxnative-sim --hud-pack my-hud --out my-hud.plxhud --format json
-plxnative-sim --hud-lint my-hud.plxhud --lang all --format json
-plxnative-sim --hud-inspect my-hud.plxhud
-python3 tools/hud_preview.py --bin bin/plxnative-sim --hud my-hud.plxhud --out previews
+multiplex-sim --hud-pack my-hud --out my-hud.plxhud --format json
+multiplex-sim --hud-lint my-hud.plxhud --lang all --format json
+multiplex-sim --hud-inspect my-hud.plxhud
+python3 tools/hud_preview.py --bin bin/multiplex-sim --hud my-hud.plxhud --out previews
 ```
 
 The published Linux SDK runs on Ubuntu 24.04 x86_64, including a VM or WSL. Its native preview
@@ -40,11 +40,11 @@ the native packer before distribution.
 
 `tools/hud-dev` (in the MultiPlex repository; the SDK archive does not ship it) puts a source folder, or a `.plxhud`,
 on your television while you edit it. Use a TV that runs a MultiPlex build with the Player HUD page, on the same home
-network as the machine you edit on. The tool needs a `plxnative-sim` (`--sim PATH`, else the one on `PATH`, else the
+network as the machine you edit on. The tool needs a `multiplex-sim` (`--sim PATH`, else the one on `PATH`, else the
 repository's `make sim-macos` build) and the repository's `tools/hud_package.py`, which it imports.
 
 ```sh
-/usr/bin/python3 tools/hud-dev my-hud --sim bin/plxnative-sim
+/usr/bin/python3 tools/hud-dev my-hud --sim bin/multiplex-sim
 ```
 
 On a Mac run it with `/usr/bin/python3`, the interpreter the macOS firewall allows by default: any other Python
@@ -80,6 +80,6 @@ MultiPlex build older than this feature reads that whole list as read-only: it d
 remove it, so remove the dev install on a newer build before you go back to an older one.
 
 Submit the source folder, attribution README and maintainer contact to
-https://github.com/GLinnik21/plxnative-huds . CI builds once and binds linting, all-language/native
+https://github.com/GLinnik21/multiplex-huds . CI builds once and binds linting, all-language/native
 previews and publication to the same archive hash. The initial format has no compatibility reader
 for standalone JSON, scripts, fonts, bitmap artwork or plugin-localized labels.

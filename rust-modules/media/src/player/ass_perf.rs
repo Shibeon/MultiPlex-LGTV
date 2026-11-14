@@ -51,7 +51,7 @@
 //! and the figures above are for the frames of that size, so a line is read at its own `scale`. Each
 //! move of the scale is also logged once as `ass: render scale 1.00 -> 0.50 ...`. The upload's own time is the `assup`
 //! span on `FRAMEDROP spans=` (spans print only on `FRAMEDROP` lines and only while the frame
-//! instrument is armed, `/tmp/plxnative-framedrop`). A window closes on the first job at least a
+//! instrument is armed, `/tmp/multiplex-framedrop`). A window closes on the first job at least a
 //! second after it opened (an idle stretch emits no line, hence `window_ms`), and [`flush`] emits the partial window when the source is deselected.
 //!
 //! Always compiled; the cost is one clock pair per render in Rust, six clock reads in the facade

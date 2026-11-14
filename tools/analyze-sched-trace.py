@@ -35,12 +35,12 @@ commit phase after it:
 
 --latch answers a different question: for a back-buffer wait of --wait-min ms or more, was it the
 app's CPU, the app's GPU work, or the compositor that made the frame miss its refresh? It scores the
-frame pairs (k, k+1) whose two FRAMEDROP lines both carry `wait_at=` (`plxnative-framecb`). The
-recipe is `plxnative-framecb` with `plxnative-framering=17`: the ring writes every frame of 17 ms or
+frame pairs (k, k+1) whose two FRAMEDROP lines both carry `wait_at=` (`multiplex-framecb`). The
+recipe is `multiplex-framecb` with `multiplex-framering=17`: the ring writes every frame of 17 ms or
 more with the 4 frames before it and the 3 after (`diag::heartbeat::FrameRing`), so the pairs around
-every slow frame are in the log, and it only works while `plxnative-framedrop` is armed (the fps
-harness arms it for a scene with a frame ceiling; add `plxnative-framedrop=17` otherwise).
-`plxnative-framedrop=0.01` would log every frame instead, but at about 60 log-file open/append/close
+every slow frame are in the log, and it only works while `multiplex-framedrop` is armed (the fps
+harness arms it for a scene with a frame ceiling; add `multiplex-framedrop=17` otherwise).
+`multiplex-framedrop=0.01` would log every frame instead, but at about 60 log-file open/append/close
 round trips a second ON THE FRAME THREAD, in the phase being measured. One or more TRACEs of the
 same run may be given; the summary spans them.
   * The compositor (surface-manager) composes at 60 Hz, just after every other `osd_irq` (they fire
@@ -377,7 +377,7 @@ def latch_trace(path, frames, args, acc):
 def latch(log, traces, args):
     frames = {f["seq"]: f for f in load_frames(log, 0.0)}
     if not frames:
-        sys.exit(f"{log}: no FRAMEDROP line carries wait_at= (arm plxnative-framecb, with plxnative-framering=17 "
+        sys.exit(f"{log}: no FRAMEDROP line carries wait_at= (arm multiplex-framecb, with multiplex-framering=17 "
                  "so the slow frames and their neighbours are logged)")
     acc = dict(pairs=0, rows=[], margin=[])
     for path in traces:
@@ -546,7 +546,7 @@ def latch_self_test():
         try:
             run_latch(log, plain)
         except SystemExit as e:
-            assert "plxnative-framecb" in str(e)
+            assert "multiplex-framecb" in str(e)
         else:
             raise AssertionError("a log without wait_at= must refuse")
     assert outs["table"].replace(table, "T") == outs["gz"].replace(gz, "T"), \

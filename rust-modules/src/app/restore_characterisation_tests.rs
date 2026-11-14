@@ -21,7 +21,7 @@
 //! save the seated profile's own record and never the top-level key.
 //!
 //! `hostsim` only, and as a correctness gate: `boot::restore_player_preferences` reads
-//! `dev::playback_quality_override()`, which reads `/tmp/plxnative-quality`. `PLXNATIVE_RUNTIME_DIR`
+//! `dev::playback_quality_override()`, which reads `/tmp/multiplex-quality`. `MULTIPLEX_RUNTIME_DIR`
 //! is honoured only in a `hostsim` build, so only there can the run promise "no dev override"
 //! instead of grading whatever file another process left in the shared `/tmp`.
 
@@ -315,7 +315,7 @@ fn pick(rig: &mut Bridge, d: &mut Dispatcher<AppHost>, index: usize, at: u32) {
 
 /// **A0 item 11.** Boot and `follow_auth_landing` set identical values in all nine cells, for a
 /// stored-resume boot with a managed Home profile seated and for one with the owner, with the dev
-/// overrides held fixed (no `/tmp/plxnative-quality`, `controlled = false`).
+/// overrides held fixed (no `/tmp/multiplex-quality`, `controlled = false`).
 ///
 /// On `main` the values are the record's nine install keys whoever is seated; the seat does not
 /// enter either list. That still holds for a profile with no values of its own (it reads the same
@@ -750,7 +750,7 @@ fn audioenh_arm_writes_the_seated_profile() {
     });
 }
 
-/// **The dev track-memory clear runs at the first seat (track memory C4).** `plxnative-trackmemory=clear`
+/// **The dev track-memory clear runs at the first seat (track memory C4).** `multiplex-trackmemory=clear`
 /// forgets what the SEATED profile remembered, so the harness's seated cases start from empty
 /// memory. Boot runs nothing for it (nobody is seated, and the memory door refuses for nobody); the
 /// seat trigger runs it beside the audio-enhancement arm, once, with the profile it seated. An

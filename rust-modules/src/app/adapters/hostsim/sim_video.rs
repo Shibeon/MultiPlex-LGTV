@@ -1,4 +1,4 @@
-//! **The simulator's picture** (`plxnative-simvideo`, with the clock sink armed): the video access
+//! **The simulator's picture** (`multiplex-simvideo`, with the clock sink armed): the video access
 //! units the clock sink already accepts are ALSO piped to a system `ffmpeg` child process, decoded
 //! there, and the frame whose presentation time the sink's clock has reached is composited UNDER
 //! the finished UI frame — the arithmetic the television's compositor applies to its hardware video
@@ -13,7 +13,7 @@
 //! **Why a child process, and why only in the simulator.** The host FFmpeg the simulator links
 //! (`ci/build-ffmpeg.sh`) is built from the television's ONE component list, which has no video
 //! decoders — the TV decodes in hardware — and growing that list for a Mac would make the two
-//! builds diverge. A system `ffmpeg` binary (`PLXNATIVE_SIM_FFMPEG`, else `ffmpeg` on `PATH`) keeps
+//! builds diverge. A system `ffmpeg` binary (`MULTIPLEX_SIM_FFMPEG`, else `ffmpeg` on `PATH`) keeps
 //! the decode entirely outside this process and the simulator's link line. `hostsim`-only: the
 //! television build does not contain this file.
 //!
@@ -160,7 +160,7 @@ fn feed(au: &[u8], pts: i64) {
 }
 
 fn ffmpeg_path() -> std::ffi::OsString {
-    std::env::var_os("PLXNATIVE_SIM_FFMPEG").unwrap_or_else(|| "ffmpeg".into())
+    std::env::var_os("MULTIPLEX_SIM_FFMPEG").unwrap_or_else(|| "ffmpeg".into())
 }
 
 fn spawn() -> Option<Session> {

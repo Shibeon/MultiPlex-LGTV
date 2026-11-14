@@ -61,9 +61,9 @@ def cache_dir():
 
 def machine_cache():
     """The machine-wide store shared by every checkout and worktree: $PLX_BUILD_CACHE/deps (the
-    variable ci/build-ffmpeg.sh keys its tree and tarball by, default ~/.cache/plxnative), or None
+    variable ci/build-ffmpeg.sh keys its tree and tarball by, default ~/.cache/multiplex), or None
     when PLX_BUILD_CACHE is set empty. A fresh worktree finds its archives here without a network."""
-    root = os.environ['PLX_BUILD_CACHE'] if 'PLX_BUILD_CACHE' in os.environ else str(Path.home() / '.cache/plxnative')
+    root = os.environ['PLX_BUILD_CACHE'] if 'PLX_BUILD_CACHE' in os.environ else str(Path.home() / '.cache/multiplex')
     return Path(root).resolve() / 'deps' if root else None
 
 

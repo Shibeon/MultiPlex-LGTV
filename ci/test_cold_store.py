@@ -225,9 +225,9 @@ class Config(Rig):
 
     def test_the_config_dir_follows_tv_config_sh(self):
         self.assertEqual(cold.config_dir({"PLX_TV_CONFIG_DIR": "/a"}), "/a")
-        self.assertEqual(cold.config_dir({"XDG_CONFIG_HOME": "/x"}), "/x/plxnative")
+        self.assertEqual(cold.config_dir({"XDG_CONFIG_HOME": "/x"}), "/x/multiplex")
         self.assertEqual(cold.config_dir({"PLX_TV_CONFIG_DIR": "", "XDG_CONFIG_HOME": ""}),
-                         os.path.join(os.path.expanduser("~"), ".config", "plxnative"))
+                         os.path.join(os.path.expanduser("~"), ".config", "multiplex"))
         env = {"PLX_TV_CONFIG_DIR": os.path.join(self.tmp, "cfgdir")}
         os.makedirs(env["PLX_TV_CONFIG_DIR"])
         with open(os.path.join(env["PLX_TV_CONFIG_DIR"], "cold-store"), "w") as fh:

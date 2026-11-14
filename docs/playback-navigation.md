@@ -76,7 +76,7 @@ Use a fresh evidence directory for each run. No household account is needed:
 ```sh
 make sim-macos
 python3 tests/fixtures/make_fixtures.py --only mockverify --out /tmp/navigation-media
-python3 tests/playback_navigation_sim.py --sim rust-modules/target-sim/debug/plxnative-sim \
+python3 tests/playback_navigation_sim.py --sim rust-modules/target-sim/debug/multiplex-sim \
   --media /tmp/navigation-media --out /tmp/navigation-evidence
 ```
 
@@ -91,7 +91,7 @@ ffmpeg -y -i /tmp/navigation-media/mockverify-v1.mkv -t 60 -map 0 \
   -x264-params nal-hrd=cbr -g 288 -keyint_min 288 -sc_threshold 0 \
   -c:a copy -c:s copy /tmp/navigation-long-gop/mockverify-v1.mkv
 cp /tmp/navigation-media/mockverify-v2.mkv /tmp/navigation-media/mockverify-v2.eng.srt /tmp/navigation-long-gop/
-python3 tests/playback_navigation_sim.py --sim rust-modules/target-sim/debug/plxnative-sim \
+python3 tests/playback_navigation_sim.py --sim rust-modules/target-sim/debug/multiplex-sim \
   --media /tmp/navigation-long-gop --out /tmp/navigation-burst --rapid-seeks
 ```
 

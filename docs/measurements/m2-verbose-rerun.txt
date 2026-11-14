@@ -1,11 +1,11 @@
 install: app.multiplex.native.debug [debug] — triggers and log under /tmp/app.multiplex.native.debug
-fixtures: /Users/gleblinnik/plxnative-fixtures/pipeline
+fixtures: /Users/gleblinnik/multiplex-fixtures/pipeline
 serving:  http://<pms-host>:52502  (the TV fetches from this address)
 TV lock: already held by this lane — inheriting it
 
 === pipe_abr_slow_start_then_fast  (pipe_h264_aac_mp4.mp4, no-Plex Auto: 2 Mbps start -> 40 Mbps link, climbing by SKIPPING rungs) ===
     covers: abr-upshift, intermediate-rung-skipping, mid-transfer-network-profile
-    triggers: plxnative-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52502/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52502/__abr"}, plxnative-stats, plxnative-quality=auto
+    triggers: multiplex-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52502/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52502/__abr"}, multiplex-stats, multiplex-quality=auto
     run-stream (cap 90s, early exit off) ...
       [srv] <TV> "GET /pipe_h264_aac_mp4.mp4 HTTP/1.1" 200 -
       [srv] <TV> "GET /__abr/720/master.m3u8?X-Plex-Token=<TOKEN> HTTP/1.1" 200 -
@@ -98,13 +98,13 @@ SUMMARY  (pipeline tier — no Plex)
 
 0 passed, 1 failed of 1
 install: app.multiplex.native.debug [debug] — triggers and log under /tmp/app.multiplex.native.debug
-fixtures: /Users/gleblinnik/plxnative-fixtures/pipeline
+fixtures: /Users/gleblinnik/multiplex-fixtures/pipeline
 serving:  http://<pms-host>:52573  (the TV fetches from this address)
 TV lock: already held by this lane — inheriting it
 
 === pipe_abr_steady_modest_link  (pipe_h264_aac_mp4.mp4, no-Plex Auto: a flat 6 Mbps link is not spent like a 40 Mbps one) ===
     covers: abr-steady-state, safe-budget, mid-transfer-network-profile
-    triggers: plxnative-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52573/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52573/__abr"}, plxnative-stats, plxnative-quality=auto
+    triggers: multiplex-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52573/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52573/__abr"}, multiplex-stats, multiplex-quality=auto
     run-stream (cap 75s, early exit off) ...
       [srv] <TV> "GET /pipe_h264_aac_mp4.mp4 HTTP/1.1" 200 -
       [srv] client closed mid-body (pipe_h264_aac_mp4.mp4 @0)
@@ -199,13 +199,13 @@ SUMMARY  (pipeline tier — no Plex)
 
 1 passed, 0 failed of 1
 install: app.multiplex.native.debug [debug] — triggers and log under /tmp/app.multiplex.native.debug
-fixtures: /Users/gleblinnik/plxnative-fixtures/pipeline
+fixtures: /Users/gleblinnik/multiplex-fixtures/pipeline
 serving:  http://<pms-host>:52653  (the TV fetches from this address)
 TV lock: already held by this lane — inheriting it
 
 === pipe_abr_brief_dropout  (pipe_h264_aac_mp4.mp4, no-Plex Auto: a 3 s near-stall mid-stream, then full speed again) ===
     covers: abr-downshift, regime-change, abr-upshift, mid-transfer-network-profile
-    triggers: plxnative-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52653/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52653/__abr"}, plxnative-stats, plxnative-quality=auto
+    triggers: multiplex-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52653/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52653/__abr"}, multiplex-stats, multiplex-quality=auto
     run-stream (cap 90s, early exit off) ...
       [srv] <TV> "GET /pipe_h264_aac_mp4.mp4 HTTP/1.1" 200 -
       [srv] client closed mid-body (pipe_h264_aac_mp4.mp4 @0)
@@ -301,13 +301,13 @@ SUMMARY  (pipeline tier — no Plex)
 
 1 passed, 0 failed of 1
 install: app.multiplex.native.debug [debug] — triggers and log under /tmp/app.multiplex.native.debug
-fixtures: /Users/gleblinnik/plxnative-fixtures/pipeline
+fixtures: /Users/gleblinnik/multiplex-fixtures/pipeline
 serving:  http://<pms-host>:52753  (the TV fetches from this address)
 TV lock: already held by this lane — inheriting it
 
 === pipe_abr_oscillating_link  (pipe_h264_aac_mp4.mp4, no-Plex Auto: a link flipping 20/3 Mbps must not flip the picture with it) ===
     covers: abr-hysteresis, transition-cost, mid-transfer-network-profile
-    triggers: plxnative-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52753/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52753/__abr"}, plxnative-stats, plxnative-quality=auto
+    triggers: multiplex-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:52753/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:52753/__abr"}, multiplex-stats, multiplex-quality=auto
     run-stream (cap 90s, early exit off) ...
       [srv] <TV> "GET /pipe_h264_aac_mp4.mp4 HTTP/1.1" 200 -
       [srv] client closed mid-body (pipe_h264_aac_mp4.mp4 @0)
@@ -406,13 +406,13 @@ SUMMARY  (pipeline tier — no Plex)
       [srv] client closed mid-body (pipe_h264_aac_mp4.mp4 @0)
       [srv] client closed mid-body (pipe_abr_480p.ts @0)
 install: app.multiplex.native.debug [debug] — triggers and log under /tmp/app.multiplex.native.debug
-fixtures: /Users/gleblinnik/plxnative-fixtures/pipeline
+fixtures: /Users/gleblinnik/multiplex-fixtures/pipeline
 serving:  http://<pms-host>:53361  (the TV fetches from this address)
 TV lock: already held by this lane — inheriting it
 
 === pipe_abr_brief_dropout  (pipe_h264_aac_mp4.mp4, no-Plex Auto: a 3 s near-stall mid-stream, then full speed again) ===
     covers: abr-downshift, regime-change, abr-upshift, mid-transfer-network-profile
-    triggers: plxnative-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:53361/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:53361/__abr"}, plxnative-stats, plxnative-quality=auto
+    triggers: multiplex-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:53361/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:53361/__abr"}, multiplex-stats, multiplex-quality=auto
     run-stream (cap 90s, early exit off) ...
       [srv] <TV> "GET /pipe_h264_aac_mp4.mp4 HTTP/1.1" 200 -
       [srv] client closed mid-body (pipe_h264_aac_mp4.mp4 @0)
@@ -508,13 +508,13 @@ SUMMARY  (pipeline tier — no Plex)
 
 1 passed, 0 failed of 1
 install: app.multiplex.native.debug [debug] — triggers and log under /tmp/app.multiplex.native.debug
-fixtures: /Users/gleblinnik/plxnative-fixtures/pipeline
+fixtures: /Users/gleblinnik/multiplex-fixtures/pipeline
 serving:  http://<pms-host>:53493  (the TV fetches from this address)
 TV lock: already held by this lane — inheriting it
 
 === pipe_abr_oscillating_link  (pipe_h264_aac_mp4.mp4, no-Plex Auto: a link flipping 20/3 Mbps must not flip the picture with it) ===
     covers: abr-hysteresis, transition-cost, mid-transfer-network-profile
-    triggers: plxnative-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:53493/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:53493/__abr"}, plxnative-stats, plxnative-quality=auto
+    triggers: multiplex-playurl={"vcodec":"h264","acodec":"aac","fps":24.0,"url":"http://<pms-host>:53493/pipe_h264_aac_mp4.mp4","auto_source_kbps":60000,"auto_hls_base":"http://<pms-host>:53493/__abr"}, multiplex-stats, multiplex-quality=auto
     run-stream (cap 90s, early exit off) ...
       [srv] <TV> "GET /pipe_h264_aac_mp4.mp4 HTTP/1.1" 200 -
       [srv] client closed mid-body (pipe_h264_aac_mp4.mp4 @0)

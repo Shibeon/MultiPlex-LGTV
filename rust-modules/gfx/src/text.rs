@@ -1709,14 +1709,14 @@ pub fn init_text() {
 /// **The fonts without the renderer.** [`init_text`] opens the fonts AND links the text shaders, so it
 /// needs a GL context; measuring needs only the first. This is the font half on its own: it starts
 /// SDL_ttf, opens the shipped base face and publishes `TEXT_OK`, so [`TtfMeasure`] answers real widths in
-/// a process with no window (`plxnative-sim --hud-lint`, which has no GL context to link a program in).
+/// a process with no window (`multiplex-sim --hud-lint`, which has no GL context to link a program in).
 /// It touches no GL symbol, logs nothing of its own and starts no SDL subsystem.
 ///
 /// **It refuses the fallback.** [`font_at`] answers the system DroidSans when the shipped face will not
 /// open, which is a defect that looks like a measurement (the module header). A headless caller asked
 /// for the app's own widths, so both shipped faces must be readable files, and the error names the one
 /// that is not and the directory they are looked for in (the resolver is `plx_base::paths::app_dir`, so
-/// `PLXNATIVE_APP_DIR` steers it in the simulator and nowhere else). A shipped face that is a file but
+/// `MULTIPLEX_APP_DIR` steers it in the simulator and nowhere else). A shipped face that is a file but
 /// not a font is the one case it cannot see; `font_at` logs that fallback.
 ///
 /// Idempotent: a second call after a success does nothing. Main-thread only, like [`init_text`].
@@ -1727,7 +1727,7 @@ pub fn init_fonts_headless() -> Result<(), String> {
     let faces = [app_font_path(false), app_font_path(true)];
     unreadable_face(&faces).map_err(|reason| {
         format!(
-            "{reason} (the faces are read from {}; set PLXNATIVE_APP_DIR to the directory holding \
+            "{reason} (the faces are read from {}; set MULTIPLEX_APP_DIR to the directory holding \
              appfont.ttf and appfont-bold.ttf, pkg/ in the repository)",
             plx_base::paths::app_dir().display()
         )

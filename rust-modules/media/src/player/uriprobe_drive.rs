@@ -1,4 +1,4 @@
-//! The URI probe's route half and its port (issue #1064, dev trigger `plxnative-uriprobe`). Route
+//! The URI probe's route half and its port (issue #1064, dev trigger `multiplex-uriprobe`). Route
 //! ownership stays here: the claimed start attempt, the settle into the route reducer, the facts the
 //! attempt view takes, the adapter's one probe slot and when it is freed, and every `uriprobe:` line
 //! the route side writes. The probe itself, the independent driver over the URI transport and the
@@ -72,7 +72,7 @@ pub trait ProbeLaunch {
 
 /// The application's probe, installed on the adapter at boot.
 pub trait UriProbe {
-    /// The launch a `plxnative-uriprobe` trigger text names; `None` when it names no variant, which
+    /// The launch a `multiplex-uriprobe` trigger text names; `None` when it names no variant, which
     /// leaves the probe unarmed and the play normal.
     fn armed(&self, text: &str) -> Option<Box<dyn ProbeLaunch>>;
 

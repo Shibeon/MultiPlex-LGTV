@@ -9,4 +9,4 @@ Homepage: https://github.com/Shibeon/MultiPlex-LGTV
 License: GPL-3.0-or-later
 Description: MultiPlex — unofficial native Plex client for LG webOS (not affiliated with Plex)
 webOS-Package-Format-Version: 2
-webOS-Packager-Version: plxnative-mkipk/1
+webOS-Packager-Version: multiplex-mkipk/1

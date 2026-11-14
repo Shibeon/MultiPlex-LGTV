@@ -9,22 +9,22 @@
 //! builds it for the HUD authoring simulator. The references to those removed files below record how
 //! the dump was designed and gated; they are not tools this checkout carries.
 //!
-//! **Armed by `PLXNATIVE_DUMP=<dir>`** (where `frames.tsv` and `dump.json` go), read once at the
+//! **Armed by `MULTIPLEX_DUMP=<dir>`** (where `frames.tsv` and `dump.json` go), read once at the
 //! first loop iteration. The rest, all optional:
 //!
 //! | variable | meaning |
 //! |---|---|
-//! | `PLXNATIVE_DUMP_FRAMES=<n>` | written frames to produce (default 180) |
-//! | `PLXNATIVE_DUMP_PREROLL=<n>` | virtual frames run and NOT written first (default [`DEFAULT_PREROLL`], 60), so the boot settles and a hero's reveal can finish |
-//! | `PLXNATIVE_DUMP_OUT=<path>` | where the RGB24 frames go: a file or a FIFO (unset: hash only, nothing is written) |
-//! | `PLXNATIVE_DUMP_MAX_HOLD_MS=<ms>` | the fail-closed wall-clock bound on a stretch without progress (default 60000) |
-//! | `PLXNATIVE_DUMP_LAND_LAG_MS=<ms>` | how long, in VIRTUAL time, a request is out before its answer lands (default 0: the next execution of its site). A page whose read takes a second to answer is filmed with its loading frames by setting this to about that second; see "Landings" below |
-//! | `PLXNATIVE_DUMP_NO_HOLD=1` | write every frame whatever the debt (a negative-test switch, never a render) |
-//! | `PLXNATIVE_DUMP_ALLOW_ABSENT=1` | do not fail on a settled-absent hero logo, a never-resolving card or a failed art request (a proof switch) |
-//! | `PLXNATIVE_DUMP_KEYS=<v>:<key>,...` | press `up`/`down`/`left`/`right`/`ok`/`back`: the down edge at the first iteration of virtual frame `<v>`, the up edge [`KEY_UP_AFTER`] frames later (the storyboard's compiled key schedule, `tests/video/feel.json`, arrives through this variable). `hold` is OK held for [`HOLD_UP_AFTER`] frames (the long press that opens an item's context menu) |
-//! | `PLXNATIVE_DUMP_CLICKS=<v>:<x>:<y>,...` | native pointer click at canvas coordinates on virtual frame `<v>`, released six frames later |
-//! | `PLXNATIVE_DUMP_ALLOW_OVERLAY=1` | do not fail when a modal or popover is open. A MOTION-REVIEW switch: the underlay's dim field is cadenced by presented iterations, so such a frame is not guaranteed to be hold-independent (the hold-injection gate does not cover it) and the render is never a film deliverable (registry still previews may use it) |
-//! | `PLXNATIVE_DUMP_EXTRA_HOLDS=<k>` or `r<seed>` | force `k` (or a seeded 0..=3) EXTRA held repeats on every clean virtual frame: the hold-injection gate's switch |
+//! | `MULTIPLEX_DUMP_FRAMES=<n>` | written frames to produce (default 180) |
+//! | `MULTIPLEX_DUMP_PREROLL=<n>` | virtual frames run and NOT written first (default [`DEFAULT_PREROLL`], 60), so the boot settles and a hero's reveal can finish |
+//! | `MULTIPLEX_DUMP_OUT=<path>` | where the RGB24 frames go: a file or a FIFO (unset: hash only, nothing is written) |
+//! | `MULTIPLEX_DUMP_MAX_HOLD_MS=<ms>` | the fail-closed wall-clock bound on a stretch without progress (default 60000) |
+//! | `MULTIPLEX_DUMP_LAND_LAG_MS=<ms>` | how long, in VIRTUAL time, a request is out before its answer lands (default 0: the next execution of its site). A page whose read takes a second to answer is filmed with its loading frames by setting this to about that second; see "Landings" below |
+//! | `MULTIPLEX_DUMP_NO_HOLD=1` | write every frame whatever the debt (a negative-test switch, never a render) |
+//! | `MULTIPLEX_DUMP_ALLOW_ABSENT=1` | do not fail on a settled-absent hero logo, a never-resolving card or a failed art request (a proof switch) |
+//! | `MULTIPLEX_DUMP_KEYS=<v>:<key>,...` | press `up`/`down`/`left`/`right`/`ok`/`back`: the down edge at the first iteration of virtual frame `<v>`, the up edge [`KEY_UP_AFTER`] frames later (the storyboard's compiled key schedule, `tests/video/feel.json`, arrives through this variable). `hold` is OK held for [`HOLD_UP_AFTER`] frames (the long press that opens an item's context menu) |
+//! | `MULTIPLEX_DUMP_CLICKS=<v>:<x>:<y>,...` | native pointer click at canvas coordinates on virtual frame `<v>`, released six frames later |
+//! | `MULTIPLEX_DUMP_ALLOW_OVERLAY=1` | do not fail when a modal or popover is open. A MOTION-REVIEW switch: the underlay's dim field is cadenced by presented iterations, so such a frame is not guaranteed to be hold-independent (the hold-injection gate does not cover it) and the render is never a film deliverable (registry still previews may use it) |
+//! | `MULTIPLEX_DUMP_EXTRA_HOLDS=<k>` or `r<seed>` | force `k` (or a seeded 0..=3) EXTRA held repeats on every clean virtual frame: the hold-injection gate's switch |
 //!
 //! **The clock.** `clock::set_replay(ORIGIN_MS + T(v))`, `T(v) = round(v * 1000 / 60)`, where `v` is
 //! the virtual frame in flight. The origin is a constant far above any tick the boot stamped, so a
@@ -80,7 +80,7 @@
 //! spring is at rest (`idle::settled`, which multiplies by `dt`) with the `dt` of the virtual
 //! frame's first pass ([`idle_dt`]), so `page_quiescent` does not flip on `dt == 0`. The springs a
 //! pushed page starts are therefore stepped once per virtual frame and written as they move, never
-//! on a wall-clock event. The check is `PLXNATIVE_DUMP_EXTRA_HOLDS`:
+//! on a wall-clock event. The check is `MULTIPLEX_DUMP_EXTRA_HOLDS`:
 //! `tools/site_video.py hold-gate` renders the scene with no extra holds and with seeded extra holds
 //! on every frame and requires `frames.tsv` columns 1-4 equal.
 //!
@@ -106,7 +106,7 @@
 //! `Fetch` stores need no `open_claims` entry for this, and Home's hubs and the Browse discovery
 //! (which have one) are held by the claim as before.
 //!
-//! **The landing lag** (`PLXNATIVE_DUMP_LAND_LAG_MS`, off by default) is how a slow page is filmed
+//! **The landing lag** (`MULTIPLEX_DUMP_LAND_LAG_MS`, off by default) is how a slow page is filmed
 //! with the frames its user would see. Waiting for an answer, however it is done, writes no frame
 //! while it is out, so a page whose read takes a second would show the loading state for one frame
 //! and then the loaded page. With a lag of `L` virtual frames the gate holds an answer back until
@@ -122,7 +122,7 @@
 //! lagged store draws its loading state (the Working read-out, a spinner, the Detail's "Loading"
 //! title: `Reason::is_loading_state`), and virtual time advances only when a frame is written, so
 //! holding on that placeholder would never reach the frame the lag waits for and the run would end
-//! on `PLXNATIVE_DUMP_MAX_HOLD_MS` naming `placeholder`. While a store is lagged this iteration
+//! on `MULTIPLEX_DUMP_MAX_HOLD_MS` naming `placeholder`. While a store is lagged this iteration
 //! those placeholders, and only those, are excused (`Entry::is_loading_state`: the loading reasons, and a
 //! card tile whose key is EMPTY, the Collection header's thumb before the collection lands, which no
 //! poster fetch can answer); a card's art with a key, a logo or a backdrop still hold, and so does any
@@ -139,7 +139,7 @@
 //! its rests in frames, and `site_video.py gates` measures whether each beat had come to rest by the
 //! next key (`storyboard/rest`).
 //!
-//! **Fail closed, never fail soft.** A stretch of `PLXNATIVE_DUMP_MAX_HOLD_MS` without a virtual
+//! **Fail closed, never fail soft.** A stretch of `MULTIPLEX_DUMP_MAX_HOLD_MS` without a virtual
 //! frame completing ends the process (exit 3, after writing `dump.json`) naming the debt reasons,
 //! the placeholder entries and the open claims. So does a hero logo that settled as a miss
 //! (`placeholder::Frame::absent`), a card that can never resolve (an empty key while nothing else
@@ -154,7 +154,7 @@
 //! handlers race the sign-in worker (`shot::maybe_capture`'s account of the same crash).
 //!
 //! **The storyboard** is `tests/video/feel.json` (positions and durations, never titles), compiled by
-//! `tools/site_video.py` (`compile_storyboard`) to `PLXNATIVE_DUMP_KEYS` and a frame count. The key
+//! `tools/site_video.py` (`compile_storyboard`) to `MULTIPLEX_DUMP_KEYS` and a frame count. The key
 //! schedule is the driver's whole seam: this file injects a key at a virtual frame in [`iteration_begin`]
 //! (after the clock is set, before the loop ingests, as `dev::scenarios` calls `bridge::script_key`) and
 //! knows nothing of beats. There is no `landed` predicate: a rest is a fixed number of frames, and the
@@ -164,11 +164,11 @@
 //! slot 0` line plus one `home: hero page slot N rk=R` per page turn, checked by `gates` against the
 //! `demo_library.py hero-report` pass set and `not_in_video`) and `opened_rating_keys` (every title page opened, read from the mock's request log), which `gates`
 //! checks against the catalog's `not_in_video` flag. A storyboard render also writes the
-//! `plxnative-hintoff` trigger (`app::boot` teaches the hold hint on every screen, a one-time
+//! `multiplex-hintoff` trigger (`app::boot` teaches the hold hint on every screen, a one-time
 //! teaching overlay a film has no viewer for) and records `hold_hint: suppressed`. Nothing here assumes
 //! the script is "hold".
 //!
-//! **What this does NOT do:** the negative tests with mock delays. The script is `PLXNATIVE_DUMP_KEYS` or
+//! **What this does NOT do:** the negative tests with mock delays. The script is `MULTIPLEX_DUMP_KEYS` or
 //! "hold the booted scene for N frames".
 
 use std::cell::RefCell;
@@ -214,7 +214,7 @@ pub(crate) fn virtual_ms(v: u64) -> u32 {
     ((v * 1000 + (FPS as u64) / 2) / FPS as u64) as u32
 }
 
-/// `PLXNATIVE_DUMP_LAND_LAG_MS` as virtual frames, rounded UP so a lag never lands before it was asked.
+/// `MULTIPLEX_DUMP_LAND_LAG_MS` as virtual frames, rounded UP so a lag never lands before it was asked.
 pub(crate) fn land_lag_frames(ms: u32) -> u64 {
     (ms as u64 * FPS as u64).div_ceil(1000)
 }
@@ -340,9 +340,9 @@ pub(crate) enum ExtraHolds {
 impl ExtraHolds {
     pub(crate) fn parse(spec: &str) -> Result<ExtraHolds, String> {
         if let Some(seed) = spec.strip_prefix('r') {
-            seed.parse().map(ExtraHolds::Seeded).map_err(|_| format!("PLXNATIVE_DUMP_EXTRA_HOLDS={spec:?}: want <k> or r<seed>"))
+            seed.parse().map(ExtraHolds::Seeded).map_err(|_| format!("MULTIPLEX_DUMP_EXTRA_HOLDS={spec:?}: want <k> or r<seed>"))
         } else {
-            spec.parse().map(ExtraHolds::Fixed).map_err(|_| format!("PLXNATIVE_DUMP_EXTRA_HOLDS={spec:?}: want <k> or r<seed>"))
+            spec.parse().map(ExtraHolds::Fixed).map_err(|_| format!("MULTIPLEX_DUMP_EXTRA_HOLDS={spec:?}: want <k> or r<seed>"))
         }
     }
 
@@ -363,13 +363,13 @@ impl ExtraHolds {
     }
 }
 
-/// `PLXNATIVE_DUMP_KEYS`: `<v>:<key>,...` sorted by frame (stable, so two keys on one frame keep
+/// `MULTIPLEX_DUMP_KEYS`: `<v>:<key>,...` sorted by frame (stable, so two keys on one frame keep
 /// their order).
 pub(crate) fn parse_keys(spec: &str) -> Result<Vec<(u64, Key, u64)>, String> {
     let mut out = Vec::new();
     for part in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
-        let (v, name) = part.split_once(':').ok_or_else(|| format!("PLXNATIVE_DUMP_KEYS: {part:?} is not <frame>:<key>"))?;
-        let v = v.parse::<u64>().map_err(|_| format!("PLXNATIVE_DUMP_KEYS: {part:?}: the frame is not a number"))?;
+        let (v, name) = part.split_once(':').ok_or_else(|| format!("MULTIPLEX_DUMP_KEYS: {part:?} is not <frame>:<key>"))?;
+        let v = v.parse::<u64>().map_err(|_| format!("MULTIPLEX_DUMP_KEYS: {part:?}: the frame is not a number"))?;
         let mut up_after = KEY_UP_AFTER;
         let key = match name {
             "hold" => {
@@ -382,7 +382,7 @@ pub(crate) fn parse_keys(spec: &str) -> Result<Vec<(u64, Key, u64)>, String> {
             "right" => Key::Right,
             "ok" => Key::Ok,
             "back" => Key::Back,
-            other => return Err(format!("PLXNATIVE_DUMP_KEYS: {other:?} is not up/down/left/right/ok/back/hold")),
+            other => return Err(format!("MULTIPLEX_DUMP_KEYS: {other:?} is not up/down/left/right/ok/back/hold")),
         };
         out.push((v, key, up_after));
     }
@@ -403,7 +403,7 @@ pub(crate) fn parse_clicks(spec: &str) -> Result<Vec<(u64, f32, f32)>, String> {
             (parts.next().is_none() && (0.0..=WIDTH as f32).contains(&x) && (0.0..=HEIGHT as f32).contains(&y))
                 .then_some((at,x,y))
         })();
-        result.push(parsed.ok_or_else(|| format!("PLXNATIVE_DUMP_CLICKS: {item:?} is not frame:x:y inside the canvas"))?);
+        result.push(parsed.ok_or_else(|| format!("MULTIPLEX_DUMP_CLICKS: {item:?} is not frame:x:y inside the canvas"))?);
     }
     result.sort_by_key(|point| point.0);
     Ok(result)
@@ -415,7 +415,7 @@ pub(crate) fn check_key_schedule(keys: &[(u64, Key, u64)], preroll: u32, frames:
     for &(v, key, up_after) in keys {
         if v.checked_add(up_after).is_none_or(|up| up >= total) {
             return Err(format!(
-                "PLXNATIVE_DUMP_KEYS: {key:?} at virtual frame {v} cannot come up before the run ends \
+                "MULTIPLEX_DUMP_KEYS: {key:?} at virtual frame {v} cannot come up before the run ends \
                  (its up edge is frame {}, the last frame is {}: {preroll} preroll + {frames} frames)",
                 v.saturating_add(up_after), total.saturating_sub(1)
             ));
@@ -528,20 +528,20 @@ fn env_u32(name: &str, default: u32) -> u32 {
 
 impl Cfg {
     fn from_env() -> Option<Cfg> {
-        let dir = std::path::PathBuf::from(std::env::var_os("PLXNATIVE_DUMP")?);
+        let dir = std::path::PathBuf::from(std::env::var_os("MULTIPLEX_DUMP")?);
         let cfg = Cfg {
             dir,
-            frames: env_u32("PLXNATIVE_DUMP_FRAMES", 180),
-            preroll: env_u32("PLXNATIVE_DUMP_PREROLL", DEFAULT_PREROLL),
-            out: std::env::var_os("PLXNATIVE_DUMP_OUT").map(Into::into),
-            max_hold: Duration::from_millis(env_u32("PLXNATIVE_DUMP_MAX_HOLD_MS", 60_000) as u64),
-            land_lag: land_lag_frames(env_u32("PLXNATIVE_DUMP_LAND_LAG_MS", 0)),
-            no_hold: std::env::var_os("PLXNATIVE_DUMP_NO_HOLD").is_some(),
-            allow_absent: std::env::var_os("PLXNATIVE_DUMP_ALLOW_ABSENT").is_some(),
-            allow_overlay: std::env::var_os("PLXNATIVE_DUMP_ALLOW_OVERLAY").is_some(),
-            keys: std::env::var("PLXNATIVE_DUMP_KEYS").map_or_else(|_| Ok(Vec::new()), |s| parse_keys(&s)).unwrap_or_else(|e| panic!("framedump: {e}")),
-            clicks: std::env::var("PLXNATIVE_DUMP_CLICKS").map_or_else(|_| Ok(Vec::new()), |s| parse_clicks(&s)).unwrap_or_else(|e| panic!("framedump: {e}")),
-            extra_holds: std::env::var("PLXNATIVE_DUMP_EXTRA_HOLDS")
+            frames: env_u32("MULTIPLEX_DUMP_FRAMES", 180),
+            preroll: env_u32("MULTIPLEX_DUMP_PREROLL", DEFAULT_PREROLL),
+            out: std::env::var_os("MULTIPLEX_DUMP_OUT").map(Into::into),
+            max_hold: Duration::from_millis(env_u32("MULTIPLEX_DUMP_MAX_HOLD_MS", 60_000) as u64),
+            land_lag: land_lag_frames(env_u32("MULTIPLEX_DUMP_LAND_LAG_MS", 0)),
+            no_hold: std::env::var_os("MULTIPLEX_DUMP_NO_HOLD").is_some(),
+            allow_absent: std::env::var_os("MULTIPLEX_DUMP_ALLOW_ABSENT").is_some(),
+            allow_overlay: std::env::var_os("MULTIPLEX_DUMP_ALLOW_OVERLAY").is_some(),
+            keys: std::env::var("MULTIPLEX_DUMP_KEYS").map_or_else(|_| Ok(Vec::new()), |s| parse_keys(&s)).unwrap_or_else(|e| panic!("framedump: {e}")),
+            clicks: std::env::var("MULTIPLEX_DUMP_CLICKS").map_or_else(|_| Ok(Vec::new()), |s| parse_clicks(&s)).unwrap_or_else(|e| panic!("framedump: {e}")),
+            extra_holds: std::env::var("MULTIPLEX_DUMP_EXTRA_HOLDS")
                 .map_or(Ok(ExtraHolds::Fixed(0)), |s| ExtraHolds::parse(&s))
                 .unwrap_or_else(|e| panic!("framedump: {e}")),
         };
@@ -555,7 +555,7 @@ impl Cfg {
 /// Is the dump asked for? Read before SDL exists: the swap interval and the pacer depend on it.
 pub(crate) fn requested() -> bool {
     static R: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *R.get_or_init(|| std::env::var_os("PLXNATIVE_DUMP").is_some())
+    *R.get_or_init(|| std::env::var_os("MULTIPLEX_DUMP").is_some())
 }
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -627,7 +627,7 @@ thread_local! {
 
 impl Dump {
     fn start(app: &mut App, cfg: Cfg) -> Dump {
-        std::fs::create_dir_all(&cfg.dir).expect("framedump: cannot create PLXNATIVE_DUMP");
+        std::fs::create_dir_all(&cfg.dir).expect("framedump: cannot create MULTIPLEX_DUMP");
         let tsv = std::fs::File::create(cfg.dir.join("frames.tsv")).expect("framedump: cannot create frames.tsv");
         let mut tsv = BufWriter::new(tsv);
         tsv.write_all(TSV_HEADER.as_bytes()).expect("framedump: frames.tsv");
@@ -635,7 +635,7 @@ impl Dump {
         let sink = cfg.out.as_ref().map(|p| {
             BufWriter::with_capacity(
                 1 << 20,
-                std::fs::OpenOptions::new().write(true).open(p).expect("framedump: cannot open PLXNATIVE_DUMP_OUT"),
+                std::fs::OpenOptions::new().write(true).open(p).expect("framedump: cannot open MULTIPLEX_DUMP_OUT"),
             )
         });
         plx_gfx::dump::arm();
@@ -746,7 +746,7 @@ pub(crate) fn iteration_begin(app: &mut App) {
         crate::app::clock::set_replay(ORIGIN_MS + virtual_ms(d.v));
         // The landing clock: a landing is due on a virtual frame, never on a count of iterations.
         app.bridge.landgate().dump_frame(d.v);
-        // The `PLXNATIVE_DUMP_KEYS` schedule: a key goes down at the FIRST iteration of its virtual frame, so a
+        // The `MULTIPLEX_DUMP_KEYS` schedule: a key goes down at the FIRST iteration of its virtual frame, so a
         // repeat never presses it twice, and comes up [`KEY_UP_AFTER`] virtual frames later, as a
         // finger leaves a remote. Both edges at one instant would make the press machine's commit
         // (`ui::press`: the release is read only once the press has armed, which happens in the
@@ -897,7 +897,7 @@ pub(crate) fn after_draw(app: &App, vx: c_int, vy: c_int, vw: c_int, vh: c_int) 
         let t = virtual_ms(d.written as u64);
         if d.v >= d.cfg.preroll as u64 {
             if vw != WIDTH || vh != HEIGHT {
-                let why = format!("the viewport is {vw}x{vh}, the master is {WIDTH}x{HEIGHT} (the dump asks for a 1:1 drawable; set PLXNATIVE_WIN=1920x1080 and run on a display that can give one)");
+                let why = format!("the viewport is {vw}x{vh}, the master is {WIDTH}x{HEIGHT} (the dump asks for a 1:1 drawable; set MULTIPLEX_WIN=1920x1080 and run on a display that can give one)");
                 d.fail(why);
             }
             let (rgb, hash) = match d.settle.take() {

@@ -1,10 +1,10 @@
 # HUD registry tooling
 
-The registry lives in `GLinnik21/plxnative-huds`. It uses the app's compiler, schema and real
+The registry lives in `GLinnik21/multiplex-huds`. It uses the app's compiler, schema and real
 text renderer through an immutable Linux authoring bundle. PR12's acceptance record belongs in
 the registry's `IMPLEMENTATION.md`; this document describes the app-side interfaces.
 
-`hud-simulator.yml` builds an optimized `plxnative-sim` with the existing `site-video-sim`
+`hud-simulator.yml` builds an optimized `multiplex-sim` with the existing `site-video-sim`
 target and the repository's host FFmpeg. `tools/hud_bundle.py` packages explicit tracked fonts,
 licenses, native dependencies, both document schemas, an indexed source/archive fixture corpus,
 synthetic mock and capture tools. The

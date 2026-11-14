@@ -1,5 +1,5 @@
 //! **The HUD lint** (`docs/hud-plugins.md`, "LLM authoring" item 2): a package's TEXT in, every finding
-//! out, in every language asked for. It is two passes over the one text, and `plxnative-sim --hud-lint` runs
+//! out, in every language asked for. It is two passes over the one text, and `multiplex-sim --hud-lint` runs
 //! both ([`lint_report_priced`]) and prints what they return through [`super::report`]; the registry's CI
 //! reads the same JSON.
 //!

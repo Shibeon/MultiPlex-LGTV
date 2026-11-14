@@ -182,7 +182,7 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   pull)
     TV="${TV_HOST:-${TV:-$("$(dirname "$0")/../../../tools/tv-config.sh" host 2>/dev/null || true)}}"
-    [ -n "$TV" ] || die "no TV host (~/.config/plxnative/tv-host, .tv-host, or TV_HOST=)"
+    [ -n "$TV" ] || die "no TV host (~/.config/multiplex/tv-host, .tv-host, or TV_HOST=)"
     mkdir -p "$BIN"
     echo "decomp: harvesting the media stack from the TV …" >&2
     TVSSH="$(cd "$(dirname "$0")/../../.." && pwd)/tools/tv-ssh"   # key first, sshpass only if refused

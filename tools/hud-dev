@@ -5,7 +5,7 @@
 
 SOURCE is a HUD source directory (manifest.json, hud.json and the declared SVGs) or a `.plxhud`. The tool
 bundles it with the native packer (`tools/hud_package.py`; it builds no archive of its own), lints it with
-`plxnative-sim --hud-lint` on every change (it polls modification times; no watcher library), and serves the last
+`multiplex-sim --hud-lint` on every change (it polls modification times; no watcher library), and serves the last
 CLEAN bundle over plain HTTP at an address the television accepts (`docs/hud-plugins.md`, "Sideload": `http://` only
 for a literal RFC 1918 IPv4 address). A source with findings is never served: the findings are printed and the
 previous clean bundle stays up.
@@ -48,7 +48,7 @@ from pathlib import Path, PurePosixPath
 from hud_package import native_json, snapshot
 
 ROOT = Path(__file__).resolve().parents[1]
-#: Not 32400 (Plex), 8080 (the TV dashboard) or 39443 (the lab receiver's default, `tools/plxnative-lab`).
+#: Not 32400 (Plex), 8080 (the TV dashboard) or 39443 (the lab receiver's default, `tools/multiplex-lab`).
 DEFAULT_PORT = 8731
 POLL_SECONDS = 0.5
 #: Dev versions count from here (2026-01-01T00:00:00Z), so they stay far below a u64 patch and above any counter.
@@ -223,9 +223,9 @@ class Bundle:
 
 
 def sim_env():
-    """The simulator's environment as `tools/hud_preview.py` builds it: no inherited PLXNATIVE_*, the checkout's assets."""
-    env = {key: value for key, value in os.environ.items() if not key.startswith("PLXNATIVE_")}
-    env["PLXNATIVE_APP_DIR"] = str(ROOT / "pkg")
+    """The simulator's environment as `tools/hud_preview.py` builds it: no inherited MULTIPLEX_*, the checkout's assets."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith("MULTIPLEX_")}
+    env["MULTIPLEX_APP_DIR"] = str(ROOT / "pkg")
     return env
 
 
@@ -392,17 +392,17 @@ class Dev:
 
 
 def find_sim(explicit):
-    """`--sim`, else `plxnative-sim` on PATH (the SDK's name for it), else what `make sim-macos` builds here."""
+    """`--sim`, else `multiplex-sim` on PATH (the SDK's name for it), else what `make sim-macos` builds here."""
     if explicit:
         path = Path(explicit)
         if path.is_file() and os.access(path, os.X_OK):
             return path.resolve()
         raise ValueError(f"--sim {explicit} is not an executable file")
-    on_path = shutil.which("plxnative-sim")
-    for path in ([Path(on_path)] if on_path else []) + [ROOT / "rust-modules/target-sim/debug/plxnative-sim"]:
+    on_path = shutil.which("multiplex-sim")
+    for path in ([Path(on_path)] if on_path else []) + [ROOT / "rust-modules/target-sim/debug/multiplex-sim"]:
         if path.is_file() and os.access(path, os.X_OK):
             return path.resolve()
-    raise ValueError("no plxnative-sim found: build it with `make sim-macos` or pass --sim PATH")
+    raise ValueError("no multiplex-sim found: build it with `make sim-macos` or pass --sim PATH")
 
 
 def addresses_for(host, found):
@@ -440,7 +440,7 @@ def pause(seconds):
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="hud-dev", description="Bundle, lint and serve a Player HUD to the television.")
     parser.add_argument("source", type=Path, help="a HUD source directory or a .plxhud")
-    parser.add_argument("--sim", help="the plxnative-sim to lint and pack with (default: on PATH, else the make sim-macos build)")
+    parser.add_argument("--sim", help="the multiplex-sim to lint and pack with (default: on PATH, else the make sim-macos build)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"TCP port to serve on (default {DEFAULT_PORT})")
     parser.add_argument("--host", help="print this RFC 1918 address instead of discovering this machine's")
     parser.add_argument("--interval", type=float, default=POLL_SECONDS, help="seconds between looks at the source")

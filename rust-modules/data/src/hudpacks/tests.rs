@@ -2,7 +2,7 @@
 //! store's effects the way `app/adapters/huds.rs`'s runners do and feeds each answer back as the event it is, so a
 //! test reads the effects in the order the store pushed them. A pack here is the text
 //! `id@version[#flag]`; the rig's validator reads it the way the appkit validator reads the real
-//! format (`#newer` is a file for a newer PlxNative, `#bad` does not validate).
+//! format (`#newer` is a file for a newer MultiPlex, `#bad` does not validate).
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;

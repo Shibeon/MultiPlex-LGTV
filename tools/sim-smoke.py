@@ -143,14 +143,14 @@ def main() -> int:
 
     env = os.environ.copy()
     env.update(
-        PLXNATIVE_RUNTIME_DIR=str(runtime),
-        PLXNATIVE_APP_DIR=str(assets),
-        PLXNATIVE_WIN="1920x1080",
-        PLXNATIVE_SHOT=str(output),
-        PLXNATIVE_SHOT_FRAME="3",
-        PLXNATIVE_SHOT_EXIT="1",
+        MULTIPLEX_RUNTIME_DIR=str(runtime),
+        MULTIPLEX_APP_DIR=str(assets),
+        MULTIPLEX_WIN="1920x1080",
+        MULTIPLEX_SHOT=str(output),
+        MULTIPLEX_SHOT_FRAME="3",
+        MULTIPLEX_SHOT_EXIT="1",
     )
-    events = runtime / "plxnative-events.log"
+    events = runtime / "multiplex-events.log"
     launched_at = time.time()
     try:
         result = subprocess.run(

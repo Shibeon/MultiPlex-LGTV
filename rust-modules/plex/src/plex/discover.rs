@@ -26,9 +26,9 @@
 //!
 //! **Where this host lives is not decided here.** [`discover`] (`account.rs`, beside `plex_tv()`) is the
 //! ONE base, shared with the Watchlist (`watchlist.rs`): the real provider, or in a `devtriggers`
-//! build the loopback stand-in named by `plxnative-discover` — or, with that unset, the one
-//! `plxnative-plextv` already redirects plex.tv to, since the mock answers both on one listener — and
-//! a dev-token boot (`plxnative-token`) with neither armed REFUSES these two reads, logged, instead
+//! build the loopback stand-in named by `multiplex-discover` — or, with that unset, the one
+//! `multiplex-plextv` already redirects plex.tv to, since the mock answers both on one listener — and
+//! a dev-token boot (`multiplex-token`) with neither armed REFUSES these two reads, logged, instead
 //! of dialling the real provider with an identity that has no account behind it. That is a standing
 //! decision (fail closed; see `account::permit_read` for the cost: such a boot shows no biography and
 //! no filmography credits). Both routes are built by [`person_profile_url`] / [`person_credits_url`]
@@ -70,10 +70,10 @@
 //! → `401 {"error":"Unauthorized","message":"You must provide a token!"}`, where
 //! `/library/people/{guid}` is recorded above as answering 200 unauthenticated). The token that
 //! satisfies it is the plex.tv ACCOUNT token, which is what makes the filmography unreachable on
-//! any automated boot: those sign in with `/tmp/plxnative-token`, a *server* token, and leave
-//! `Session::account_token` empty. That is the same wall `/tmp/plxnative-personbio` exists for, one
+//! any automated boot: those sign in with `/tmp/multiplex-token`, a *server* token, and leave
+//! `Session::account_token` empty. That is the same wall `/tmp/multiplex-personbio` exists for, one
 //! step further along — the biography degrades to a blank line, the filmography degrades to
-//! nothing at all — and it is why `/tmp/plxnative-personcredits` had to be written.
+//! nothing at all — and it is why `/tmp/multiplex-personcredits` had to be written.
 use super::account::{discover, discover_read_allowed, AccountClient};
 use super::models::de_i64;
 use serde::Deserialize;

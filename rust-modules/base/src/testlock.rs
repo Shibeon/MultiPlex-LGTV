@@ -179,7 +179,7 @@ pub fn fresh_process(module_path: &str, test: &str) -> bool {
 }
 
 /// [`fresh_process`] for a test whose child must also START with environment variables set: a global
-/// resolved once per process from the environment (`plx_base::paths::app_dir` and `PLXNATIVE_APP_DIR`)
+/// resolved once per process from the environment (`plx_base::paths::app_dir` and `MULTIPLEX_APP_DIR`)
 /// is read before the test body runs, and the parent cannot set it for the child without
 /// `set_var`, which races every other test thread's `getenv`. `envs` is added to the child's
 /// environment (the child's own `FRESH_PROCESS_ENV` is set after it, and wins); nothing is set in the

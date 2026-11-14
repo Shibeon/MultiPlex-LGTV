@@ -27,11 +27,11 @@
 # and this project's collisions come from exactly those. It is under /tmp deliberately — a TV
 # reboot clears it, which is the one event that also makes every holder's session meaningless.
 #
-# The name does NOT begin with `plxnative-`, and that is load-bearing rather than cosmetic: for the
+# The name does NOT begin with `multiplex-`, and that is load-bearing rather than cosmetic: for the
 # stable install the app's runtime root IS /tmp, and any file there matching that prefix marks the
 # boot as automated and suppresses the who's-watching picker (`dev::any_trigger_present`). A lock
-# named `plxnative-tv.lock` would silently change which screen the app boots to — for every
-# session, including the ones it was taken to protect. It is also outside the `plxnative-*` glob
+# named `multiplex-tv.lock` would silently change which screen the app boots to — for every
+# session, including the ones it was taken to protect. It is also outside the `multiplex-*` glob
 # that `make run` and `tests/run.py` clear, so a teardown cannot drop somebody's lease.
 #
 # THE CLOCK IS THE HOST'S. Every timestamp written into the lock comes from the machine taking it,
@@ -63,7 +63,7 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 REMOTE_LOCK="${PLX_TV_LOCK_PATH:-/tmp/plx-tv.lock}"
-STATE_DIR="${PLX_TV_LOCK_STATE:-$HOME/.plxnative/tv-lock}"
+STATE_DIR="${PLX_TV_LOCK_STATE:-$HOME/.multiplex/tv-lock}"
 
 # Lease lengths, in minutes. An EXPLICIT acquire is a session and gets the long one; the implicit
 # lease `require` takes when nobody holds the set is short on purpose, because nothing will ever
@@ -360,7 +360,7 @@ new_token() {
 
 need_host() {
   [ -n "$HOST" ] && return 0
-  bad "no TV configured — put its IP in ~/.config/plxnative/tv-host (or .tv-host), or pass TV=<ip>"
+  bad "no TV configured — put its IP in ~/.config/multiplex/tv-host (or .tv-host), or pass TV=<ip>"
   return 1
 }
 
@@ -676,9 +676,9 @@ preflight_note() {
     out="$(cat "$PLX_TV_LOCK_LOCAL_PROBE")"
   else
     [ -n "$sd" ] && [ -n "$dd" ] || return 0
-    # `fuser` on each install's own binary, never `pidof plxnative`: both binaries carry that name, so
+    # `fuser` on each install's own binary, never `pidof multiplex`: both binaries carry that name, so
     # a name-scoped test matches BOTH and answers in an order busybox does not promise.
-    out="$(run_bounded "$secs" ssh_tv "for d in '$sd' '$dd'; do printf '%s ' \"\$(fuser \$d/plxnative 2>/dev/null || echo NONE)\"; done; echo; netstat -an 2>/dev/null | grep -c 'ESTABLISHED.*:22 \|:22 .*ESTABLISHED'; $(luna_probe fg com.webos.applicationManager/getForegroundAppInfo)$(luna_probe vol com.webos.service.audio/getVolume)$(luna_probe power com.webos.service.tvpower/power/getPowerState)")"
+    out="$(run_bounded "$secs" ssh_tv "for d in '$sd' '$dd'; do printf '%s ' \"\$(fuser \$d/multiplex 2>/dev/null || echo NONE)\"; done; echo; netstat -an 2>/dev/null | grep -c 'ESTABLISHED.*:22 \|:22 .*ESTABLISHED'; $(luna_probe fg com.webos.applicationManager/getForegroundAppInfo)$(luna_probe vol com.webos.service.audio/getVolume)$(luna_probe power com.webos.service.tvpower/power/getPowerState)")"
     rc=$?
     if [ "$rc" = 124 ]; then
       warn "UNKNOWN (the pre-flight read timed out after ${secs}s) — nobody vouches that the television is idle; treat it as possibly in use"
@@ -1125,7 +1125,7 @@ cmd_selftest() {
   rcase "the real shape, the same appId repeated (a streaming app) stays IN USE" "IN USE" '{ "returnValue": true, "appId": "youtube.leanback.v4", "foregroundAppInfo": [ { "appId": "youtube.leanback.v4" } ] }' "$vol_on" "$pow_ok"
   rcase "a truncated second appId is UNKNOWN, not the first one's verdict" UNKNOWN '{"returnValue": true, "appId": "com.webos.app.home", "foregroundAppInfo": [{"appId": "youtu' "$vol_on" "$pow_ok"
   rcase "F: a prefix of Home (homeX)" "IN USE" "$(fgj com.webos.app.homeX)" "$vol_on" "$pow_ok"
-  rcase "G: a prefix of ours (plxnative.debugger)" "IN USE" "$(fgj "$sid.debugger")" "$vol_on" "$pow_ok"
+  rcase "G: a prefix of ours (multiplex.debugger)" "IN USE" "$(fgj "$sid.debugger")" "$vol_on" "$pow_ok"
   rcase "H: upper-case Home" "IN USE" "$(fgj COM.WEBOS.APP.HOME)" "$vol_on" "$pow_ok"
   rcase "I: Home plus a junk character" UNKNOWN "$(fgj 'com.webos.app.home!')" "$vol_on" "$pow_ok"
   rcase "J: Home plus a space" UNKNOWN "$(fgj 'com.webos.app.home ')" "$vol_on" "$pow_ok"

@@ -15,7 +15,7 @@ resolved value and touches nothing (no stamp, no deletion), and the manifest fac
   `[profile.tvdev]` inherits it and turns LTO off;
 * no workflow names `tvdev`, so a CI job can only reach it by the rule above;
 * the other half of the stamp: a goal that builds nothing must not reset it. A release-built
-  `pkg/plxnative` has the stamp `features:...` while a plain `make` computes `+profile:tvdev`, and the
+  `pkg/multiplex` has the stamp `features:...` while a plain `make` computes `+profile:tvdev`, and the
   Makefile deletes the binary at PARSE time whenever the two differ and the goals are not all in
   `SIDE_EFFECT_FREE`. Two kinds of goal leave the build alone: the ones that only drive the television
   (`make kill`, which `tools/tv-session.sh` runs without an `ARM_PROFILE`) and the host-only ones (the
@@ -58,7 +58,7 @@ class ArmProfileSelection(unittest.TestCase):
         cfg = resolved()
         self.assertEqual(cfg["ARM_PROFILE"], "tvdev")
         self.assertEqual(cfg["ARM_PROFILE_FLAG"], "--profile tvdev")
-        self.assertTrue(cfg["RUST_LIB"].endswith("/armv7-unknown-linux-gnueabi/tvdev/libplxnative_modules.a"),
+        self.assertTrue(cfg["RUST_LIB"].endswith("/armv7-unknown-linux-gnueabi/tvdev/libmultiplex_modules.a"),
                         cfg["RUST_LIB"])
         self.assertEqual(self.profile("FLAVOR=debug", "LAB=1"), "tvdev")
 
@@ -75,7 +75,7 @@ class ArmProfileSelection(unittest.TestCase):
                 cfg = resolved(*args, env=env)
                 self.assertEqual(cfg["ARM_PROFILE"], "release")
                 self.assertEqual(cfg["ARM_PROFILE_FLAG"], "--release")
-                self.assertTrue(cfg["RUST_LIB"].endswith("/armv7-unknown-linux-gnueabi/release/libplxnative_modules.a"),
+                self.assertTrue(cfg["RUST_LIB"].endswith("/armv7-unknown-linux-gnueabi/release/libmultiplex_modules.a"),
                                 cfg["RUST_LIB"])
 
     def test_the_override_wins_in_both_directions(self):
@@ -102,7 +102,7 @@ class ArmProfileSelection(unittest.TestCase):
 # check they share is one of them: it is a shell call to tools/tv-lock.sh and nothing else.
 DEVICE_CONTROL_GOALS = ("kill", "run", "run-stream", "verify-deploy", "uninstall", "fetch-profile",
                         "softfloat-probe", "tv-lock-require")
-# The goals that run only on the HOST and never build, read or ship `pkg/plxnative`, the ARM library or
+# The goals that run only on the HOST and never build, read or ship `pkg/multiplex`, the ARM library or
 # anything else under `pkg/` (each recipe and each prerequisite was read, not judged from its name).
 HOST_ONLY_GOALS = (
     # the unit-test loops and the lint pass (host cargo in a tree under rust-modules/), and the pieces of
@@ -128,11 +128,11 @@ HOST_ONLY_GOALS = (
 # artifacts (or writes under pkg/) must reset the stamp: that is how a stale binary is never deployed.
 STAMPED_GOALS = {
     # they build or ship the binary the stamp describes
-    "all": "builds pkg/plxnative", "deploy": "builds and ships pkg/plxnative", "install": "builds and ships the ipk",
-    "ipk": "packages pkg/plxnative", "test": "is `deploy run`", "symbols": "reads pkg/plxnative",
-    "symbols-libs": "reads pkg/ libraries", "sentry-symbols": "reads pkg/plxnative",
+    "all": "builds pkg/multiplex", "deploy": "builds and ships pkg/multiplex", "install": "builds and ships the ipk",
+    "ipk": "packages pkg/multiplex", "test": "is `deploy run`", "symbols": "reads pkg/multiplex",
+    "symbols-libs": "reads pkg/ libraries", "sentry-symbols": "reads pkg/multiplex",
     "libass": "builds the staged ARM libass", "sentry-native": "builds the staged ARM sentry-native",
-    "clean": "deletes pkg/plxnative on purpose (the control in this file)",
+    "clean": "deletes pkg/multiplex on purpose (the control in this file)",
     # host builds, but they stage host libraries into pkg/ or package from it
     "libass-host": "builds pkg/libass-plx.0.dylib", "check-ass": "needs the host libass in pkg/",
     "check-ffmpeg": "needs the host FFmpeg in pkg/", "sim": "needs the host FFmpeg in pkg/",
@@ -145,22 +145,22 @@ STAMPED_GOALS = {
     # ARM probes cross-compiled into pkg/
     "threadprobe": "builds pkg/threadprobe", "sockprobe": "builds pkg/sockprobe", "logmprobe": "builds pkg/logmprobe",
     "mali-hwcnt-probe": "builds pkg/mali-hwcnt-probe", "tv-capture-bench": "builds pkg/tv-capture-bench",
-    "mali-irq-sample": "builds pkg/mali-irq-sample", "plxnative-stackwalk": "builds pkg/plxnative-stackwalk",
+    "mali-irq-sample": "builds pkg/mali-irq-sample", "multiplex-stackwalk": "builds pkg/multiplex-stackwalk",
     # a build INPUT that lives under pkg/: writing it changes TELEMETRY_CFG, which is in the stamp
     "telemetry-local": "writes pkg/telemetry.local.json, an input of the stamp",
     # `check` and the goals that re-enter it are a mix: a step of check-python-rest (ci/test_disk_preflight.py,
     # `test_make_n_runs_the_preflight_before_the_build`) runs `make -n` of the ARM library and of
-    # pkg/plxnative-storage at the checkout's root, and check-cargo-unit-default grades pkg/plxnative-storage
+    # pkg/multiplex-storage at the checkout's root, and check-cargo-unit-default grades pkg/multiplex-storage
     # when it exists (ci/test_storage_service_package.py). Listing them would only move the reset into a
     # nested make.
     "check": "mix: its steps run make -n of ARM goals in the checkout",
     "check-unlocked": "mix: the body of check", "check-python": "mix: runs check-python-rest",
     "check-python-rest": "mix: its steps run make -n of ARM goals in the checkout",
     "check-cargo": "mix: runs check-cargo-unit-default",
-    "check-cargo-unit-default": "mix: grades pkg/plxnative-storage when it exists",
+    "check-cargo-unit-default": "mix: grades pkg/multiplex-storage when it exists",
 }
 # What the Makefile's parse-time reset `rm -f`s when the configuration changed, plus the stamp itself.
-RESET_PATHS = ("pkg/plxnative", "pkg/plxnative-storage", "pkg/libavformat-plx.so.58", "pkg/.ffabi-ok",
+RESET_PATHS = ("pkg/multiplex", "pkg/multiplex-storage", "pkg/libavformat-plx.so.58", "pkg/.ffabi-ok",
                "vendor/ffmpeg-prefix/include/libavformat/avformat.h")
 STAMP = "pkg/.build-config"
 PLACEHOLDER_TV = "198.51.100.7"  # TEST-NET-2: a documentation address, never a television
@@ -262,7 +262,7 @@ class PlaybackBackendSelection(ScratchTree):
         stamp = self.seed_release_build()
         self.query("uri")
         self.assertNotEqual((self.tree / STAMP).read_text(), stamp)
-        self.assertFalse((self.tree / "pkg/plxnative").exists())
+        self.assertFalse((self.tree / "pkg/multiplex").exists())
 
     def test_a_user_facing_flavour_ships_both_backends(self):
         """`PLAYBACK_BACKENDS ?= both` also takes its value from the environment, so a leftover
@@ -285,7 +285,7 @@ class PlaybackBackendSelection(ScratchTree):
 
     def test_no_backend_cannot_produce_a_television_binary(self):
         stamp = self.seed_release_build()
-        for goal in ("pkg/plxnative", "ipk", "deploy"):
+        for goal in ("pkg/multiplex", "ipk", "deploy"):
             proc = subprocess.run(
                 ["make", "-s", "--no-print-directory", "-C", str(self.tree),
                  "PLAYBACK_BACKENDS=none", goal],
@@ -394,8 +394,8 @@ class PackageGateDecodesTheStampTheMakefileWrites(ScratchTree):
 class DeviceControlGoalsKeepTheBuild(ScratchTree):
     """`tools/tv-session.sh` closes the app with a plain `make kill` right after a
     `make ARM_PROFILE=release` build. `kill` builds nothing, but it was not in `SIDE_EFFECT_FREE`, so
-    its (tvdev) configuration differed from the release stamp and the Makefile deleted `pkg/plxnative`
-    and rewrote the stamp: the next `up` died on "no pkg/plxnative -- run make".
+    its (tvdev) configuration differed from the release stamp and the Makefile deleted `pkg/multiplex`
+    and rewrote the stamp: the next `up` died on "no pkg/multiplex -- run make".
     """
 
     def test_goals_that_only_drive_the_tv_keep_a_release_build(self):
@@ -412,9 +412,9 @@ class DeviceControlGoalsKeepTheBuild(ScratchTree):
 
 
 class HostOnlyGoalsKeepTheBuild(ScratchTree):
-    """`make test-crate C=plx_gfx` after a `make ARM_PROFILE=release` build deleted `pkg/plxnative` and
+    """`make test-crate C=plx_gfx` after a `make ARM_PROFILE=release` build deleted `pkg/multiplex` and
     rewrote the stamp to `features:+profile:tvdev+tel:...` (2026-10-24). It builds and runs one crate's lib
-    tests in `rust-modules/target-fast` and never produces or reads `pkg/plxnative`; `test-hostsim` and
+    tests in `rust-modules/target-fast` and never produces or reads `pkg/multiplex`; `test-hostsim` and
     `check-nodef` were exempt and it had been missed. The rule is "does the goal build, read or ship an
     ARM artifact or anything under pkg/", so this pins the whole set of goals that do not, and (below)
     the ones that do.

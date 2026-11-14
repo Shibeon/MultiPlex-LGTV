@@ -139,7 +139,7 @@ mod tests {
 
         let _serial = plx_base::testlock::serial();
         let dir = std::env::temp_dir().join(format!(
-            "plxnative-consent-adapter-fixture-{}",
+            "multiplex-consent-adapter-fixture-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -176,7 +176,7 @@ mod tests {
 
         let _serial = plx_base::testlock::serial();
         let dir = std::env::temp_dir().join(format!(
-            "plxnative-consent-adapter-live-thread-{}",
+            "multiplex-consent-adapter-live-thread-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -225,7 +225,7 @@ mod tests {
         let _serial = plx_base::testlock::serial();
         let saved = consent::current();
         let dir = std::env::temp_dir().join(format!(
-            "plxnative-consent-adapter-oneoff-{}",
+            "multiplex-consent-adapter-oneoff-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -276,7 +276,7 @@ mod tests {
         let _serial = plx_base::testlock::serial();
         let saved = consent::current();
         let dir = std::env::temp_dir().join(format!(
-            "plxnative-consent-adapter-held-{}",
+            "multiplex-consent-adapter-held-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

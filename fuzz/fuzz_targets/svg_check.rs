@@ -70,7 +70,7 @@ fuzz_target!(|data: &[u8]| {
                 assert!(codes::ALL.iter().any(|c| c.id == f.code), "{}", f.code);
                 assert!(f.code.starts_with("HUD-E07"), "{}", f.code);
                 assert_eq!(f.pointer, POINTER);
-                plxnative_fuzz::lint_shaped(f);
+                multiplex_fuzz::lint_shaped(f);
             }
         }
     }

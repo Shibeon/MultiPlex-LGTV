@@ -4,7 +4,7 @@
 //! contracts): no panic, no unbounded work, and the invariants named in the target's own header. A
 //! failed assertion here is a finding about the parser, not about the fuzzer.
 //!
-//! Every target links this crate, even one that calls nothing from it (`use plxnative_fuzz as _;`):
+//! Every target links this crate, even one that calls nothing from it (`use multiplex_fuzz as _;`):
 //! `build.rs` prints the host link lines (SDL2, OpenGL, the nanosvg object) for the package's library
 //! target, and rustc passes them to a binary only through a library it links. Without the line, a
 //! target that touches only `plx_data` links no OpenGL, and `plx_base` still names its symbols.

@@ -15,7 +15,7 @@ a shot at each rung, and a contact sheet out the other end:
     tools/glass-patterns.py --lens "off:2,0,0 a:10,10,0 b:14,18,0"   # …one instance per rung
 
 `--lens` is the second axis: each entry is `<name>:<bevel>,<lens>,<spec>`, written to that
-instance's `plxnative-tracklens`, so a run photographs every geometry against every ground and the
+instance's `multiplex-tracklens`, so a run photographs every geometry against every ground and the
 per-ground sheets stack the rungs for comparison. It is read once per process, which is why a rung
 costs a whole simulator — and why they are launched together and driven in lockstep.
 
@@ -37,9 +37,9 @@ import argparse, os, re, shutil, signal, subprocess, sys, time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SIM = REPO / "rust-modules/target-sim/debug/plxnative-sim"
+SIM = REPO / "rust-modules/target-sim/debug/multiplex-sim"
 # The tab track, in authored 1920x1080 coordinates, when no `track_ground` line has said where it
-# is: the bar logs its rect as `rect=` when `plxnative-groundlog` is armed, and the crops and the
+# is: the bar logs its rect as `rect=` when `multiplex-groundlog` is armed, and the crops and the
 # plate measurement use that, since the track's width follows the strip's labels.
 TRACK = (686, 36, 547, 76)
 # The token a booted `--mock` run is given: the mock accepts any non-empty one.
@@ -78,34 +78,34 @@ def launch(root: Path, pkg: str, pms: str, port: str, token: str, mock: bool = F
     root.mkdir(parents=True, exist_ok=True)
     # the container's lens geometry, one rung per instance — `gfx::standing_sweep` reads it once
     if lens:
-        (root / "plxnative-tracklens").write_text(lens)
+        (root / "multiplex-tracklens").write_text(lens)
     # …and its diffuse floor, the same way; "0" is the material before the floor existed
     if lift:
-        (root / "plxnative-tracklift").write_text(lift)
+        (root / "multiplex-tracklift").write_text(lift)
     # …and how much of the rim shows the page unblurred
     if sharp:
-        (root / "plxnative-tracksharp").write_text(sharp)
+        (root / "multiplex-tracksharp").write_text(sharp)
     if token:
-        (root / "plxnative-token").write_text(token)
+        (root / "multiplex-token").write_text(token)
     if mock:
         # a token boot has no account: plex.tv and Discover are pointed at the same mock, so the
         # run reaches no host but the one it was given
-        (root / "plxnative-plextv").write_text(f"http://{pms}:{port}")
-        (root / "plxnative-discover").write_text(f"http://{pms}:{port}")
+        (root / "multiplex-plextv").write_text(f"http://{pms}:{port}")
+        (root / "multiplex-discover").write_text(f"http://{pms}:{port}")
     # `noidle` because a settled screen stops presenting and `shot` would then wait for a frame that
     # never comes; `groundlog` because the numbers below are read from it.
-    (root / "plxnative-noidle").touch()
-    (root / "plxnative-groundlog").touch()
-    (root / "plxnative-testpat").write_text("flat:0")
-    env = dict(os.environ, PLXNATIVE_RUNTIME_DIR=str(root), PLXNATIVE_APP_DIR=str(REPO / "pkg"),
-               PLXNATIVE_WIN="1920x1080")
+    (root / "multiplex-noidle").touch()
+    (root / "multiplex-groundlog").touch()
+    (root / "multiplex-testpat").write_text("flat:0")
+    env = dict(os.environ, MULTIPLEX_RUNTIME_DIR=str(root), MULTIPLEX_APP_DIR=str(REPO / "pkg"),
+               MULTIPLEX_WIN="1920x1080")
     log = open(root / "stdout.log", "w")
     return subprocess.Popen([str(SIM), pms, port], env=env, stdout=log, stderr=log)
 
 
 def drive(root: Path, pats, settle):
     """Walk the ladder, one shot per rung, and return [(pat, shot_path)] in order."""
-    fifo = root / "plxnative-remote"
+    fifo = root / "multiplex-remote"
     for _ in range(120):
         if fifo.exists():
             break
@@ -125,7 +125,7 @@ def drive(root: Path, pats, settle):
     return out
 
 
-# What `draw_tab_row` logs when `plxnative-groundlog` is armed:
+# What `draw_tab_row` logs when `multiplex-groundlog` is armed:
 #   track_ground rgb=R,G,B L*=… span=… want=… drawn=… rect=x,y,w,h src=…
 # `src=` is newer than the rest (builds before it end at `rect=`), and `span=` is optional too, so a
 # line from an older build still parses. The end is left open: a field appended after `src=` must not
@@ -139,7 +139,7 @@ GROUND = re.compile(
 def readings(root: Path):
     """Every `track_ground` line in the instance's event log, in order, as dicts of its fields."""
     seen = []
-    for line in (root / "plxnative-events.log").read_text(errors="replace").splitlines():
+    for line in (root / "multiplex-events.log").read_text(errors="replace").splitlines():
         m = GROUND.search(line)
         if m:
             d = m.groupdict()
@@ -281,7 +281,7 @@ def main():
     global REPO, SIM
     if a.repo:
         REPO = Path(a.repo).resolve()
-        SIM = REPO / "rust-modules/target-sim/debug/plxnative-sim"
+        SIM = REPO / "rust-modules/target-sim/debug/multiplex-sim"
     if a.sim:
         SIM = Path(a.sim).resolve()
     if not SIM.exists():
@@ -315,7 +315,7 @@ def main():
     shots, rungs = {}, {}
     try:
         # driven in lockstep so every package sees the same ground at the same moment
-        fifos = {pkg: open(roots[pkg] / "plxnative-remote", "r+b", buffering=0) for pkg in pkgs}
+        fifos = {pkg: open(roots[pkg] / "multiplex-remote", "r+b", buffering=0) for pkg in pkgs}
         for pkg in pkgs:
             shots[pkg], rungs[pkg] = [], []
         for i, pat in enumerate(pats):

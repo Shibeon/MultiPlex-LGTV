@@ -1,15 +1,15 @@
 //! The `/tmp` developer-trigger surface, behind one door.
 //!
-//! This app is driven headlessly by ~44 files under `/tmp/plxnative-*`: which screen to boot to,
+//! This app is driven headlessly by ~44 files under `/tmp/multiplex-*`: which screen to boot to,
 //! which item to play, which URL to stream, whether to auto-press OK, which PMS token to use.
 //! That is how `tests/run.py` and every capture scene work, and it is not going away.
 //!
 //! It must not exist in a public build. `/tmp` is the SHARED system `/tmp` in the production jail
 //! too (mode 1777, both jail profiles), so on an ordinary user's TV every one of those files is a
 //! behaviour switch any co-resident process can throw. Three are outright takeovers:
-//! `plxnative-token` beats the signed-in session (`app.rs`'s boot gate), `plxnative-servers` hands
+//! `multiplex-token` beats the signed-in session (`app.rs`'s boot gate), `multiplex-servers` hands
 //! the app a whole additional server — an address AND the token to trust it with (see [`servers`])
-//! — and `plxnative-url` replaces the stream the player feeds.
+//! — and `multiplex-url` replaces the stream the player feeds.
 //!
 //! So every read goes through [`plx_base::devtrig`] — the primitives (`flag`, `read`, `latched_flag!`,
 //! `read_sample`, `no_wan`, …), a base-layer module no application type can leak into — and that
@@ -24,13 +24,13 @@
 //! `nobudget` flag on `DevFlags`), the optimizer may keep the branch and its string literals
 //! in a release build, and `ci/check-package.py` fails the package because it greps the shipped
 //! bytes for every trigger name this module's [`DIAG`] and `devtrig`'s `CONTROLLED` list. So every
-//! statement whose literal names a trigger (a log line saying `/tmp/plxnative-…`) carries its own
+//! statement whose literal names a trigger (a log line saying `/tmp/multiplex-…`) carries its own
 //! `#[cfg(feature = "devtriggers")]`. Never rely on constant folding for this.
 //!
 //! Two rules for anything added later:
 //!
 //! 1. **Never open a `/tmp` path directly.** Read through `plx_base::devtrig`. The grep that audits
-//!    this (`/tmp/plxnative-` outside this module and the unconditional log sinks) is the only
+//!    this (`/tmp/multiplex-` outside this module and the unconditional log sinks) is the only
 //!    thing keeping the property true. The two profiler logs are dev-only and listed in [`DIAG`]
 //!    below.
 //! 2. **A gate is not always a path.** `any_trigger_present` scans the whole directory and names
@@ -56,12 +56,12 @@ pub(crate) mod scenarios;
 #[cfg(all(feature = "devtriggers", feature = "play-uri"))]
 pub(crate) mod uriprobe;
 
-/// The URI dev route (`plxnative-uridev`): the production URI backend, ACB-bound, playing a URL a
+/// The URI dev route (`multiplex-uridev`): the production URI backend, ACB-bound, playing a URL a
 /// developer names. The application's composition reads it once, at `install_uri_product`.
 #[cfg(all(feature = "devtriggers", feature = "play-uri"))]
 pub(crate) mod uri_product;
 
-/// The exported-window override (`plxnative-uriexported`): the production URI backend bound to the
+/// The exported-window override (`multiplex-uriexported`): the production URI backend bound to the
 /// exported window on a webOS 5+ set the evidence table has not admitted. The application's
 /// composition reads it once, at `install_uri_product`.
 #[cfg(all(feature = "devtriggers", feature = "play-uri"))]
@@ -73,8 +73,8 @@ pub(crate) mod framedump;
 
 /// Files that are pure diagnostics rather than automation — see [`any_trigger_present`].
 ///
-/// Every log this app writes belongs here, not just its trigger. `plxnative-anim` was listed and
-/// `plxnative-anim.log` was not, while arming the overlay creates exactly that file and nothing
+/// Every log this app writes belongs here, not just its trigger. `multiplex-anim` was listed and
+/// `multiplex-anim.log` was not, while arming the overlay creates exactly that file and nothing
 /// ever removes it (`make run` clears only the event log; `tests/run.py` spares every `*.log` by
 /// design) — so a single historical anim session skipped the who's-watching picker on every later
 /// boot, interactive ones included.
@@ -82,142 +82,142 @@ pub(crate) mod framedump;
 // release build, but the test below asserts this list's contents and runs with default features.
 #[cfg(any(feature = "devtriggers", test))]
 const DIAG: [&str; 49] = [
-    "plxnative-diag.log",
-    "plxnative-hud-text-metrics",
-    "plxnative-hud-text-metrics.json",
-    "plxnative-events.log",
-    "plxnative-stderr.log",
-    "plxnative-crash.log",
-    "plxnative-anim.log",
-    "plxnative-profile",
-    "plxnative-gputime.jsonl",
-    "plxnative-hwcnt",
-    "plxnative-hwcnt.jsonl",
+    "multiplex-diag.log",
+    "multiplex-hud-text-metrics",
+    "multiplex-hud-text-metrics.json",
+    "multiplex-events.log",
+    "multiplex-stderr.log",
+    "multiplex-crash.log",
+    "multiplex-anim.log",
+    "multiplex-profile",
+    "multiplex-gputime.jsonl",
+    "multiplex-hwcnt",
+    "multiplex-hwcnt.jsonl",
     // The render thread's own per-phase clock ([`plx_ui::profile`]'s CPU mode). DIAG for the
     // reason the two GPU profilers are: it observes a screen, and must not move the boot away
     // from the screen it was armed to observe.
-    "plxnative-cpuprof",
-    "plxnative-anim",
-    "plxnative-remote",
-    "plxnative-capture",
-    "plxnative-noidle",
+    "multiplex-cpuprof",
+    "multiplex-anim",
+    "multiplex-remote",
+    "multiplex-capture",
+    "multiplex-noidle",
     // The focus fingerprint ([`crate::focusprobe`]). Diagnostic for `noidle`'s reason and one of
     // its own: it only READS focus and writes a log line, and a (route × key) characterization
     // harness has to be able to observe the who's-watching picker, which a non-DIAG trigger would
     // suppress — the observer would remove the screen it was armed to watch.
-    "plxnative-focus",
+    "multiplex-focus",
     // `fx=` on Home's fingerprint (the focused card's drawn x) and, on every page that draws a
     // card section, the `cd*` fields (`plx_ui::card_probe`): a pure observer of `focus`.
-    "plxnative-focusx",
+    "multiplex-focusx",
     // The two OVERDRAW surfaces and the resting-card split's off switch
     // ([`plx_gfx::overdraw`], `docs/backdrop-blur-profiling.md` Part 5). All three are measurement knobs whose whole
     // method is an A/B against an unmasked control leg — and a non-DIAG trigger suppresses the
     // who's-watching picker, so the control leg and the masked leg would boot to DIFFERENT
     // SCREENS and the difference between them would be the screen, not the class being priced.
     // That is the exact failure this list exists to stop, and it is invisible in the numbers.
-    "plxnative-overdraw",
-    "plxnative-drawmask",
-    "plxnative-nocardsplit",
+    "multiplex-overdraw",
+    "multiplex-drawmask",
+    "multiplex-nocardsplit",
     // The Under posters preview's texture cache ([`plx_gfx::gfx::region_paint`]): off draws the
     // preview live every frame again, snap puts the cached quad on whole pixels. The same A/B
     // control-leg argument as the card split above: both legs must boot to the SAME screen.
-    "plxnative-nopreviewcache",
-    "plxnative-previewsnap",
+    "multiplex-nopreviewcache",
+    "multiplex-previewsnap",
     // The FRAME BUDGET's A/B control leg (`ui/frame/budget.rs`, spec §8.1): admission as it was
     // before phase 11 — quota only, no time ceiling, no solo rule. DIAG for exactly the argument
     // the three above make: its whole method is an A/B against an unmasked control leg, and a
     // non-DIAG trigger would boot the two legs to DIFFERENT SCREENS, so what the numbers measured
     // would be the screen and not the admission rule.
-    "plxnative-nobudget",
+    "multiplex-nobudget",
     // LG's own GStreamer logging ([`arm_gst_logging`]) and the file it writes. Both are DIAG for
-    // the same reason `plxnative-profile` is: the whole point is to observe a playback that would
+    // the same reason `multiplex-profile` is: the whole point is to observe a playback that would
     // otherwise be unobservable, and a non-DIAG trigger would silently move the boot screen out
     // from under the very session being measured.
-    "plxnative-gstlog",
-    "plxnative-gst.log",
-    "plxnative-playback.log",
+    "multiplex-gstlog",
+    "multiplex-gst.log",
+    "multiplex-playback.log",
     // The forced Stats-for-nerds overlay. It only changes presentation, and grading a playback
     // case without the read-out risks a failure whose evidence was never put on screen.
-    "plxnative-stats",
+    "multiplex-stats",
     // A deliberate crash happens before the picker could ever be reached, so whether it suppresses
     // one is moot — but leaving it out of this list would be a silent inconsistency for the next
     // reader, and the honest reading is that it changes no screen.
-    "plxnative-crashtest",
+    "multiplex-crashtest",
     // The deliberate FREEZE (`freeze_on_purpose`): it stalls the main loop and changes no screen,
     // and its whole use is watching the freeze report come back from the screen it froze.
-    "plxnative-freeze",
+    "multiplex-freeze",
     // The FRAME-DROP DETECTOR (`app.rs`, the `FRAMEDROP` line and `worstframe=`). It observes the
     // frame it is armed on and changes no screen; the harness's `worst_ceiling_ms` /
     // `stall_ceiling_ms` gates arm it under every fps scene, and a scene whose gate moved the boot
     // away from the screen it grades would fail as "never entered this screen".
-    "plxnative-framedrop",
+    "multiplex-framedrop",
     // The compositor frame-callback probe (`system.rs`): extra fields on that same line, from one
     // `wl_surface.frame` request per present. An observer for the reason `framedrop` is.
-    "plxnative-framecb",
+    "multiplex-framecb",
     // The post-120-present `EGL_BUFFER_AGE` re-ask (`plx_gfx::egl::late_probe`, off unless armed).
     // It changes nothing on screen, which is what DIAG membership means: a boot that arms it stays
     // on the screen it was going to, where a non-DIAG trigger would move it off the who's-watching
     // picker. It is NOT free: that one query blocks a swap 13-16 ms on the T820 at present 120, so
     // never arm it for a smoothness run. The two EGL triggers that DO change something (`eglprobe`,
     // `egldamage`) are deliberately not here.
-    "plxnative-eglage",
+    "multiplex-eglage",
     // The detector's context ring: which of the same lines are written, never which screen they
     // are written about.
-    "plxnative-framering",
+    "multiplex-framering",
     // libwayland's own protocol log ([`arm_wayland_debug`]): an observer of the present path.
-    "plxnative-wldebug",
+    "multiplex-wldebug",
     // The poster pipeline's observers: the cache counters and the per-image timeline
     // (`app/adapters/poster/trace.rs`). Both only READ the store and write log lines, and the boot
     // they exist to trace is the owner's everyday one — who's-watching picker, then Home. A
     // non-DIAG trigger suppresses that picker, so the trace would observe a different boot from
     // the one it was armed to explain.
-    "plxnative-imagecache-stats",
-    "plxnative-imgtrace",
-    "plxnative-imagecache-bypass",
+    "multiplex-imagecache-stats",
+    "multiplex-imgtrace",
+    "multiplex-imagecache-bypass",
     // The deterministic RECORDER and its replay trigger (`ui/rec.rs`, NOT YET IN THE TREE — reserved
     // here first so the recorder cannot land as a non-DIAG trigger and move the boot screen out
     // from under the session it records; restructure spec §5.3). Both observe or reproduce a session and must not decide
     // which screen it starts on — a recording of the who's-watching picker has to be possible.
-    // `recplay` is a NEW name: `plxnative-replay[=N]` is the EOS replay COUNTER, non-DIAG, and
+    // `recplay` is a NEW name: `multiplex-replay[=N]` is the EOS replay COUNTER, non-DIAG, and
     // stays exactly as it is.
-    "plxnative-rec",
-    "plxnative-recplay",
-    "plxnative-guard", // diagnostic policy only; never changes the boot screen
+    "multiplex-rec",
+    "multiplex-recplay",
+    "multiplex-guard", // diagnostic policy only; never changes the boot screen
     // Boot-latched Dolby Vision capability A/B. They alter only the platform answer used by the
     // route policy, so an experiment must not independently replace Home with the profile picker.
-    "plxnative-dvcaps0",
-    "plxnative-dvcaps1",
+    "multiplex-dvcaps0",
+    "multiplex-dvcaps1",
     // The AV1 framing A/B (`media::ff`'s `av1obu` tokens: notd, noseq, raw). It alters only
     // how an AV1 packet is framed before the decoder sees it, so an on-device comparison of the
     // variants must not move the boot screen out from under the playback being compared.
-    "plxnative-av1obu",
+    "multiplex-av1obu",
     // Send VP9's sourceInfo envelope as the pipeline made it, without the container-derived HDR10
     // declaration (`plx_play_feed::vp9_hdr`): the A/B for whether the television switches to HDR.
-    "plxnative-novp9hdr",
+    "multiplex-novp9hdr",
     // The side subtitle reader (`plx_play_feed::side_reader`, `media::player::subside`): content = the 0-based position of the
     // embedded subtitle stream to draw over a plain remux, read at each playback start.
-    "plxnative-subside",
+    "multiplex-subside",
     // The URI-mode probe (`dev::uriprobe`, the application's half of `media::player::uriprobe_drive`, issue #1064): content = `load`, `late`
     // or `none` (empty = `load`), read at each playback start. It changes how ONE play is carried
     // out and nothing about the boot: the tester signs in and picks a profile as always, then
     // plays a title. A non-DIAG trigger would suppress the who's-watching picker and move that
     // boot away from the one the probe is meant to run on.
-    "plxnative-uriprobe",
+    "multiplex-uriprobe",
     // The URI dev route (`dev::uri_product`): content = `acb part=<N> pms=<dotted-quad:port>
     // url=<http://dotted-quad:port/path>`, read once at boot. It changes which source one play is
     // certified for and nothing about the boot, so a test run still signs in and boots as always;
     // a non-DIAG trigger would suppress the who's-watching picker. It is listed here so that
     // `ci/check-package.py` greps the shipped bytes for the name.
-    "plxnative-uridev",
+    "multiplex-uridev",
     // The exported-window override (`dev::uri_exported`): presence arms it, read once at boot. It
     // changes which display path one play's backend is composed with and nothing about the boot, so
     // the tester signs in and picks a profile as always; a non-DIAG trigger would suppress the
     // who's-watching picker, and a stale file would keep suppressing it. Listed so that
     // `ci/check-package.py` greps the shipped bytes for the name.
-    "plxnative-uriexported",
+    "multiplex-uriexported",
 ];
 
-/// **Turn on the TELEVISION'S OWN GStreamer logging** — `/tmp/plxnative-gstlog`.
+/// **Turn on the TELEVISION'S OWN GStreamer logging** — `/tmp/multiplex-gstlog`.
 ///
 /// This is the only instrument that can see inside LG's Dolby Vision chain. That chain is
 /// `dvbin` → `h265parse` → `dvsplitter` → {`lxvideodec`, `dvmdparse`} → `dualsequencer`, all of it
@@ -257,10 +257,10 @@ pub(crate) fn arm_gst_logging() {
 #[cfg(not(feature = "devtriggers"))]
 pub(crate) fn arm_gst_logging() {}
 
-/// **Turn on libwayland-client's protocol log** — `/tmp/plxnative-wldebug`.
+/// **Turn on libwayland-client's protocol log** — `/tmp/multiplex-wldebug`.
 ///
 /// `WAYLAND_DEBUG` makes the client library print every request it sends and every event it
-/// dispatches, each with a microsecond wall-clock stamp, to stderr (`plxnative-stderr.log`). It is
+/// dispatches, each with a microsecond wall-clock stamp, to stderr (`multiplex-stderr.log`). It is
 /// the one place the compositor's side of a present is visible from inside the app: when
 /// `wl_buffer.release` and `wl_callback.done` actually arrive, against when the driver's
 /// `attach`/`commit` went out. libwayland reads the variable in `wl_display_connect`, so this has
@@ -292,9 +292,9 @@ pub(crate) fn arm_wayland_debug() {
 #[cfg(not(feature = "devtriggers"))]
 pub(crate) fn arm_wayland_debug() {}
 
-/// Parse `/tmp/plxnative-server=<slot>`, the optional server half of a direct-screen trigger.
+/// Parse `/tmp/multiplex-server=<slot>`, the optional server half of a direct-screen trigger.
 ///
-/// A Plex `ratingKey` is only unique together with its server.  The original `plxnative-play`
+/// A Plex `ratingKey` is only unique together with its server.  The original `multiplex-play`
 /// trigger predated the multi-server registry and therefore meant "that key on the current
 /// server".  Keeping the slot in a separate trigger preserves that wire format for the regression
 /// harness while allowing `tv-session --server N` to name the other half explicitly.
@@ -330,7 +330,7 @@ pub(crate) fn server_slot() -> Option<Result<u16, String>> {
     None
 }
 
-/// **Crash the app on purpose** — `plxnative-crashtest=<segv|abrt|bus|ill|trap|panic|unwind>`.
+/// **Crash the app on purpose** — `multiplex-crashtest=<segv|abrt|bus|ill|trap|panic|unwind>`.
 ///
 /// Not a feature. An INSTRUMENT for the instrument, and it exists because of the rule this repo
 /// keeps re-learning: prove the instrument can see the thing before you read its silence, and
@@ -415,7 +415,7 @@ pub(crate) fn crash_on_purpose() {
 #[cfg(not(feature = "devtriggers"))]
 pub(crate) fn crash_on_purpose() {}
 
-/// **Freeze the main loop on purpose** — `plxnative-freeze=<seconds>` (1 to 120).
+/// **Freeze the main loop on purpose** — `multiplex-freeze=<seconds>` (1 to 120).
 ///
 /// The instrument for the freeze probe, as [`crash_on_purpose`] is for the fault tracer: nothing a
 /// person does reliably stalls the loop for five seconds on demand, and a freeze report nobody has
@@ -430,7 +430,7 @@ pub(crate) fn crash_on_purpose() {}
 ///
 /// **With the default `threadcheck` feature the developer watchdog is armed**, and it aborts the
 /// process once the main thread has made no progress for `HANG_FATAL_MS` (2 s), well before the 5 s
-/// freeze probe. To see a freeze report come back, write `log` into `/tmp/plxnative-guard` before
+/// freeze probe. To see a freeze report come back, write `log` into `/tmp/multiplex-guard` before
 /// launching (that file turns the abort into a log line), or build without `threadcheck`.
 ///
 /// **Compiled out of a release build** with the rest of `devtriggers`.
@@ -461,9 +461,9 @@ pub(crate) fn freeze_on_purpose() {}
 #[cfg(feature = "devtriggers")]
 const FREEZE_AFTER_TICKS: u32 = 8;
 
-/// `plxnative-softfloat`: the ARM half of `plx_machine::motion`'s differential claim (spec §4.2). Runs the
+/// `multiplex-softfloat`: the ARM half of `plx_machine::motion`'s differential claim (spec §4.2). Runs the
 /// 4,096-operand table through this binary's own arithmetic, logs its hash beside the host's
-/// pinned one, and writes the words to `plxnative-softfloat.tbl` in the runtime root so a
+/// pinned one, and writes the words to `multiplex-softfloat.tbl` in the runtime root so a
 /// divergence can be diffed word by word. `make softfloat-probe` is the recipe.
 #[cfg(feature = "devtriggers")]
 pub(crate) fn softfloat_probe() {
@@ -480,7 +480,7 @@ pub(crate) fn softfloat_probe() {
     let mut t = Vec::new();
     plx_machine::motion::differential_table(&mut t);
     let body: String = t.iter().map(|w| format!("{w:08x}\n")).collect();
-    let path = plx_base::paths::runtime_dir().join("plxnative-softfloat.tbl");
+    let path = plx_base::paths::runtime_dir().join("multiplex-softfloat.tbl");
     if let Err(e) = std::fs::write(&path, body) {
         plx_base::eventlog::log(&format!("softfloat: table write failed: {e}"));
     }
@@ -488,7 +488,7 @@ pub(crate) fn softfloat_probe() {
 #[cfg(not(feature = "devtriggers"))]
 pub(crate) fn softfloat_probe() {}
 
-/// A test-only playback policy override from `plxnative-quality`.
+/// A test-only playback policy override from `multiplex-quality`.
 ///
 /// The server matrix grades established direct-play/remux/transcode routes. It must not silently
 /// become an Auto-HLS matrix because the television happened to persist that user preference in
@@ -532,7 +532,7 @@ fn parse_playback_quality(value: &str) -> Option<plx_plex::plex::session::Playba
     }
 }
 
-/// **Switch the playback quality MID-PLAYBACK** — `plxnative-qualityswitch=[gap=<ms>,]<q>[,<q>…]`.
+/// **Switch the playback quality MID-PLAYBACK** — `multiplex-qualityswitch=[gap=<ms>,]<q>[,<q>…]`.
 ///
 /// The one thing [`playback_quality_override`] above cannot do. That is a BOOT override: it decides
 /// what the playback starts as and is read once. What a person actually does at the television is
@@ -541,9 +541,9 @@ fn parse_playback_quality(value: &str) -> Option<plx_plex::plex::session::Playba
 /// way out of Auto) tears down a running ABR controller. None of that is reachable from a boot
 /// value, and none of it was reachable from a test at all.
 ///
-/// Same vocabulary as `plxnative-quality`, deliberately — one spelling of a rung across both
+/// Same vocabulary as `multiplex-quality`, deliberately — one spelling of a rung across both
 /// triggers, so a case cannot name a quality one of them accepts and the other silently ignores.
-/// Same grammar as `plxnative-autoseek`: an optional leading `gap=<ms>` then comma-separated steps
+/// Same grammar as `multiplex-autoseek`: an optional leading `gap=<ms>` then comma-separated steps
 /// fired one per gap. There is no default gap and none is invented: with a single step no cadence
 /// exists to state, and a case wanting several states its own, in the manifest, where a reader can
 /// see it beside the assertions it enables.
@@ -551,7 +551,7 @@ fn parse_playback_quality(value: &str) -> Option<plx_plex::plex::session::Playba
 /// **This writes the stored preference, and that is not incidental.** `route::set_quality` persists
 /// through `plex::session::update`, because a person picking a rung means it. A test therefore
 /// leaves the value behind — on the `debug` flavour's own session, never the install you watch
-/// with, and `tests/run.py` writes `plxnative-quality` on every server case, so the next boot
+/// with, and `tests/run.py` writes `multiplex-quality` on every server case, so the next boot
 /// overrides whatever this left. Both halves are load-bearing; neither alone would make it safe.
 fn parse_quality_switch_script(
     raw: &str,
@@ -590,7 +590,7 @@ pub(crate) fn quality_switch_script() -> Option<(u32, Vec<plx_plex::plex::sessio
 }
 
 /// One synchronized user Pause, optionally followed by Resume —
-/// `plxnative-autopause=[delay=<ms>,][at=<ms>,][hold=<ms>]`.
+/// `multiplex-autopause=[delay=<ms>,][at=<ms>,][hold=<ms>]`.
 ///
 /// An empty file preserves the original paused-HUD capture contract: pause at the player's
 /// ordinary six-second dev gate and stay paused. A non-empty script may delay that edge and name a
@@ -599,7 +599,7 @@ pub(crate) fn quality_switch_script() -> Option<(u32, Vec<plx_plex::plex::sessio
 /// that position: `HostSink::stop_clock_at`): a wall-clock delay pauses wherever the host's
 /// scheduling has got playback to, which moves from run to run, and the documentation's player
 /// figure wants the same frame and the same clock every time. The simulator's settled capture
-/// (`PLXNATIVE_SHOT_SETTLE`) waits for the Pause to land (`scenarios::screenshot::PauseDebt`): the
+/// (`MULTIPLEX_SHOT_SETTLE`) waits for the Pause to land (`scenarios::screenshot::PauseDebt`): the
 /// edge arms six seconds in, and a slow host can leave the player still for longer than the
 /// capture's quiet meanwhile. Unknown/duplicate/invalid fields fail the whole trigger closed; silently
 /// substituting a duration would exercise a different interleaving from the manifest.
@@ -705,7 +705,7 @@ pub(crate) struct DevServer {
     pub(crate) tier: Option<plx_plex::plex::probe::Location>,
     /// This identity's per-(user,server) access token **for this server**. A shared server is a
     /// separate authority: the account token gets a 401 from it, which is the whole reason one
-    /// `plxnative-token` cannot express two servers. A SECRET — never logged.
+    /// `multiplex-token` cannot express two servers. A SECRET — never logged.
     #[serde(default)]
     pub(crate) token: String,
     /// The owner's plex.tv handle (`sourceTitle` on the wire) — "friend". EMPTY means **your own
@@ -716,7 +716,7 @@ pub(crate) struct DevServer {
     pub(crate) handle: String,
     /// The literal to dial `host` at WITHOUT resolving it — the `Connection.address` plex.tv
     /// advertises beside a `plex.direct` `uri`, which is what a stored session persists. This is
-    /// how a headless run puts a pinned TLS origin through the registry (`/tmp/plxnative-nowan`
+    /// how a headless run puts a pinned TLS origin through the registry (`/tmp/multiplex-nowan`
     /// beside it is the offline reproduction). It is validated exactly as a session's address is
     /// ([`plx_plex::plex::ResolvePin::for_origin`]): a value the `host` label does not encode pins
     /// nothing. Omitted: no pin, unchanged behaviour for every overlay written before it existed.
@@ -732,7 +732,7 @@ impl DevServer {
     /// Everything about this server except the token, for the event log.
     pub(crate) fn describe(&self) -> String {
         // A SHARED server is someone else's machine, and this line goes to
-        // `/tmp/plxnative-events.log` — the file that gets pasted into issues and PR bodies. Four
+        // `/tmp/multiplex-events.log` — the file that gets pasted into issues and PR bodies. Four
         // PR bodies leaked exactly these fields on 2026-08-14 and had to be redacted after the
         // fact, which a public repository does not really allow. So a share names NOTHING that
         // identifies it or its owner: not the server's name, not the plex.tv handle, not the
@@ -838,14 +838,14 @@ fn parse_servers(s: &str) -> Result<Vec<DevServer>, String> {
     }
 }
 
-/// The EXTRA servers this boot was given credentials for — `/tmp/plxnative-servers`.
+/// The EXTRA servers this boot was given credentials for — `/tmp/multiplex-servers`.
 ///
-/// Purely ADDITIVE: the primary server is still the compiled-in host plus `plxnative-token` (or the
+/// Purely ADDITIVE: the primary server is still the compiled-in host plus `multiplex-token` (or the
 /// signed-in session), untouched, so a run that names one server behaves exactly as it always has.
 /// This is the channel for the *second* authority — a friend's shared server, which has its own
 /// `machineIdentifier` and its own access token and answers 401 to anybody else's.
 ///
-/// Read and parsed **once**. `tests/run.py` wipes `/tmp/plxnative-*` between cases and again on
+/// Read and parsed **once**. `tests/run.py` wipes `/tmp/multiplex-*` between cases and again on
 /// exit (pass, fail or Ctrl-C — that is how a live token stops surviving in world-readable `/tmp`),
 /// so a second read could legitimately see the file gone. The credentials a boot was handed are a
 /// property of that boot, not of what `/tmp` happens to hold when someone asks.
@@ -871,11 +871,11 @@ pub(crate) fn servers() -> Result<Vec<DevServer>, String> {
 /// screen from a squatted file — after every named read had been compiled out.
 ///
 /// **A trigger is a FILE.** Nothing else here names a path, so nothing else could have caught a
-/// non-file entry whose name happens to match: a directory called `plxnative-anything` sitting in
+/// non-file entry whose name happens to match: a directory called `multiplex-anything` sitting in
 /// the runtime root would read as an armed trigger and permanently suppress the boot picker,
 /// silently changing which screen this install comes up on with no line in any log. That became
 /// reachable the moment two installs could share `/tmp` — the obvious name for a second install's
-/// runtime root is exactly `plxnative-<flavour>`, which is why `paths::resolve_runtime_dir` spells
+/// runtime root is exactly `multiplex-<flavour>`, which is why `paths::resolve_runtime_dir` spells
 /// it with a DOT instead. Two independent reasons is the right number for a failure this quiet.
 #[cfg(feature = "devtriggers")]
 pub(crate) fn any_trigger_present() -> bool {
@@ -885,7 +885,7 @@ pub(crate) fn any_trigger_present() -> bool {
         .unwrap_or(false)
 }
 
-/// Every `plxnative-*` FILE in the runtime root, by name (DIAG entries included), sorted — the
+/// Every `multiplex-*` FILE in the runtime root, by name (DIAG entries included), sorted — the
 /// recorder's header lists them so a replay can say what the recording boot had armed. Names
 /// only: a trigger's CONTENT can be a query or a path and never enters a recording.
 #[cfg(feature = "devtriggers")]
@@ -902,7 +902,7 @@ fn armed_triggers_in(root: &std::path::Path) -> Vec<String> {
                 .filter_map(|e| {
                     let n = e.file_name().to_string_lossy().into_owned();
                     // Runtime logs share the prefix and are not triggers
-                    (n.starts_with("plxnative-") && !n.ends_with(".log")).then_some(n)
+                    (n.starts_with("multiplex-") && !n.ends_with(".log")).then_some(n)
                 })
                 .collect()
         })
@@ -922,7 +922,7 @@ fn is_armed_trigger(entry: &std::fs::DirEntry) -> bool {
     }
     let name = entry.file_name();
     let name = name.to_string_lossy();
-    name.starts_with("plxnative-") && !DIAG.contains(&name.as_ref())
+    name.starts_with("multiplex-") && !DIAG.contains(&name.as_ref())
 }
 #[cfg(not(feature = "devtriggers"))]
 pub(crate) fn any_trigger_present() -> bool {
@@ -990,8 +990,8 @@ mod tests {
         let entry = std::fs::read_dir(&root).unwrap().next().unwrap().unwrap();
         assert!(!super::is_armed_trigger(&entry));
         assert!(super::armed_triggers_in(&root).is_empty());
-        std::fs::write(root.join("plxnative-home"), b"").unwrap();
-        assert_eq!(super::armed_triggers_in(&root), vec!["plxnative-home"]);
+        std::fs::write(root.join("multiplex-home"), b"").unwrap();
+        assert_eq!(super::armed_triggers_in(&root), vec!["multiplex-home"]);
     }
 
     /// The poster pipeline's two observers — the per-image timeline and the cache counters — must
@@ -1009,7 +1009,7 @@ mod tests {
             fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
         }
         let _cleanup = Cleanup(root.clone());
-        for name in ["plxnative-imgtrace", "plxnative-imagecache-stats"] {
+        for name in ["multiplex-imgtrace", "multiplex-imagecache-stats"] {
             std::fs::write(root.join(name), b"").unwrap();
         }
         // `is_armed_trigger` is the predicate `any_trigger_present` (the picker suppression) applies
@@ -1043,7 +1043,7 @@ mod tests {
         // other `cargo test` on this Mac, and two suites running at once (a second checkout's
         // `make check`) removed each other's entry between the create and the read_dir.
         let d = plx_base::paths::in_runtime_dir(&format!(
-            "plxnative-notatrigger-{}",
+            "multiplex-notatrigger-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&d);
@@ -1063,7 +1063,7 @@ mod tests {
     }
 
     /// **How an https origin is exercised without a plex.tv account that has one.** The
-    /// `plxnative-servers` trigger is the only surface that can inject a server the app did not
+    /// `multiplex-servers` trigger is the only surface that can inject a server the app did not
     /// discover, so it is also the only way any lane or the integrator can put a TLS origin
     /// through `plex::register_origin` headlessly.
     ///
@@ -1331,15 +1331,15 @@ mod tests {
         assert_eq!(v[0].describe(), "SHARED ref=71c955 port_set=true");
     }
 
-    /// `plxnative-servers` must NOT be exempt from the picker-suppression scan: it names a host and
+    /// `multiplex-servers` must NOT be exempt from the picker-suppression scan: it names a host and
     /// carries the token to trust it with, which is automation of the strongest kind. Listing it in
     /// DIAG would let a headless run boot to the who's-watching picker instead of Home.
     #[test]
     fn servers_trigger_is_not_diagnostic() {
-        assert!(!super::DIAG.contains(&"plxnative-servers"));
+        assert!(!super::DIAG.contains(&"multiplex-servers"));
     }
 
-    // ---- plxnative-uriprobe (the URI-mode probe, issue #1064) ----
+    // ---- multiplex-uriprobe (the URI-mode probe, issue #1064) ----
 
     /// The probe changes how one play is carried out, never which screen the app boots to: a tester
     /// signs in through the normal boot, then plays. Out of DIAG, the file would suppress the
@@ -1347,10 +1347,10 @@ mod tests {
     /// to be run on.
     #[test]
     fn uriprobe_trigger_is_diagnostic() {
-        assert!(super::DIAG.contains(&"plxnative-uriprobe"));
+        assert!(super::DIAG.contains(&"multiplex-uriprobe"));
     }
 
-    // ---- plxnative-uridev (the URI dev route) ----
+    // ---- multiplex-uridev (the URI dev route) ----
 
     /// The dev route changes which source one play is certified for, never which screen the app
     /// boots to (a test run signs in with the dev token and plays, as always). It is listed so the
@@ -1358,31 +1358,31 @@ mod tests {
     /// file in `/tmp` cannot move a later boot off the screen it was going to.
     #[test]
     fn uridev_trigger_is_diagnostic() {
-        assert!(super::DIAG.contains(&"plxnative-uridev"));
+        assert!(super::DIAG.contains(&"multiplex-uridev"));
     }
 
-    // ---- plxnative-uriexported (the exported-window override) ----
+    // ---- multiplex-uriexported (the exported-window override) ----
 
     /// The override changes the display path one play's backend is composed with, never which screen
     /// the app boots to: a tester arms it before launch, then signs in and picks a profile as always.
     /// Out of DIAG, the file would suppress the who's-watching picker on every boot it stays in `/tmp`.
     #[test]
     fn uriexported_trigger_is_diagnostic() {
-        assert!(super::DIAG.contains(&"plxnative-uriexported"));
+        assert!(super::DIAG.contains(&"multiplex-uriexported"));
     }
 
-    // ---- plxnative-playurl (the pipeline test tier's one trigger) ----
+    // ---- multiplex-playurl (the pipeline test tier's one trigger) ----
 
     /// The trigger decides WHAT THE APP PLAYS. Listing it in DIAG would leave a headless pipeline
     /// run booting to the who's-watching picker — with no session, to the sign-in screen — instead
     /// of into the player.
     #[test]
     fn playurl_trigger_is_not_diagnostic() {
-        assert!(!super::DIAG.contains(&"plxnative-playurl"));
+        assert!(!super::DIAG.contains(&"multiplex-playurl"));
     }
 
-    /// **One vocabulary for a rung, in both directions.** `plxnative-quality` and
-    /// `plxnative-qualityswitch` accept these strings and `quality: switch → …` prints them, so a
+    /// **One vocabulary for a rung, in both directions.** `multiplex-quality` and
+    /// `multiplex-qualityswitch` accept these strings and `quality: switch → …` prints them, so a
     /// case states its rung once and asserts on the same word. A one-way table would let the log
     /// drift from what the trigger accepts and the drift would show up as a case that arms
     /// correctly and then matches nothing — indistinguishable from the feature not working.
@@ -1409,7 +1409,7 @@ mod tests {
 
     /// The script grammar, including the two ways it must FAIL CLOSED. A typo that resolved to a
     /// default would switch the playback to something the case never asked for — the same hazard
-    /// `plxnative-abrpin` documents for its own value.
+    /// `multiplex-abrpin` documents for its own value.
     #[test]
     fn a_quality_script_fails_closed_and_never_substitutes() {
         use plx_plex::plex::session::PlaybackQuality as Q;

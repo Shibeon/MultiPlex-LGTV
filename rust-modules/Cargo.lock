@@ -655,6 +655,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "multiplex-modules"
+version = "0.10.0"
+dependencies = [
+ "image",
+ "libc",
+ "plx_appkit",
+ "plx_base",
+ "plx_data",
+ "plx_gfx",
+ "plx_machine",
+ "plx_media",
+ "plx_media_codecs",
+ "plx_net",
+ "plx_platform",
+ "plx_play_feed",
+ "plx_play_uri",
+ "plx_playback_contract",
+ "plx_plex",
+ "plx_screens",
+ "plx_session",
+ "plx_telemetry",
+ "plx_ui",
+ "serde",
+ "serde_json",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "multiplex-storage"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -979,43 +1016,6 @@ dependencies = [
  "plx_machine",
  "plx_platform",
  "qrcodegen",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "plxnative-modules"
-version = "0.10.0"
-dependencies = [
- "image",
- "libc",
- "plx_appkit",
- "plx_base",
- "plx_data",
- "plx_gfx",
- "plx_machine",
- "plx_media",
- "plx_media_codecs",
- "plx_net",
- "plx_platform",
- "plx_play_feed",
- "plx_play_uri",
- "plx_playback_contract",
- "plx_plex",
- "plx_screens",
- "plx_session",
- "plx_telemetry",
- "plx_ui",
- "serde",
- "serde_json",
- "xxhash-rust",
-]
-
-[[package]]
-name = "plxnative-storage"
-version = "0.0.0"
-dependencies = [
- "libc",
  "serde",
  "serde_json",
 ]

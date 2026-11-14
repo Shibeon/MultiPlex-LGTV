@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse guard: an agent may not turn on the owner's live Watchlist switch.
 
-`plxnative-watchlist-live` in a debug install's runtime root (on the television
+`multiplex-watchlist-live` in a debug install's runtime root (on the television
 `/tmp/app.multiplex.native.debug/`) lets a `devtriggers` build send Watchlist add/remove to the REAL
 plex.tv account (`rust-modules/plex/src/plex/watchlist.rs`, `live_armed`). Without it a debug build
 refuses every write (the Q11 failsafe), which is what keeps an agent's TV run from changing a
@@ -26,17 +26,19 @@ import json
 import re
 import sys
 
-NAME = re.compile(r"plxnative-watchlist-live\b")
+# `plxnative-` is the name a build from before the plxnative -> multiplex rename reads, and an older
+# debug build may still be deployed on the set, so creating either is refused.
+NAME = re.compile(r"(?:multiplex|plxnative)-watchlist-live\b")
 BYPASS = re.compile(r"\bPLX_WATCHLIST_LIVE_OWNER=1\b")
-# `--arm watchlist-live` / `--arm=watchlist-live[=…]` on tv-session.sh writes plxnative-<name>.
+# `--arm watchlist-live` / `--arm=watchlist-live[=…]` on tv-session.sh writes multiplex-<name>.
 ARM = re.compile(r"--arm(?:=|\s+)['\"]?watchlist-live\b")
 # Commands that write a file named among their arguments.
 WRITERS = re.compile(r"(?:^|[\s;&|('\"`])(?:touch|tee|cp|mv|install|ln|dd|rsync|scp|truncate)(?=\s)")
-# A redirection whose target is the trigger: `> …plxnative-watchlist-live`, `>>`, `>|`, `&>`.
-REDIRECT = re.compile(r"(?:\d?>>?|>\||&>)\s*['\"]?[^\s;&|'\"]*plxnative-watchlist-live\b")
+# A redirection whose target is the trigger: `> …multiplex-watchlist-live`, `>>`, `>|`, `&>`.
+REDIRECT = re.compile(r"(?:\d?>>?|>\||&>)\s*['\"]?[^\s;&|'\"]*(?:multiplex|plxnative)-watchlist-live\b")
 # A script that opens it for writing: python `open(…, 'w'|'a'|'x')`, `.write_text(`, `.touch(`.
-SCRIPTED = re.compile(r"open\([^)]*plxnative-watchlist-live[^)]*,\s*['\"][wax]|"
-                      r"plxnative-watchlist-live[^;\n]*\.(?:write_text|write_bytes|touch)\(")
+SCRIPTED = re.compile(r"open\([^)]*(?:multiplex|plxnative)-watchlist-live[^)]*,\s*['\"][wax]|"
+                      r"(?:multiplex|plxnative)-watchlist-live[^;\n]*\.(?:write_text|write_bytes|touch)\(")
 # Statement separators. A pipe stays inside the segment on purpose: `echo 1 | tee <path>`.
 SPLIT = re.compile(r"&&|\|\||;|\n")
 
@@ -74,7 +76,7 @@ def main():
         return 0
     sys.stderr.write(
         "BLOCKED: this command would turn on the owner's live Watchlist switch "
-        "(plxnative-watchlist-live).\n"
+        "(multiplex-watchlist-live).\n"
         "  the command: %s\n\n"
         "With that file present a debug build writes Watchlist add/remove to the REAL plex.tv account.\n"
         "AGENTS.md: no agent creates it unless the owner asks for it in this same session. Test writes\n"

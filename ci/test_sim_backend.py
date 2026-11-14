@@ -4,7 +4,7 @@
 `hostsim` swaps the television's native video sink for the simulator's (`plx_play_feed::ffi_host`),
 but that stand-in is the Feed backend's, so it exists only when `play-feed` is built. A simulator
 built `--no-default-features --features hostsim` selects NO backend: its app installs `NoSink`, so
-Play can only ever reach the failure read-out and the clock sink (`plxnative-clocksink`) has nothing
+Play can only ever reach the failure read-out and the clock sink (`multiplex-clocksink`) has nothing
 to arm. Three builds drift into that state because they drop `devtools` and `devtriggers` with
 `--no-default-features` and then list `hostsim` alone: the `.app` bundle (`ci/mkmacapp.py`), the
 screenshot simulator (`make screenshots-sim`) and the demo-video simulator (`make site-video-sim`);
@@ -110,7 +110,7 @@ class SimulatorBackend(unittest.TestCase):
             with self.subTest(site):
                 self.assertIn((site, True), reached, f"no `--no-default-features --features hostsim` build found in {site}")
         makefile_lines = " ".join(line for path, _, line, _, _ in sims if path == MAKEFILE)
-        for target_flag in ("--bin plxnative-sim", "placeholder-sentinel", "devtriggers"):
+        for target_flag in ("--bin multiplex-sim", "placeholder-sentinel", "devtriggers"):
             self.assertIn(target_flag, makefile_lines)
 
     def test_a_simulator_without_default_features_selects_the_feed_backend(self):

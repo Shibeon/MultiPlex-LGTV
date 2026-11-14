@@ -29,7 +29,7 @@ pub mod card_motion;
 #[cfg(feature = "devtriggers")]
 pub mod card_motion_metrics;
 #[cfg(feature = "devtriggers")]
-pub mod card_probe; // `plxnative-focusx`: the focused card's drawn rect/index/art of every Shelf and Grid
+pub mod card_probe; // `multiplex-focusx`: the focused card's drawn rect/index/art of every Shelf and Grid
 pub mod containers; // RESTRUCTURE (spec §6.2): Navigation = TabContainer → NavStack → ModalStack, the transitions, the host fold
 pub mod collection_tile; // the neutral tile a thumb-less collection draws on every surface
 pub mod consts;

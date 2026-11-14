@@ -366,7 +366,7 @@ impl RouteSurface {
     /// Settings arm (Privacy & data → Done) and `onboard::leave`'s settings arm (Favorite
     /// libraries → Done/Cancel). Both are correct at the depth the ROOT surface puts them at —
     /// pushed over the Settings root, so the pop reveals it — and both empty the stack when the
-    /// surface was booted ROOTED at that page, which `/tmp/plxnative-settings=privacy|home` does
+    /// surface was booted ROOTED at that page, which `/tmp/multiplex-settings=privacy|home` does
     /// (`app/run.rs`'s boot-target match). A `RELEASE` build compiles `devtrig::read` out and roots
     /// at `SettingsPage::Root`, except for the Library's Favorite libraries row, which roots at
     /// that page and relies on exactly this — but a Pop with nothing
@@ -1278,7 +1278,7 @@ fn root_form(inputs: &RootInputs) -> Form<RootId, Action, SettingsPage> {
     // Order (Settings v2): Libraries (Favorite libraries, Under posters), Playback (Video &
     // playback, Audio & subtitles), System (Language, Automatically Sign In, Play trailers
     // automatically, Interface resolution on webOS 1-3), Unencrypted connections, then Support
-    // (Privacy & data, Diagnostics, Legal notices, About PlxNative). A row is its label and a value,
+    // (Privacy & data, Diagnostics, Legal notices, About MultiPlex). A row is its label and a value,
     // a switch or a chevron: its sentence is [`sentence_for`]'s.
     //
     // The Libraries section is Libraries and the row is Favorite libraries: the switch governs

@@ -1484,7 +1484,7 @@ pub(crate) fn enter_profiles_from_onboard(pages: &mut plx_ui::dispatch::Dispatch
 /// routing call sites go on simply asking.
 pub(crate) fn maybe_ask_consent(pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>) {
     let c = plx_telemetry::telemetry::consent::current().unwrap_or_default();
-    // dev: /tmp/plxnative-consent[=<crash|product>] forces either first-run purpose even on an
+    // dev: /tmp/multiplex-consent[=<crash|product>] forces either first-run purpose even on an
     // automated boot. This screen is suppressed BY the presence of any trigger, so without an
     // override it cannot be reached headlessly at all. Selecting Product changes display state
     // only; no answer is stored by a harness boot — the stage byte is where the surface STARTS,
@@ -1698,7 +1698,7 @@ mod delete_all_tests {
             std::fs::write(path, b"x").unwrap();
         }
         let log = tv.runtime().join(plx_base::paths::runtime_file::EVENTS);
-        let rec = tv.runtime().join("plxnative-rec");
+        let rec = tv.runtime().join("multiplex-rec");
         std::fs::write(&log, b"x").unwrap();
         std::fs::write(&rec, b"x").unwrap();
         let _erofs = plx_platform::storage::UnlinkFaultForTest::install(&tv.0, libc::EROFS);
@@ -1859,7 +1859,7 @@ pub(crate) fn key_back(
 /// **It does not end the process, and nothing about a BACK press does any more.** The remote's own
 /// EXIT key still terminates (LG checklist item 38), and a script that wants the app closed uses
 /// SAM's `closeByAppId` exactly as `make kill`, `tests/run.py` and `tools/tv-session.sh` already do.
-/// That is why the old `/tmp/plxnative-noexitconfirm` bypass went with the alert: it existed to let
+/// That is why the old `/tmp/multiplex-noexitconfirm` bypass went with the alert: it existed to let
 /// a headless caller quit by pressing BACK, and BACK is no longer a quit for anybody.
 pub(crate) fn back_at_root() {
     if plx_platform::tv::home::take_root_press() {

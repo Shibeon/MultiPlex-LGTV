@@ -3,7 +3,7 @@
 //!
 //! The tests marked `#[cfg(feature = "hostsim")]` below (the item-menu opener-lift ones) run ONLY
 //! with that feature: `make test-crate C=app T=<filter>` filters them out and exits 0. Run them with
-//! `CARGO_INCREMENTAL=0 PATH="$HOME/.cargo/bin:$PATH" cargo test --lib -p plxnative-modules --features hostsim -- <filter>`
+//! `CARGO_INCREMENTAL=0 PATH="$HOME/.cargo/bin:$PATH" cargo test --lib -p multiplex-modules --features hostsim -- <filter>`
 //! from `rust-modules/`.
 
 use super::*;
@@ -176,10 +176,10 @@ fn switching_profile_leaves_the_container_holding_nothing_of_the_previous_profil
 }
 
 /// **Each `settings-*` fps scene's boot target stands on the page whose heartbeat word the scene selects on.**
-/// `tests/manifest.json` names a `plxnative-settings=<target>` trigger and an `overlay` word; the harness grades
+/// `tests/manifest.json` names a `multiplex-settings=<target>` trigger and an `overlay` word; the harness grades
 /// the frames that print the word, so a target that opened another page (or the root, as an unknown one does)
 /// would leave the scene with no samples or, worse, another page's. The pairs are READ from the manifest (every
-/// scene that names a `plxnative-settings` trigger and an `overlay`), not transcribed. About answers the Legal
+/// scene that names a `multiplex-settings` trigger and an `overlay`), not transcribed. About answers the Legal
 /// index's word, which is why it has a boot target and no scene of its own.
 #[test]
 fn each_settings_fps_scene_boot_target_prints_the_overlay_word_the_scene_selects_on() {
@@ -190,7 +190,7 @@ fn each_settings_fps_scene_boot_target_prints_the_overlay_word_the_scene_selects
     for scene in manifest["fps_scenes"].as_array().expect("fps_scenes is an array") {
         let name = scene["name"].as_str().unwrap_or("?");
         let (Some(target), Some(word)) = (
-            scene["triggers"]["plxnative-settings"].as_str(),
+            scene["triggers"]["multiplex-settings"].as_str(),
             scene["overlay"].as_str(),
         ) else { continue };
         let page = crate::dev::scenarios::settings_boot_page(target)

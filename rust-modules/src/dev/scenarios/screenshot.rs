@@ -69,7 +69,7 @@ impl ScreenshotArms {
 /// The pause is the state a pause scene photographs (a `hold=` pause is photographed paused, so its
 /// Resume is not owed), and it cannot land early: the arm only arms itself six seconds into the
 /// run (`autopause_arm`), then waits for the playhead (`at=`). The capture's quiet is WALL clock
-/// (`shot::tick`: nothing changed for `PLXNATIVE_SHOT_SETTLE` ms), and a host that is slow to start
+/// (`shot::tick`: nothing changed for `MULTIPLEX_SHOT_SETTLE` ms), and a host that is slow to start
 /// playback satisfies it before the Pause: with the host busy the debug simulator runs a frame a
 /// second (`fps=1`) and a Play start stalls the main thread for seconds (`main-thread hang`), so
 /// the first tick after the stall finds the screen unchanged for longer than the quiet and
@@ -136,7 +136,7 @@ pub(crate) fn autopause_debt(app: &mut App, fr: &Frame) {
     }
 }
 
-/// `/tmp/plxnative-stillclock=<ms>` — hold every free-running clock animator (`motion::Phase`:
+/// `/tmp/multiplex-stillclock=<ms>` — hold every free-running clock animator (`motion::Phase`:
 /// spinners, stall timers) at `<ms>` elapsed. A waiting screen then draws one fixed picture and
 /// comes to rest, which is what a settled capture needs; springs and ramps are untouched, they
 /// settle on their own.
@@ -147,7 +147,7 @@ pub(crate) fn arm_stillclock() {
     if let Some(v) = plx_base::devtrig::read("stillclock") {
         let ms = v.parse().unwrap_or(0);
         plx_machine::motion::hold_phase_clocks(Some(ms));
-        plx_base::eventlog::log(&format!("motion: free-running clocks held at {ms} ms by /tmp/plxnative-stillclock"));
+        plx_base::eventlog::log(&format!("motion: free-running clocks held at {ms} ms by /tmp/multiplex-stillclock"));
     }
 }
 
@@ -190,7 +190,7 @@ fn due(sent: Option<u32>, now: u32) -> bool {
     sent.is_none_or(|at| now.wrapping_sub(at) >= RESEND_MS)
 }
 
-/// What `plxnative-libtype` asks for: a Show-menu type of the page's own grid, or one of the two
+/// What `multiplex-libtype` asks for: a Show-menu type of the page's own grid, or one of the two
 /// pages the header's controls push over it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LibTypeArm {
@@ -215,7 +215,7 @@ fn on_library_page(app: &App) -> bool {
     app.route().is_library_family()
 }
 
-/// `/tmp/plxnative-libtype=<movies|shows|seasons|episodes|collections|recommended>` — on the
+/// `/tmp/multiplex-libtype=<movies|shows|seasons|episodes|collections|recommended>` — on the
 /// Library page, choose that Show-menu type the way its row does, or (collections, recommended)
 /// press the header control that opens that page (the `library-collections` and
 /// `library-recommended` scenarios), once the section's listing is there. Done when the page's
@@ -260,7 +260,7 @@ pub(crate) fn libtype_arm(app: &mut App, fr: &Frame) {
     }
 }
 
-/// `/tmp/plxnative-libgrid=<row>,<col>` — on the Library page, seat focus on that grid card once
+/// `/tmp/multiplex-libgrid=<row>,<col>` — on the Library page, seat focus on that grid card once
 /// the grid has landed. Done when the page REPORTS focus there.
 pub(crate) fn libgrid_arm(app: &mut App, fr: &Frame) {
     if !app.scenarios.shots.libtype_done {
@@ -275,7 +275,7 @@ pub(crate) fn libgrid_arm(app: &mut App, fr: &Frame) {
     }
 }
 
-/// `/tmp/plxnative-libshelf=<shelf>,<col>` — on the Library page, seat focus on card `<col>` of
+/// `/tmp/multiplex-libshelf=<shelf>,<col>` — on the Library page, seat focus on card `<col>` of
 /// hub shelf `<shelf>` (0 is Continue Watching when there is one) once the shelves have landed.
 /// Focus on a lower shelf scrolls the ones above it up under the tab bar. Done when the page
 /// REPORTS focus there.
@@ -344,7 +344,7 @@ impl SeatArm {
     }
 }
 
-/// `/tmp/plxnative-libmenu=<sortfilter|sort|filter|type>[,<rest ms>]` — on the Library page, open that toolbar
+/// `/tmp/multiplex-libmenu=<sortfilter|sort|filter|type>[,<rest ms>]` — on the Library page, open that toolbar
 /// menu, after `libgrid` (if armed) has seated its focus and, with a rest period, once the page has
 /// stopped moving ([`at_rest`]). Done when the menu SURFACE is up.
 pub(crate) fn libmenu_arm(app: &mut App, fr: &Frame) {
@@ -387,7 +387,7 @@ pub(crate) fn libmenu_arm(app: &mut App, fr: &Frame) {
     }
 }
 
-/// `/tmp/plxnative-clockstop=<ms>` — simulator only: stop the clock sink at that movie position
+/// `/tmp/multiplex-clockstop=<ms>` — simulator only: stop the clock sink at that movie position
 /// and leave the transport PLAYING, so the player holds a moment of playback that pausing would
 /// change (the Up Next tile, which exists only while playing). Logs once when the playhead is
 /// there. The stop is a stall of the sink's own making (`HostSink::stop_clock_at`), re-armed

@@ -38,7 +38,7 @@ and its operator. MultiPlex’s developer does not receive them.
 MultiPlex has a developer-only input/frame recorder used to reproduce and test bugs. It is not
 part of the app you installed: a release build has the developer-trigger inputs, including the
 recorder, compiled out — there is no code path in a release binary that can open, write or read a
-recording, on this television or off it. The unconditional `plxnative-*.log` files are create-only
+recording, on this television or off it. The unconditional `multiplex-*.log` files are create-only
 diagnostics, not trigger inputs. The recorder exists only in development builds used to build and
 test MultiPlex itself, is started only by explicitly arming it on that build, and its recordings
 never leave the device it was made on.

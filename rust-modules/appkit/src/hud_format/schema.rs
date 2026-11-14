@@ -2,7 +2,7 @@
 //! widget, rest and focus style, command (with its typed parameters), condition and theme token: its
 //! type, allowed values, default and the format minor it arrived in. The strict parser
 //! ([`super::parse`]) is a generic walker over this table and the schema emitter
-//! ([`super::schema_emit`], which `plxnative-sim --hud-schema` will print) serializes it, so nothing is listed twice and the two cannot drift
+//! ([`super::schema_emit`], which `multiplex-sim --hud-schema` will print) serializes it, so nothing is listed twice and the two cannot drift
 //! (a test walks the table, proves every entry is accepted, and proves an unlisted name is refused).
 //!
 //! The table is `'static` data: plain `&'static` slices and `Copy` types, no `Vec`, no `Box`, no
@@ -149,7 +149,7 @@ pub const BUILTIN_MULTIPLEX_ID: &str = "builtin:multiplex";
 /// A string shape a [`Ty::Pattern`] checks. Each is a closed grammar, never a regular expression.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pattern {
-    /// `[a-z0-9.-]`, at least two dot-separated labels, each starting with a letter: `com.plxnative.x`.
+    /// `[a-z0-9.-]`, at least two dot-separated labels, each starting with a letter: `com.multiplex.x`.
     /// The two other strings it accepts are [`BUILTIN_CLASSIC_ID`] and [`BUILTIN_MULTIPLEX_ID`].
     ReverseDns,
     /// `MAJOR.MINOR.PATCH` numeric semver (no pre-release, no build metadata).

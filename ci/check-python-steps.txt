@@ -31,7 +31,7 @@
 # the benchmarks (blocks and is blocked by shared runs, not starved by a stream of them, two
 # exclusive requests do not deadlock), the default slot count, --timeout exiting 75 and
 # PLX_CHECK_LOCK=off bypassing it. Runs against a throwaway lock path -- never the real
-# ~/.cache/plxnative/check.lock* -- so it cannot contend with the `check` that is running it.
+# ~/.cache/multiplex/check.lock* -- so it cannot contend with the `check` that is running it.
 python3 ci/test_check_lock.py
 # `make build-bench`: table/JSON shape, edit-and-restore, refusals, skips and the Makefile wiring, against a fake cargo.
 python3 ci/test_build_bench.py
@@ -51,7 +51,7 @@ python3 ci/test_check_elf.py
 # each against one shared TMPDIR; and no test source binds a fixed port.
 python3 ci/test_check_collisions.py
 # `tools/tv-config.sh`, the ONE resolver for the TV address and Wake-on-LAN MAC (this checkout's
-# .tv-host/.tv-mac, the main checkout's, then ~/.config/plxnative/), and every reader of it
+# .tv-host/.tv-mac, the main checkout's, then ~/.config/multiplex/), and every reader of it
 # (tv-ssh, wake-tv, the Makefile's TV, tests/run.py, stream-screen.py), against a throwaway repo
 # with a linked worktree. No TV, no network; placeholder values only.
 python3 ci/test_tv_config.py
@@ -83,7 +83,7 @@ python3 ci/test_tv_ssh.py
 # the public internet. ~5 s, most of it the two deliberate rate-limit waits, and it needs no
 # router: the UPnP half reports what is on this LAN rather than asserting anything.
 # It runs here because the receiver has no other gate — nothing in cargo can see a python file.
-python3 tools/plxnative-lab selftest
+python3 tools/multiplex-lab selftest
 # `make test-fast` (the opt-in incremental loop) is fenced off from every other target.
 python3 ci/test_test_fast.py
 # `make test-hostsim` / `make check-nodef`, the managed replacements for the `/tmp/<dir>` cargo recipes
@@ -153,7 +153,7 @@ python3 tests/test_image_cache_stress.py
 # Host-only halves of the opt-in live diagnostics: /proc/interrupt parsing, rate normalization,
 # stack aggregation and folded output. Neither command resolves a TV or takes its lock.
 tools/profile-graphics --selftest
-tools/plxnative-sample selftest
+tools/multiplex-sample selftest
 # The direct-screen TV command's own host-only contract: `--server N` must suppress the
 # singular token boot (which cannot register N>0) and must construct the exact identity marker
 # that `up` requires after launch. No SSH or television access occurs in this self-test.
@@ -301,7 +301,7 @@ python3 ci/test_check_vfp.py
 python3 ci/check-vfp.py --skip-if-missing
 # tools/disk-budget.py, the disk budget's inventory and planner (docs/disk-budget.md): the ladder's order, stopping at the line,
 # refusing only when the whole ladder cannot free the build's estimate plus the reserve, and NEVER planning the current checkout
-# below rung 6 (nor, there, the tree being built), a live, tracked, pkg/, vendor/ or non-PlxNative tree; private-byte accounting under hard links; `origin/main` merged detection
+# below rung 6 (nor, there, the tree being built), a live, tracked, pkg/, vendor/ or non-MultiPlex tree; private-byte accounting under hard links; `origin/main` merged detection
 # (squash merges, a stale local main, nothing written to the repository); `report` changes nothing; the plan file `build-gc.sh --evict`
 # reads (format, order, the stale slot, rung-6 `current`), `settle`, the cargo seed never planned, a /tmp tree aged by ctime so a
 # backdated fixture is never a candidate, the probes (`probe`, `tmp-trees`), and that collecting an inventory never rewrites a

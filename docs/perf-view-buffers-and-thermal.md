@@ -137,7 +137,7 @@ Fixed scene, vary only thermal history, and log the **ordered** `pres=` series. 
 
 **Arm** (clear first — `make run` clears only the event log, so a stale trigger silently changes the screen):
 
-> **The `/tmp/plxnative-…` paths in this section predate the two-install split: they are the STABLE
+> **The `/tmp/multiplex-…` paths in this section predate the two-install split: they are the STABLE
 > install's runtime root.** A flavoured install puts the same names under `$(make -s print-rundir
 > FLAVOR=<f>)` — `/tmp/app.multiplex.native.debug` at the tracked `FLAVOR ?= debug` default — so
 > pasted as bare `/tmp/…` this arms one install while `make run` launches the other, and the ordered
@@ -147,20 +147,20 @@ Fixed scene, vary only thermal history, and log the **ordered** `pres=` series. 
 
 ```
 R=$(make -s print-rundir)                  # this install's runtime root, never bare /tmp
-rm -f $R/plxnative-*                       # keeps the 3 append-only *.log files
-printf '2012' > $R/plxnative-detail        # detail-transition's rk, manifest.json:62
-touch  $R/plxnative-detailosc              # permanent scroll, app.rs:484 / :3362
-printf '0.01' > $R/plxnative-framedrop     # log EVERY frame — 0 is filtered out at app.rs:526
-touch  $R/plxnative-noidle                 # pin present==loop so pres= is unambiguous
+rm -f $R/multiplex-*                       # keeps the 3 append-only *.log files
+printf '2012' > $R/multiplex-detail        # detail-transition's rk, manifest.json:62
+touch  $R/multiplex-detailosc              # permanent scroll, app.rs:484 / :3362
+printf '0.01' > $R/multiplex-framedrop     # log EVERY frame — 0 is filtered out at app.rs:526
+touch  $R/multiplex-noidle                 # pin present==loop so pres= is unambiguous
 ```
 
-`plxnative-noidle` is in the DIAG list (`app.rs:386`) so it does **not** suppress the boot picker — `plxnative-detail` is what does that. Arming noidle alone lands you on the profiles picker.
+`multiplex-noidle` is in the DIAG list (`app.rs:386`) so it does **not** suppress the boot picker — `multiplex-detail` is what does that. Arming noidle alone lands you on the profiles picker.
 
 **Run** four legs, teeing to a host file (`run-stream` tails forever; `make run` truncates the log each launch at `src/main.c:103`, so the host tee is the *only* place the time axis can survive):
 
 | leg | condition | duration |
 |---|---|---|
-| **0 — control** | same, but `/tmp/plxnative-login` instead of `plxnative-detail` (near-empty screen, ~zero fill) | 3 min |
+| **0 — control** | same, but `/tmp/multiplex-login` instead of `multiplex-detail` (near-empty screen, ~zero fill) | 3 min |
 | **A — cold** | TV in standby ≥30 min, WoL, launch | 40 min |
 | **B — hot restart** | relaunch within ~30 s of A ending | 3 min |
 | **C — recovered** | `make kill`, app closed 15 min, relaunch | 3 min |

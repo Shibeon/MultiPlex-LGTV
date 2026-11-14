@@ -103,14 +103,14 @@ overwrites the regular app's logs.
 
 | Install | Where the log files are |
 | --- | --- |
-| MultiPlex (release) | directly in `/tmp/`, for example `/tmp/plxnative-events.log` |
+| MultiPlex (release) | directly in `/tmp/`, for example `/tmp/multiplex-events.log` |
 | MultiPlex Nightly | in the folder `/tmp/app.multiplex.native.nightly/` |
 
 The three files have the same names in both places:
 
-- `plxnative-events.log` — the event log: what the app did, line by line.
-- `plxnative-crash.log` — the crash log: a record each time the app was stopped by a fault.
-- `plxnative-stderr.log` — what the app and the TV's own libraries printed to the error stream.
+- `multiplex-events.log` — the event log: what the app did, line by line.
+- `multiplex-crash.log` — the crash log: a record each time the app was stopped by a fault.
+- `multiplex-stderr.log` — what the app and the TV's own libraries printed to the error stream.
 
 ### Fetch them before you reopen the app
 

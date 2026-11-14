@@ -621,7 +621,7 @@ mod tests {
             Some(Ctx {
                 sid: format!("00000000-0000-4000-8000-{n:012}"),
                 did: "crash-id".into(),
-                release: "plxnative@9.9.9".into(),
+                release: "multiplex@9.9.9".into(),
                 environment: "production".into(),
             })
         }
@@ -790,7 +790,7 @@ mod tests {
         Stored {
             sid: "11111111-1111-4111-8111-111111111111".into(),
             did: did.into(),
-            release: "plxnative@1.2.3".into(),
+            release: "multiplex@1.2.3".into(),
             environment: "production".into(),
             started: 1_800_000_000,
             last_active: 1_800_000_420,
@@ -802,7 +802,7 @@ mod tests {
         let now = 1_800_100_000;
         let c = classify_unfinished(stored("d"), 1, now, "d").expect("reported");
         assert_eq!((c.status, c.errors, c.duration_s), (Status::Crashed, 1, 420));
-        assert_eq!(c.stored.release, "plxnative@1.2.3", "reported under the release that ran it");
+        assert_eq!(c.stored.release, "multiplex@1.2.3", "reported under the release that ran it");
         let a = classify_unfinished(stored("d"), 0, now, "d").expect("reported");
         assert_eq!((a.status, a.errors, a.duration_s), (Status::Abnormal, 0, 420));
     }
@@ -831,7 +831,7 @@ mod tests {
                 "duration": 420,
                 "status": "crashed",
                 "errors": 1,
-                "attrs": {"release": "plxnative@1.2.3", "environment": "production"},
+                "attrs": {"release": "multiplex@1.2.3", "environment": "production"},
             })
         );
         assert_eq!(f.event_id(), "11111111111141118111111111111111");

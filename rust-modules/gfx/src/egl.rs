@@ -306,7 +306,7 @@ pub fn probe() {
         // EGL_SWAP_BEHAVIOR_PRESERVED_BIT the `eglSurfaceAttrib` route is closed by the config,
         // not by policy, and no amount of asking will open it.
         probe_config(dpy, ctx, &mut lib);
-        // Only with `/tmp/plxnative-eglprobe`, because it MUTATES the live surface: ask for
+        // Only with `/tmp/multiplex-eglprobe`, because it MUTATES the live surface: ask for
         // EGL_BUFFER_PRESERVED, read back what we got, and put it back the way SDL had it.
         // Empirical, because a config bit and a driver's answer have disagreed before.
         if plx_base::devtrig::flag("eglprobe") {
@@ -314,7 +314,7 @@ pub fn probe() {
             try_damage(dpy, surface, &mut lib);
         }
         damage_init(dpy, surface, &mut lib);
-        // Only with `/tmp/plxnative-eglage` (read here, once): remember the handles so `late_probe`
+        // Only with `/tmp/multiplex-eglage` (read here, once): remember the handles so `late_probe`
         // can ask again once frames have actually been presented — an age queried before the first
         // swap is 0 by definition and says nothing. Opt-in because that second query blocks a swap
         // 13-16 ms on the T820 (2026-10-24).
@@ -466,7 +466,7 @@ fn try_damage(dpy: *mut c_void, surface: *mut c_void, lib: &mut Option<Handle>) 
 }
 
 // ---------------------------------------------------------------------------------------------
-// EXPERIMENT (`/tmp/plxnative-egldamage[=WxH]`): is the unadvertised damage region REAL?
+// EXPERIMENT (`/tmp/multiplex-egldamage[=WxH]`): is the unadvertised damage region REAL?
 // ---------------------------------------------------------------------------------------------
 //
 // `eglSetDamageRegionKHR` resolves and returns `EGL_TRUE`/`EGL_SUCCESS` on this driver, but
@@ -499,7 +499,7 @@ static mut DMG_SURFACE: *mut c_void = std::ptr::null_mut();
 /// must be full damage" rule of any shippable version, arrived at from the wrong end.
 const DMG_WARMUP_FRAMES: u32 = 180;
 
-/// Resolve the damage entry points once, if `/tmp/plxnative-egldamage` is armed. `WxH` in the
+/// Resolve the damage entry points once, if `/tmp/multiplex-egldamage` is armed. `WxH` in the
 /// trigger sets the rect (default 480x270, a sixteenth of the panel), anchored bottom-left
 /// because both damage specs use GL's origin, not the authored top-left one.
 fn damage_init(dpy: *mut c_void, surface: *mut c_void, lib: &mut Option<Handle>) {
@@ -570,7 +570,7 @@ static mut LATE_DPY: *mut c_void = std::ptr::null_mut();
 static mut LATE_SURFACE: *mut c_void = std::ptr::null_mut();
 static mut LATE_FRAMES: u32 = 0;
 
-/// Arm [`late_probe`] — only with `/tmp/plxnative-eglage` — by handing it the display and draw
+/// Arm [`late_probe`] — only with `/tmp/multiplex-eglage` — by handing it the display and draw
 /// surface to ask about. Called once, from [`probe`], so the trigger is read ONCE, at boot: an
 /// unarmed run leaves the handles null and `late_probe` stays on its first-branch return for the
 /// life of the process, with nothing read from disk and no state touched on any present.
@@ -590,7 +590,7 @@ fn remember_late_handles(dpy: *mut c_void, surface: *mut c_void) {
 }
 
 /// Re-ask for `EGL_BUFFER_AGE` once frames have really been presented — **a dev diagnostic, off
-/// unless `/tmp/plxnative-eglage` was present at boot** (`remember_late_handles` reads it).
+/// unless `/tmp/multiplex-eglage` was present at boot** (`remember_late_handles` reads it).
 ///
 /// The boot reading is 0 by construction — before the first `eglSwapBuffers` the back buffer has
 /// no history — so it cannot distinguish "this driver does not track age" from "there is no age
@@ -878,7 +878,7 @@ mod tests {
 
     /// The reported bug: the post-120-present `eglQuerySurface(EGL_BUFFER_AGE)` re-ask blocks that
     /// swap 13-16 ms on the Mali-T820 (one dropped frame, ~2 s after EVERY launch), and it was armed
-    /// unconditionally. Without `/tmp/plxnative-eglage` the handles must not be remembered, so
+    /// unconditionally. Without `/tmp/multiplex-eglage` the handles must not be remembered, so
     /// `late_probe` stays on its null-handle early return and never even counts a present.
     ///
     /// `late_probe` is only called once the handles are known to be null, so no fake handle can

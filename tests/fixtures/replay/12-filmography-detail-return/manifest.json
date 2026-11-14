@@ -172,16 +172,16 @@
    },
    "settings": null,
    "triggers": [
-    "plxnative-app-init",
-    "plxnative-rec",
-    "plxnative-focus",
-    "plxnative-noidle",
-    "plxnative-detail",
-    "plxnative-detailsec",
-    "plxnative-detailok",
-    "plxnative-filmography",
-    "plxnative-personcredits",
-    "plxnative-nowan"
+    "multiplex-app-init",
+    "multiplex-rec",
+    "multiplex-focus",
+    "multiplex-noidle",
+    "multiplex-detail",
+    "multiplex-detailsec",
+    "multiplex-detailok",
+    "multiplex-filmography",
+    "multiplex-personcredits",
+    "multiplex-nowan"
    ],
    "version": 1
   },
@@ -191,15 +191,15 @@
  "schema": 3,
  "state_fp": 15834642128357272210,
  "triggers": [
-  "plxnative-app-init",
-  "plxnative-rec",
-  "plxnative-focus",
-  "plxnative-noidle",
-  "plxnative-detail",
-  "plxnative-detailsec",
-  "plxnative-detailok",
-  "plxnative-filmography",
-  "plxnative-personcredits",
-  "plxnative-nowan"
+  "multiplex-app-init",
+  "multiplex-rec",
+  "multiplex-focus",
+  "multiplex-noidle",
+  "multiplex-detail",
+  "multiplex-detailsec",
+  "multiplex-detailok",
+  "multiplex-filmography",
+  "multiplex-personcredits",
+  "multiplex-nowan"
  ]
 }

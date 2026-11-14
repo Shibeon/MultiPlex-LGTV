@@ -326,7 +326,7 @@ def _selftest() -> int:
     # notes rendering
     body = render_notes(
         label="0.7.0-nightly-20260919", sha="abc1234def5678900000000000000000000000",
-        prev_tag="nightly/v0.7.0-nightly-20260918", ipk="plxnative-v0.7.0-nightly-20260919.ipk",
+        prev_tag="nightly/v0.7.0-nightly-20260918", ipk="multiplex-v0.7.0-nightly-20260919.ipk",
         sha256="deadbeef" * 8, repo="Shibeon/MultiPlex-LGTV",
         changes=["- session: one in-memory cache owned by the session module (#136)"],
     )
@@ -338,7 +338,7 @@ def _selftest() -> int:
     check("session: one in-memory cache" in body, "notes carry the passed-in change lines")
     check("compare/nightly/v0.7.0-nightly-20260918...nightly/v0.7.0-nightly-20260919" in body,
           "notes link the compare view between the two tags")
-    check(f"deadbeef{'deadbeef' * 7}  plxnative-v0.7.0-nightly-20260919.ipk" in body,
+    check(f"deadbeef{'deadbeef' * 7}  multiplex-v0.7.0-nightly-20260919.ipk" in body,
           "notes carry the sha256 code block with the exact ipk name")
     check("LGPL-2.1-or-later" in body and "deleted after 30 days" in body,
           "notes carry the LGPL notice and the retention promise")
@@ -346,7 +346,7 @@ def _selftest() -> int:
           "the first paragraph is not internally hard-wrapped")
     first_notes = render_notes(
         label="0.7.0-nightly-20260919", sha="0" * 40, prev_tag=None,
-        ipk="plxnative-v0.7.0-nightly-20260919.ipk", sha256="0" * 64, repo="Shibeon/MultiPlex-LGTV",
+        ipk="multiplex-v0.7.0-nightly-20260919.ipk", sha256="0" * 64, repo="Shibeon/MultiPlex-LGTV",
         changes=[],
     )
     check("First nightly." in first_notes, "no prev_tag -> 'First nightly.'")

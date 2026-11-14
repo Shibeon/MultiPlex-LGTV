@@ -11,8 +11,8 @@
  * plane owner in tv/plane.rs). This is the one piece that
  * stays C in the Rust-first app — porting the mangled-C++ FFI to Rust is
  * worse-than-C. */
-#ifndef PLXNATIVE_STARFISH_H
-#define PLXNATIVE_STARFISH_H
+#ifndef MULTIPLEX_STARFISH_H
+#define MULTIPLEX_STARFISH_H
 
 #define PLAYER_TYPE_MSE 10   /* ACB playerType (default) */
 
@@ -97,4 +97,4 @@ void sf_on_event(unsigned int epoch, int type, long long num, const char *str);
  * 1 complete. */
 void acb_on_event(long id, long task, long ev, const char *reply);
 
-#endif /* PLXNATIVE_STARFISH_H */
+#endif /* MULTIPLEX_STARFISH_H */

@@ -317,10 +317,10 @@ fn change_profile_then_back_cannot_restore_the_protected_profile_it_left() {
 /// Expected: the picker mounts once, the consent surface mounts once, and neither unmounts.
 ///
 /// `hostsim`-only, and this is a correctness gate rather than a convenience: `paths::ENV_STEERABLE`
-/// is `cfg!(feature = "hostsim")`, so `PLXNATIVE_RUNTIME_DIR` is only honoured in that build; off
+/// is `cfg!(feature = "hostsim")`, so `MULTIPLEX_RUNTIME_DIR` is only honoured in that build; off
 /// it, `dev::any_trigger_present()` scans the literal shared `/tmp` regardless of the env var this
 /// test sets, and `make check`'s first (non-`hostsim`) pass grades this test against whatever
-/// stray `plxnative-*` file another process or an earlier run left there instead of a private root.
+/// stray `multiplex-*` file another process or an earlier run left there instead of a private root.
 #[cfg(feature = "hostsim")]
 #[test]
 fn first_run_consent_over_the_picker_does_not_flip_mounts_every_frame() {
@@ -328,8 +328,8 @@ fn first_run_consent_over_the_picker_does_not_flip_mounts_every_frame() {
     let _g = plx_base::testlock::serial();
     let saved_consent = plx_telemetry::telemetry::consent::current();
     plx_telemetry::telemetry::consent::install(plx_telemetry::telemetry::consent::Consent::default());
-    // Any `plxnative-*` file in the runtime root suppresses the question (`dev::any_trigger_present`);
-    // run under `--features hostsim` with a private `PLXNATIVE_RUNTIME_DIR`, as `make check` does.
+    // Any `multiplex-*` file in the runtime root suppresses the question (`dev::any_trigger_present`);
+    // run under `--features hostsim` with a private `MULTIPLEX_RUNTIME_DIR`, as `make check` does.
     assert!(!crate::dev::any_trigger_present(), "a stray trigger in {:?} suppresses the consent question",
         plx_base::paths::runtime_dir());
     assert!(crate::dev::scenarios::consent_override().is_none());

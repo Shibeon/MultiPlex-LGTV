@@ -410,7 +410,7 @@ fn limit_codec(caps: &mut Caps, codec: &str, max: u32) -> Option<String> {
 }
 
 /// Take the exclusions for `codename` off `caps`, returning what was applied as `codec<=N`,
-/// `codec=none` or `dv-first-picture=idr`. `ignore` (the debug flag `/tmp/plxnative-nativeaudiowide`)
+/// `codec=none` or `dv-first-picture=idr`. `ignore` (the debug flag `/tmp/multiplex-nativeaudiowide`)
 /// skips the AUDIO rows, so a combination the table keeps off the pipeline can be tried on a set; a
 /// Dolby Vision row is not an audio row and stays applied.
 pub fn apply_exclusions(caps: &mut Caps, codename: &str, ignore: bool, table: &[Exclusion]) -> Vec<String> {
@@ -1034,11 +1034,11 @@ struct Boot {
     /// The running firmware build (`tv::device::Info::build`; empty when the set did not say).
     build: String,
     /// Whether this set learns refusals and applies the ones it learned: it names its firmware, and
-    /// `plxnative-nativeaudiowide` has not switched the learned layer off (`plxnative-nativeaudiolearn`
+    /// `multiplex-nativeaudiowide` has not switched the learned layer off (`multiplex-nativeaudiolearn`
     /// beside it keeps the layer, so the learn-and-convert path can be shown on a set the exclusions
     /// would keep off it). Read once in [`probe`] (the flags are a `stat` per read) and never changes.
     learns: bool,
-    /// `plxnative-nativeaudioforget`: the stored refusals are not applied, so a set can be shown
+    /// `multiplex-nativeaudioforget`: the stored refusals are not applied, so a set can be shown
     /// learning from nothing. Recording is unchanged, and so is the record: a row recorded during a
     /// forgetful run is stored and applies from the next launch without the flag. The request in
     /// flight still converts, because its machine narrowed its own attempt.
@@ -1097,7 +1097,7 @@ pub fn assumed_shared() -> std::sync::Arc<Caps> {
 /// (`Session::applied_refusals`, read by the caller at the play-start edge). The one reader that turns
 /// the write-once boot and the install's record into a start value; PURE, so the same inputs answer
 /// the same value. A set that does not learn applies no row (no firmware name, or
-/// `plxnative-nativeaudiowide` without `nativeaudiolearn`), and `plxnative-nativeaudioforget` applies
+/// `multiplex-nativeaudiowide` without `nativeaudiolearn`), and `multiplex-nativeaudioforget` applies
 /// none either. Rows watched on another build say nothing ([`Refusal::watched_on`]). Returns the boot
 /// `Arc` itself when nothing applies (the common path, with no clone), and a new value only when a
 /// row took something away.

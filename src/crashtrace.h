@@ -1,4 +1,4 @@
-/* PlxNative — an unofficial native Plex client for LG webOS.
+/* MultiPlex — an unofficial native Plex client for LG webOS.
  * Copyright © 2026 Gleb Linnik. Licensed under GPL-3.0-or-later; see LICENSE at the repository root.
  *
  * crashtrace.h — the fatal-signal tracer: `plx_crash_install`, called once from `main`, and

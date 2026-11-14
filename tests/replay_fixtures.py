@@ -7,7 +7,7 @@ when a replay failed or `--output` named it; a root this run made for itself is 
 clean run, where it would only pile up in `$TMPDIR` with nothing to inspect.
 
 The replays are independent processes and run side by side (`--jobs`, `PLX_REPLAY_JOBS`; 1 is
-serial). What makes that sound: each replay gets its own `PLXNATIVE_RUNTIME_DIR` (triggers, FIFO,
+serial). What makes that sound: each replay gets its own `MULTIPLEX_RUNTIME_DIR` (triggers, FIFO,
 event log, evidence) from `mkdtemp`, reads its recording and the assets read-only, is pointed at
 `127.0.0.1:9` with outbound networking denied (so it binds and dials nothing), and is graded on
 the recorded clock (`app::clock::set_replay`), never on wall time. Each replay's output is printed
@@ -38,7 +38,7 @@ MAX_DEFAULT_JOBS = 4
 MODES = ('targets', 'resolve')
 JOBS_ENV = 'PLX_REPLAY_JOBS'
 WINDOW_ENV = 'PLX_REPLAY_WINDOW'
-# The window the simulator opens for a replay, `PLXNATIVE_WIN`. The authored canvas is 1920x1080
+# The window the simulator opens for a replay, `MULTIPLEX_WIN`. The authored canvas is 1920x1080
 # logical whatever the window is (`surface::scale`/`viewport` map it; layout, hit resolution and
 # the graded hash never see pixels), so this only sets how many pixels a software GL context fills.
 DEFAULT_WINDOW = '1920x1080'
@@ -150,9 +150,9 @@ def resolve_window(flag, environ):
 
 def run_fixture(binary, assets, fixture, mode, output, timeout, window=DEFAULT_WINDOW):
     runtime = Path(tempfile.mkdtemp(prefix=fixture.name + '-' + mode + '-', dir=output))
-    (runtime / 'plxnative-recplay').write_text('v1\n' + mode + '\n' + str(fixture))
-    env = dict(os.environ, PLXNATIVE_RUNTIME_DIR=str(runtime), PLXNATIVE_APP_DIR=str(assets),
-               PLXNATIVE_WIN=window)
+    (runtime / 'multiplex-recplay').write_text('v1\n' + mode + '\n' + str(fixture))
+    env = dict(os.environ, MULTIPLEX_RUNTIME_DIR=str(runtime), MULTIPLEX_APP_DIR=str(assets),
+               MULTIPLEX_WIN=window)
     command = [str(binary), '127.0.0.1', '9']
     if sys.platform == 'darwin':
         command = ['/usr/bin/sandbox-exec', '-p',
@@ -163,7 +163,7 @@ def run_fixture(binary, assets, fixture, mode, output, timeout, window=DEFAULT_W
                                      timeout=timeout, check=False)
         except subprocess.TimeoutExpired as error:
             raise ValueError(f'{fixture.name}/{mode}: timeout; evidence {runtime}') from error
-    log = runtime / 'plxnative-events.log'
+    log = runtime / 'multiplex-events.log'
     try:
         summary = verdict(log.read_text() if log.exists() else '', process.returncode,
                           expected_counts(fixture))
@@ -204,7 +204,7 @@ def main():
     except ValueError as error:
         parser.error(str(error))
     own = args.output is None
-    output = Path(tempfile.mkdtemp(prefix='plxnative-replay-gate-')) if own else args.output
+    output = Path(tempfile.mkdtemp(prefix='multiplex-replay-gate-')) if own else args.output
     output.mkdir(parents=True, exist_ok=True)
     failures = run_all(args.sim.resolve(), args.assets.resolve(), fixtures, output.resolve(),
                        args.timeout, jobs, functools.partial(run_fixture, window=window))

@@ -2,15 +2,15 @@
 """`make test-hostsim` and `make check-nodef` keep their cargo trees where the disk tooling can see them.
 
 AGENTS.md used to hand out two hand recipes, a `CARGO_TARGET_DIR=/tmp/<dir> cargo test --lib -p
-plxnative-modules --features hostsim` and a `CARGO_INCREMENTAL=0 cargo check ... --no-default-features`,
+multiplex-modules --features hostsim` and a `CARGO_INCREMENTAL=0 cargo check ... --no-default-features`,
 and every agent that ran one picked its own `/tmp/<dir>`. Nothing tracked those: on 2026-10-19 there
-were 28 PlxNative cargo trees in `/tmp`, 45.6 GiB, none of them visible to `make disk` or
+were 28 MultiPlex cargo trees in `/tmp`, 45.6 GiB, none of them visible to `make disk` or
 `tools/build-gc.sh`. The two make targets replace the recipes, and this pins the property that
 matters, that neither can put a cargo tree outside the checkout:
 
 * `test-hostsim` builds into `rust-modules/target-hostsim` (relative, so it resolves inside the
   checkout), whatever `CARGO_TARGET_DIR` the caller exported; it is incremental in that dir only,
-  runs `plxnative-modules` (or the `C=<crate>` named, spelled as for `test-crate`: `plx_media`,
+  runs `multiplex-modules` (or the `C=<crate>` named, spelled as for `test-crate`: `plx_media`,
   `media`, `app`, several allowed; the SAME recipe, so the same dir and the same rules) with
   `--features hostsim`, gives the run a throwaway runtime dir that is removed afterwards, and FAILS
   when the `T=` filter matches no test (libtest says `0 passed` and exits 0, which a mistyped name
@@ -88,7 +88,7 @@ class TestHostsim(unittest.TestCase):
             self.assertTrue(call["cwd"].endswith("rust-modules"), call["cwd"])
             self.assertEqual(inside_checkout(call), Path(TDIR))
             self.assertEqual(call["runtime_dir_set"], "yes")
-            self.assertRegex(call["args"], r"^\+\S+ test --lib -p plxnative-modules --features hostsim --no-run "
+            self.assertRegex(call["args"], r"^\+\S+ test --lib -p multiplex-modules --features hostsim --no-run "
                                            r"--message-format=json-render-diagnostics$")
             # One package, so one test binary, and the filter goes to it (the runner builds, then runs).
             (line,) = fake.bin_calls()
@@ -99,13 +99,13 @@ class TestHostsim(unittest.TestCase):
         # plx_media's own hostsim tests (player/engine.rs, pump.rs, route/decision.rs) are not in the
         # application crate's test binary: C= is how they get the managed dir instead of a /tmp one.
         spellings = {
-            "": "-p plxnative-modules",
-            "C=app": "-p plxnative-modules",
-            "C=plxnative-modules": "-p plxnative-modules",
+            "": "-p multiplex-modules",
+            "C=app": "-p multiplex-modules",
+            "C=multiplex-modules": "-p multiplex-modules",
             "C=plx_media": "-p plx_media",
             "C=media": "-p plx_media",
             "C=plx_ui media": "-p plx_ui -p plx_media",
-            "C=app plx_media": "-p plxnative-modules -p plx_media",
+            "C=app plx_media": "-p multiplex-modules -p plx_media",
         }
         for spelling, packages in spellings.items():
             with self.subTest(spelling=spelling):
@@ -142,7 +142,7 @@ class TestHostsim(unittest.TestCase):
             self.assertEqual(fake.run("test-hostsim").returncode, 0)
             (line,) = fake.bin_calls()
             runtime = Path(dict(p.split("=", 1) for p in line.split(" ") if "=" in p)["runtime"])
-            self.assertIn("plxnative-check.", str(runtime))
+            self.assertIn("multiplex-check.", str(runtime))
             self.assertFalse(runtime.parent.exists(), f"{runtime.parent} outlived the run")
 
     def test_a_filter_that_matches_no_test_fails_instead_of_passing_with_zero_tests(self):

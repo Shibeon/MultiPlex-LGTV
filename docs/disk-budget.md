@@ -60,7 +60,7 @@ its estimate). It prints, in order:
    `PLX_GC_TEST_FREE_KIB=$((8*1024*1024)) python3 tools/disk-budget.py report`.
 
 On macOS the table before the budget also carries one line, `hourly agent`, saying whether the
-launchd agent `com.plxnative.build-gc` (the hourly `--auto`) is loaded (`launchctl list` exit status).
+launchd agent `com.multiplex.build-gc` (the hourly `--auto`) is loaded (`launchctl list` exit status).
 If it is not, nothing reclaims disk between builds and nothing else says so: `make disk-watch` loads
 it. The line is absent elsewhere. A tree on another volume appears in the trees list with `-` for its
 sizes and age and the state `other volume (not sized)`: see below.
@@ -151,7 +151,7 @@ almost nothing, and the next lane's first build is cold.
   checkout builds into this very tree.
 - **A cargo tree that is not MultiPlex's.** `CACHEDIR.TAG` alone proves nothing (any cargo writes
   it); a tree is ours only if its `deps/`, `.fingerprint/`, `build/` or `incremental/` hold a
-  `plx_*`, `libplx_*` or `plxnative*` entry. Other trees are reported as "not ours" and never planned.
+  `plx_*`, `libplx_*` or `multiplex*` entry. Other trees are reported as "not ours" and never planned.
 
 The planner checks these again itself, on top of the inventory's filtering. It is a pure function
 (`plan(inventory, free, need, thresholds, me, now)`; no I/O inside, tested with the filesystem,
@@ -170,7 +170,7 @@ subprocess and `open` made to raise), so `ci/test_disk_budget.py` feeds it synth
   (`os.utime`, `cp -p`, an archive restore, a test fixture); a ctime is the kernel's. A fixture
   whose files were backdated to last month is minutes old to the planner, so it is never "garbage
   nobody has written to for a day".
-- `$PLX_BUILD_CACHE` (default `~/.cache/plxnative`): the cargo seed, and leftover `.tmp.`,
+- `$PLX_BUILD_CACHE` (default `~/.cache/multiplex`): the cargo seed, and leftover `.tmp.`,
   `.restore.`, `.old.` and `.tombstone.` entries. The FFmpeg cache's live entries are never listed.
 
 **Merged lanes are judged against `origin/main`** (by the report, the planner and `build-gc.sh --worktrees` alike) when it exists, because the local `main` can be days
@@ -415,12 +415,12 @@ anywhere, `--auto` prints and logs exactly what it did before, and the preflight
 about to build (an index entry is only ever written by a park, so an unconfigured install never has one).
 
 **Turning it on.** A per-user file `cold-store` in the directory `tools/tv-config.sh` resolves
-(`PLX_TV_CONFIG_DIR`, else `${XDG_CONFIG_HOME:-~/.config}/plxnative`), `key=value` lines, `#` comments, nothing
+(`PLX_TV_CONFIG_DIR`, else `${XDG_CONFIG_HOME:-~/.config}/multiplex`), `key=value` lines, `#` comments, nothing
 secret in it and never committed:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `root` | (required) | An absolute directory on the cold volume, e.g. `/Volumes/DAS/plxnative-cold` |
+| `root` | (required) | An absolute directory on the cold volume, e.g. `/Volumes/DAS/multiplex-cold` |
 | `park_below_gib` | 40 | `--auto` parks when the build volume has less than this free but still at least the comfort line (20 GiB): trees move before the ladder must delete them, and never once it must |
 | `park_idle_min` | 120 | A tree, and its lane, must have been idle this long |
 | `park_max_gib_per_run` | 20 | The most one pass parks (private bytes; the pass stops after the tree that reaches it) |

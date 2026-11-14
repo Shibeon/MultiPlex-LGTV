@@ -15,7 +15,7 @@ void plx_launch_args(const char *json) { (void)json; }
 void plx_crash_install(int event_fd, int crash_fd) { (void)event_fd; (void)crash_fd; }
 
 /* The runtime root `main()` resolves its sinks under. The shipped resolver is Rust; here it is a
- * scratch directory, so booting the shim never touches a real /tmp/plxnative-*.log. */
+ * scratch directory, so booting the shim never touches a real /tmp/multiplex-*.log. */
 static const char *runtime_root = "/tmp";
 int plx_runtime_path(const char *name, char *out, size_t cap) {
     return snprintf(out, cap, "%s/%s", runtime_root, name) > 0;
@@ -32,14 +32,14 @@ static void expect(int yes, const char *what) {
 
 /* The three sinks main() opens, by their runtime names. */
 static const char *const sinks[] = {
-    "plxnative-events.log", "plxnative-crash.log", "plxnative-stderr.log",
+    "multiplex-events.log", "multiplex-crash.log", "multiplex-stderr.log",
 };
 
 /* Run the REAL boot shim — `plx_boot_main`, i.e. `main()` — once, keeping the test's own stderr:
  * `main()` dup2()s the stderr log over fd 2, which would otherwise swallow every later FAIL line. */
 static void boot_shim_once(void) {
     int saved = dup(STDERR_FILENO);
-    char arg0[] = "plxnative";
+    char arg0[] = "multiplex";
     char *argv[] = { arg0, NULL };
     expect(saved >= 0, "stderr saved");
     expect(plx_boot_main(1, argv) == 0, "boot shim returned");

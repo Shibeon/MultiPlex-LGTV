@@ -1,7 +1,7 @@
 //! The bounded diagnostic ring — **the log this app already writes, kept in memory**.
 //!
 //! This taps messages sent through `crate::eventlog::log` after credential scrubbing. The ring is
-//! a strict subset of `plxnative-events.log`; modules using that sink join the snapshot without
+//! a strict subset of `multiplex-events.log`; modules using that sink join the snapshot without
 //! changes here. Opt-in firmware playback messages use a separate local trace file and are absent
 //! from this ring and lab snapshots.
 //!

@@ -1108,21 +1108,21 @@ fn open(
     }
 }
 
-/// `/tmp/plxnative-personbio[=<text>]` — **stand in for the plex.tv biography record**, so the
+/// `/tmp/multiplex-personbio[=<text>]` — **stand in for the plex.tv biography record**, so the
 /// person page's header bio and the bio alert panel behind it can be reached headlessly.
 ///
 /// **Why this trigger has to exist.** Everything below the name on this page — roles, dates,
 /// birthplace and the biography itself — comes from `discover.provider.plex.tv`, which is a
-/// different identity from the PMS. An automated boot signs in with `/tmp/plxnative-token`, a
+/// different identity from the PMS. An automated boot signs in with `/tmp/multiplex-token`, a
 /// *server* token and leaves `Session::account_token` empty, so no account token reaches the
 /// provider. The app therefore does not ask: a dev-token boot with no Discover stand-in armed
-/// (`plxnative-discover`, or a `plxnative-plextv` redirect) has the read refused and the page
+/// (`multiplex-discover`, or a `multiplex-plextv` redirect) has the read refused and the page
 /// settled empty, by a standing decision whose cost is stated once at `plex::account::permit_read`;
 /// with one armed the mock answers with its synthetic record. A real interactive session gets a
 /// real biography and an automated one never does. So neither `tests/run.py` nor `make sim-shot` can reach a person page
 /// with the real prose on it at all, and the panel this seeds is by construction only reachable when there is MORE
 /// prose than the header shows. That is the same argument
-/// `/tmp/plxnative-search`'s query seed makes (no harness can type) and `/tmp/plxnative-failtest`'s
+/// `/tmp/multiplex-search`'s query seed makes (no harness can type) and `/tmp/multiplex-failtest`'s
 /// (no server will refuse on cue) — the screen is real, the route to it is not automatable.
 ///
 /// Empty file = a long built-in sample with paragraph breaks in it, which is the shape that
@@ -1161,7 +1161,7 @@ fn seed_dev_profile(p: &mut Person, text: Option<&str>) {
     p.profiled = true;
     #[cfg(feature = "devtriggers")]
     plx_base::eventlog::log(&format!(
-        "person: DEV bio seeded ({}B) — /tmp/plxnative-personbio",
+        "person: DEV bio seeded ({}B) — /tmp/multiplex-personbio",
         p.bio.len()
     ));
 }
@@ -1338,7 +1338,7 @@ impl PersonState {
     }
 }
 
-/// `/tmp/plxnative-personcredits[=<rows>]` — **stand in for the plex.tv FILMOGRAPHY record**, so
+/// `/tmp/multiplex-personcredits[=<rows>]` — **stand in for the plex.tv FILMOGRAPHY record**, so
 /// `plx_ui::filmography` can be reached headlessly.
 ///
 /// It exists for exactly [`seed_dev_profile`]'s reason and the argument is not repeated here: the
@@ -1445,11 +1445,11 @@ fn seed_dev_credits(state: &mut PersonState, arg: Option<&str>) -> bool {
     // Gated: `personcredits` is a `devtrig::CONTROLLED` name (a controlled/recorded boot may carry
     // it), and `ci/check-package.py`'s dev-trigger-catalog check greps a release binary for that
     // exact vocabulary. This function is already unreachable without `devtriggers` (`arg` above
-    // is always `None`), but the log line's literal `/tmp/plxnative-personcredits` would still
+    // is always `None`), but the log line's literal `/tmp/multiplex-personcredits` would still
     // have shipped in the bytes regardless of whether the branch ever ran.
     #[cfg(feature = "devtriggers")]
     plx_base::eventlog::log(&format!(
-        "person: DEV credits seeded ({} groups, {} held) — /tmp/plxnative-personcredits",
+        "person: DEV credits seeded ({} groups, {} held) — /tmp/multiplex-personcredits",
         p.credits.len(),
         held.len()
     ));

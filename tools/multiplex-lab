@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""plxnative-lab — receive diagnostic snapshots from PlxNative running in LG Cloud Test Lab.
+"""multiplex-lab — receive diagnostic snapshots from MultiPlex running in LG Cloud Test Lab.
 
 LG rents us physical televisions and gives us a picture and a virtual remote. It gives us no
 console, no ssh, no stdout and no way to download a file, so a bug reproduced on a k8hpp webOS 10
@@ -9,12 +9,12 @@ Mac, reachable from the internet through a TEMPORARY UPnP port mapping on the ro
 exactly one kind of request — the app's own diagnostic upload — and files it where an agent can
 read it.
 
-    plxnative-lab start            # session + certificate + listener + port mapping
-    plxnative-lab status --json    # what an agent polls
-    plxnative-lab send down down ok wait:1000 diag
-    plxnative-lab clear            # cancel input queued for a disconnected TV
-    plxnative-lab logs --follow    # the snapshots, as JSONL on stdout
-    plxnative-lab stop             # listener down, mapping deleted
+    multiplex-lab start            # session + certificate + listener + port mapping
+    multiplex-lab status --json    # what an agent polls
+    multiplex-lab send down down ok wait:1000 diag
+    multiplex-lab clear            # cancel input queued for a disconnected TV
+    multiplex-lab logs --follow    # the snapshots, as JSONL on stdout
+    multiplex-lab stop             # listener down, mapping deleted
 
 Python 3 standard library only, one file, no dependencies — the idiom `tools/netcond.py` and
 `tools/stream-screen.py` already use. `--selftest` proves the whole path against a loopback
@@ -74,7 +74,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 """The checkout this tool belongs to, so `pkg/lab.json` lands in the tree that will be packaged
 rather than wherever the shell happened to be. A lane running in a worktree gets ITS worktree."""
 
-HOME = os.path.expanduser(os.environ.get("PLXNATIVE_LAB_HOME", "~/.plxnative-lab"))
+HOME = os.path.expanduser(os.environ.get("MULTIPLEX_LAB_HOME", "~/.multiplex-lab"))
 SESSION_FILE = os.path.join(HOME, "session.json")
 UPLOAD_DIR = os.path.join(HOME, "uploads")
 SERVER_LOG = os.path.join(HOME, "receiver.log")
@@ -273,7 +273,7 @@ class Upnp:
             ("NewRemoteHost", ""), ("NewExternalPort", str(external_port)),
             ("NewProtocol", "TCP"), ("NewInternalPort", str(internal_port)),
             ("NewInternalClient", internal_ip), ("NewEnabled", "1"),
-            ("NewPortMappingDescription", "plxnative-lab"), ("NewLeaseDuration", str(lease)),
+            ("NewPortMappingDescription", "multiplex-lab"), ("NewLeaseDuration", str(lease)),
         ]
         if self._soap("AddPortMapping", args) is not None:
             return True
@@ -398,7 +398,7 @@ class Receiver(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "plxnative-lab"
+    server_version = "multiplex-lab"
     sys_version = ""
     protocol_version = "HTTP/1.1"
     timeout = SOCKET_TIMEOUT_S
@@ -714,7 +714,7 @@ def serve(args) -> int:
 
     def teardown(*_):
         # Every exit path, so the port stops being exposed the moment the receiver does: normal
-        # stop, SIGTERM from `plxnative-lab stop`, and Ctrl-C.
+        # stop, SIGTERM from `multiplex-lab stop`, and Ctrl-C.
         if mapped and igd:
             igd.delete(st["port"])
         s = _state()
@@ -749,7 +749,7 @@ def serve(args) -> int:
 def cmd_start(args) -> int:
     st = _state()
     if st.get("status") == "listening" and st.get("pid") and _alive(st["pid"]):
-        print("a session is already listening — one at a time. `plxnative-lab stop` first.",
+        print("a session is already listening — one at a time. `multiplex-lab stop` first.",
               file=sys.stderr)
         return 1
     if not args.hostname:
@@ -861,7 +861,7 @@ def cmd_send(args) -> int:
         return 2
     st = _state()
     if not (st.get("pid") and _alive(st["pid"]) and st.get("status") == "listening"):
-        print("receiver is stopped — run `tools/plxnative-lab start` first", file=sys.stderr)
+        print("receiver is stopped — run `tools/multiplex-lab start` first", file=sys.stderr)
         return 1
     for token in args.tokens:
         if why := command_error(token):
@@ -1222,8 +1222,8 @@ def selftest(_args) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    # `--json` is accepted on BOTH sides of the subcommand — `plxnative-lab --json status` and
-    # `plxnative-lab status --json`. An agent writes the second one and argparse rejects it unless
+    # `--json` is accepted on BOTH sides of the subcommand — `multiplex-lab --json status` and
+    # `multiplex-lab status --json`. An agent writes the second one and argparse rejects it unless
     # the flag is on the subparser too, which is a confusing failure for a tool whose whole point
     # is machine-readable output.
     common = argparse.ArgumentParser(add_help=False)

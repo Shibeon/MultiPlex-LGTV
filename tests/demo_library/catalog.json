@@ -3,7 +3,7 @@
  "now": 1790000000,
  "server": {
   "friendlyName": "Demo Library",
-  "machineIdentifier": "demo0000library0000plxnative"
+  "machineIdentifier": "demo0000library0000multiplex"
  },
  "hero": "sintel",
  "hero_alternatives": ["spring", "cosmos-laundromat"],

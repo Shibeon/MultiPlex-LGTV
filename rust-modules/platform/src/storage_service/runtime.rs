@@ -5,7 +5,7 @@ use super::wire::{Descriptor, DESCRIPTOR_NAME, PROTOCOL, SOCKET_NAME};
 use std::path::Path;
 
 pub fn app_identity(executable: &Path) -> Result<&str, ErrorCode> {
-    if executable.file_name().and_then(|n| n.to_str()) != Some("plxnative-storage") {
+    if executable.file_name().and_then(|n| n.to_str()) != Some("multiplex-storage") {
         return Err(ErrorCode::Invalid);
     }
     let dir = executable.parent().ok_or(ErrorCode::Invalid)?;
@@ -261,17 +261,17 @@ mod tests {
 
     #[test]
     fn nightly_app_identity() {
-        assert_eq!(app_identity(Path::new("/media/developer/apps/usr/palm/services/app.multiplex.native.nightly.storage/plxnative-storage")), Ok("app.multiplex.native.nightly"));
+        assert_eq!(app_identity(Path::new("/media/developer/apps/usr/palm/services/app.multiplex.native.nightly.storage/multiplex-storage")), Ok("app.multiplex.native.nightly"));
     }
 
     #[test]
     fn rejects_foreign_or_malformed_install_paths() {
         for path in [
-            "/usr/palm/services/app.multiplex.native.typo.storage/plxnative-storage",
-            "/usr/palm/services/app.multiplex.native.nightly/plxnative-storage",
-            "/usr/palm/applications/app.multiplex.native.nightly.storage/plxnative-storage",
+            "/usr/palm/services/app.multiplex.native.typo.storage/multiplex-storage",
+            "/usr/palm/services/app.multiplex.native.nightly/multiplex-storage",
+            "/usr/palm/applications/app.multiplex.native.nightly.storage/multiplex-storage",
             "/usr/palm/services/app.multiplex.native.nightly.storage/other",
-            "plxnative-storage",
+            "multiplex-storage",
         ] {
             assert_eq!(app_identity(Path::new(path)), Err(ErrorCode::Invalid));
         }

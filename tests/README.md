@@ -2,7 +2,7 @@
 
 Headless regression tests for the native webOS Plex player. Nothing on the host decodes a frame or
 talks to Starfish/ACB, so every test here drives the **real app on the real TV** via the
-`plxnative-*` dev triggers and asserts on the on-device event log (`plxnative-events.log`) — both
+`multiplex-*` dev triggers and asserts on the on-device event log (`multiplex-events.log`) — both
 of them inside that install's **runtime root**, which is `/tmp` for the stable install and
 `/tmp/<app id>` for a flavoured one. See *Which install it drives*, below: it decides every path
 on this page, and the default is the **debug** build.
@@ -55,12 +55,12 @@ so that a recording of the UI can be COMMITTED to this public repository:
   — and `scrub.rs` cannot recognise a title anyway. `--selftest` proves the shapes and the
   determinism (two servers, one seed, byte-identical answers) with no app. Boot the simulator
   against it with `make sim-shot SIM_PMS=127.0.0.1 SIM_PORT=32499` and any non-empty
-  `$SIM_DIR/plxnative-token`.
+  `$SIM_DIR/multiplex-token`.
 - **`tests/focusfp.sh`** drives eleven focus flows (boot → grid, grid → detail → BACK, the
   Library, Search with a seeded query, detail ↔ person, the Settings family, first-run consent,
   press-and-hold, the player read-out, pointer clicks; flow 10 — root BACK — is a television flow
   and is SKIPPED here) on the simulator against that server, and writes one `.fp` file per flow:
-  every `focus …` fingerprint (`crate::focusprobe`, `plxnative-focus`) and every heartbeat route
+  every `focus …` fingerprint (`crate::focusprobe`, `multiplex-focus`) and every heartbeat route
   transition. In phase 0 it is a live-sim SMOKE (the app must survive and fingerprint); from
   phase 2 the flows replay from a committed recording, and from 3b `--resolve` grades the focus
   engine against these lines pointwise.
@@ -148,7 +148,7 @@ resolved and the flavour it kills, launches, arms triggers in and greps for cann
 closing install A while launching install B reproduces SAM's stale-"running" no-op and then grades
 the other app's log, which is *plausible wrong data*, not a clean failure.
 
-- **The runtime root moved; the names did not.** Every `plxnative-*` trigger, the `plxnative-remote`
+- **The runtime root moved; the names did not.** Every `multiplex-*` trigger, the `multiplex-remote`
   FIFO and the three `*.log` files are named exactly as before — only the directory they sit in
   changed. Ask for it (`make -s print-rundir FLAVOR=debug`) rather than writing it out.
 - **The root is created `1777` — `mkdir` then an explicit `chmod`** (umask masks `mkdir`'s mode),
@@ -170,7 +170,7 @@ appdir: /media/developer/apps/usr/palm/applications/app.multiplex.native.debug (
 
 `run.py` grades it as the log arrives and **aborts the whole run**, once and by name, if `id=` is
 not the app id it drove or `features=` is not `dev` (`check_install`). Nothing else can answer that
-question: both binaries are named `plxnative`, and `pkg/plxnative` is a path every flavour *and*
+question: both binaries are named `multiplex`, and `pkg/multiplex` is a path every flavour *and*
 every configuration writes, so an md5 against the local build proves only that *some* build
 matches. An absent boot line is refused too — it means a deployed binary that predates the line,
 and an unattributable log.
@@ -187,13 +187,13 @@ dev build on the stable id without `ALLOW_DEV_ON_STABLE=1`, so that install *is*
 
 | | scope | matches |
 |---|---|---|
-| `fuser <appdir>/plxnative` | **inode** | exactly the install at that path |
+| `fuser <appdir>/multiplex` | **inode** | exactly the install at that path |
 | `luna-send … closeByAppId {"id":…}` | **app id** | exactly that install |
-| `pidof plxnative` | **name** | **both installs** — both binaries are called `plxnative` |
+| `pidof multiplex` | **name** | **both installs** — both binaries are called `multiplex` |
 
 `make kill` uses the first two and carries `FLAVOR=`, which is what leaves the *other* install
-alone — including its running app. **`pidof plxnative` is no longer a liveness test**: it returns
-two pids, in an order busybox does not promise. Use `fuser <appdir>/plxnative`, or resolve
+alone — including its running app. **`pidof multiplex` is no longer a liveness test**: it returns
+two pids, in an order busybox does not promise. Use `fuser <appdir>/multiplex`, or resolve
 `readlink /proc/<pid>/exe` per pid. And any match on the app id must be **anchored on a delimiter**:
 `app.multiplex.native` is a prefix of `app.multiplex.native.debug`.
 
@@ -208,7 +208,7 @@ device I/O (no new secret is introduced).
 
 Every other token the harness uses is **derived from that one at run time and stored nowhere**: the
 managed user's per-server token (below), and a second server's access token (further below). Both
-are written to a `plxnative-*` file in the TV's runtime root and cleared by the same glob wipe —
+are written to a `multiplex-*` file in the TV's runtime root and cleared by the same glob wipe —
 before every case, and again by `teardown()` on *every* exit path, including Ctrl-C and a crash.
 
 ## Test identity — runs as a managed user (no watch-history pollution)
@@ -225,21 +225,21 @@ account stays clean. It works without storing any new secret:
   `test_user.token_file`: the path of a private file, outside the tree, holding that managed
   user's per-server token on one line (`~` is expanded). `run.py` reads it at run time, skips the
   plex.tv lookup, and never prints it; `--print-test-token` honours the same key.
-- That token is used for the `/:/progress` resume seed **and** written to `plxnative-token` in the
+- That token is used for the `/:/progress` resume seed **and** written to `multiplex-token` in the
   TV's runtime root. The binary carries **no** token, so this file is the only way an automated run
   gets PMS access at all (see `plex_run`); the **app itself** then plays and scrobbles as the
   managed user, not just the seed. The token value is never printed (redacted to
-  `<…, redacted>`), and `plxnative-token` is cleared between cases like every other trigger.
+  `<…, redacted>`), and `multiplex-token` is cleared between cases like every other trigger.
 - Pass **`--owner`** to run as the `config.local.h` owner token instead (history *will* be
   affected). If the overlay has no `test_user`, the runner falls back to owner with a warning.
 
 ## A second server (a friend's shared one)
 
-`plxnative-token` carries exactly **one** token, and a shared server is a **separate
+`multiplex-token` carries exactly **one** token, and a shared server is a **separate
 authority**: its own `machineIdentifier`, its own per-(user,server) access token, and a 401 for
 anybody else's. So a screen that shows two sources at once could only ever be checked by hand, one
-capture at a time. `plxnative-servers` is the second credential channel — **purely additive**:
-the primary server is still `plxnative-token` against the compiled-in host, unchanged, and a run
+capture at a time. `multiplex-servers` is the second credential channel — **purely additive**:
+the primary server is still `multiplex-token` against the compiled-in host, unchanged, and a run
 that names one server behaves exactly as it always did.
 
 **Configure it once**, in the gitignored `manifest.local.json` (the block is optional — delete it if
@@ -275,9 +275,9 @@ server is needed, never *which*):
 ```
 
 - With `shared_server` configured, the runner resolves it **before touching the TV** and writes
-  `plxnative-servers` for those cases only — a JSON array of
-  `{name, machine_id, host, port, token}` — beside `plxnative-token`. Value never on stdout; the
-  printed line is `plxnative-servers: <nas-home @ 10.0.0.9:32400, token redacted>`.
+  `multiplex-servers` for those cases only — a JSON array of
+  `{name, machine_id, host, port, token}` — beside `multiplex-token`. Value never on stdout; the
+  printed line is `multiplex-servers: <nas-home @ 10.0.0.9:32400, token redacted>`.
 - Without it, those cases are **SKIPPED**, with the reason, and appear as `[SKIP]` in the summary —
   an installation with no friend's server is a normal installation. Anything unresolvable *is* a
   loud exit that names it (server no longer shared, no `accessToken`, no address).
@@ -295,8 +295,8 @@ servers: 1 extra server(s) injected, 1 usable
 
 — never a token (`DevServer` has no `Debug`, and `describe()` prints everything but). That pair of
 lines is the headless proof the credentials arrived, and is what a shared-server case can assert on
-before any of its screen exists. `plxnative-servers` is deliberately **not** on `dev.rs`'s `DIAG`
-exemption list: it names a host *and* the token to trust it with, so like `plxnative-token` it marks
+before any of its screen exists. `multiplex-servers` is deliberately **not** on `dev.rs`'s `DIAG`
+exemption list: it names a host *and* the token to trust it with, so like `multiplex-token` it marks
 the boot automated and skips the who's-watching picker — a run that landed on the picker would grade
 the wrong screen.
 
@@ -417,7 +417,7 @@ A separate mode that guards **UI framerate**, not playback correctness. The app 
 [overlay=<the topmost surface's own screen name, or `none` on a bare player>]
 [section=<chapters|info|chapters_info>, while the player page holds an HUD section open]
 fps=<n>` heartbeat; each
-*scene* in the manifest's `fps_scenes` sets its `plxnative-*` triggers (profiler **off**), runs, and
+*scene* in the manifest's `fps_scenes` sets its `multiplex-*` triggers (profiler **off**), runs, and
 asserts its gates. This is the automated form of the by-hand FPS hunting that found the hero /
 cast+about / info-panel regressions.
 
@@ -466,13 +466,13 @@ off, 59.6-59.9 on) and the sound muted (`sound off`, once per run); the run stop
 done, and the sound is never un-muted. `--panel on` lights the panel instead (`screen on` before every
 scene), for a run someone wants to watch.
 **A person page on a `--mock` or `--guest` boot has no biography and no filmography credits.** Both
-write `plxnative-token`, and a dev-token boot with no Discover stand-in armed has the app refuse the
+write `multiplex-token`, and a dev-token boot with no Discover stand-in armed has the app refuse the
 page's two provider reads itself (`discover: GET … refused` in the log, `discover: base=real
 reads=refused` at boot). That is a standing decision (fail closed), and it settles the page as for a
 person the provider has never heard of, once, with nothing retried; `person-page`, `person-bio`,
 `filmography-idle`, `push-100` and `deep-100` are the scenes that open one. Arming the
-stand-in (`plxnative-discover`, or a loopback `plxnative-plextv`) brings the mock's synthetic reads
-back; `plxnative-personbio` and `plxnative-personcredits` seed the content instead.
+stand-in (`multiplex-discover`, or a loopback `multiplex-plextv`) brings the mock's synthetic reads
+back; `multiplex-personbio` and `multiplex-personcredits` seed the content instead.
 
 A scene is runnable under `--mock` only if it carries a `"mock"` block (`{}` for the default
 library); everything else needs real library content and is skipped with that reason. `"only":
@@ -483,15 +483,15 @@ true` marks a scene that runs ONLY under `--mock` (it is skipped, with a reason,
 A **player** scene can also grade what the app declared, not how fast it drew: `fixed-480p-reencode-declaration`
 (#665) is a `--fps-player --mock` scene whose `mock` block hands the mock `extra_media` (a real, ffprobed
 3840x2160 H.264 file, rk 990001) and a `transcode_fixture` (the 854x480 clip `start.mkv` returns), both
-named relative to `$FIXTURES_OUT` (default `~/plxnative-fixtures`; a scene whose files are not built is
+named relative to `$FIXTURES_OUT` (default `~/multiplex-fixtures`; a scene whose files are not built is
 skipped with the ffmpeg commands' location), and whose `expect` block reuses a playback case's keys
 (`load_max`, `sink_echo`, `decision`, `codec`/`video_size`, `min_timeline_climb_s`; `no_error` always).
 `quality` pins the rung (`480p_720_kbps`). Run it: `tools/tv-lock.sh with --why "fixed 480p declaration" --
 ./tests/run.py --fps-player --mock --filter fixed-480p-reencode-declaration`.
 
-`boost-remux-declares-source-rate` (#832) is the second such scene: `plxnative-audioenh=boost` turns a direct-playable 4K H.264 24p file into an enhanced remux, and it grades `load_fps: 24.0`, `load_max: 3840x2160@24`, the set's echo, and (`presented_rate: true`, optionally `presented_rate_tol_pct`) the sink's presented rate against the declared one. Fixtures live in `boost-remux/` under the same root; the ffmpeg commands are in the scene's `comment`. Run it: `tools/tv-lock.sh with --why "boost remux declaration" -- ./tests/run.py --fps-player --mock --filter boost-remux-declares-source-rate`.
+`boost-remux-declares-source-rate` (#832) is the second such scene: `multiplex-audioenh=boost` turns a direct-playable 4K H.264 24p file into an enhanced remux, and it grades `load_fps: 24.0`, `load_max: 3840x2160@24`, the set's echo, and (`presented_rate: true`, optionally `presented_rate_tol_pct`) the sink's presented rate against the declared one. Fixtures live in `boost-remux/` under the same root; the ffmpeg commands are in the scene's `comment`. Run it: `tools/tv-lock.sh with --why "boost remux declaration" -- ./tests/run.py --fps-player --mock --filter boost-remux-declares-source-rate`.
 
-`home-grid-deep` is the Home-with-many-rows scene (#395): `--home-hubs 170`. `plxnative-homeosc`
+`home-grid-deep` is the Home-with-many-rows scene (#395): `--home-hubs 170`. `multiplex-homeosc`
 only sweeps about nine rows either side of the top, so it instead presses **Down once per landed
 row** at about three keys a second, rests, and presses **Up** back, through one ssh paced from the
 Mac (the keys go into the app's own remote FIFO; only `down` and `up` are ever sent). The row count
@@ -510,10 +510,10 @@ library is unchanged), 40 of them promoted collections (`custom.collection.<sect
 keyed `/library/collections/<rk>/children`, which the mock resolves) whose headings the app links.
 Without the flags `/hubs/sections/<id>` is byte-for-byte what it was. The shelves live on the
 Library's **Recommended page** (the Library page itself mounts none), so the scene arms
-`plxnative-library` (the preferred Movies library), `plxnative-libtype` = `recommended` (presses
-the header's Recommended control), `plxnative-framedrop` and `plxnative-focus`, and the walk
+`multiplex-library` (the preferred Movies library), `multiplex-libtype` = `recommended` (presses
+the header's Recommended control), `multiplex-framedrop` and `multiplex-focus`, and the walk
 (`"landed": "library"`) is sized from the **seated section's**
-`libhubs: section N landed S shelves` line (index 0 for Movies; `plxnative-library` content `1`
+`libhubs: section N landed S shelves` line (index 0 for Movies; `multiplex-library` content `1`
 seats Shows, index 1 — the last landing of that section, not the last such line in the log):
 **Down once per shelf, a second time for each linked shelf** (its heading is a stop of its own,
 then its row), and `extra_rows` more (0: the Recommended page seats its first shelf on arrival and
@@ -539,7 +539,7 @@ never rests, so it cannot show a strategy that warms upcoming rows while the gri
 per landed shelf plus `extra_rows` into the grid, rests, then `bursts` (8) bursts of `burst` (4)
 Downs `key_ms` (125) apart, each followed by `rest_ms` (1500), then the same bursts of Up. The
 count is the `phcount: frames=F ph_frames=P draws=D ph=N` line the app writes once a second while
-`plxnative-phcount` is armed (scene-armed; `ui::card_motion_metrics`, counted at the card primitive:
+`multiplex-phcount` is armed (scene-armed; `ui::card_motion_metrics`, counted at the card primitive:
 `ph` is card draws that showed a skeleton, `ph_frames` the presented card frames that showed at
 least one, `frames`/`draws` the totals). Printed, not graded: `ph` in total, in the prelude, in the
 bursts and per burst (a sample belongs to the burst of the last key before it), the share of card
@@ -548,13 +548,13 @@ tally; `n/a` when no `phcount:` line is in the window (never a zero). Graded: th
 keys sent == the plan, and a `focus route=library … region=grid` fingerprint in the window. Dev
 triggers pass through like any scene's. The app ships with 3 rows of at-rest poster lookahead and
 no moving-card decline, so a plain run measures the shipping behaviour; the two triggers rebuild
-the baselines it was measured against (`plxnative-lookahead=0` is no lookahead, `=1`..`=4` another
-depth; `plxnative-cardspeed=120` is the old decline of poster work for a card moving over 120 px/s):
+the baselines it was measured against (`multiplex-lookahead=0` is no lookahead, `=1`..`=4` another
+depth; `multiplex-cardspeed=120` is the old decline of poster work for a card moving over 120 px/s):
 
 ```bash
 tools/tv-lock.sh with --why "fps burst" -- ./tests/run.py --fps --mock --filter library-burst
 tools/tv-lock.sh with --why "fps burst" -- ./tests/run.py --fps --mock --filter library-burst \
-    --extra-trigger plxnative-cardspeed=120 --extra-trigger plxnative-lookahead=0
+    --extra-trigger multiplex-cardspeed=120 --extra-trigger multiplex-lookahead=0
 ```
 
 `library-hold` is `library-burst`'s sibling for a long held scroll: the same mock, triggers, printing
@@ -676,7 +676,7 @@ marks pacing invalid if a render-profiler trigger is armed.
     only to separate a frozen animator (~0.5/s, `plx_machine::idle`'s keepalive) from a running one. Raise it
     to a real median the first time it runs green on a television — the scene's own
     `_fps_floor_note` says so, and the neighbours all quote a date.
-  - **`plxnative-search`'s value is a literal query, not a symbolic key.** `run.py` resolves `item`
+  - **`multiplex-search`'s value is a literal query, not a symbolic key.** `run.py` resolves `item`
     keys against your overlay; it has no notion of a query, so the manifest carries the text. If
     your library matches nothing for it there are no shelves, and `search-type` degrades to grading
     the tab strip. Change the literal, never the floor.
@@ -719,18 +719,18 @@ pieces make that reproducible:
 
   | surface | what is walked | boot |
   |---|---|---|
-  | `home-row` | Home > Recently Added Movies (Shelf, 24-card window) | `plxnative-grid` |
-  | `library-section-hub-row` | Library > a pageable section shelf (`--section-hubs 3`) | `plxnative-library=0` |
-  | `library-grid` | Library > the 1000-movie poster grid (6 columns, row-band window) | `plxnative-library=0` |
-  | `search-row` | Search > the Movies result row of a 2-letter query | `plxnative-search=sf` |
-  | `detail-related-row` | Detail > the related row (head of 8, tail from `/similar`) | `plxnative-detail=1001 plxnative-detailsec=2` |
-  | `collection` | a ~130-member collection (Grid over a paged listing) | `plxnative-collection=50002` |
-  | `long-season` | Detail > the episode strip of a 150-episode season (pages of 60) | `plxnative-detail=2001` |
+  | `home-row` | Home > Recently Added Movies (Shelf, 24-card window) | `multiplex-grid` |
+  | `library-section-hub-row` | Library > a pageable section shelf (`--section-hubs 3`) | `multiplex-library=0` |
+  | `library-grid` | Library > the 1000-movie poster grid (6 columns, row-band window) | `multiplex-library=0` |
+  | `search-row` | Search > the Movies result row of a 2-letter query | `multiplex-search=sf` |
+  | `detail-related-row` | Detail > the related row (head of 8, tail from `/similar`) | `multiplex-detail=1001 multiplex-detailsec=2` |
+  | `collection` | a ~130-member collection (Grid over a paged listing) | `multiplex-collection=50002` |
+  | `long-season` | Detail > the episode strip of a 150-episode season (pages of 60) | `multiplex-detail=2001` |
 
   The read-out is one shared hook, `plx_ui::card_probe` (cargo feature `devtriggers`, so a release
   build has none of it), called from the two functions every card section draws through
-  (`Shelf::draw_card`, `Grid::draw_card`) and the episode strip. With `plxnative-focus` and
-  `plxnative-focusx` armed the focus fingerprint gains, per frame, the focused card's drawn rect
+  (`Shelf::draw_card`, `Grid::draw_card`) and the episode strip. With `multiplex-focus` and
+  `multiplex-focusx` armed the focus fingerprint gains, per frame, the focused card's drawn rect
   (`cdx cdy cdw`), its slot in the run of cards the section holds and that run's length (`cdi cdn`),
   its index in the source (`cdg`), the ratingKey in its artwork path (`cdk`, the stable item key),
   whether its texture was resident (`cda`), the caption's left edge and width (`cdc cdcw`) and two
@@ -740,7 +740,7 @@ pieces make that reproducible:
   (reported as `art_returned_bare`, not graded: the poster store holds 64 pictures).
   `--trigger imgtrace` arms one more dev trigger and puts its lines in `--dump`: each
   `HIDDEN ... gap=1f cause=...` is one `cdr`, with the store's reason.
-  Without `plxnative-focusx` the fingerprint is byte-for-byte what it was (the replay recordings
+  Without `multiplex-focusx` the fingerprint is byte-for-byte what it was (the replay recordings
   do not change). Asserted on every surface: the last item and then the first are focused; one
   key moves one card (one grid row), and keys held while the list could not move may land together
   but never move more than they were pressed for; no focus change without a key; no slot jump (the
@@ -775,31 +775,31 @@ pieces make that reproducible:
 1. `make kill` — close the app (luna-send `closeByAppId` + `fuser -k`) **first**.
 2. If the case sets `viewOffset_ms`: `PUT /:/progress` to seed the resume point — done
    **after** the close so the app's `timeline_thread` can't re-scrobble over it.
-3. Create the runtime root (`mkdir` + `chmod 1777`), clear every `plxnative-*` trigger in it,
+3. Create the runtime root (`mkdir` + `chmod 1777`), clear every `multiplex-*` trigger in it,
    then write only the ones this case needs.
 4. `make run TV=<tv> RUN_SECS=<n> FLAVOR=<f>` — relaunch, wait, and cat that install's
-   `plxnative-events.log` back.
+   `multiplex-events.log` back.
 5. Filter the `smp_cb type=43 num=0 str=` flood and evaluate the assertions.
-6. `crash_gate` (`run.py`): if the case's log holds a `*** SIGNAL` line, or `plxnative-crash.log`
+6. `crash_gate` (`run.py`): if the case's log holds a `*** SIGNAL` line, or `multiplex-crash.log`
    gained a `*** SIGNAL` record since step 3 counted it (a `*** EXIT` or `*** FREEZE` record does
    not trip it), the case FAILS (`app_alive`) unless it sets
-   `expect_crash: true`, and the set's `plxnative-stderr.log` (the abort message; the next launch
+   `expect_crash: true`, and the set's `multiplex-stderr.log` (the abort message; the next launch
    truncates it) is copied to `<name>.stderr.log` / `<name>.crash.log` in the `--save-logs`
-   directory, else `$TMPDIR/plxnative-crash-evidence/`, with the path printed. `--save-logs`
+   directory, else `$TMPDIR/multiplex-crash-evidence/`, with the path printed. `--save-logs`
    keeps `<name>.stderr.log` for every case. The FPS tier does not run this gate.
 
-## The `plxnative-play=<rk>` trigger (added for this harness)
+## The `multiplex-play=<rk>` trigger (added for this harness)
 
-Tests use `plxnative-play=<ratingKey>` instead of the fragile `plxnative-detail`. `plxnative-detail`
+Tests use `multiplex-play=<ratingKey>` instead of the fragile `multiplex-detail`. `multiplex-detail`
 only *plays* if the rk is in the home catalog (Continue Watching / hubs); off-catalog it loads
-data-only and never plays. `plxnative-play` fetches the item's metadata fresh (`metadata::load_detail`,
+data-only and never plays. `multiplex-play` fetches the item's metadata fresh (`metadata::load_detail`,
 works for **any** rk) and drives the same field-based play path the detail Play button uses
 (`route::play_episode` — generic over movie/episode — + `player::begin_resume`, whose transcode rebuild is a
 flight landed by `player::land_resume`, + `start_bufferfeed`),
 bypassing the catalog lookup entirely. It honors the server `viewOffset` for resume and logs
-`plxnative-play: rk=<rk> server=<slot> start` so the harness can confirm both halves of the item
-identity that fired. A bare `plxnative-play` keeps the historical current-server behaviour;
-`plxnative-server=<slot>` makes a by-hand/direct-screen run target a registered secondary PMS and
+`multiplex-play: rk=<rk> server=<slot> start` so the harness can confirm both halves of the item
+identity that fired. A bare `multiplex-play` keeps the historical current-server behaviour;
+`multiplex-server=<slot>` makes a by-hand/direct-screen run target a registered secondary PMS and
 fails closed when that slot does not exist. `tools/tv-session.sh up --screen player=<rk> --server
 <slot>` writes the pair without navigating the UI, boots from the signed-in stored roster (rather
 than the singular injected-token server), and exits nonzero unless the log confirms the exact
@@ -935,13 +935,13 @@ Append an entry to `manifest.json` → `cases`:
 }
 ```
 
-`run.py` derives the triggers from `operations` (`play`→`plxnative-play`, `seek`→`plxnative-autoseek`
+`run.py` derives the triggers from `operations` (`play`→`multiplex-play`, `seek`→`multiplex-autoseek`
 — for `"mode":"rapid"` the op's `script` becomes the trigger content: optional `gap=<ms>` +
 comma-separated steps, absolute `120` or tap-relative `+10`/`-10`, fired one per gap;
-`pause_resume`→one `plxnative-autopause=delay=<ms>,hold=<ms>` script, plus a `plxnative-autoseek`
+`pause_resume`→one `multiplex-autopause=delay=<ms>,hold=<ms>` script, plus a `multiplex-autoseek`
 when it carries `seek_s` (graded by `op_paused_seek`, which reads the log's own edge order:
 Pause, `autoseek: step`, `seek: paused frame restored`, Resume);
-`audio_switch`/`subtitle`→`plxnative-menupick`) and picks the
+`audio_switch`/`subtitle`→`multiplex-menupick`) and picks the
 per-op assertions from the `op`/`mode`. Track-menu row semantics: **audio tab** row = the
 metadata audio index (0-based, file order); **subtitles tab** row 0 = *Off*, row 1 = *Forced only*
 (shown wherever Off is), row *r* = subtitle index *r−2* on the root's flat list. A `"track": N`
@@ -949,17 +949,17 @@ target skips all of them (it counts tracks only), which is why the manifest uses
 
 **Track memory.** A track-menu pick on an episode (what `audio_switch` and `subtitle` emulate) is
 remembered for its show by the SEATED profile, and the next episode plays it. So `run.py` arms
-`plxnative-trackmemory=clear` for every case, beside `plxnative-audioenh`: the app forgets the seated
+`multiplex-trackmemory=clear` for every case, beside `multiplex-audioenh`: the app forgets the seated
 profile's remembered shows at the first seat, and a case's starting memory is the manifest's rather
 than whatever the previous case's pick left. Only a seated boot (`"session": "stored"`, or a picker
 boot) remembers anything or has anything to clear; a boot that injects a token (the default, `--guest`
-included, since both write `plxnative-token`) never seats, so its picks write no memory. A case that
+included, since both write `multiplex-token`) never seats, so its picks write no memory. A case that
 grades the memory itself (E1's pick shows on E2) must boot seated; `ui-sim` does, against `mock_pms`
-with a stored mock session and `plxnative-pickuser`. For that walk, `mock_pms.py --media DIR
+with a stored mock session and `multiplex-pickuser`. For that walk, `mock_pms.py --media DIR
 --media-next-episode` serves the verification show with a second episode (ratingKey 900005) of the
 same tracks, under its own part id so a selection PUT on episode 1 never reaches it, and a
-continuous PlayQueue over the show. Boot episode 1 (`plxnative-play=900003`,
-`plxnative-menupick=<tab>,<row>`, `plxnative-autoseek=<s>`), let Up Next run, and the log's
+continuous PlayQueue over the show. Boot episode 1 (`multiplex-play=900003`,
+`multiplex-menupick=<tab>,<row>`, `multiplex-autoseek=<s>`), let Up Next run, and the log's
 `track-memory: applied …` line on episode 2 is the read. Add `--media-next-episode-remux` and
 episode 2 is a copy remux the app's subtitle side reader is not admitted on (its decision says
 `transcode`/`copy` and its bitrate reads 32000 kbps): a subtitle remembered ON from episode 1 is then
@@ -973,7 +973,7 @@ leaves nothing to note.
 state: the forced track in the language of the audio that plays, or nothing. `mock_pms.py --media DIR
 --media-forced-subtitle` flags the verification episodes' English subtitle forced on the wire (the
 fixture has no forced track otherwise; add `--media-next-episode` and episode 2, the same file, has
-it too). Boot seated, `plxnative-play=900003` and `plxnative-menupick=1,1` (row 1 IS Forced only;
+it too). Boot seated, `multiplex-play=900003` and `multiplex-menupick=1,1` (row 1 IS Forced only;
 the trigger leaves the panel up) check the row with the language it draws beside it. The show's
 first audio is German, so the first pick draws nothing (the fixture's only forced track is
 English) and the read-out names the audio's language; pick the English audio (Audio tab) and the
@@ -999,7 +999,7 @@ make fixtures-pipeline          # ~1.1 GB into $FIXTURES_OUT/pipeline; ~4 min, o
 ```
 
 `--extra-trigger NAME[=CONTENT]` also applies to every synthetic case. For example,
-`./tests/run.py --extra-trigger plxnative-uriprobe=load --save-logs /tmp/uri-suite`
+`./tests/run.py --extra-trigger multiplex-uriprobe=load --save-logs /tmp/uri-suite`
 runs the original assertions with the developer URI probe armed. It does not translate the
 buffer-feed assertions or control scripts into a URI backend: inspect each saved log for
 `uriprobe: ... armed variant=at-load` before attributing its result to URI. The controlled ACB
@@ -1032,7 +1032,7 @@ requested rung (also printed as `segments fetched by rung (kbps)`).
 
 The gates. `pipe_uri_hls_720p24_20m_bound` plays `pipe_hls_720p24_20m/index.m3u8` (below) with
 `uriprobe=acb-control` and `ptype=0` (each case `triggers` entry `NAME: CONTENT` is written as
-`plxnative-NAME=CONTENT`, so those are the two files `plxnative-uriprobe` and `plxnative-ptype`): the
+`multiplex-NAME=CONTENT`, so those are the two files `multiplex-uriprobe` and `multiplex-ptype`): the
 plane is ACB-bound, and the same 20 Mbit/s stream that stalls an unbound arm plays through the
 75 s cap. `pipe_uri_hls_720p24_20m_bound_collapse` is that arm through the collapse link, where the
 bound plane's buffered lead drains in plain sight before a mid-playback `bufferingStart`. The ACB
@@ -1042,18 +1042,18 @@ segments (a build that stopped half way); `make fixtures-pipeline` builds it (ab
 
 The product route. `pipe_uri_product_hls_720p24_20m_bound` and `..._bound_collapse` (`"uri_route":
 "product"`) have the same fixture, link and 75 s cap as the gate pair, but the app plays the stream with
-its production URI backend, bound through ACB, via the debug-only dev route `plxnative-uridev`. The
+its production URI backend, bound through ACB, via the debug-only dev route `multiplex-uridev`. The
 harness's own mock PMS is the plan carrier: it starts on the configured `PMS_HOST:PMS_PORT` with the
 `pipe_uri_carrier_720p24.mp4` clip (a 90 s 720p24 progressive twin; one audio stream, no subtitles; built
 by `make fixtures-pipeline`) as ratingKey 990001, the app signs in as the synthetic guest and opens that
-item (`plxnative-play=990001`, with `quality=original`, `audioenh=off` pinned; no `ptype`, since the boot gives the URI engine its own player type 0 handle), and the runner
-writes `plxnative-uridev` as `acb part=991001 pms=<PMS_HOST>:<PMS_PORT> url=<fixture server>/<fixture>`,
+item (`multiplex-play=990001`, with `quality=original`, `audioenh=off` pinned; no `ptype`, since the boot gives the URI engine its own player type 0 handle), and the runner
+writes `multiplex-uridev` as `acb part=991001 pms=<PMS_HOST>:<PMS_PORT> url=<fixture server>/<fixture>`,
 so the app's qualifier answers with the fixture's URL and the TV fetches the HLS stream from the fixture
 server (shaper and wire counters keep working). `pms=` pins the server by ORIGIN, not by machine
 identifier: a `--guest --mock` boot registers its primary by address only (nothing learns the id before the
 first play), as `http://PMS_HOST:PMS_PORT` from the same `src/config.local.h` the mock listens on, so the
 runner writes that exact address (a canonical dotted quad; a hostname, a leading-zero spelling or the real
-PMS's port 32400 is refused before anything starts), and `plxnative-pms-origin` is never armed in this mode
+PMS's port 32400 is refused before anything starts), and `multiplex-pms-origin` is never armed in this mode
 (it would move the primary off that address). A log that has `uri-dev: armed` and never `uri: service
 playing` fails the case (`uri_dev_offer`), and the message says which way: `dev route armed but no product
 offer (pin mismatch?)` when the log has no `uri-acb:` line at all (the qualifier never offered the
@@ -1065,7 +1065,7 @@ envelope` when the service sent no usable video facts). A product case also fail
 `stream: ... path=`). A fallback plays the same stream and writes every plane line the URI backend does,
 so without this grade it reads as a pass. `uriprobe` is never armed in this mode
 (`--extra-trigger` for it, `playurl`, `uridev`, `play`, `ptype` or `quality` is refused), the runner
-deletes `plxnative-uridev` when the case ends however it ends, and a log that does not show the
+deletes `multiplex-uridev` when the case ends however it ends, and a log that does not show the
 synthetic mock (`check_synthetic_identity`) is not graded. A case skips with a reason when the install is
 not `debug`, `src/config.local.h` has no `PMS_HOST`/`PMS_PORT`, or the carrier is missing. The probe
 pair stays as the instrument baseline to compare against.
@@ -1099,7 +1099,7 @@ already-selected line and no sent line.
 The mock route. `pipe_side_reader_srt` (`"pms_route": "mock"`) is the one synthetic case that plays an item of the
 harness's mock PMS on the ordinary Feed route, to start the subtitle side reader (`player::subside`) with no real
 account behind it. Same preconditions and order as the product route (debug install, `--guest --mock`, the mock on the
-`src/config.local.h` address, a log that does not show the synthetic version is not graded), but no `plxnative-uridev`
+`src/config.local.h` address, a log that does not show the synthetic version is not graded), but no `multiplex-uridev`
 and no fixture-server stream: `carrier` (`pipe_side_reader_srt.mkv`, one embedded SubRip track) is the mock's only item,
 `carrier_subtitle: 1` makes that track the SERVER-selected one (`mock_pms.py --extra-media-subtitle 1`, so no selection
 is ever written to a server), `audio_enhancements_boot: loudness` makes the cold start the enhanced remux, and `fixture`
@@ -1117,7 +1117,7 @@ samples). Grading it on them fails by construction, so `evaluate_pipeline` runs 
 INSTEAD: `no_error` and `server_wire` are kept, `stream_path`, `load_decl`, `codec`, `video_bound`,
 `pos_climb`, `presented_rate` and the operation assertions are not, and the case never exits early
 (the saved `uriprobe:` window is the evidence, and a stall can come late). `--extra-trigger
-plxnative-uriprobe=...` does not switch a case into this mode: it runs the Feed assertions with the
+multiplex-uriprobe=...` does not switch a case into this mode: it runs the Feed assertions with the
 probe armed on top.
 
 On the probe route every line the grader reads starts `uriprobe: t=<ms since arm> ...`, on the probe's
@@ -1190,11 +1190,11 @@ fixture server; this option changes the advertised interface only.
 Nothing else is required — no `manifest.local.json`, no PMS, no token, no ratingKey, no library, no
 sharing. The TV address comes from the overlay's `tv` if you have one, else from `tools/tv-config.sh`
 (this checkout's gitignored `.tv-host`, the main checkout's, then the per-user
-`~/.config/plxnative/tv-host` — set that one once and every worktree has it), else `--tv`. That is the
+`~/.config/multiplex/tv-host` — set that one once and every worktree has it), else `--tv`. That is the
 whole configuration.
 
 **How it works.** `run.py` starts `serve_fixtures.py` on this machine, then arms
-`/tmp/plxnative-playurl` per case — one JSON object carrying the clip's URL **and the Load payload
+`/tmp/multiplex-playurl` per case — one JSON object carrying the clip's URL **and the Load payload
 declaration to play it with**:
 
 ```json
@@ -1209,13 +1209,13 @@ byte for byte; only the *choosing* is bypassed.
 **Why the declaration is carried separately, and why it is the interesting half.** The Starfish
 `Load` payload takes its codecs from `route::stream_vcodec`/`stream_acodec` and its Dolby nodes from
 `stream_dovi`/`stream_immersive` — five fields normally installed together by `route::apply_plan`
-from a PMS decision and replaced together by later route transitions. The older `plxnative-url`
+from a PMS decision and replaced together by later route transitions. The older `multiplex-url`
 trigger hands over a URL and nothing else, so a URL-fed 4K HEVC file was declared to the television
 as whatever the route happened to hold. An absent or unsupported audio declaration now fails
 before Load instead of silently declaring AC3.
 The declaration is precisely what governs HEVC-vs-H264 payload selection, LG's `"AC3 PLUS"`
 renaming of E-AC-3, and both Dolby nodes — so a tier that cannot set it cannot test any of them.
-`plxnative-playurl` sets all five in one write (`route::set_stream_declaration`).
+`multiplex-playurl` sets all five in one write (`route::set_stream_declaration`).
 
 The matrix carries codec-specific `load_audio` expectations, including `"AC3 PLUS"`, `"AAC"` and
 `"DTS"`. Together with the `load_decl` assertion, these prove that each fixture supplies its
@@ -1358,8 +1358,8 @@ order is the assertion — every stop tears the engine down, the harness's own c
 
 **And the second half — starting the same content *again* — is `pipe_replay_after_eos`**, which
 plays the same clip, lets it end, and restarts it. That needed an app change and got the smallest
-one that works: `/tmp/plxnative-replay[=N]` re-arms `app.rs`'s one-shot `auto_tried` latch N times
-when a `plxnative-playurl` playback reaches EOS, so the next frame goes back through the entry it
+one that works: `/tmp/multiplex-replay[=N]` re-arms `app.rs`'s one-shot `auto_tried` latch N times
+when a `multiplex-playurl` playback reaches EOS, so the next frame goes back through the entry it
 booted through. `teardown` clears the URL and the `ended` flag on a real stop, and
 `route_start::start_bufferfeed` re-reads `player::playurl::playurl()` whenever `route::url()` is empty. One more
 piece was NOT in place until 2026-09-02: the fixture entry asks the route reducer for a start
@@ -1433,7 +1433,7 @@ clips, served from the host, fed by boot trigger — and a gap becomes a case by
 `make_fixtures.py` and an entry to `pipeline_cases`. Two corrections to how this paragraph used to
 read, both of which would send you down a dead end: the server is **`tests/serve_fixtures.py`**, not
 `python3 -m http.server`, which has no `Range` support and silently corrupts every seek; and the
-trigger is **`plxnative-playurl`**, not `plxnative-url`, because the latter carries no declaration
+trigger is **`multiplex-playurl`**, not `multiplex-url`, because the latter carries no declaration
 and several of these gaps (HLG, HDR10+, 8-bit HEVC) are *about* what the payload declares. Still
 secondary to the real item shapes, and still to be labelled synthetic:
 
@@ -1470,7 +1470,7 @@ secondary to the real item shapes, and still to be labelled synthetic:
   human in front of the television is whether the panel engages Dolby Vision at all on the P8 file
   that does direct-play.
   **And since 2026-08-21 the P5 half of that refusal is CONDITIONAL, so read the paragraph above as
-  the behaviour with `plxnative-dv` absent — which is what this suite runs and what a
+  the behaviour with `multiplex-dv` absent — which is what this suite runs and what a
   `RELEASE=1` build compiles in.** Arming that trigger makes the Load payload declare the stream
   (`contents.DolbyHdrInfo`, the node LG's own pipeline has parsed all along), and a declared
   single-layer Profile 5 direct-plays *correctly* — so with it armed the P5 item's expectation is a

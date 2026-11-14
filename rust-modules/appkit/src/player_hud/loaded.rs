@@ -170,7 +170,7 @@ pub enum DevStep {
     Quiet,
 }
 
-/// **The dev package** (`plxnative-hud=<path>`): the bytes the owner read ONCE, what they compiled to for
+/// **The dev package** (`multiplex-hud=<path>`): the bytes the owner read ONCE, what they compiled to for
 /// the current language and what was already refused, so a bad file is neither re-read nor recompiled
 /// every frame. The file read is the owner's (this module does no IO): it hands the bytes, or the read
 /// error, to [`DevPackage::new`].
@@ -265,7 +265,7 @@ mod tests {
             assert_eq!(more.label, plx_platform::i18n::msg::player_hud_more_in(&cx), "{}", language.tag());
         }
         assert_eq!(crate::hud_format::MULTIPLEX_PACKAGE, &crate::hud_format::fixtures::bytes("multiplex")[..],
-            "fixtures/multiplex.plxhud is fixtures/multiplex/ packed: run plxnative-sim --hud-pack again");
+            "fixtures/multiplex.plxhud is fixtures/multiplex/ packed: run multiplex-sim --hud-pack again");
     }
 
     /// **Classic answers every frame the player can be in**, in every shipped language: for every slot the

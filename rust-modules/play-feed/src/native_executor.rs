@@ -460,7 +460,7 @@ pub fn launch_native_open(
         }
         return Err(());
     }
-    // The side subtitle reader (dev trigger `plxnative-subside`), started once the demuxer is
+    // The side subtitle reader (dev trigger `multiplex-subside`), started once the demuxer is
     // spawned and the media thread exists: it waits for the demuxer's first keyframe before it
     // reads anything. (Its ownership flag was set before the demux spawn, below.)
     side_reader.start_after_load_spawn();
@@ -1088,7 +1088,7 @@ impl FeedSlice {
 /// What is now open is why the slot the firmware asks for — using, we measured, dualsequencer's
 /// own key — is not in the ring. That points at pairing or at slot lifetime, not at rounding.
 ///
-/// `/tmp/plxnative-ptsnudge=<ns>` is kept because it is the instrument that produced that result
+/// `/tmp/multiplex-ptsnudge=<ns>` is kept because it is the instrument that produced that result
 /// and the next candidate value is one run away. Anything from 1 to ~11110 is in range; beyond
 /// that an already-correct frame is pushed a tick the other way.
 ///
@@ -1876,7 +1876,7 @@ pub fn sink_envelope_now(facts: &crate::PayloadFacts, video: crate::LoadVideo, r
         if let Some(env) = crate::parse_sinkmax(&spec) {
             #[cfg(feature = "devtriggers")]
             plx_base::eventlog::log(&format!(
-                "sinkmax: envelope OVERRIDDEN to {}x{}@{} by /tmp/plxnative-sinkmax",
+                "sinkmax: envelope OVERRIDDEN to {}x{}@{} by /tmp/multiplex-sinkmax",
                 env.w, env.h, env.fps
             ));
             return env;
@@ -2034,7 +2034,7 @@ pub fn prepare_native_open(
     // For a streamed direct-play/transcode, pick the Load codecs from the item: video H264 vs
     // H265 (native HEVC direct-play), audio AC3/EAC3/AAC/DTS. (The local sample paths keep their
     // fixed payloads.)
-    // dev A/B: /tmp/plxnative-noaudio feeds video only (needAudio:false + skip es=2) to isolate
+    // dev A/B: /tmp/multiplex-noaudio feeds video only (needAudio:false + skip es=2) to isolate
     // whether the audio ES (E-AC3/Atmos) is what stalls the sink on 4K HEVC.
     crate::set_feed_audio(!no_audio);
     let stream_payload;

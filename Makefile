@@ -1,4 +1,4 @@
-# plxnative — native webOS build (cross-compiled from macOS with the webOS NDK)
+# multiplex — native webOS build (cross-compiled from macOS with the webOS NDK)
 #
 # Toolchain: the webosbrew "native-toolchain" buildroot SDK (GCC 12, glibc 2.12,
 # armv7-a soft-float). Install it once with `make setup-env` (or see the
@@ -18,7 +18,7 @@
 # video-plane comment in src/video_plane.c. `tools/fwcompat.py` grades the
 # result against 14 real firmware inventories without leaving the desk.
 #
-# make          — build pkg/plxnative
+# make          — build pkg/multiplex
 # make setup-env— install the pinned Rust (+ its ARMv7 std), then the NDK into $(WEBOS_SDK)
 # make deploy   — scp binary + appinfo to the TV (rooted, root@TV)
 # make run      — launch on TV, keep alive $(RUN_SECS)s, fetch event log
@@ -45,7 +45,7 @@
 # network. `tools/` reads the same files via $TV_HOST. Absent, the targets that need a TV say so.
 # The lookup itself is `tools/tv-config.sh host`, the ONE resolver every tool shares: this
 # checkout's `.tv-host`, then the MAIN checkout's, then the per-USER
-# `${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/plxnative}/tv-host`. The last two are for a
+# `${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/multiplex}/tv-host`. The last two are for a
 # LINKED WORKTREE, and they are not a convenience: `.tv-host` is gitignored, so a worktree cut from
 # this repo has none — and worktrees are exactly where the parallel agents live. Without them, the
 # checkouts most likely to collide over the one television are also the only ones that cannot ask
@@ -65,7 +65,7 @@ TV       ?= $(strip $(shell tools/tv-config.sh host 2>/dev/null))
 # TV_CHECK expands to nothing when a TV is configured and stops make otherwise, so a recipe never
 # dials an empty address (it used to be `root@$(TV_OR_DIE)`; without this a deploy with no TV
 # says "does not exist ... make install", which is the wrong advice).
-TV_CHECK  = $(if $(TV),,$(error no TV configured — put its IP in ~/.config/plxnative/tv-host (or .tv-host), or pass TV=<ip>))
+TV_CHECK  = $(if $(TV),,$(error no TV configured — put its IP in ~/.config/multiplex/tv-host (or .tv-host), or pass TV=<ip>))
 SSH       = $(TV_CHECK)tools/tv-ssh ssh tv
 SCP       = $(TV_CHECK)tools/tv-ssh scp
 RUN_SECS ?= 18
@@ -142,7 +142,7 @@ APPDIR       = /media/developer/apps/usr/palm/applications/$(APPID)
 # there, never invents the directory.
 SERVICEDIR   = /media/developer/apps/usr/palm/services/$(APPID).storage
 
-# Where this install's runtime files live — the event log, the crash log, the `plxnative-*` dev
+# Where this install's runtime files live — the event log, the crash log, the `multiplex-*` dev
 # triggers and the remote FIFO. The app resolves this itself (`paths::resolve_runtime_dir`); this
 # is the same rule spelled for the shell, and `make print-rundir` is how every tool asks for it
 # instead of restating it a fourth time.
@@ -150,10 +150,10 @@ SERVICEDIR   = /media/developer/apps/usr/palm/services/$(APPID).storage
 # The stable install keeps `/tmp` byte for byte, so every existing recipe, doc line and harness
 # glob stays true for the app users get. A flavoured install gets `/tmp/<app id>` — a DOT in the
 # name, never a hyphen, because `dev::any_trigger_present` scans the root for entries beginning
-# `plxnative-` and a sibling directory matching that prefix would silently suppress the OTHER
+# `multiplex-` and a sibling directory matching that prefix would silently suppress the OTHER
 # install's who's-watching picker.
 RUNDIR       = $(if $(filter stable,$(FLAVOR)),/tmp,/tmp/$(APPID))
-EVENTLOG     = $(RUNDIR)/plxnative-events.log
+EVENTLOG     = $(RUNDIR)/multiplex-events.log
 
 # Machine-readable answers, so no tool has to restate any of the above. `make -s print-appdir
 # FLAVOR=debug` and every tool in tools/ and tests/ asks this way — which also means the flavour a
@@ -291,7 +291,7 @@ CFLAGS       = --sysroot=$(SYSROOT) -O2 -fno-omit-frame-pointer -funwind-tables 
 # WORKING DIRECTORY (`DW_AT_comp_dir`) and every `-I`/sysroot path into DWARF, which
 # --remap-path-prefix cannot touch — that flag is rustc's, and GCC never sees it. Found on the
 # first release build that ever combined SYMBOLS=1 with ci/check-elf.sh's build-host-identity
-# scan (both existed before; this exact pairing had not): pkg/plxnative, built with SYMBOLS=1 on
+# scan (both existed before; this exact pairing had not): pkg/multiplex, built with SYMBOLS=1 on
 # CI, carried five `/home/runner/work/plx-native/plx-native/.webos-ndk/…/sysroot/usr/include…`
 # strings and the bare checkout root, both from GCC's DWARF, not rustc's. Same broad-then-
 # specific order as RUST_REMAP and the same reasoning: WEBOS_SDK defaults under $(HOME) but is
@@ -319,7 +319,7 @@ CFLAGS       = --sysroot=$(SYSROOT) -O2 -fno-omit-frame-pointer -funwind-tables 
 # fix, if the degradation turns out to matter, is a real directory or symlink at each remapped
 # target path, created in the CI job between the build and the upload step — not a change here.
 CFLAGS_REMAP = -fdebug-prefix-map=$(HOME)=/build -fdebug-prefix-map=$(WEBOS_SDK)=/webos-sdk \
-               -fdebug-prefix-map=$(CURDIR)=/plxnative
+               -fdebug-prefix-map=$(CURDIR)=/multiplex
 
 ifeq ($(DEBUG),1)
 # -DPLX_DEBUG lets the C shim keep core dumps enabled for a post-mortem (src/crashtrace.c's
@@ -330,7 +330,7 @@ RUST_DEBUGINFO = -C debuginfo=2
 endif
 
 # SYMBOLS=1 — the same DWARF, WITHOUT DEBUG=1's behaviour change, for producing a separated
-# `pkg/plxnative.debug` that a symbol server can match to a stripped shipped binary by build id.
+# `pkg/multiplex.debug` that a symbol server can match to a stripped shipped binary by build id.
 # `make symbols` below is the whole recipe.
 #
 # **NOT the default, and the numbers are why** (measured 2026-08-29 on the dev Mac, cold):
@@ -339,7 +339,7 @@ endif
 #   its target dir                      356 MB   vs a normal one's share of a tree already at 26 GB
 #   the Rust staticlib                  148 MB   vs 19.6 MB
 #   the linked binary                    86.7 MB vs 10.0 MB
-#   -> pkg/plxnative.debug               79.8 MB
+#   -> pkg/multiplex.debug               79.8 MB
 #   -> stripped, i.e. what ships          6.93 MB vs 6.99 MB from a non-debuginfo build
 #
 # (Those are the 2026-08-29 absolutes; the binary has grown since. On 2026-10-01 a RELEASE=1
@@ -444,7 +444,7 @@ LIBS_REAL = -lSDL2 -lSDL2_ttf -lGLESv2 -lluna-service2 -lglib-2.0 \
 # See rust-modules/Cargo.toml's [features].
 #
 # Each feature set gets its OWN target dir, and that is load-bearing rather than tidy. Cargo names
-# the staticlib by crate, so both builds would otherwise write the SAME libplxnative_modules.a —
+# the staticlib by crate, so both builds would otherwise write the SAME libmultiplex_modules.a —
 # and cargo fingerprints the build without hashing its output, so after a RELEASE=1 build it
 # reports the dev build "Finished in 0.04s" and leaves the release .a sitting there. `make` then
 # links it with no comment: a release binary shipped as if it were the tested dev one. Measured,
@@ -490,13 +490,13 @@ endif
 # path) and are 40% of a lane's target bytes. `tools/cargo-seed.py` fills an ABSENT target dir with
 # an APFS clone of those artifacts (the app crate is stripped from it: cargo judges a path package
 # by mtime alone, so a cloned app artifact could be linked silently) and refreshes the seed under
-# ~/.cache/plxnative/cargo-seed/ after a build finishes. A clone costs no disk until a file is
+# ~/.cache/multiplex/cargo-seed/ after a build finishes. A clone costs no disk until a file is
 # rewritten, and nothing else about the build changes: each checkout still builds into its own
 # target dirs, which is what keeps `make` outputs per-checkout. Linked worktrees only (the main
 # checkout is not a lane and keeps what it has); `true` swallows the call elsewhere, and
 # PLX_CARGO_SEED=off turns it off here. It is never fatal: the script exits 0 and a build never
 # waits on it. See the script's docstring for the safety argument. Not hooked into
-# `pkg/plxnative-storage`, on purpose: that rule sets the linker to an absolute path in the lane,
+# `pkg/multiplex-storage`, on purpose: that rule sets the linker to an absolute path in the lane,
 # cargo hashes it into every unit, so a seeded helper tree recompiled in full (measured).
 CARGO_SEED = $(if $(filter yes,$(PLX_LINKED_WORKTREE)),python3 tools/cargo-seed.py,true)
 
@@ -584,7 +584,7 @@ RUST_TDIR = target$(if $(RELEASE),-release,)$(if $(LAB),-lab,)$(if $(SYMBOLS),-s
 
 # OVERRIDING RUST_FEATFLAGS BY HAND? PASS RUST_TDIR TOO. This dir is keyed on RELEASE, not on the
 # flag set, so `make RUST_FEATFLAGS=...` alone lands in the SAME target/ as an ordinary build:
-# cargo's staticlib looks up to date, the stamp below deletes pkg/plxnative, and make relinks the
+# cargo's staticlib looks up to date, the stamp below deletes pkg/multiplex, and make relinks the
 # PREVIOUS feature set without a word. Exactly the stale-artifact trap the stamp exists to prevent,
 # one step removed — and it burned two builds while shooting the README screenshots (which want
 # devtriggers ON and devtools OFF, a combination neither RELEASE nor the default gives). The set
@@ -691,9 +691,9 @@ export PLX_RC
 else
 unexport PLX_RC
 endif
-# ...and the LINK needs its own witness, because pkg/plxnative is a path BOTH configurations
+# ...and the LINK needs its own witness, because pkg/multiplex is a path BOTH configurations
 # write. Per-dir targets keep cargo honest, but after a RELEASE=1 build the dev .a is older
-# than the release binary sitting at pkg/plxnative, so make would call the link up to date and
+# than the release binary sitting at pkg/multiplex, so make would call the link up to date and
 # leave the release binary in place under a plain `make`. The stamp's CONTENT is the flag set,
 # so switching configuration is a real prerequisite change.
 RUST_STAMP     = pkg/.build-config
@@ -770,7 +770,7 @@ TELEMETRY_CFG  = $(shell printf '%s|%s|%s|%s' '$(PLX_SENTRY_DSN)' '$(PLX_POSTHOG
 # packaged binary was built with to grade it — and the ONLY other place that date exists is this
 # environment variable, gone the moment the shell that ran `make` exits. Embedding the real value
 # (not just "nightly: yes/no") is also what makes a DATE CHANGE relink: two nightly builds cut on
-# the same tracked version a day apart must not silently share pkg/plxnative just because nothing
+# the same tracked version a day apart must not silently share pkg/multiplex just because nothing
 # else about the configuration moved. `$(filter nightly,$(FLAVOR))` guards it exactly the way
 # PLX_CHANNEL and PLX_NIGHTLY_DATE above are themselves guarded, so a non-nightly stamp is
 # byte-for-byte what it always was. `+rc:<n>` is the same argument for a release candidate: the
@@ -785,7 +785,7 @@ RUST_CFG       = features:$(RUST_FEATFLAGS)$(if $(filter-out release,$(ARM_PROFI
 #   * A newer stamp is not enough either. make 3.81 compares mtimes at ONE-SECOND granularity, so
 #     a stamp written 0.5s after the binary compares EQUAL and the link is still skipped —
 #     measured: stamp 1785559259.894 vs binary 1785559259.408, no relink.
-# Removing pkg/plxnative cannot be defeated by either, because "the target does not exist" is not
+# Removing pkg/multiplex cannot be defeated by either, because "the target does not exist" is not
 # a timestamp comparison. The failure this prevents is silent: you get the OTHER configuration's
 # binary, with the dev counter burned into a release build or vice versa.
 # (Consequence: a `make -n` that CHANGES the configuration really does delete the binary. The next
@@ -793,7 +793,7 @@ RUST_CFG       = features:$(RUST_FEATFLAGS)$(if $(filter-out release,$(ARM_PROFI
 #
 # ...and it is skipped for a PURE QUERY. `make -s print-appdir` and friends exist so tools stop
 # restating this file's values, but the block above runs at PARSE time, on every invocation,
-# whatever the goal — so asking a question would delete `pkg/plxnative`, the FFmpeg header sentinel
+# whatever the goal — so asking a question would delete `pkg/multiplex`, the FFmpeg header sentinel
 # and the staged libraries whenever the asking invocation's configuration differed from the stamp.
 # That is not hypothetical: `tools/crash-report.sh` shells out to make for the TV address, and it
 # is the tool you run immediately after a crash, i.e. right after the RELEASE=1 build you were
@@ -806,11 +806,11 @@ RUST_CFG       = features:$(RUST_FEATFLAGS)$(if $(filter-out release,$(ARM_PROFI
 # `release-guard` is in the list beside the queries for the same reason it is not one of them: it
 # is a check-only phony that produces no artifact, and it is exactly the target somebody runs to
 # SEE the refusal message the cut-release skill quotes. Without it, asking that question on a
-# different configuration deleted `pkg/plxnative`, the FFmpeg header sentinel and the staged
+# different configuration deleted `pkg/multiplex`, the FFmpeg header sentinel and the staged
 # libraries — measured, by a reviewer, mid-review.
 #
 # THE RULE, for what joins the queries and the guards above: a goal is listed when it builds, reads and
-# ships NOTHING the stamp describes -- not `pkg/plxnative`, not the ARM library, not anything staged
+# ships NOTHING the stamp describes -- not `pkg/multiplex`, not the ARM library, not anything staged
 # under `pkg/` -- so a parse that finds the configuration changed has nothing to protect and must not
 # delete a release build because its caller left `ARM_PROFILE=release` off. The stamp exists so that a
 # stale ARM binary is never deployed; a goal that builds, reads or ships any of that stays OUT. Decide
@@ -823,22 +823,22 @@ RUST_CFG       = features:$(RUST_FEATFLAGS)$(if $(filter-out release,$(ARM_PROFI
 #     `check-python-harness`), the notices tables, and the set-up and local tooling that writes outside
 #     `pkg/` (a toolchain install, the disk-watch agent, the test media, the demo library, the
 #     simulator's instance root). `make test-crate C=plx_gfx` after a `make ARM_PROFILE=release` build
-#     deleted `pkg/plxnative` and rewrote the stamp to `+profile:tvdev` (2026-10-24): it had been missed
+#     deleted `pkg/multiplex` and rewrote the stamp to `+profile:tvdev` (2026-10-24): it had been missed
 #     when `test-hostsim` and `check-nodef` were listed. Each such goal builds a cargo tree under
 #     `rust-modules/` or runs a script, and none of them reads what the stamp guards.
 #   * TV-CONTROL goals: `kill`, `run`, `run-stream`, `verify-deploy`, `uninstall`, `fetch-profile` and
 #     `softfloat-probe` each have `tv-lock-require` as their one prerequisite and an ssh/scp recipe, and
 #     `tv-lock-require` itself is a shell call, so they build and ship nothing. `tools/tv-session.sh`
 #     runs `make kill` with no ARM_PROFILE, which is the tvdev configuration, so after a
-#     `make ARM_PROFILE=release` build its `make kill` deleted the release-built `pkg/plxnative` and
-#     rewrote the stamp, and the next `tv-session.sh up` died on "no pkg/plxnative".
+#     `make ARM_PROFILE=release` build its `make kill` deleted the release-built `pkg/multiplex` and
+#     rewrote the stamp, and the next `tv-session.sh up` died on "no pkg/multiplex".
 #
 # NOT here, deliberately: `deploy`, `install`, `ipk`, `symbols*`, `libass`, `sentry-native` and the
 # probes build or ship the binary (or write `pkg/`), the host simulators and `check-ass`/`check-ffmpeg`/
 # `macapp` stage host libraries into `pkg/`, `telemetry-local` writes an INPUT of the stamp
 # (`pkg/telemetry.local.json`), and `check` is a mix: its own steps run `make -n` of the ARM library and
-# `pkg/plxnative-storage` at the checkout's root (ci/test_disk_preflight.py), and `check-cargo-unit-default`
-# grades `pkg/plxnative-storage` when it exists, so listing `check` or the goals that re-enter it
+# `pkg/multiplex-storage` at the checkout's root (ci/test_disk_preflight.py), and `check-cargo-unit-default`
+# grades `pkg/multiplex-storage` when it exists, so listing `check` or the goals that re-enter it
 # would only move the reset into a nested make. `ci/test_arm_profile.py` pins both sides of this: every
 # goal in the two kinds above resets nothing under a dry run, and every goal named as NOT here stays out
 # of the list. The list is ONE line on purpose (`grep '^SIDE_EFFECT_FREE' Makefile` is the exact set,
@@ -857,7 +857,7 @@ endif
 endif
 ifneq ($(PURE_QUERY),yes)
 ifneq ($(RUST_CFG),$(shell cat $(RUST_STAMP) 2>/dev/null))
-  $(shell mkdir -p pkg && printf '%s' '$(RUST_CFG)' > $(RUST_STAMP) && rm -f pkg/plxnative pkg/plxnative-storage \
+  $(shell mkdir -p pkg && printf '%s' '$(RUST_CFG)' > $(RUST_STAMP) && rm -f pkg/multiplex pkg/multiplex-storage \
           vendor/ffmpeg-prefix/include/libavformat/avformat.h pkg/lib*-plx.so.* pkg/.ffabi-ok)
 endif
 endif
@@ -879,7 +879,7 @@ endif
 endif
 
 RUST_TARGET = armv7-unknown-linux-gnueabi
-RUST_LIB    = rust-modules/$(RUST_TDIR)/$(RUST_TARGET)/$(ARM_PROFILE)/libplxnative_modules.a
+RUST_LIB    = rust-modules/$(RUST_TDIR)/$(RUST_TARGET)/$(ARM_PROFILE)/libmultiplex_modules.a
 
 # Every ordinary C translation unit ships except `src/gpdebug.c` (an opt-in allocator guard) and, when
 # no Feed backend is built (`PLAYBACK_HAS_FEED` empty: `PLAYBACK_BACKENDS=uri|none`), `src/starfish.c`,
@@ -889,7 +889,7 @@ RUST_LIB    = rust-modules/$(RUST_TDIR)/$(RUST_TARGET)/$(ARM_PROFILE)/libplxnati
 SRCS = $(filter-out src/gpdebug.c src/ass.c src/ass_fonts.c src/ass_text.c $(if $(PLAYBACK_HAS_FEED),,src/starfish.c),$(wildcard src/*.c)) src/compat/getauxval.c
 OBJS = $(SRCS:.c=.o)
 
-all: pkg/plxnative pkg/plxnative-storage
+all: pkg/multiplex pkg/multiplex-storage
 
 # per-file compile; each object depends on ALL headers so a header edit rebuilds all, plus the
 # config.local.h presence/hash stamp so its appearance, change or disappearance also rebuilds
@@ -1033,32 +1033,32 @@ $(RUST_LIB): LICENSE $(RUST_INPUTS) rust-modules/Cargo.toml rust-modules/Cargo.l
 # The helper is an independent executable: it has its own auxv implementation and must never
 # link app getauxval.o. The project linker wrapper attests its map, trace and ELF bytes too.
 #
-# ITS OWN TARGET DIR, deliberately not $(RUST_TDIR): this `cargo rustc -p plxnative-storage` and
+# ITS OWN TARGET DIR, deliberately not $(RUST_TDIR): this `cargo rustc -p multiplex-storage` and
 # $(RUST_LIB)'s `cargo rustc --lib` are two cargo invocations in ONE workspace (two packages, two
 # feature configurations), and `make -j` runs them concurrently — exactly the hazard
 # rust-modules/.cargo/config.toml's own comment already documents ("a hand-typed cross build with a DIFFERENT ENVIRONMENT still writes the archive
 # make links... give a hand-run one its own --target-dir"). Sharing one target dir let the two
 # invocations race on shared units (back when `-Z build-std` rebuilt std/core/alloc fresh in BOTH
 # processes every run), which could leave
-# `cargo rustc`'s own fingerprint believing the just-linked plxnative-storage binary was still
+# `cargo rustc`'s own fingerprint believing the just-linked multiplex-storage binary was still
 # fresh from the OTHER invocation's pass and skip re-invoking arm-cc.py — so no `.link.map`/
 # `.link.trace`/`.link.json` sidecar existed anywhere `stage-link-evidence.py` could find one,
 # even by its content-hash fallback (`04801c22`). A dedicated target dir makes the two cargo
 # invocations share nothing, so neither can observe the other's fingerprint state.
 STORAGE_TDIR = $(RUST_TDIR)-storage
 # The helper is its own cargo package (rust-modules/storage) that does NOT depend on the app crate,
-# so the `cargo rustc -p plxnative-storage` below compiles only it, not the application library. What
+# so the `cargo rustc -p multiplex-storage` below compiles only it, not the application library. What
 # it does read of the platform layer crate is the handful of files it shares by `#[path]`
 # (platform/src/storage_service/ and platform/src/storage/state.rs) and the install-identity
 # generator in build_support/; that is all it names here, so an edit to the UI no longer relinks it. `ci/test_storage_package_isolated.py` holds the
 # "no app library" line.
 STORAGE_INPUTS := $(shell find rust-modules/storage rust-modules/build_support rust-modules/platform/src/storage_service -type f 2>/dev/null) rust-modules/platform/src/storage/state.rs rust-modules/.cargo/config.toml
-STORAGE_BIN = rust-modules/$(STORAGE_TDIR)/$(RUST_TARGET)/$(ARM_PROFILE)/plxnative-storage
-pkg/plxnative-storage: LICENSE $(STORAGE_INPUTS) rust-modules/Cargo.toml rust-modules/Cargo.lock ci/install-identities.json Makefile ci/arm-cc.py ci/check-link-evidence.py
+STORAGE_BIN = rust-modules/$(STORAGE_TDIR)/$(RUST_TARGET)/$(ARM_PROFILE)/multiplex-storage
+pkg/multiplex-storage: LICENSE $(STORAGE_INPUTS) rust-modules/Cargo.toml rust-modules/Cargo.lock ci/install-identities.json Makefile ci/arm-cc.py ci/check-link-evidence.py
 	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" $(RUST_ENV) \
 	  CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABI_LINKER='$(CC)' \
 	  cargo +$(RUST_TOOLCHAIN) rustc $(ARM_PROFILE_FLAG) --target $(RUST_TARGET) \
-	    -p plxnative-storage --bin plxnative-storage --target-dir $(STORAGE_TDIR) --no-default-features -- \
+	    -p multiplex-storage --bin multiplex-storage --target-dir $(STORAGE_TDIR) --no-default-features -- \
 	    -C link-arg=--sysroot=$(SYSROOT) -L native=$(SYSROOT)/usr/lib \
 	    -C link-arg=-Wl,-rpath-link,$(SYSROOT)/usr/lib -C link-arg=-Wl,--build-id=sha1
 	cp $(STORAGE_BIN) $@
@@ -1095,7 +1095,7 @@ SMP_INTERPOSER_LDFLAG = $(if $(PLAYBACK_HAS_FEED),-Wl$(PLAYBACK_COMMA)--export-d
 # `check-c-unit` links its host copy of the interposer with this same variable.
 EXIT_INTERPOSER_LDFLAG = -Wl,--export-dynamic-symbol=exit
 # --gc-sections: this link is gcc's, not rustc's. rustc passes --gc-sections itself when IT links an
-# executable (which is why pkg/plxnative-storage above never needed the flag), but here the Rust
+# executable (which is why pkg/multiplex-storage above never needed the flag), but here the Rust
 # code arrives as a finished staticlib, so without the flag every section of every archive member
 # that got pulled in stays — measured on the dev binary (unmodified main, 2026-10-01): 22.95 MB
 # allocated, of which 8.27 MB .rodata (mostly icu_datetime compiled_data for markers the app never
@@ -1120,7 +1120,7 @@ GC_SECTIONS_LDFLAG = -Wl,--gc-sections
 # call to __aeabi_fadd). With libm.so first, those names are already defined when the archive is
 # scanned and the members are never extracted, so every call (Rust's and svg.c's) binds to glibc's
 # VFP libm. `ci/check-elf.sh` fails if a local definition of one of them comes back.
-pkg/plxnative: $(OBJS) $(RUST_LIB) $(FFMPEG_STAGED) $(LIBASS_STAGED) $(SENTRY_NATIVE_STAMP) Makefile ci/arm-cc.py ci/check-link-evidence.py
+pkg/multiplex: $(OBJS) $(RUST_LIB) $(FFMPEG_STAGED) $(LIBASS_STAGED) $(SENTRY_NATIVE_STAMP) Makefile ci/arm-cc.py ci/check-link-evidence.py
 	$(CC) $(CFLAGS) -Wl,--build-id=sha1 $(GC_SECTIONS_LDFLAG) $(SMP_INTERPOSER_LDFLAG) $(EXIT_INTERPOSER_LDFLAG) \
 	  $(OBJS) -lm $(RUST_LIB) $(SENTRY_NATIVE_LIB) \
 	  $(SENTRY_UNWIND_LIB) $(LIBS_REAL) -ldl -lrt -lpthread -lm -o $@
@@ -1226,12 +1226,12 @@ APPINFO   = $(if $(filter stable,$(FLAVOR)),pkg/appinfo.json,pkg/.flavor/$(FLAVO
 ICONDIR   = $(if $(filter nightly,$(FLAVOR)),pkg/nightly,pkg/dev)
 ICONS     = $(if $(filter stable,$(FLAVOR)),pkg/icon.png pkg/largeIcon.png,$(ICONDIR)/icon.png $(ICONDIR)/largeIcon.png)
 # `pkg/lab.json` is in this list ONLY under LAB=1, and it is the whole handoff between the two
-# halves of the Cloud Lab bridge: `tools/plxnative-lab start` writes it (endpoint, session,
+# halves of the Cloud Lab bridge: `tools/multiplex-lab start` writes it (endpoint, session,
 # secret, certificate pin), and the app reads it out of its own install directory at boot, because
 # a Cloud Test Lab set has no ssh and the package is the only channel into it. GITIGNORED, 0600,
 # and in `.claude/hooks/outbound-guard.py`'s PRIVATE_FILES — it carries a live credential.
 LAB_FILES = $(if $(LAB),pkg/lab.json,)
-APP_FILES = pkg/plxnative $(SENTRY_HANDLER) $(APPINFO) $(ICONS) pkg/splash.png \
+APP_FILES = pkg/multiplex $(SENTRY_HANDLER) $(APPINFO) $(ICONS) pkg/splash.png \
             pkg/appfont.ttf pkg/appfont-bold.ttf pkg/appfont-cjk.ttf pkg/appfont-emoji.ttf pkg/OFL.txt \
             pkg/appfont-arabic.ttf pkg/appfont-arabic-bold.ttf pkg/appfont-hebrew.ttf pkg/appfont-hebrew-bold.ttf \
             pkg/le-roots.pem \
@@ -1251,7 +1251,7 @@ APP_FILES = pkg/plxnative $(SENTRY_HANDLER) $(APPINFO) $(ICONS) pkg/splash.png \
 # `THIRD-PARTY-NOTICES.md` were in every `.ipk` and in NO deployed app directory, silently, for as
 # long as nobody compared the two by hand. `ci/test_deploy_manifest.py` pins the relationship
 # itself (via `print-app-files`/`print-deploy-files`), not just today's four names.
-DEPLOY_FILES = $(filter-out pkg/plxnative $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(LAB_FILES),$(APP_FILES))
+DEPLOY_FILES = $(filter-out pkg/multiplex $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(LAB_FILES),$(APP_FILES))
 
 # The subtitle faces (tools/cut-noto-subs.py): Noto Sans <script> Bold, one file per script, plus the
 # manifest that names them in add order. They are NOT in `APP_FILES`, because that list is staged
@@ -1318,7 +1318,7 @@ pkg/.flavor/$(FLAVOR)/appinfo.json: pkg/appinfo.json ci/flavor.py ci/install-ide
 # prerequisites run left to right, and a cold `make deploy` spends ~2 minutes building FFmpeg
 # before it touches the television. Taking the lock first would hold the set through a build that
 # needs no television — and, on the short implicit lease, could even let it expire before the scp.
-deploy: pkg/plxnative pkg/plxnative-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STAMP) $(APPINFO) release-guard tv-lock-require
+deploy: pkg/multiplex pkg/multiplex-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STAMP) $(APPINFO) release-guard tv-lock-require
 	@echo "deploying $(if $(RELEASE),RELEASE,dev) build ($(RUST_CFG)) to $(APPID) [$(FLAVOR)]"
 	@$(SSH) 'test -d $(APPDIR)' || { \
 	  echo "$(APPDIR) does not exist on the TV — the $(FLAVOR) flavour is not installed."; \
@@ -1357,8 +1357,8 @@ deploy: pkg/plxnative pkg/plxnative-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STA
 	# reinstall. Same `.new` + `mv` dance as the crash handler and for the same reason: LS2 may
 	# already have this service's OLD binary running (`appinstalld` execs `services.json`'s
 	# `executable` under its own uid), so `scp` straight onto that inode risks `ETXTBSY`.
-	$(SCP) pkg/plxnative-storage tv:$(SERVICEDIR)/plxnative-storage.new
-	$(SSH) 'chmod 755 $(SERVICEDIR)/plxnative-storage.new && mv $(SERVICEDIR)/plxnative-storage.new $(SERVICEDIR)/plxnative-storage'
+	$(SCP) pkg/multiplex-storage tv:$(SERVICEDIR)/multiplex-storage.new
+	$(SSH) 'chmod 755 $(SERVICEDIR)/multiplex-storage.new && mv $(SERVICEDIR)/multiplex-storage.new $(SERVICEDIR)/multiplex-storage'
 	# ...then retire any FFmpeg from a PREVIOUS version. `scp` only adds, so bumping the bundled
 	# release left the old majors sitting in the app directory forever — observed on the dev TV,
 	# which was carrying libavcodec-plx.so.60 and .so.58 from an earlier experiment alongside the
@@ -1367,7 +1367,7 @@ deploy: pkg/plxnative pkg/plxnative-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STA
 	# a moment with no FFmpeg on the device.
 	$(SSH) 'cd $(APPDIR) && for f in libav*-plx.so.* libswscale-plx.so.*; do case " $(FFMPEG_SONAMES) " in *" $$f "*) ;; *) rm -f "$$f";; esac; done'
 
-	$(SCP) pkg/plxnative tv:$(APPDIR)/plxnative.new
+	$(SCP) pkg/multiplex tv:$(APPDIR)/multiplex.new
 	@# The lab session file, under LAB=1 only. Shipped by deploy as well as by the .ipk so the
 	@# whole path — trigger, snapshot, pinned upload — can be rehearsed on the dev television
 	@# before an hour of Cloud Test Lab is spent on it. A non-LAB deploy REMOVES any file a
@@ -1406,7 +1406,7 @@ deploy: pkg/plxnative pkg/plxnative-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STA
 	@# root-owned 0700 binary: SAM could launch it before entering the app jail, but Sentry's
 	@# same-uid external reporter could not `execv` it to spool a crash envelope. The .ipk builder
 	@# already normalises this member to 0755; make the fast deploy path identical.
-	$(SSH) 'mv $(APPDIR)/plxnative.new $(APPDIR)/plxnative && chmod 755 $(APPDIR)/plxnative'
+	$(SSH) 'mv $(APPDIR)/multiplex.new $(APPDIR)/multiplex && chmod 755 $(APPDIR)/multiplex'
 	@# Which cargo profile this binary was built with, on the television next to it. Every path that
 	@# measures or grades frame timing (tools/arm_profile_guard.py) reads this and refuses a `tvdev`
 	@# binary, including one deployed earlier by a plain `make deploy`. See ARM_PROFILE above.
@@ -1425,7 +1425,7 @@ deploy: pkg/plxnative pkg/plxnative-storage $(FFMPEG_STAGED) $(SENTRY_NATIVE_STA
 # report to find weeks later. `VERIFY_FILES` is deliberately not `DEPLOY_FILES` alone: the binary,
 # the crash handler and the FFmpeg libraries take their own path to the device above and are just
 # as capable of silently drifting, so they are verified too.
-VERIFY_FILES = pkg/plxnative $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(DEPLOY_FILES) pkg/plxnative-storage \
+VERIFY_FILES = pkg/multiplex $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(DEPLOY_FILES) pkg/multiplex-storage \
                $(SUBS_FONT_FILES) $(if $(LAB),pkg/lab.json,)
 verify-deploy: tv-lock-require
 	@echo "verify-deploy: comparing $(words $(VERIFY_FILES)) files against $(APPID) [$(FLAVOR)]"
@@ -1433,9 +1433,9 @@ verify-deploy: tv-lock-require
 	@# `ci/verify-deploy.py` keys purely by basename (see its module doc), so a second `cd && md5sum`
 	@# appended to the same ssh round trip merges into one stream it already knows how to read,
 	@# rather than needing a transport of its own.
-	@$(SSH) 'cd $(APPDIR) && md5sum $(notdir $(filter-out pkg/plxnative-storage $(SUBS_FONT_FILES),$(VERIFY_FILES))) 2>&1; \
+	@$(SSH) 'cd $(APPDIR) && md5sum $(notdir $(filter-out pkg/multiplex-storage $(SUBS_FONT_FILES),$(VERIFY_FILES))) 2>&1; \
 	         cd $(APPDIR)/$(SUBS_FONT_DIR) && md5sum $(notdir $(SUBS_FONT_FILES)) 2>&1; \
-	         cd $(SERVICEDIR) && md5sum plxnative-storage 2>&1' | \
+	         cd $(SERVICEDIR) && md5sum multiplex-storage 2>&1' | \
 	  python3 ci/verify-deploy.py $(VERIFY_FILES)
 
 # NB (this webOS build): luna-send must stay subscribed (-i) for the launch to
@@ -1450,7 +1450,7 @@ verify-deploy: tv-lock-require
 # event log: they are OUTPUTS the app creates, and a root-owned leftover is one the jailed app
 # cannot open — which disables the profiler with a single `Permission denied` line that is easy to
 # scroll past. Clearing an output is not disarming a trigger: `make run` deliberately preserves
-# `$(RUNDIR)/plxnative-*` scene triggers, including `plxnative-profile` and `plxnative-hwcnt`, so a
+# `$(RUNDIR)/multiplex-*` scene triggers, including `multiplex-profile` and `multiplex-hwcnt`, so a
 # profiling run is armed once and repeated.
 #
 # Only `rm -f` the log — never pre-create it. The app runs jailed under its own uid
@@ -1458,8 +1458,8 @@ verify-deploy: tv-lock-require
 # log stays 0 bytes and every assertion reads as a total regression. `tail -F` retries
 # until the app creates the file itself, which is exactly what -F is for.
 #
-# `fuser -k $(APPDIR)/plxnative` is INODE-scoped where `closeByAppId` is ID-scoped, and with two
-# installs that difference is the point: both binaries are named `plxnative`, so a name-based kill
+# `fuser -k $(APPDIR)/multiplex` is INODE-scoped where `closeByAppId` is ID-scoped, and with two
+# installs that difference is the point: both binaries are named `multiplex`, so a name-based kill
 # (`pidof`, `killall`) would take down the OTHER install too. Keep it addressed by path.
 #
 # `mkdir -p` + `chmod 1777` on the runtime root before anything writes into it: two uids write here
@@ -1469,10 +1469,10 @@ verify-deploy: tv-lock-require
 # reports as "no line found", i.e. exactly like a total regression. A no-op for the stable flavour,
 # whose root is `/tmp` itself (already 1777).
 CLOSE_SH = (luna-send -i "luna://com.webos.applicationManager/closeByAppId" "{\"id\":\"$(APPID)\"}" >/dev/null 2>&1 & P=$$!; sleep 2; kill $$P 2>/dev/null); \
-	  fuser -k $(APPDIR)/plxnative 2>/dev/null;
+	  fuser -k $(APPDIR)/multiplex 2>/dev/null;
 BOOT_SH = $(CLOSE_SH) \
 	  mkdir -p $(RUNDIR) && chmod 1777 $(RUNDIR); \
-	  rm -f $(EVENTLOG) $(RUNDIR)/plxnative-gputime.jsonl $(RUNDIR)/plxnative-hwcnt.jsonl; \
+	  rm -f $(EVENTLOG) $(RUNDIR)/multiplex-gputime.jsonl $(RUNDIR)/multiplex-hwcnt.jsonl; \
 	  luna-send -i "luna://com.webos.applicationManager/launch" "{\"id\":\"$(APPID)\"}" >/dev/null 2>&1 & LP=$$!;
 
 run: tv-lock-require
@@ -1493,23 +1493,23 @@ run-stream: tv-lock-require
 	  tail -F -n +1 $(EVENTLOG)'
 
 # make softfloat-probe — the ARM half of machine/src/motion.rs's differential claim (spec §4.2): boot the
-# deployed debug build with plxnative-softfloat armed, print the `softfloat:` line (its hash beside
+# deployed debug build with multiplex-softfloat armed, print the `softfloat:` line (its hash beside
 # the host's pinned one, MATCH or DIVERGE) and fetch the word table for a diff. Needs a prior
 # `make deploy`; the trigger is removed afterwards so the next boot is ordinary.
 softfloat-probe: tv-lock-require
 	@echo "softfloat probe on $(APPID) [$(FLAVOR)]"
-	$(SSH) 'mkdir -p $(RUNDIR) && chmod 1777 $(RUNDIR); touch $(RUNDIR)/plxnative-softfloat; \
+	$(SSH) 'mkdir -p $(RUNDIR) && chmod 1777 $(RUNDIR); touch $(RUNDIR)/multiplex-softfloat; \
 	  $(BOOT_SH) \
-	  sleep 12; kill $$LP 2>/dev/null; sleep 1; rm -f $(RUNDIR)/plxnative-softfloat; \
+	  sleep 12; kill $$LP 2>/dev/null; sleep 1; rm -f $(RUNDIR)/multiplex-softfloat; \
 	  $(CLOSE_SH) grep softfloat $(EVENTLOG) || echo "softfloat: NO LINE (was the build deployed with devtriggers?)"'
 	@mkdir -p tests/fixtures/softfloat
-	-$(SCP) tv:$(RUNDIR)/plxnative-softfloat.tbl tests/fixtures/softfloat/arm.tbl 2>/dev/null && echo "table: tests/fixtures/softfloat/arm.tbl"
+	-$(SCP) tv:$(RUNDIR)/multiplex-softfloat.tbl tests/fixtures/softfloat/arm.tbl 2>/dev/null && echo "table: tests/fixtures/softfloat/arm.tbl"
 
 kill: tv-lock-require
 	$(SSH) '$(CLOSE_SH) echo closed $(APPID)'
 
 clean:
-	rm -f src/*.o pkg/plxnative pkg/plxnative-storage
+	rm -f src/*.o pkg/multiplex pkg/multiplex-storage
 
 test: deploy run
 
@@ -1537,7 +1537,7 @@ test: deploy run
 # finds every target whose recipe runs cargo and fails when one is missing from this list.
 DISK_ENTRIES = check check-replay check-cargo-lint check-cargo-unit-default check-cargo-unit-hostsim lint \
                test-fast test-crate test-hostsim check-nodef check-ass check-ffmpeg sim-macos sim-linux screenshots-sim site-video-sim \
-               $(RUST_LIB) pkg/plxnative-storage macapp macapp-zip build-bench build-bench-quick fuzz-hud
+               $(RUST_LIB) pkg/multiplex-storage macapp macapp-zip build-bench build-bench-quick fuzz-hud
 $(DISK_ENTRIES): | disk-preflight
 
 # A relative CARGO_TARGET_DIR is relative to rust-modules, where cargo runs.
@@ -1557,8 +1557,8 @@ macapp macapp-zip: DISK_TREE = $(abspath $(MACAPP_TDIR))
 # The ARM builds add far less than the host's: 0.6 GiB (`tvdev`) or 0.45 GiB (`release`), 0.15 for the helper.
 $(RUST_LIB): DISK_TREE = $(CURDIR)/rust-modules/$(RUST_TDIR)
 $(RUST_LIB): DISK_NEED = $(if $(filter release,$(ARM_PROFILE)),0.45,0.6)
-pkg/plxnative-storage: DISK_TREE = $(CURDIR)/rust-modules/$(STORAGE_TDIR)
-pkg/plxnative-storage: DISK_NEED = 0.15
+pkg/multiplex-storage: DISK_TREE = $(CURDIR)/rust-modules/$(STORAGE_TDIR)
+pkg/multiplex-storage: DISK_NEED = 0.15
 # The benchmark's worst case: the host `target` AND a test-fast tree built from nothing (only `ARGS=--cold`
 # builds it; a plain run reuses an existing one or skips the -inc rows).
 build-bench build-bench-quick: DISK_NEED = 6.1
@@ -1576,7 +1576,7 @@ print-disk-entries: ; @printf '%s\n' $(DISK_ENTRIES)
 # is a cold 412k-line rustc build (~1 GB RSS), swap hit 9-15 GB, and one run took 60
 # minutes (`cargo test --lib` build 26m33 vs. a normal ~1-2 min, hostsim build 17m37) —
 # where a lone run is ~10 min. Queuing through `tools/check-lock.py`'s machine-wide
-# flocks (`~/.cache/plxnative/check.lock` and `check.lock.1` by default, shared by every
+# flocks (`~/.cache/multiplex/check.lock` and `check.lock.1` by default, shared by every
 # worktree) is strictly faster for everyone: the kernel releases a lock the moment a
 # holder dies, so there is nothing to clean up by hand. Two at once is the measured
 # optimum (2026-10-06: a pair finishes in 0.67-0.76 of the back-to-back time, 5-6 GB
@@ -1601,9 +1601,9 @@ check:
 # that actually calls into FFmpeg or GL fails to link by design. --lib keeps it to the crate's own
 # `#[cfg(test)] mod tests` blocks (there are no integration tests in tests/ — that directory is the
 # on-device Python harness, a different thing entirely).
-# NB the suite APPENDS to `/tmp/plxnative-events.log` on the dev Mac, and deliberately cannot be
+# NB the suite APPENDS to `/tmp/multiplex-events.log` on the dev Mac, and deliberately cannot be
 # pointed elsewhere. Since 2026-08-15 enough of the tree logs its failures (stream, posters, img,
-# account, remote) that host tests exercising those paths write real lines. `PLXNATIVE_RUNTIME_DIR`
+# account, remote) that host tests exercising those paths write real lines. `MULTIPLEX_RUNTIME_DIR`
 # does NOT help: `paths::ENV_STEERABLE` is `cfg!(feature = "hostsim")`, off here, and widening it to
 # `cfg(test)` would silently retire `paths.rs`'s own test that a television build ignores that
 # variable — the suite is the only place that guarantee is ever checked. Host-side cosmetics are not
@@ -1669,7 +1669,7 @@ check-cargo-lint: lint
 	@# gate has nothing to reuse a cache for. No `pkg/lab.json` is involved — that file is `make
 	@# LAB=1`'s requirement (a live session secret), not the compiler's.
 	@set -e; cd rust-modules && CARGO_INCREMENTAL=0 PATH="$$HOME/.cargo/bin:$$PATH" \
-	  cargo +$(RUST_TOOLCHAIN) check --lib --tests -p plxnative-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens --features lab-diagnostics
+	  cargo +$(RUST_TOOLCHAIN) check --lib --tests -p multiplex-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens --features lab-diagnostics
 	@# And the demo-video dump build's pixel oracle, `placeholder-sentinel`: in no default set and
 	@# built only by `make site-video-sim`, which no gate runs and which compiles no `plx_ui` tests, so
 	@# this line is what keeps it compiling (its code AND its tests, `--tests`). `plx_ui` is the only
@@ -1681,18 +1681,18 @@ check-cargo-lint: lint
 # so the suite's wall time was their SUM and one slow binary set it: measured 2026-10-05, `plx_media`
 # alone was 28.7 s of 78.8 s because one test held `testlock::serial()` for 16 s. UNIT_RUN builds
 # exactly what the `cargo ... test --lib -p ...` after it names, then runs the binaries side by
-# side (tools/cargo-test-parallel.py: bounded jobs, each in its own PLXNATIVE_RUNTIME_DIR and an
+# side (tools/cargo-test-parallel.py: bounded jobs, each in its own MULTIPLEX_RUNTIME_DIR and an
 # empty TMPDIR that it must leave empty, every
 # binary's `test result:` line printed, any failing binary fails the gate). It must run from
 # `rust-modules/` like the cargo line it wraps. UNIT_SUITE is the same package list as the literal
 # `-p` lists in the recipes below (those stay literal because ci/test_ci_split.py greps for them);
 # ci/test_test_crate.py pins the two equal.
 UNIT_RUN = python3 ../tools/cargo-test-parallel.py
-UNIT_SUITE = plxnative-modules plx_base plx_machine plx_platform plx_gfx plx_net plx_ui plx_plex plx_telemetry plx_data plx_session plx_media plx_playback_contract plx_play_uri plx_play_feed plx_media_codecs plx_appkit plx_screens
+UNIT_SUITE = multiplex-modules plx_base plx_machine plx_platform plx_gfx plx_net plx_ui plx_plex plx_telemetry plx_data plx_session plx_media plx_playback_contract plx_play_uri plx_play_feed plx_media_codecs plx_appkit plx_screens
 
 # The default-feature unit suite and everything that drives cargo through ci/ self-tests.
 check-cargo-unit-default:
-	@# WHAT `PLXNATIVE_RUNTIME_DIR` DOES HERE: nothing, in THIS (default-feature) pass. The variable is
+	@# WHAT `MULTIPLEX_RUNTIME_DIR` DOES HERE: nothing, in THIS (default-feature) pass. The variable is
 	@# honoured only when `paths::ENV_STEERABLE` (`cfg!(feature = "hostsim")`) is on, which is a
 	@# compile-time guarantee that a shipping build cannot be steered, so the default pass resolves the
 	@# runtime root to the bare `/tmp` whatever is exported (the `hostsim` pass below does honour it).
@@ -1713,13 +1713,13 @@ check-cargo-unit-default:
 	@# the two compile-time refusals are derived from them, so a host suite run WITHOUT them grades a
 	@# configuration nobody builds. With them, `the_environment_matches_the_credential_pair_that_was_
 	@# supplied` checks this checkout's actual configuration rather than the empty one.
-	@set -e; d=$$(mktemp -d /tmp/plxnative-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
-	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" PLXNATIVE_RUNTIME_DIR="$$d" \
+	@set -e; d=$$(mktemp -d /tmp/multiplex-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
+	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" MULTIPLEX_RUNTIME_DIR="$$d" \
 	  $(TELEMETRY_ENV) \
 	  $(HOST_ENV) \
-	  $(UNIT_RUN) -- cargo +$(RUST_TOOLCHAIN) test --lib -p plxnative-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens
+	  $(UNIT_RUN) -- cargo +$(RUST_TOOLCHAIN) test --lib -p multiplex-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens
 	RUST_TOOLCHAIN=$(RUST_TOOLCHAIN) python3 ci/test_storage_service_package.py
-	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" cargo +$(RUST_TOOLCHAIN) test -p plxnative-storage --bin plxnative-storage
+	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" cargo +$(RUST_TOOLCHAIN) test -p multiplex-storage --bin multiplex-storage
 	@# The helper is its own package, so building it compiles no copy of the app library; this reads
 	@# cargo's resolved unit graph (`--unit-graph`, nothing is compiled) for both invocations the repo
 	@# uses for it and fails if either contains a unit of the app package.
@@ -1747,11 +1747,11 @@ check-cargo-unit-hostsim:
 	@# was invisible to all 1398 default-feature tests because the seam it needs was not there.
 	@# Cargo keys fingerprints by feature set, so the two configurations coexist in one target/ and
 	@# this costs a few seconds warm rather than a rebuild.
-	@set -e; d=$$(mktemp -d /tmp/plxnative-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
-	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" PLXNATIVE_RUNTIME_DIR="$$d" \
+	@set -e; d=$$(mktemp -d /tmp/multiplex-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
+	cd rust-modules && PATH="$$HOME/.cargo/bin:$$PATH" MULTIPLEX_RUNTIME_DIR="$$d" \
 	  $(TELEMETRY_ENV) \
 	  $(HOST_ENV) \
-	  $(UNIT_RUN) -- cargo +$(RUST_TOOLCHAIN) test --lib -p plxnative-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens --features hostsim
+	  $(UNIT_RUN) -- cargo +$(RUST_TOOLCHAIN) test --lib -p multiplex-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens --features hostsim
 
 # OPT-IN incremental inner loop: the default-feature unit suite (the same `cargo test --lib` as
 # `check-cargo-unit-default`, same throwaway runtime root and telemetry env) with
@@ -1770,12 +1770,12 @@ TEST_FAST_TDIR = target-fast
 test-fast:
 	@$(if $(RELEASE),echo "make test-fast: refused under RELEASE=1 -- it runs the default-feature host unit suite incrementally; RELEASE=1 is the shipping feature set (use make check for gates)." >&2; exit 1,:)
 	@echo "test-fast: incremental host unit tests in rust-modules/$(TEST_FAST_TDIR) -- this dir grows to ~2.7 GB; reclaim it with: tools/build-gc.sh --incremental (cache) or rm -rf rust-modules/$(TEST_FAST_TDIR)"
-	@set -e; d=$$(mktemp -d /tmp/plxnative-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
+	@set -e; d=$$(mktemp -d /tmp/multiplex-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
 	cd rust-modules && CARGO_INCREMENTAL=1 CARGO_TARGET_DIR=$(TEST_FAST_TDIR) \
-	  PATH="$$HOME/.cargo/bin:$$PATH" PLXNATIVE_RUNTIME_DIR="$$d" \
+	  PATH="$$HOME/.cargo/bin:$$PATH" MULTIPLEX_RUNTIME_DIR="$$d" \
 	  $(TELEMETRY_ENV) \
 	  $(HOST_ENV) \
-	  $(UNIT_RUN) $(if $(T),--filter '$(T)') -- cargo +$(RUST_TOOLCHAIN) test --lib -p plxnative-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens
+	  $(UNIT_RUN) $(if $(T),--filter '$(T)') -- cargo +$(RUST_TOOLCHAIN) test --lib -p multiplex-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens
 
 # `make test-crate C=plx_ui [T=filter] [DEPS=1]` -- build and run ONLY the named crate's lib tests, in
 # the same incremental `$(TEST_FAST_TDIR)` tree and with the same flags as `test-fast`, so the two
@@ -1790,9 +1790,9 @@ test-fast:
 test-crate:
 	@$(if $(RELEASE),echo "make test-crate: refused under RELEASE=1 -- it runs the default-feature host unit tests incrementally; RELEASE=1 is the shipping feature set (use make check for gates)." >&2; exit 1,:)
 	@$(if $(C),:,echo "make test-crate: name the crate(s): make test-crate C=plx_ui [T=filter] [DEPS=1]  (crates: $(UNIT_SUITE))" >&2; exit 2)
-	@set -e; d=$$(mktemp -d /tmp/plxnative-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
+	@set -e; d=$$(mktemp -d /tmp/multiplex-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
 	cd rust-modules && CARGO_INCREMENTAL=1 CARGO_TARGET_DIR=$(TEST_FAST_TDIR) \
-	  PATH="$$HOME/.cargo/bin:$$PATH" PLXNATIVE_RUNTIME_DIR="$$d" \
+	  PATH="$$HOME/.cargo/bin:$$PATH" MULTIPLEX_RUNTIME_DIR="$$d" \
 	  $(TELEMETRY_ENV) \
 	  $(HOST_ENV) \
 	  python3 ../tools/test-crate.py --suite '$(UNIT_SUITE)' --cargo 'cargo +$(RUST_TOOLCHAIN)' $(if $(DEPS),--deps) $(if $(T),--filter '$(T)') $(C)
@@ -1807,9 +1807,9 @@ test-crate:
 # are the crate's own plus `hostsim`, not the application crate's defaults the full suite unifies in
 # (`test-crate` documents that gap); `C=plx_media` measured identical to the suite's line (1839
 # passed, 60 ignored, 2026-10-19). It is the managed form of what AGENTS.md used to hand out as a recipe,
-# `CARGO_INCREMENTAL=1 CARGO_TARGET_DIR=/tmp/<dir> cargo test --lib -p plxnative-modules --features
+# `CARGO_INCREMENTAL=1 CARGO_TARGET_DIR=/tmp/<dir> cargo test --lib -p multiplex-modules --features
 # hostsim`: every agent picked its own `/tmp/<dir>`, nothing tracked them, and on 2026-10-19 there
-# were 28 PlxNative cargo trees there, 45.6 GiB, none of them known to `make disk` or `build-gc`.
+# were 28 MultiPlex cargo trees there, 45.6 GiB, none of them known to `make disk` or `build-gc`.
 #
 # The target dir is `rust-modules/$(TEST_HOSTSIM_TDIR)`, INSIDE the checkout like `target-fast`: it is
 # gitignored, `tools/build-gc.sh --incremental` drops its `debug/incremental` and `--lanes` /
@@ -1828,20 +1828,20 @@ test-crate:
 # build-gc reclaims. Nothing in `check*`, `lint` or CI names the dir.
 #
 # The same environment as `check-cargo-unit-hostsim` (pinned toolchain, throwaway
-# `PLXNATIVE_RUNTIME_DIR` -- honoured here because `hostsim` is what makes it steerable --, the
+# `MULTIPLEX_RUNTIME_DIR` -- honoured here because `hostsim` is what makes it steerable --, the
 # telemetry words and HOST_ENV), run through $(UNIT_RUN) so the binary gets its own runtime
 # subdirectory and an empty TMPDIR it must leave empty. `--require-match` makes a filter that
 # matches no test FAIL: libtest prints `0 passed ... N filtered out` and exits 0, which a mistyped
 # `T=` reads exactly like a green run. Refused under RELEASE=1 like `test-fast`.
 TEST_HOSTSIM_TDIR = target-hostsim
-HOSTSIM_PKGS = $(foreach c,$(or $(strip $(C)),app),$(if $(filter app,$(c)),plxnative-modules,$(if $(filter plx_% plxnative-modules,$(c)),$(c),plx_$(c))))
+HOSTSIM_PKGS = $(foreach c,$(or $(strip $(C)),app),$(if $(filter app,$(c)),multiplex-modules,$(if $(filter plx_% multiplex-modules,$(c)),$(c),plx_$(c))))
 .PHONY: test-hostsim
 test-hostsim:
 	@$(if $(RELEASE),echo "make test-hostsim: refused under RELEASE=1 -- it runs the default-plus-hostsim feature set incrementally; RELEASE=1 is the shipping feature set (use make check-nodef for that)." >&2; exit 1,:)
 	@echo "test-hostsim: incremental hostsim tests of $(HOSTSIM_PKGS) in rust-modules/$(TEST_HOSTSIM_TDIR) -- see 'make disk'; reclaim it with: tools/build-gc.sh --incremental (cache) or rm -rf rust-modules/$(TEST_HOSTSIM_TDIR)"
-	@set -e; d=$$(mktemp -d /tmp/plxnative-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
+	@set -e; d=$$(mktemp -d /tmp/multiplex-check.XXXXXX); trap 'rm -rf "'"$$d"'"' EXIT; \
 	cd rust-modules && CARGO_INCREMENTAL=1 CARGO_TARGET_DIR=$(TEST_HOSTSIM_TDIR) \
-	  PATH="$$HOME/.cargo/bin:$$PATH" PLXNATIVE_RUNTIME_DIR="$$d" \
+	  PATH="$$HOME/.cargo/bin:$$PATH" MULTIPLEX_RUNTIME_DIR="$$d" \
 	  $(TELEMETRY_ENV) \
 	  $(HOST_ENV) \
 	  $(UNIT_RUN) --require-match $(if $(T),--filter '$(T)') -- cargo +$(RUST_TOOLCHAIN) test --lib $(addprefix -p ,$(HOSTSIM_PKGS)) --features hostsim
@@ -2088,34 +2088,34 @@ STAGE       := ipkroot/data/usr/palm/applications/$(APPID)
 #   - ci/mkipk.py normalises uid/gid/uname/gname/mtime/mode/order and the gzip header. `tar czf`
 #     was embedding `gleblinnik/staff` in every shipped archive.
 #   - `ar` gets D (deterministic): binutils' default embeds the builder's uid and a real mtime.
-# `make SYMBOLS=1 symbols` — separate the debug info into `pkg/plxnative.debug`.
+# `make SYMBOLS=1 symbols` — separate the debug info into `pkg/multiplex.debug`.
 #
 # What this is FOR: a crash reported from a stranger's television carries an address, and the
 # binary they are running is stripped. Matching the two needs a debug file identified by the same
 # BUILD ID, which `-Wl,--build-id=sha1` on the link puts in an allocated note that survives
 # `strip`. Verified end to end 2026-08-29 — full, `.debug` and stripped all carry
-# `cc4a5c7b3923da5e872ee3c8f5054a3b23f07568`, and `addr2line -e pkg/plxnative.debug` resolves an
+# `cc4a5c7b3923da5e872ee3c8f5054a3b23f07568`, and `addr2line -e pkg/multiplex.debug` resolves an
 # address the stripped binary answers `?? ??:0` for.
 #
 # **It refuses without SYMBOLS=1 rather than producing an empty shell.** `objcopy --only-keep-debug`
 # on a binary with no `.debug_*` sections succeeds and writes a file; that file matches nothing and
 # fails only much later, at the symbol server, on somebody else's crash. Fail here instead.
-symbols: pkg/plxnative
+symbols: pkg/multiplex
 ifneq ($(SYMBOLS),1)
 	@echo "make symbols needs SYMBOLS=1 — without it this binary carries no DWARF and" >&2
 	@echo "objcopy would write an empty .debug that silently matches nothing." >&2
 	@echo "  correct: make RELEASE=1 SYMBOLS=1 ipk symbols" >&2
 	@false
 else
-	$(TOOLPREFIX)objcopy --only-keep-debug pkg/plxnative pkg/plxnative.debug
+	$(TOOLPREFIX)objcopy --only-keep-debug pkg/multiplex pkg/multiplex.debug
 	@# The build ids MUST agree, and asserting it here is the point: everything downstream —
 	@# the DIF upload, the symbol server's lookup, `addr2line` against the right file — keys on
 	@# this one value, and a mismatch is invisible until a real crash fails to symbolize.
-	@bin=$$($(TOOLPREFIX)readelf -n pkg/plxnative | sed -n 's/.*Build ID: //p'); \
-	 dbg=$$($(TOOLPREFIX)readelf -n pkg/plxnative.debug 2>/dev/null | sed -n 's/.*Build ID: //p'); \
-	 if [ -z "$$bin" ]; then echo "pkg/plxnative has NO build id — is -Wl,--build-id still on the link?" >&2; exit 1; fi; \
+	@bin=$$($(TOOLPREFIX)readelf -n pkg/multiplex | sed -n 's/.*Build ID: //p'); \
+	 dbg=$$($(TOOLPREFIX)readelf -n pkg/multiplex.debug 2>/dev/null | sed -n 's/.*Build ID: //p'); \
+	 if [ -z "$$bin" ]; then echo "pkg/multiplex has NO build id — is -Wl,--build-id still on the link?" >&2; exit 1; fi; \
 	 if [ "$$bin" != "$$dbg" ]; then echo "build id mismatch: binary $$bin, debug $$dbg" >&2; exit 1; fi; \
-	 echo "symbols: pkg/plxnative.debug  build-id $$bin  ($$(du -h pkg/plxnative.debug | cut -f1))"
+	 echo "symbols: pkg/multiplex.debug  build-id $$bin  ($$(du -h pkg/multiplex.debug | cut -f1))"
 endif
 
 # `make symbols-libs` — the same for every BUNDLED shared object: the FFmpeg libraries and libass.
@@ -2123,14 +2123,14 @@ endif
 # A crash frame inside `libavformat-plx.so.63` is an address in a library that ships stripped, so
 # without this it reaches Sentry as a bare address. The shipped copy is made from a link output that
 # still has `.symtab`; `pkg/symbols/<soname>.debug` is that output through `objcopy
-# --only-keep-debug`, the same treatment `symbols` gives pkg/plxnative. ci/extract-so-symbols.sh
+# --only-keep-debug`, the same treatment `symbols` gives pkg/multiplex. ci/extract-so-symbols.sh
 # refuses a library without a GNU build id (`-Wl,--build-id=sha1` on its link, which ci/build-ffmpeg.sh
 # and ci/build-libass.py now pass) and a `.debug` whose id differs from the shipped copy's or that
 # has no function symbols: `sentry-cli debug-files check` passes a symbol-less object, so the
 # assertion cannot be left to it.
 #
 # NOT `sentry-crash`: it is a separate process that never sends a report, so no frame of an event
-# lands in it; the in-process handler code is libsentry.a, linked into pkg/plxnative and covered by
+# lands in it; the in-process handler code is libsentry.a, linked into pkg/multiplex and covered by
 # `symbols`. libswscale, which only a non-RELEASE build bundles, is covered because FFMPEG_SONAMES
 # lists it. Independent of SYMBOLS=1 (these libraries carry no DWARF of ours; their `.symtab` is the content).
 SO_SYMBOLS_DIR        = pkg/symbols
@@ -2147,7 +2147,7 @@ $(LIBASS_SO_SYMBOLS): $(LIBASS_STAGED) ci/extract-so-symbols.sh
 
 symbols-libs: $(SO_SYMBOLS)
 
-# Validate and upload the exact debug file that matches `pkg/plxnative`. This is a separate target
+# Validate and upload the exact debug file that matches `pkg/multiplex`. This is a separate target
 # so a development build used for an on-device crash test gets the same fail-closed pairing as CI.
 # `SENTRY_AUTH_TOKEN` is read only from the process environment and is never echoed or written.
 SENTRY_ORG     ?= gleb-linnik
@@ -2167,37 +2167,37 @@ sentry-symbols: symbols symbols-libs $(filter $(SENTRY_CLI_LOCAL),$(SENTRY_CLI))
 	  echo "sentry-symbols: SENTRY_AUTH_TOKEN is required" >&2; exit 1; }
 	@# `debug-files check` on every file, requiring `debug` or `symtab` features (not merely a zero exit).
 	@SENTRY_ORG='$(SENTRY_ORG)' SENTRY_PROJECT='$(SENTRY_PROJECT)' SENTRY_CLI='$(SENTRY_CLI)' \
-	  python3 ci/check-debug-files.py pkg/plxnative.debug $(SO_SYMBOLS)
+	  python3 ci/check-debug-files.py pkg/multiplex.debug $(SO_SYMBOLS)
 	@SENTRY_ORG='$(SENTRY_ORG)' SENTRY_PROJECT='$(SENTRY_PROJECT)' \
-	  $(SENTRY_CLI) debug-files upload --include-sources pkg/plxnative.debug pkg/plxnative
+	  $(SENTRY_CLI) debug-files upload --include-sources pkg/multiplex.debug pkg/multiplex
 	@# No --include-sources for the libraries: their DWARF names third-party source files, not ours.
 	@SENTRY_ORG='$(SENTRY_ORG)' SENTRY_PROJECT='$(SENTRY_PROJECT)' \
 	  $(SENTRY_CLI) debug-files upload $(SO_SYMBOLS)
 
-ipk: pkg/plxnative pkg/plxnative-storage $(APPINFO) release-guard
-	python3 ci/check-link-evidence.py pkg/plxnative pkg/plxnative-storage $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(LIBASS_STAGED)
+ipk: pkg/multiplex pkg/multiplex-storage $(APPINFO) release-guard
+	python3 ci/check-link-evidence.py pkg/multiplex pkg/multiplex-storage $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(LIBASS_STAGED)
 	@echo "packaging $(if $(RELEASE),RELEASE,dev) build ($(RUST_CFG)) as $(APPID) [$(FLAVOR)]"
 	rm -rf ipkroot/data/usr && mkdir -p $(STAGE)/licenses
 	cp $(APP_FILES) $(STAGE)/
 	mkdir -p $(STAGE)/$(SUBS_FONT_DIR) && cp $(SUBS_FONT_FILES) $(STAGE)/$(SUBS_FONT_DIR)/
 	cp $(LICENSE_FILES) $(STAGE)/licenses/
-	@# Strip the STAGED copy only, never pkg/plxnative. ~2.4 MB of .symtab+.strtab (30% of the
+	@# Strip the STAGED copy only, never pkg/multiplex. ~2.4 MB of .symtab+.strtab (30% of the
 	@# download, on a device whose app partition is 615 MB total and shared with every other app).
-	@# It must not be pkg/plxnative because tools/crash-report.sh symbolizes a crash PC against
+	@# It must not be pkg/multiplex because tools/crash-report.sh symbolizes a crash PC against
 	@# that local binary AND md5-compares it to the on-TV copy to prove they are the same build —
 	@# stripping in place would break the identity check and lose function names from every
 	@# release crash report. Deploy ships the unstripped one by design; only the ipk is stripped.
-	$(TOOLPREFIX)strip --strip-unneeded $(STAGE)/plxnative
+	$(TOOLPREFIX)strip --strip-unneeded $(STAGE)/multiplex
 	rm -rf pkg/link-evidence/$(FLAVOR)
-	@for source in pkg/plxnative $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(LIBASS_STAGED); do \
+	@for source in pkg/multiplex $(SENTRY_HANDLER) $(FFMPEG_STAGED) $(LIBASS_STAGED); do \
 	  python3 ci/stage-link-evidence.py "$$source" "$(STAGE)/$$(basename "$$source")" --stripped \
 	    --evidence-base "pkg/link-evidence/$(FLAVOR)/$$(basename "$$source")" || exit $$?; \
 	done
 	@# Only THIS flavour's artifact — packaging one must never delete the other's.
 	rm -f pkg/$(APPID)_*_arm.ipk
 	FLAVOR=$(FLAVOR) python3 ci/mkipk.py
-	python3 ci/stage-link-evidence.py pkg/plxnative-storage ipkroot/data/usr/palm/services/$(APPID).storage/plxnative-storage \
-	  --evidence-base pkg/link-evidence/$(FLAVOR)/plxnative-storage
+	python3 ci/stage-link-evidence.py pkg/multiplex-storage ipkroot/data/usr/palm/services/$(APPID).storage/multiplex-storage \
+	  --evidence-base pkg/link-evidence/$(FLAVOR)/multiplex-storage
 	@# Emitted from INSIDE pkg/ so the line carries the bare filename. With the `pkg/` prefix
 	@# in it, `shasum -a 256 -c ipk.sha256` fails for everyone who downloads the two release
 	@# assets side by side — which is every user, and is what shipped through v0.2.1.
@@ -2215,7 +2215,7 @@ ipk: pkg/plxnative pkg/plxnative-storage $(APPINFO) release-guard
 # THE STABLE INSTALL IS ALWAYS A RELEASE BUILD, and that is a gate rather than a habit.
 #
 # `app.multiplex.native` is the id users get. A dev-featured binary under it carries the whole
-# `/tmp` trigger surface, the world-writable `plxnative-remote` FIFO and the `:8910` capture
+# `/tmp` trigger surface, the world-writable `multiplex-remote` FIFO and the `:8910` capture
 # listener — the exact surface the `cut-release` skill's §2 exists to keep out of a shipped
 # artifact, seen from the other side. Before the flavour split this could only happen by
 # publishing by hand, which is how v0.2.1's defects got out; now it is one forgotten `RELEASE=1`
@@ -2240,7 +2240,7 @@ lab-guard:
 	  exit 1; fi
 	@if [ -n "$(LAB)" ] && [ ! -f pkg/lab.json ]; then \
 	  echo "LAB=1 but pkg/lab.json is missing — the build would ship with no session."; \
-	  echo "  start a receiver first:  tools/plxnative-lab start"; \
+	  echo "  start a receiver first:  tools/multiplex-lab start"; \
 	  echo "  (it writes pkg/lab.json for you; docs/lab-diagnostics.md)"; \
 	  exit 1; fi
 
@@ -2340,16 +2340,16 @@ mali-irq-sample: tools/mali-irq-sample.c
 	@mkdir -p pkg
 	$(CC) $(CFLAGS) -o pkg/mali-irq-sample tools/mali-irq-sample.c
 
-# tools/plxnative-stackwalk.c — opt-in live-process sampler for the rooted development set.  The
+# tools/multiplex-stackwalk.c — opt-in live-process sampler for the rooted development set.  The
 # ptrace implementation is the same libunwind remote archive used by sentry-crash, but this helper
-# is never an APP_FILE and therefore never enters an ipk or a deploy.  tools/plxnative-sample owns
+# is never an APP_FILE and therefore never enters an ipk or a deploy.  tools/multiplex-sample owns
 # its temporary copy under /tmp and removes it after every session.
-plxnative-stackwalk: $(SENTRY_NATIVE_STAMP) tools/plxnative-stackwalk.c
+multiplex-stackwalk: $(SENTRY_NATIVE_STAMP) tools/multiplex-stackwalk.c
 	@mkdir -p pkg
 	$(CC) $(CFLAGS) \
 	  -Ivendor/sentry-native-src/vendor/libunwind/include \
 	  -Ivendor/sentry-native-build/vendor/libunwind/include \
-	  -o pkg/plxnative-stackwalk tools/plxnative-stackwalk.c \
+	  -o pkg/multiplex-stackwalk tools/multiplex-stackwalk.c \
 	  $(SENTRY_REMOTE_UNWIND_LIB) -ldl -lpthread
 
 # ---------------------------------------------------------------------------------------------
@@ -2368,7 +2368,7 @@ plxnative-stackwalk: $(SENTRY_NATIVE_STAMP) tools/plxnative-stackwalk.c
 cfg_macro = $(shell sed -n 's/^\#define[ \t]*$(1)[ \t]*"\([^"]*\)".*/\1/p' src/config.local.h 2>/dev/null)
 SIM_PMS  ?= $(call cfg_macro,PMS_HOST)
 SIM_PORT ?= $(shell sed -n 's/^\#define[ \t]*PMS_PORT[ \t]*\([0-9]*\).*/\1/p' src/config.local.h 2>/dev/null)
-SIM_DIR  ?= /tmp/plxnative-sim
+SIM_DIR  ?= /tmp/multiplex-sim
 # Its OWN target dir, per this file's rule for feature-set splits: `make check` builds default
 # features on nightly, `make sim-macos` builds `hostsim` on the default toolchain. Sharing one dir makes
 # each invocation rebuild the crate the other way round.
@@ -2377,9 +2377,9 @@ SIM_DIR  ?= /tmp/plxnative-sim
 # (/Volumes/…, SMB, some external SSDs) cannot be a cargo target dir at all — those filesystems do
 # not implement flock, and cargo fails with "could not create session directory lock file
 # (os error 45)" before compiling anything. Point this at a local path and the checkout can stay
-# where it is:  export SIM_TDIR=$HOME/plxnative-sim-target
+# where it is:  export SIM_TDIR=$HOME/multiplex-sim-target
 SIM_TDIR  ?= rust-modules/target-sim
-SIM_MACOS_BIN = $(SIM_TDIR)$(if $(LAB),-lab,)/debug/plxnative-sim
+SIM_MACOS_BIN = $(SIM_TDIR)$(if $(LAB),-lab,)/debug/multiplex-sim
 SIM_MACOS_BIN_ENV = $(SIM_MACOS_BIN)
 SIM_LINUX_TDIR_ENV = $(SIM_TDIR)
 export SIM_MACOS_BIN_ENV SIM_LINUX_TDIR_ENV
@@ -2395,13 +2395,13 @@ SIM_SHOT  ?= $(SIM_DIR)/shot.png
 # canvas and therefore half the resolution of every screenshot. Set both to look at the UI the
 # size it is drawn:
 #   make sim-shot SIM_W=1920 SIM_H=1080
-# For a capture LARGER than the display can hold, set PLXNATIVE_RENDER_SCALE=<1..4> in the
+# For a capture LARGER than the display can hold, set MULTIPLEX_RENDER_SCALE=<1..4> in the
 # environment instead: the frame is then rendered offscreen at that multiple of 1920x1080 (glyphs,
 # icons and artwork rasterised to match) and shots come out at that size (`surface::render_scale`).
 SIM_W ?=
 SIM_H ?=
-SIM_WIN = $(if $(and $(SIM_W),$(SIM_H)),PLXNATIVE_WIN=$(SIM_W)x$(SIM_H),)
-SIM_ENV = PLXNATIVE_RUNTIME_DIR=$(SIM_DIR) PLXNATIVE_APP_DIR=$(CURDIR)/pkg $(SIM_WIN)
+SIM_WIN = $(if $(and $(SIM_W),$(SIM_H)),MULTIPLEX_WIN=$(SIM_W)x$(SIM_H),)
+SIM_ENV = MULTIPLEX_RUNTIME_DIR=$(SIM_DIR) MULTIPLEX_APP_DIR=$(CURDIR)/pkg $(SIM_WIN)
 SIM_PRE = mkdir -p $(SIM_DIR); test -n "$(SIM_PMS)" || \
           { echo "no PMS host — set SIM_PMS=<ip> or add PMS_HOST to src/config.local.h"; exit 1; }
 
@@ -2428,10 +2428,10 @@ libass-host: $(LIBASS_HOST_STAGED)
 # fonts that ship, including cancellation and source-lifecycle regressions beside the pixels.
 .PHONY: check-ass
 check-ass: $(LIBASS_HOST_STAGED)
-	cd rust-modules && CARGO_INCREMENTAL=0 PLXNATIVE_APP_DIR="$(CURDIR)/pkg" PATH="$$HOME/.cargo/bin:$$PATH" \
+	cd rust-modules && CARGO_INCREMENTAL=0 MULTIPLEX_APP_DIR="$(CURDIR)/pkg" PATH="$$HOME/.cargo/bin:$$PATH" \
 	  cargo +$(RUST_TOOLCHAIN) test --lib -p plx_media player::ass::tests -- --include-ignored
 	# The same library's UI text surface (ABI 4): Arabic and Hebrew runs, gfx/src/rtl.rs.
-	cd rust-modules && CARGO_INCREMENTAL=0 PLXNATIVE_APP_DIR="$(CURDIR)/pkg" PATH="$$HOME/.cargo/bin:$$PATH" \
+	cd rust-modules && CARGO_INCREMENTAL=0 MULTIPLEX_APP_DIR="$(CURDIR)/pkg" PATH="$$HOME/.cargo/bin:$$PATH" \
 	  cargo +$(RUST_TOOLCHAIN) test --lib -p plx_gfx rtl:: -- --include-ignored
 
 $(FFMPEG_HOST_INC)/libavformat/avformat.h: ci/build-ffmpeg.sh ci/deps.py ci/dependencies.json
@@ -2465,9 +2465,9 @@ pkg/.ffabi-host-ok: ci/ffabi-assert.c $(FFMPEG_HOST_INC)/libavformat/avformat.h 
 
 # LAB=1 adds the Lab Diagnostics feature here too, and that is not a curiosity: it is the only way
 # to exercise the WHOLE upload path — trigger, snapshot, scrub, gzip, pinned TLS POST, receiver —
-# without a television and without opening a port on the router (`tools/plxnative-lab start
+# without a television and without opening a port on the router (`tools/multiplex-lab start
 # --hostname 127.0.0.1 --no-upnp`). The simulator reads `lab.json` out of its app dir, which is
-# `pkg/`, which is where `plxnative-lab start` writes it. It has its own target dir for the same
+# `pkg/`, which is where `multiplex-lab start` writes it. It has its own target dir for the same
 # reason every other feature set does.
 #
 # The host FFmpeg is a prerequisite of BOTH configurations: a lab simulator that cannot demux
@@ -2478,7 +2478,7 @@ sim: sim-macos
 
 sim-macos: $(FFMPEG_HOST_STAGED) $(LIBASS_HOST_STAGED) pkg/.ffabi-host-ok
 	$(TELEMETRY_ENV) \
-	  cargo +$(RUST_TOOLCHAIN) build --manifest-path rust-modules/Cargo.toml --target-dir $(SIM_TDIR)$(if $(LAB),-lab,) --features hostsim$(if $(LAB), --features lab-diagnostics,) --bin plxnative-sim
+	  cargo +$(RUST_TOOLCHAIN) build --manifest-path rust-modules/Cargo.toml --target-dir $(SIM_TDIR)$(if $(LAB),-lab,) --features hostsim$(if $(LAB), --features lab-diagnostics,) --bin multiplex-sim
 
 # Full product replay is a renderer-backed host gate. Keep the fast unit suite usable without
 # a window system; Simulator CI runs this same driver against the simulator it just built.
@@ -2505,7 +2505,7 @@ check-replay: sim-macos
 # selects no backend and Play can only reach the failure read-out; `ci/test_sim_backend.py`).
 # Its own target dir, for this file's feature-set rule. `CARGO_INCREMENTAL=0`: a one-shot build.
 SHOT_TDIR ?= $(SIM_TDIR)-shots
-SHOT_BIN   = $(SHOT_TDIR)/debug/plxnative-sim
+SHOT_BIN   = $(SHOT_TDIR)/debug/multiplex-sim
 SHOT_SCENES ?=
 SHOT_OUT    ?=
 SHOT_CHECK  ?=
@@ -2513,7 +2513,7 @@ SHOT_HERO   ?=
 SHOT_HERO_VARIANTS ?=
 screenshots-sim: $(FFMPEG_HOST_STAGED) $(LIBASS_HOST_STAGED) pkg/.ffabi-host-ok
 	CARGO_INCREMENTAL=0 cargo +$(RUST_TOOLCHAIN) build --manifest-path rust-modules/Cargo.toml --target-dir $(SHOT_TDIR) \
-	  --no-default-features --features hostsim,play-feed,devtriggers --bin plxnative-sim
+	  --no-default-features --features hostsim,play-feed,devtriggers --bin multiplex-sim
 
 demo-library:
 	python3 tools/demo_library.py derive
@@ -2529,7 +2529,7 @@ screenshots: screenshots-sim demo-library
 sim-linux: $(LIBASS_HOST_STAGED)
 	$(TELEMETRY_ENV) \
 	  cargo +$(RUST_TOOLCHAIN) build --release --manifest-path rust-modules/Cargo.toml --target-dir "$$SIM_LINUX_TDIR_ENV" \
-	  --features hostsim --bin plxnative-sim
+	  --features hostsim --bin multiplex-sim
 
 # The frame-dump simulator (`rust-modules/src/dev/framedump.rs`), which `.github/workflows/hud-simulator.yml`
 # builds for the HUD authoring artifact (`tools/hud_bundle.py`); the target keeps the name of the upstream's
@@ -2541,11 +2541,11 @@ sim-linux: $(LIBASS_HOST_STAGED)
 # video, so no host FFmpeg (whose staged names are `.dylib`s, which is what keeps
 # `screenshots-sim` macOS-only). It builds on macOS and on Linux.
 SITE_VIDEO_TDIR ?= $(SIM_TDIR)-video
-SITE_VIDEO_BIN   = $(SITE_VIDEO_TDIR)/release/plxnative-sim
+SITE_VIDEO_BIN   = $(SITE_VIDEO_TDIR)/release/multiplex-sim
 site-video-sim: $(LIBASS_HOST_STAGED)
 	CARGO_INCREMENTAL=0 cargo +$(RUST_TOOLCHAIN) build --release --manifest-path rust-modules/Cargo.toml \
 	  --target-dir $(SITE_VIDEO_TDIR) --no-default-features \
-	  --features hostsim,play-feed,devtriggers,placeholder-sentinel --bin plxnative-sim
+	  --features hostsim,play-feed,devtriggers,placeholder-sentinel --bin multiplex-sim
 
 # Compatibility spelling used by the Windows launcher and existing documentation.
 sim-wsl: sim-linux
@@ -2559,7 +2559,7 @@ sim-macos-run: sim-macos
 sim-shot: sim-macos-shot
 sim-macos-shot: sim-macos
 	@$(SIM_PRE)
-	$(SIM_ENV) PLXNATIVE_SHOT=$(SIM_SHOT) PLXNATIVE_SHOT_FRAME=$(SIM_FRAME) PLXNATIVE_SHOT_EXIT=1 \
+	$(SIM_ENV) MULTIPLEX_SHOT=$(SIM_SHOT) MULTIPLEX_SHOT_FRAME=$(SIM_FRAME) MULTIPLEX_SHOT_EXIT=1 \
 	  $(SIM_MACOS_BIN) $(SIM_PMS) $(SIM_PORT)
 	@echo "wrote $(SIM_SHOT)"
 
@@ -2571,8 +2571,8 @@ sim-macos-shot: sim-macos
 sim-token: sim-macos-token
 sim-macos-token:
 	@mkdir -p $(SIM_DIR)
-	@printf '%s' '$(call cfg_macro,PMS_TOKEN)' > $(SIM_DIR)/plxnative-token
-	@test -s $(SIM_DIR)/plxnative-token || { echo "no PMS_TOKEN in src/config.local.h"; rm -f $(SIM_DIR)/plxnative-token; exit 1; }
+	@printf '%s' '$(call cfg_macro,PMS_TOKEN)' > $(SIM_DIR)/multiplex-token
+	@test -s $(SIM_DIR)/multiplex-token || { echo "no PMS_TOKEN in src/config.local.h"; rm -f $(SIM_DIR)/multiplex-token; exit 1; }
 	@echo "token staged in $(SIM_DIR)"
 
 # `make sim-play` — a REAL playback session on this Mac, with no television and no Plex.
@@ -2598,20 +2598,20 @@ sim-macos-play: sim-macos
 	@test -n "$(SIM_SAMPLE)" || { echo "SIM_SAMPLE=<file.h264> is required — an Annex-B elementary stream WITH access-unit delimiters, e.g."; \
 	  echo "  ffmpeg -i clip.ts -c:v copy -an -bsf:v h264_metadata=aud=insert -f h264 /tmp/sample.h264"; exit 1; }
 	@mkdir -p $(SIM_DIR)
-	@rm -f $(SIM_DIR)/plxnative-playurl $(SIM_DIR)/plxnative-events.log
+	@rm -f $(SIM_DIR)/multiplex-playurl $(SIM_DIR)/multiplex-events.log
 	@cp $(SIM_SAMPLE) $(SIM_DIR)/sample.h264
-	@touch $(SIM_DIR)/plxnative-clocksink $(SIM_DIR)/plxnative-autoplay $(SIM_DIR)/plxnative-stats
-	$(SIM_ENV) PLXNATIVE_SHOT=$(SIM_SHOT) PLXNATIVE_SHOT_FRAME=$$(( $(SIM_SECS) * 60 )) \
-	  PLXNATIVE_SHOT_EXIT=1 $(SIM_MACOS_BIN) 127.0.0.1 32400 || true
-	@echo "--- $(SIM_DIR)/plxnative-events.log ---"
-	@grep -E 'clocksink|bf_split|SMP |vplane|route=player' $(SIM_DIR)/plxnative-events.log | head -20
+	@touch $(SIM_DIR)/multiplex-clocksink $(SIM_DIR)/multiplex-autoplay $(SIM_DIR)/multiplex-stats
+	$(SIM_ENV) MULTIPLEX_SHOT=$(SIM_SHOT) MULTIPLEX_SHOT_FRAME=$$(( $(SIM_SECS) * 60 )) \
+	  MULTIPLEX_SHOT_EXIT=1 $(SIM_MACOS_BIN) 127.0.0.1 32400 || true
+	@echo "--- $(SIM_DIR)/multiplex-events.log ---"
+	@grep -E 'clocksink|bf_split|SMP |vplane|route=player' $(SIM_DIR)/multiplex-events.log | head -20
 
 sim-clean: sim-macos-clean
 sim-macos-clean:
 	rm -rf $(SIM_DIR)
 
 # ---------------------------------------------------------------------------------------------
-# PlxNative.app — the same host build, packaged as a SELF-CONTAINED macOS application you can send
+# MultiPlex.app — the same host build, packaged as a SELF-CONTAINED macOS application you can send
 # to somebody who has none of this installed. `ci/mkmacapp.py` is the whole recipe and its module
 # doc is the account of the three ways it silently ships broken; `docs/macos-app.md` is the design
 # note (what it can and cannot do — chiefly: no video off-device).
@@ -2630,7 +2630,7 @@ macapp-zip:
 
 # ---------------------------------------------------------------------------------------------
 # `make fixtures` — SYNTHESIZE THE TEST MEDIA. Host-side, and there is NO TELEVISION anywhere in
-# it: it is ffmpeg + lavfi on this Mac, writing into $(FIXTURES_OUT) (default ~/plxnative-fixtures,
+# it: it is ffmpeg + lavfi on this Mac, writing into $(FIXTURES_OUT) (default ~/multiplex-fixtures,
 # OUTSIDE the repo — tests/fixtures/make_fixtures.py refuses an --out inside it, because media must
 # never be committed).
 #
@@ -2647,7 +2647,7 @@ macapp-zip:
 # and takes ~20 minutes, which is not something a build should do because somebody typed `make`.
 # `fixtures-quick` builds the same shapes at ~20 s each in about a minute — structurally correct,
 # and NOT suite-valid, since every seek/resume/marker depth the suite asserts is deeper than that.
-FIXTURES_OUT ?= $(HOME)/plxnative-fixtures
+FIXTURES_OUT ?= $(HOME)/multiplex-fixtures
 
 # $(FIXTURES_OUT) is QUOTED: it defaults under $(HOME), and a home directory with a space in it
 # would otherwise split into two arguments and fail as an unknown option.
@@ -2663,7 +2663,7 @@ fixtures-quick:
 # watched threshold that drops a seeded resume point, the marker windows, the Up Next tail).
 # `./tests/run.py` (the DEFAULT tier since 2026-08-22) needs none of that — it serves these files
 # off this machine over HTTP
-# and plays them through plxnative-playurl with no Plex anywhere — so the pack is short clips in a
+# and plays them through multiplex-playurl with no Plex anywhere — so the pack is short clips in a
 # FLAT directory, ~0.7 GB and a few minutes instead of ~3 GB and twenty. Same root, its own
 # subdirectory, which is also where the harness looks by default.
 #
@@ -2683,9 +2683,9 @@ fixtures-pipeline:
 # because both lines are `-` prefixed the miss was swallowed — so a profiling run that produced
 # exactly the data asked for reported "no profiler output on the TV".
 fetch-profile:
-	-$(SCP) tv:$(RUNDIR)/plxnative-gputime.jsonl pkg/plxnative-gputime.jsonl
-	-$(SCP) tv:$(RUNDIR)/plxnative-hwcnt.jsonl pkg/plxnative-hwcnt.jsonl
-	@ls -l pkg/plxnative-*.jsonl 2>/dev/null || echo "no profiler output in $(RUNDIR) on the TV ($(APPID))"
+	-$(SCP) tv:$(RUNDIR)/multiplex-gputime.jsonl pkg/multiplex-gputime.jsonl
+	-$(SCP) tv:$(RUNDIR)/multiplex-hwcnt.jsonl pkg/multiplex-hwcnt.jsonl
+	@ls -l pkg/multiplex-*.jsonl 2>/dev/null || echo "no profiler output in $(RUNDIR) on the TV ($(APPID))"
 
-.PHONY: setup-rust libass libass-host screenshots screenshots-sim demo-library disk symbols symbols-libs sentry-symbols sentry-native all setup-env telemetry-local deploy verify-deploy run run-stream kill check check-unlocked check-ffmpeg lint test ipk clean tv-lock-require threadprobe sockprobe logmprobe mali-hwcnt-probe tv-capture-bench mali-irq-sample plxnative-stackwalk sim sim-macos sim-linux site-video-sim sim-wsl sim-run sim-macos-run sim-shot sim-macos-shot sim-token sim-macos-token sim-play sim-macos-play sim-clean sim-macos-clean macapp macapp-zip fixtures fixtures-quick fixtures-pipeline fetch-profile \
+.PHONY: setup-rust libass libass-host screenshots screenshots-sim demo-library disk symbols symbols-libs sentry-symbols sentry-native all setup-env telemetry-local deploy verify-deploy run run-stream kill check check-unlocked check-ffmpeg lint test ipk clean tv-lock-require threadprobe sockprobe logmprobe mali-hwcnt-probe tv-capture-bench mali-irq-sample multiplex-stackwalk sim sim-macos sim-linux site-video-sim sim-wsl sim-run sim-macos-run sim-shot sim-macos-shot sim-token sim-macos-token sim-play sim-macos-play sim-clean sim-macos-clean macapp macapp-zip fixtures fixtures-quick fixtures-pipeline fetch-profile \
         release-guard lab-guard install uninstall $(QUERY_GOALS)

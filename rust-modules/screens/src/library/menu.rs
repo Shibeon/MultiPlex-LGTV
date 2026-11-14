@@ -914,7 +914,7 @@ impl<H: LibraryLike> Screen<H> for LibraryMenu {
     fn draw(&mut self, f: &mut DrawFrame<'_, '_, H>) {
         let p = f.painter.alpha(f.page_alpha);
         let measure = f.measure;
-        // The panel's own share, named for `/tmp/plxnative-cpuprof` beside the page's `lb.*`
+        // The panel's own share, named for `/tmp/multiplex-cpuprof` beside the page's `lb.*`
         // phases: the frosted ground plus its rows, so a slow frame while the Sort/Filter menu is
         // up can be read as the PANEL or as the host under it rather than as one `main.ui` total.
         // The glass and the rows ride the MORPH (`Popover::panel` / `morph_rows`), not the

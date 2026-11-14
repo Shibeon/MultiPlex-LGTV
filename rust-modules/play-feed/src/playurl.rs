@@ -1,4 +1,4 @@
-//! The `plxnative-playurl` trigger: a stream to play and the Load payload declaration to play it
+//! The `multiplex-playurl` trigger: a stream to play and the Load payload declaration to play it
 //! with. The value ([`PlayUrl`], [`PlayDovi`]) is the contract's plain data
 //! (`plx_playback_contract::playurl`); the parse is here, and the application hands [`playurl`] to
 //! the player adapter as its `PlayUrlSource`.
@@ -18,7 +18,7 @@ pub use plx_playback_contract::playurl::{PlayDovi, PlayUrl};
 /// An `Err` rather than a defaulted object on malformed input, for the application's `dev`'s `parse_servers`' reason: a
 /// run whose declaration was silently dropped grades as "the payload is wrong", when the fault is
 /// a typo in the harness. An empty `url` is an `Err` too — an all-defaults object would send the
-/// engine looking for `plxnative-url` instead and the case would play something else entirely.
+/// engine looking for `multiplex-url` instead and the case would play something else entirely.
 #[cfg(any(feature = "devtriggers", test))]
 pub fn parse_playurl(s: &str) -> Result<PlayUrl, String> {
     let p: PlayUrl = serde_json::from_str(s).map_err(|e| e.to_string())?;
@@ -28,7 +28,7 @@ pub fn parse_playurl(s: &str) -> Result<PlayUrl, String> {
     Ok(p)
 }
 
-/// This boot's URL-and-declaration, if one was armed — `/tmp/plxnative-playurl`.
+/// This boot's URL-and-declaration, if one was armed — `/tmp/multiplex-playurl`.
 ///
 /// `None` = not armed; `Some(Err)` = armed but unreadable, which the caller logs.
 ///
@@ -103,7 +103,7 @@ mod tests {
     }
 
     /// An empty `url` must be an Err, not an all-defaults object: on `Ok` the engine would take
-    /// the empty URL, fall through to `plxnative-url` or a local sample, and PLAY SOMETHING ELSE —
+    /// the empty URL, fall through to `multiplex-url` or a local sample, and PLAY SOMETHING ELSE —
     /// a case grading a stream it was never pointed at. Same class as `dev::parse_servers`' untagged
     /// ordering trap, in different clothes.
     #[test]

@@ -1935,7 +1935,7 @@ mod tests {
         impl TempCanonicalRoot {
             fn new(tag: &str) -> TempCanonicalRoot {
                 let dir = std::env::temp_dir().join(format!(
-                    "plxnative-adapter-canonical-{}-{tag}", std::process::id()));
+                    "multiplex-adapter-canonical-{}-{tag}", std::process::id()));
                 let _ = std::fs::remove_dir_all(&dir);
                 plx_base::paths::redirect_persistent_state_root_for_test(Some(dir.clone()));
                 TempCanonicalRoot { dir }
@@ -2121,7 +2121,7 @@ mod tests {
         impl TempCanonicalRoot {
             fn new(tag: &str) -> TempCanonicalRoot {
                 let dir = std::env::temp_dir().join(format!(
-                    "plxnative-adapter-canonical-{}-{tag}", std::process::id()));
+                    "multiplex-adapter-canonical-{}-{tag}", std::process::id()));
                 let _ = std::fs::remove_dir_all(&dir);
                 plx_base::paths::redirect_persistent_state_root_for_test(Some(dir.clone()));
                 TempCanonicalRoot { dir }

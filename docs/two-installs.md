@@ -16,7 +16,7 @@ damage a wrong assumption does, and the first item is the one the whole change e
 safe: **the ACB video bind under a second app id.**
 
 The mechanism is deliberately small. There is one axis — `FLAVOR` — one derived id, one derived
-runtime root, and no codegen input anywhere. `pkg/plxnative` is still one artifact.
+runtime root, and no codegen input anywhere. `pkg/multiplex` is still one artifact.
 
 ---
 
@@ -63,7 +63,7 @@ make -s print-flavor   FLAVOR=debug     # debug
 make -s print-appid    FLAVOR=debug     # app.multiplex.native.debug
 make -s print-appdir   FLAVOR=debug     # /media/developer/apps/usr/palm/applications/app.multiplex.native.debug
 make -s print-rundir   FLAVOR=debug     # /tmp/app.multiplex.native.debug
-make -s print-eventlog FLAVOR=debug     # /tmp/app.multiplex.native.debug/plxnative-events.log
+make -s print-eventlog FLAVOR=debug     # /tmp/app.multiplex.native.debug/multiplex-events.log
 make -s print-appport  FLAVOR=debug     # 8911  (the capture listener's port — §3.1)
 make -s print-tv                        # the television's address, expanded
 ```
@@ -114,7 +114,7 @@ made it right.
 
 Two consequences, and they are the reason for the design rather than side effects of it:
 
-- **`pkg/plxnative` stays ONE artifact.** Nothing about the flavour reaches codegen. No second
+- **`pkg/multiplex` stays ONE artifact.** Nothing about the flavour reaches codegen. No second
   `--target-dir`, no second `pkg/.build-config` stamp, no `cfg!`, no rebuild when you flip
   `FLAVOR`, and — the expensive one — no second FFmpeg build. This project's classic failure is the
   stale artifact make believes is fresh (the Makefile's `pkg/.build-config` comment is the
@@ -177,13 +177,13 @@ inside a bullet already claiming to be separate. It is written out in full below
   surface already composes on `paths::in_runtime_dir`, moving the root separated all of them at
   once and left every name unchanged — all but the last of these, which composed on nothing and had
   to be moved by hand:
-  - the three logs — `plxnative-events.log` (truncated per launch), `plxnative-crash.log`
-    (append-only), `plxnative-stderr.log`;
-  - all ~40 `plxnative-*` dev triggers, `dev::DIAG` and `dev::any_trigger_present`'s scan;
-  - the `plxnative-remote` FIFO;
-  - the capture listener's file trigger (`plxnative-capture`) and the two profiler JSONLs;
+  - the three logs — `multiplex-events.log` (truncated per launch), `multiplex-crash.log`
+    (append-only), `multiplex-stderr.log`;
+  - all ~40 `multiplex-*` dev triggers, `dev::DIAG` and `dev::any_trigger_present`'s scan;
+  - the `multiplex-remote` FIFO;
+  - the capture listener's file trigger (`multiplex-capture`) and the two profiler JSONLs;
   - the two local Annex-B sample payloads, `sample.h264` and `sample.h265` — the only runtime files
-    that are *not* spelled `plxnative-*`, which is why they have their own door
+    that are *not* spelled `multiplex-*`, which is why they have their own door
     (`devtrig::read_sample`). They took an absolute `/tmp` path until after the split landed, so they
     were the last two surfaces still pinned to a shared root while every other one had moved. Two
     installs reading one sample is harmless in itself; a rule with a hole in it is not, because it
@@ -273,7 +273,7 @@ inside a bullet already claiming to be separate. It is written out in full below
   and §6.10 records that the ~74 MB was never a measurement at all. 60 was worse than declaring
   nothing, since webOS substitutes 120 for an app that declares none.
 - **The host build tree, deliberately — the one entry here that is not on the television.**
-  `FLAVOR` never reaches codegen (§2), so `pkg/plxnative`,
+  `FLAVOR` never reaches codegen (§2), so `pkg/multiplex`,
   the `pkg/.build-config` stamp and the cargo `--target-dir` are one set for both installs — that
   is the point, not an oversight. The consequence to know is at the ipk stage: `make ipk` does
   `rm -rf ipkroot/data/usr` and re-stages, so **exactly one flavour is staged at a time** (which is
@@ -289,15 +289,15 @@ inside a bullet already claiming to be separate. It is written out in full below
 Two are name collisions and the third is a file mode. None of the three produces an error;
 all three produce evidence about the wrong thing, which is worse.
 
-### 4.1 `plxnative-` — why the runtime root's separator is a DOT
+### 4.1 `multiplex-` — why the runtime root's separator is a DOT
 
 `dev::any_trigger_present` decides whether the boot is automated by scanning the runtime root for
-entries whose name begins `plxnative-`, and suppressing the who's-watching picker if it finds one.
+entries whose name begins `multiplex-`, and suppressing the who's-watching picker if it finds one.
 It is the one surface in `dev.rs` that names no path at all.
 
-A second install's root named `/tmp/plxnative-debug` would therefore sit in `/tmp` reading, to the
+A second install's root named `/tmp/multiplex-debug` would therefore sit in `/tmp` reading, to the
 *other* install, as a permanently armed trigger — silently changing which screen the released app
-boots to, with no line in any log. The full app id contains no `plxnative-`, so
+boots to, with no line in any log. The full app id contains no `multiplex-`, so
 `/tmp/app.multiplex.native.debug` cannot. That is the first reason.
 
 The second is independent, because a failure this quiet deserves two: `any_trigger_present` now
@@ -313,7 +313,7 @@ Any match on the app id must be **anchored on a delimiter**. A bare `grep app.mu
 — or kills it.
 
 This is the same shape `src/main.c:57-61` already documents from the other side: the crash tracer
-matches `/proc/self/maps` lines on `/plxnative\n` and `/plxnative ` rather than on the app-directory
+matches `/proc/self/maps` lines on `/multiplex\n` and `/multiplex ` rather than on the app-directory
 name, precisely because the directory is *itself* called `…app.multiplex.native/` and a bare substring
 test would also match every library deployed beside the binary.
 
@@ -322,12 +322,12 @@ other install:
 
 | test | scope | matches |
 | --- | --- | --- |
-| `pidof plxnative` | **name** | BOTH installs — both binaries are named `plxnative` |
-| `fuser <appdir>/plxnative` | **inode** | exactly one install |
+| `pidof multiplex` | **name** | BOTH installs — both binaries are named `multiplex` |
+| `fuser <appdir>/multiplex` | **inode** | exactly one install |
 | `closeByAppId {"id":…}` | **id** | exactly one install |
 
-`pidof plxnative` returns two pids in an order busybox does not promise, so every liveness check
-built on it had to move to `fuser $(make -s print-appdir)/plxnative` — or to a loop resolving
+`pidof multiplex` returns two pids in an order busybox does not promise, so every liveness check
+built on it had to move to `fuser $(make -s print-appdir)/multiplex` — or to a loop resolving
 `readlink /proc/<pid>/exe` per pid, when the pid itself is what you need. The Makefile's `CLOSE_SH`
 kills by path for the same reason: a name-based kill (`pidof`, `killall`) takes down the other
 install too.
@@ -385,7 +385,7 @@ install's runtime root, which takes its three logs with it — so pull anything 
 with no hatch gets deleted rather than respected — the legitimate use is reproducing a user's report
 against the shipped id with instrumentation on). `ci/check-package.py` then asserts the same rule on
 the **packaged bytes**, which is the half that survives somebody reaching for the hatch and
-forgetting: the stable package must not contain the `plxnative-noidle` dev witness.
+forgetting: the stable package must not contain the `multiplex-noidle` dev witness.
 
 That gate is graded **unconditionally**, outside the build-configuration branch, and the nesting is
 why it is worth a paragraph rather than a clause. `pkg/.build-config` records a feature set, and it
@@ -395,8 +395,8 @@ Nested under that stamp, exactly that combination satisfied `release-guard` (`RE
 non-empty), printed `SKIP — neither shipped configuration`, and would have packaged a dev-trigger
 binary under the released id on an all-green run. "This package carries no dev-trigger surface" is a
 property of the bytes and needs no stamp to grade, so it no longer asks for one. The witness is
-graded from *both* sides for the same reason — the dev leg asserts `plxnative-noidle` is still
-emitted — because the previous witness (`plxnative-autoplay`) matched nothing in *either*
+graded from *both* sides for the same reason — the dev leg asserts `multiplex-noidle` is still
+emitted — because the previous witness (`multiplex-autoplay`) matched nothing in *either*
 configuration, and so printed `ok` over every build for as long as it existed.
 
 **That dev leg did not actually run until 2026-09-02, and the way it failed is the same shape a
@@ -420,8 +420,8 @@ install: id=app.multiplex.native.debug flavour=debug runtime=/tmp/app.multiplex.
 appdir: /media/developer/apps/usr/palm/applications/app.multiplex.native.debug (from current_exe)
 ```
 
-It exists because none of the obvious witnesses work. Both binaries are named `plxnative`, so
-`pidof` cannot tell them apart on this busybox set; `pkg/plxnative` is a path every configuration
+It exists because none of the obvious witnesses work. Both binaries are named `multiplex`, so
+`pidof` cannot tell them apart on this busybox set; `pkg/multiplex` is a path every configuration
 writes, so an md5 against the local build proves only that *some* flavour of *some* configuration
 matches. `features=` is `dev` or `release`. `APPID_env=` is evidence rather than configuration —
 see §6.2.

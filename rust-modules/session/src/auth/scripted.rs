@@ -1,9 +1,9 @@
 //! The sign-in worker's SCRIPTED outcomes: the two dev triggers that stand in for plex.tv, read
 //! beside the worker that consumes them.
 //!
-//! * `plxnative-readout=<case>` boots the sign-in screen straight into a canned terminal failure
+//! * `multiplex-readout=<case>` boots the sign-in screen straight into a canned terminal failure
 //!   ([`ReadoutCase`]), with no PIN minted and no call made.
-//! * `plxnative-signinfail[=…]` makes the real requests fail the way an unresolvable plex.tv
+//! * `multiplex-signinfail[=…]` makes the real requests fail the way an unresolvable plex.tv
 //!   would ([`signin_trouble_create`], [`signin_trouble_poll`], [`signin_trouble_resources`]).
 //!
 //! Both are for the ui-sim captures of the incident offer. Both produce REAL state through the
@@ -16,9 +16,9 @@
 //! `dev` module. With `devtriggers` off, `plx_base::devtrig::read` is `None` at compile time and
 //! every function below answers "no script", exactly as before.
 
-/// `/tmp/plxnative-readout=<case>` — boot straight into a chosen page-filling `Failed` read-out
+/// `/tmp/multiplex-readout=<case>` — boot straight into a chosen page-filling `Failed` read-out
 /// for the read-out glyph work's own visual verification (spec "1A"), with NO network call and no
-/// account touched: paired with `plxnative-login` (which already forces `BootTo::Login` with no
+/// account touched: paired with `multiplex-login` (which already forces `BootTo::Login` with no
 /// session), `login_worker_with_output` reads this ONCE at the top of the worker thread and, for
 /// every case named here, skips straight to `auth::output_failed_naming` with a canned caption,
 /// [`plx_telemetry::telemetry::incident::IncidentContext`] and (`discovery_no_servers` only) a canned account name instead of minting a PIN or discovering
@@ -66,7 +66,7 @@ pub fn readout_case() -> Option<ReadoutCase> {
 }
 
 /// The mock account the canned `discovery_no_servers` read-out says it signed in as, unless
-/// `/tmp/plxnative-readout-account=<name>` names another (an empty file shows the nameless
+/// `/tmp/multiplex-readout-account=<name>` names another (an empty file shows the nameless
 /// `browse.auth.no_servers` fallback). A canned name, never a real account's.
 const MOCK_ACCOUNT: &str = "alexandra";
 
@@ -150,7 +150,7 @@ impl ReadoutCase {
     }
 }
 
-/// The synthetic failure `plxnative-signinfail` stands for: a name that did not resolve, the
+/// The synthetic failure `multiplex-signinfail` stands for: a name that did not resolve, the
 /// commonest way a television "has no internet". A `net::RequestFailure` like the one libcurl's
 /// `CURLE_COULDNT_RESOLVE_HOST` produces, planted only into the one call it replaces — never into
 /// `net`'s own records, which other callers read as real evidence (0.6.6's reason, kept).
@@ -169,7 +169,7 @@ fn signinfail_spec() -> Option<String> {
     plx_base::devtrig::read("signinfail")
 }
 
-/// `/tmp/plxnative-signinfail[=error]` — every sign-in code request fails as an unresolvable
+/// `/tmp/multiplex-signinfail[=error]` — every sign-in code request fails as an unresolvable
 /// plex.tv would. Re-read at each attempt, so *Try again* fails the same way until it is removed.
 /// `None` means "make the real request".
 pub fn signin_trouble_create()
@@ -183,14 +183,14 @@ pub fn signin_trouble_create()
     }
 }
 
-/// `/tmp/plxnative-signinfail=stall` — the code is real, but every poll of it goes unanswered, so
+/// `/tmp/multiplex-signinfail=stall` — the code is real, but every poll of it goes unanswered, so
 /// the wait reaches the stalled rule (`auth::LINK_TROUBLE_AFTER`) exactly as a dropped link would.
 pub fn signin_trouble_poll() -> Option<plx_plex::plex::account::PinPoll> {
     (signinfail_spec()?.as_str() == "stall")
         .then(|| plx_plex::plex::account::PinPoll::Unreachable(Err(synthetic_dns_failure())))
 }
 
-/// `/tmp/plxnative-signinfail=resources|resources-blip` — fail the plex.tv resource listing on
+/// `/tmp/multiplex-signinfail=resources|resources-blip` — fail the plex.tv resource listing on
 /// every attempt, or on its first attempt only. The latter exercises the in-place retry while the
 /// sign-in screen remains in Discovering.
 pub fn signin_trouble_resources()

@@ -88,7 +88,7 @@ and never varied.
 
 # Addendum — M2 re-run with `--verbose --no-early`
 
-**Second device session, same day, same binary** (`pkg/plxnative` md5 verified identical on the
+**Second device session, same day, same binary** (`pkg/multiplex` md5 verified identical on the
 television before the run). This fills the gap the M2 table above records as `—`.
 
 **It is a SECOND RUN, not a recovery of the first one's numbers.** The trajectories below are not

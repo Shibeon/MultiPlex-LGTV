@@ -16,7 +16,7 @@ import json
 import os
 import sys
 
-CRATE = "plxnative_modules"
+CRATE = "multiplex_modules"
 
 
 def artifacts(lines):

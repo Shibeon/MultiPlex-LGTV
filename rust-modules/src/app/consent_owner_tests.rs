@@ -144,7 +144,7 @@ fn signing_out_through_consent_owner_leaves_nothing_for_the_next_account() {
 
     let _serial = plx_base::testlock::serial();
     let dir = std::env::temp_dir().join(format!(
-        "plxnative-consent-owner-signout-{}",
+        "multiplex-consent-owner-signout-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);

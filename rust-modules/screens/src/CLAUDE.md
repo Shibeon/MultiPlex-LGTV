@@ -24,7 +24,7 @@ A screen may name `ui/`, `appkit/` (the widgets several screens share — `playe
 this directory's `registry` — **never `app/`, and never a sibling screen module**. `ci/check-deps.sh`'s `layer` and `sibling` gates have
 held this since restructure phase 10, so a violation fails CI rather than review. Since Split 13
 this directory is the crate `plx_screens`, which cannot name the application at all (cargo has no
-edge from it to `plxnative-modules`, and the application depends on it); the `layer` gate still
+edge from it to `multiplex-modules`, and the application depends on it); the `layer` gate still
 greps for the spelling `crate::app::`, and the `sibling` gate reads a sibling as `crate::<screen>`
 because the crate root is the module `screens`. What the screens crate needs from the build
 (`PLX_BUILD_SHA`, for About and Source) the application hands in at boot

@@ -284,7 +284,7 @@ pub fn reset_shown_for_test() {
 }
 
 /// Mark the hint as taught for this run: the viewer-has-opened-a-menu state and every surface's one
-/// showing already spent. Called once at boot by the dev trigger `plxnative-hintoff`
+/// showing already spent. Called once at boot by the dev trigger `multiplex-hintoff`
 /// (`app::boot`), so the site demo film, which is shot headless with no viewer to teach, is not the
 /// one place a one-time teaching overlay appears. It changes no timing and no rest clock, and it is
 /// a seed: nothing is reported for storage. Compiled only with `devtriggers`, so no shipping build

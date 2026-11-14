@@ -25,7 +25,7 @@ CLEAN = {
     ALLOWED: 'const CURLOPT_USERAGENT: c_int = 10018;\n'
              'fn line() -> String { format!("User-Agent: {}\\r\\n", ua()) }\n',
     'rust-modules/plex/src/plex/identity.rs': '/// The HTTP `User-Agent` for libcurl.\n'
-                                              'pub fn user_agent() -> String { format!("PlxNative/{}", V) }\n',
+                                              'pub fn user_agent() -> String { format!("MultiPlex/{}", V) }\n',
     REFUSES: 'pub const RESERVED: [&str; 2] = ["host", "user-agent"];\n',
     OTHER: 'fn open() { plx_net::net::apply_user_agent(easy); }\n',
     'src/starfish.c': '/* sets the User-Agent: nothing here */ int x(void) { return 0; }\n',
@@ -61,7 +61,7 @@ class Verdicts(unittest.TestCase):
         self.assertIn('CURLOPT_USERAGENT', problems[0])
 
     def test_a_literal_user_agent_header_fails_in_any_spelling(self):
-        for source in ('fn f() -> &\'static str { "User-Agent: plxnative/0.1\\r\\n" }',
+        for source in ('fn f() -> &\'static str { "User-Agent: multiplex/0.1\\r\\n" }',
                        'fn f() -> &\'static str { "user-agent:" }',
                        'fn f() { h.insert("USER-AGENT", v); }',
                        'fn f() { let r = format!("GET / HTTP/1.1\\r\\nUser-Agent: {ua}\\r\\n\\r\\n"); }',

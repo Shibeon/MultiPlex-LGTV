@@ -51,7 +51,7 @@ last two bullets); it is the source; this list only indexes it. Cite a rule by i
   `src/config.local.h`, `pkg/auth.json`), a token or a friend's server identity in code, fixtures,
   a PR body or a log excerpt is a BLOCKER. Never repeat the value in your report.
 - **TV and Plex-account safety.** A write to a real account (scrobble, mark watched,
-  Watchlist, a `plxnative-watchlist-live` file), a device command outside the TV lock, or a test
+  Watchlist, a `multiplex-watchlist-live` file), a device command outside the TV lock, or a test
   needing the set where a mock would do.
 - **"Build and verification"** duties: a new `MAX_*` constant with no `ci/list-caps.ini` class; a
   `Makefile`, `Cargo.toml` or workflow change whose body lacks the `make build-bench` table.

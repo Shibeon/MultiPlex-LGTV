@@ -18,7 +18,7 @@ spec = importlib.util.spec_from_file_location("guard", HOOK)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
-T = "/tmp/app.multiplex.native.debug/plxnative-watchlist-live"
+T = "/tmp/app.multiplex.native.debug/multiplex-watchlist-live"
 BLOCK, ALLOW = True, False
 CASES = [
     # --- must be blocked: every way of creating the file -------------------------
@@ -30,7 +30,7 @@ CASES = [
     (BLOCK, f"printf '' >>{T}"),
     (BLOCK, f"echo 1 | tee {T}"),
     (BLOCK, f"cp /dev/null {T}"),
-    (BLOCK, f"tools/tv-ssh ssh tv 'cd /tmp/app.multiplex.native.debug && touch plxnative-watchlist-live'"),
+    (BLOCK, f"tools/tv-ssh ssh tv 'cd /tmp/app.multiplex.native.debug && touch multiplex-watchlist-live'"),
     (BLOCK, f"python3 -c \"open('{T}', 'w').close()\""),
     (BLOCK, f"python3 -c \"import pathlib; pathlib.Path('{T}').touch()\""),
     (BLOCK, "tools/tv-session.sh up --screen watchlist --arm watchlist-live"),
@@ -40,12 +40,12 @@ CASES = [
     (ALLOW, f"ls -la {T}"),
     (ALLOW, f"test -e {T} && echo on"),
     (ALLOW, f"tools/tv-ssh ssh tv \"rm -f {T}\""),
-    (ALLOW, "grep -rn plxnative-watchlist-live rust-modules docs"),
-    (ALLOW, "git log -S plxnative-watchlist-live --oneline"),
+    (ALLOW, "grep -rn multiplex-watchlist-live rust-modules docs"),
+    (ALLOW, "git log -S multiplex-watchlist-live --oneline"),
     (ALLOW, f"grep -c watchlist {T} > /tmp/count.txt"),
-    (ALLOW, "touch /tmp/plxnative-discover"),
+    (ALLOW, "touch /tmp/multiplex-discover"),
     (ALLOW, "tools/tv-session.sh up --screen watchlist --mock-plextv=8765"),
-    (ALLOW, "git commit -m 'watchlist: the plxnative-watchlist-live switch'"),
+    (ALLOW, "git commit -m 'watchlist: the multiplex-watchlist-live switch'"),
     # --- the owner's prefix ------------------------------------------------------
     (ALLOW, f"PLX_WATCHLIST_LIVE_OWNER=1 tools/tv-ssh ssh tv \"touch {T}\""),
 ]

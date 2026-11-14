@@ -16,11 +16,11 @@ class RegistryDispatch(unittest.TestCase):
         with patch.object(dispatch.subprocess, "run") as run:
             dispatch.dispatch(pin, "v0.10.0")
         call = run.call_args
-        self.assertEqual(call.args[0], ["gh", "api", "repos/GLinnik21/plxnative-huds/dispatches", "--input", "-"])
+        self.assertEqual(call.args[0], ["gh", "api", "repos/GLinnik21/multiplex-huds/dispatches", "--input", "-"])
         body = json.loads(call.kwargs["input"])
         self.assertEqual(body["event_type"], "app-release")
         self.assertEqual(body["client_payload"]["simulator"]["sha256"], pin["sha256"])
-        self.assertIn("/v0.10.0/plxnative-hud-simulator-linux-x86_64.tar.gz", body["client_payload"]["simulator"]["url"])
+        self.assertIn("/v0.10.0/multiplex-hud-simulator-linux-x86_64.tar.gz", body["client_payload"]["simulator"]["url"])
         self.assertNotIn("url", pin)
         self.assertTrue(call.kwargs["check"])
 

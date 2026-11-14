@@ -81,7 +81,7 @@
 //! whole frame ("not dirty-RECTANGLE tracking", `app/run.rs`'s present gate). So the pass runs once,
 //! over a buffer composed this frame from a clear, and nothing in a later frame is ever blended over
 //! straight pixels. **A bound frame therefore has to stay a complete redraw.** A damage scheme
-//! (`EGL_KHR_partial_update`, today only the `plxnative-egldamage` experiment) that redrew part of
+//! (`EGL_KHR_partial_update`, today only the `multiplex-egldamage` experiment) that redrew part of
 //! it and blended over the pixels the buffer kept would composite premultiplied colour onto straight
 //! colour: it must clear every damaged region first and run this pass over exactly that region (the
 //! ledger already holds the boxes a frame drew; it would be reset to the damage instead of to nothing).

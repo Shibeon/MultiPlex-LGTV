@@ -3,7 +3,7 @@ name = "plx_media_codecs"
 version = "0.0.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-description = "Bundled FFmpeg ABI, codec jobs and capture encoder for PlxNative."
+description = "Bundled FFmpeg ABI, codec jobs and capture encoder for MultiPlex."
 repository = "https://github.com/GLinnik21/plx-native"
 publish = false
 

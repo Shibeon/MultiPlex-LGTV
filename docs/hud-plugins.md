@@ -210,7 +210,7 @@ Layers, Sans-IO, settings, replay
   `SCREEN_SHAPES` order is part of the hash (`screens/src/registry.rs:2389-2390`), pinned by
   `SCREEN_SHAPES_PIN` (`:2616`); a moved state shape refuses every anchor (`tests/fixtures/replay/README.md:115-127`).
 - F34. `dev/scenarios.rs:1120` pins the HUD up for a headless capture; `.github/workflows/simulators.yml:99-108`
-  runs the Linux `plxnative-sim` under `xvfb-run` and `tools/sim-smoke.py` captures a 1080p PNG.
+  runs the Linux `multiplex-sim` under `xvfb-run` and `tools/sim-smoke.py` captures a 1080p PNG.
 
 Other subsystems the plan touches
 - F35. Lower layers mirror HUD geometry (`text_style.rs:53-64`), and classic constants are read outside the
@@ -249,7 +249,7 @@ Other subsystems the plan touches
   `Cargo.toml` printed nothing; PR14 added `ed25519-compact` to `plx_data`); `plx_base` has `sha256`, `b64`, `spki`; a duplicate-key-preserving JSON
   reader exists, private (`ui/src/rec/strict_json.rs`, `mod strict_json;` at `ui/src/rec.rs:40`); no JSON
   Schema crate (`grep -c 'name = "schemars"\|name = "jsonschema"' Cargo.lock` prints 0); `plx_ui` already
-  depends on `serde_json` (`ui/Cargo.toml:50`). The lint host is the existing `plxnative-sim` bin
+  depends on `serde_json` (`ui/Cargo.toml:50`). The lint host is the existing `multiplex-sim` bin
   (`Cargo.toml:64-67`, `required-features = ["hostsim"]`); dev triggers are the default `devtriggers`
   feature, absent from the shipping `--no-default-features` set (`Cargo.toml:73`, `:88`).
 
@@ -825,7 +825,7 @@ language is unloadable in that language only (Text fit).
 MultiPlex fork, 2026-11-14: the owner chose parity with the MultiPlex web player for the default HUD
 (`rust-modules/ui/src/CLAUDE.md`, product idiom 3). It is the embedded package `builtin:multiplex`
 (`appkit/src/hud_format/fixtures/multiplex/`, packed to `fixtures/multiplex.plxhud`; a test pins the two equal and
-`plxnative-sim --hud-export builtin:multiplex` prints the bytes). It is the selection of a profile that chose
+`multiplex-sim --hud-export builtin:multiplex` prints the bytes). It is the selection of a profile that chose
 nothing and the fallback for a package that cannot draw; `builtin:classic` stays compiled at boot beside it and
 selectable in Settings > Player HUD, where the two rows read "MultiPlex" and "Classic" and neither has a removal row.
 
@@ -879,7 +879,7 @@ in, a `vstack` of fixed `w`, a strip card for `item.title`'s fallback `widgets_c
 what it sees, a file and the simulator it pins; it cannot see a sideload, a TV's language or a later app release. The
 app sees all three at the moment it would draw, so the app is the enforcement point and the same compiler runs in
 three places:
-1. `plxnative-sim --hud-lint --lang all`, locally or in a model's lint loop (LLM authoring);
+1. `multiplex-sim --hud-lint --lang all`, locally or in a model's lint loop (LLM authoring);
 2. registry CI, through the simulator pinned to an app release, as a required check that refuses the merge;
 3. the TV, which compiles when a package becomes the resolved selection, never at install (an install only runs
    `admit`), with its OWN `Measure` for its language. The language is fixed for a process (`run.rs`), so a changed
@@ -906,7 +906,7 @@ Refresh, an install) tries them again, with no second line. The selection is kep
 restores it, at the next launch.
 
 The gap: an app release can lengthen a translation or add a language, so a package that passed can fail later.
-- (a) Re-lint on every app release: YES. A job in `plxnative-huds`, triggered by a `repository_dispatch` from this
+- (a) Re-lint on every app release: YES. A job in `multiplex-huds`, triggered by a `repository_dispatch` from this
   repo's release workflow and also weekly as a backstop (a missed dispatch must not leave the index stale), re-lints
   the latest version of every entry with the new release's simulator in all eleven languages. Per entry it records the
   result in the index as `unfit: [{"from": "<app release>", "langs": [...]}]`; when every language fails, or a
@@ -1533,7 +1533,7 @@ determined. It is not specific to a HUD state.
 every language, and a state whose cost (a Skip state at the larger of its two pill layouts) is above its class's ceiling in
 any term is one error at `/layout`: the class, each term over as `value > ceiling`, and the three ops that weigh most, each
 by the pointer of the node that drew it (`CompiledState::top_contributors`, `CompiledState::origin`). It runs in the lint
-(`plxnative-sim --hud-lint`, both passes) and on the television, in PR10's driver: the television loads
+(`multiplex-sim --hud-lint`, both passes) and on the television, in PR10's driver: the television loads
 `builtin:classic` through `load_classic`, which never lints, and a selected package is linted by the driver, which
 calls both passes (`lint_fit` with the live measure, `lint_price` with `WholePixelMeasure`), one tick each, before the load.
 So the verdict never rejects a package in a frame, and the builtin classic is safe because it is never linted, as well as
@@ -1542,7 +1542,7 @@ raised and no state is exempt; because they carry no headroom, a package that ad
 heaviest state of its class is over until it is run on the television and its figures set the ceiling. The builtin classic
 and the reference pass every state in every language.
 
-**The simulator prices with the same model.** `plxnative-sim` measures text fit with the host's SDL_ttf, which sums
+**The simulator prices with the same model.** `multiplex-sim` measures text fit with the host's SDL_ttf, which sums
 fractional advances, where the television's sums whole-pixel ones. Priced by the simulator's own measure the classic's
 Up Next and Info states and every two-section state would read over a ceiling the television accepts, in 4 of the 12 terms
 (`blended_px` by 320 to 6605 px in three classes, `texture_bytes` by 2876 in the compact class; `draw_ops` and
@@ -1550,7 +1550,7 @@ Up Next and Info states and every two-section state would read over a ceiling th
 `WholePixelMeasure`, built by `plx_gfx::text::read_price_model` from the bytes of the two files
 `plx_gfx::text::app_font_path` returns, `appfont.ttf` and `appfont-bold.ttf` (`plx_base::fontcov::advances::Face`), and
 `HUD-E1401` and the cost lines are that compile's: every side prints one number. Text fit (`HUD-E0601` and the geometry) keeps SDL_ttf's measure, and a width there can still be a few pixels off
-the television's. `plxnative-sim --hud-lint` prints every state's cost beside its class's ceiling, as information lines
+the television's. `multiplex-sim --hud-lint` prints every state's cost beside its class's ceiling, as information lines
 (text) and a `costs` array (JSON), and exits 1 on `HUD-E1401` like any other error.
 
 ## Storage per install mode
@@ -1672,7 +1672,7 @@ authoring exercise; the other external comparisons below remain design notes.
 - One schema per document kind and MAJOR.MINOR. Each declared version keeps its published contract when later minors extend it.
 - One source: `hud_format::schema` holds a descriptor table (per key: type, closed values, numeric range,
   required, state-keyable; per command: its typed parameters). The strict parser walks it and
-  `plxnative-sim --hud-schema manifest|hud --version 1.0` serializes it; nothing is hand-written. The emitted file is a committed golden
+  `multiplex-sim --hud-schema manifest|hud --version 1.0` serializes it; nothing is hand-written. The emitted file is a committed golden
   that a test regenerates and diffs. The commands are a `oneOf` keyed by `const` on `command`, each branch
   listing its parameters with `additionalProperties: false`, so a validator reports a wrong parameter at the
   item.
@@ -1689,7 +1689,7 @@ at the ITEM, through the `oneOf`, where the parser names the key). The schema is
   dependency.
 
 2. Lint.
-- `plxnative-sim --hud-lint <file> [--format text|json] [--lang all|<tag>]`; exit 0 clean, 1 findings, 2 usage.
+- `multiplex-sim --hud-lint <file> [--format text|json] [--lang all|<tag>]`; exit 0 clean, 1 findings, 2 usage.
   It runs to the end and reports EVERY finding (parse, then compile per state, slot and language), sorted by
   member and pointer, so one round fixes many.
 - A finding: `code` (stable, never reused, listed in the guide), `severity` (`error` or `warning`; a missing
@@ -1839,7 +1839,7 @@ PR5. `appkit::hud_format`.
   T=hud_format` with a nonzero count, seeded mutation tests, `make check`. Risk: schema churn before PR7 proves
   classic; mitigated by reviewing PR5 with PR7 and by `builtin_classic_passes_every_invariant` here.
 
-PR6. Schema, examples, site: `plxnative-sim --hud-schema manifest|hud --version 1.0`, `--hud-export builtin:classic`,
+PR6. Schema, examples, site: `multiplex-sim --hud-schema manifest|hud --version 1.0`, `--hud-export builtin:classic`,
 `site/hud/schema/{manifest,hud}/1.0.json` committed as goldens with drift tests, `site/hud/examples/` linted in CI. The bundle reader and canonical writer use the pinned minimal-feature ZIP crate.
 
 PR7. One renderer for the compact HUD.
@@ -1848,7 +1848,7 @@ PR7. One renderer for the compact HUD.
   `Playbar` (fill, track, thickness, knob, clocks, mark, grab), `up_next::layout_of` (its `Align`), the band `chrome`
   split, `w: fill` as `title_right`'s rule, `hairline` (axis), `HUD_TITLE`. Menus anchor from
   `HudGeometry` through PR1's placer. `ClockWarm` prewarms the clock sizes the package uses (`player_hud.rs:109`,
-  `:126`, test `:2400`), so the cold-clock drop does not return. A dev trigger `plxnative-hud=<path>` under
+  `:126`, test `:2400`), so the cold-clock drop does not return. A dev trigger `multiplex-hud=<path>` under
   `devtriggers` (F41) boots the sim with a package.
 - Verify: pixel-identical compact, Up Next and Skip states; the reference compact state renders in the sim; the
   TV check with `ARM_PROFILE=release` and the `profile-tv` tools, which measures the compact states (PR7 stored no
@@ -1912,7 +1912,7 @@ carry.
 
 PR15. Authoring tools (shipped): `tools/hud-dev` (Python standard library, runs on macOS's `/usr/bin/python3`) bundles a
 package source with `tools/hud_package.py` (the simulator's `--hud-pack`, never a second packer), lints it with
-`plxnative-sim --hud-lint` on every change (it polls mtimes), serves the last CLEAN bundle over plain http on the
+`multiplex-sim --hud-lint` on every change (it polls mtimes), serves the last CLEAN bundle over plain http on the
 Mac's RFC 1918 address, and prints the address to type under Settings > Player HUD > "Install from address". A source
 with findings is printed and not served; the previous clean bundle stays up. Every clean change is served under a
 strictly higher version: `Semver` is numeric `MAJOR.MINOR.PATCH` only (no pre-release, so `1.2.0-dev.7` cannot be
@@ -1924,7 +1924,7 @@ dialog follows, and OK installs. The confirmation is kept. The dev patch outrank
 patch (a dev `1.0.26000000` makes the published `1.0.4` NotNewer), so the comparator is left alone and the author is told, by
 the recipe and the tool's own output, to remove the dev install (the page's Remove row) before installing the published one.
 The local state-matrix preview is
-`tools/hud_preview.py --hud <file>` (already on main), the PR15 "`plxnative-sim --hud <file>`" of this plan; a static web
+`tools/hud_preview.py --hud <file>` (already on main), the PR15 "`multiplex-sim --hud <file>`" of this plan; a static web
 editor stays later. Verified on the host (the store, the page, the tool against a stub simulator and a local HTTP
 client).
 On a debug build on the television, with a dev-source install seeded by hand, Play on its row fetched the next

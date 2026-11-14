@@ -9,7 +9,7 @@
 //! new start at the new offset), `stop` once per teardown; there is no in-place seek.
 //!
 //! Started by the engine for a route whose presenter is `ClientOverRemux` for an embedded track
-//! (`route::side_reader_target`), or, for diagnostics, by the dev trigger `plxnative-subside`; the
+//! (`route::side_reader_target`), or, for diagnostics, by the dev trigger `multiplex-subside`; the
 //! reader itself is not dev-gated. Everything is main-thread driven except the one reader thread,
 //! whose only inputs are the [`Spec`], `FEED_SHARED`'s playhead and clock atomics, and the main
 //! demuxer's published keyframe anchor.

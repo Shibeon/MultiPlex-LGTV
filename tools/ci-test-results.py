@@ -7,7 +7,7 @@ The host unit jobs of ci.yml tee `make check-cargo-unit-*` into a log. Every tes
 `Running unittests` header, one `test <name> ... ok|FAILED|ignored` line per test (stable libtest has no JSON
 format: `-Z unstable-options --format json` is nightly-only, so the text lines are the machine-readable
 form). tools/cargo-test-parallel.py prints the header as `Running unittests (target/debug/deps/plx_ui-1a2b)
-[plx_ui, 3.2s]` and plain cargo as `Running unittests src/main.rs (target/debug/deps/plxnative_storage-1a2b)`;
+[plx_ui, 3.2s]` and plain cargo as `Running unittests src/main.rs (target/debug/deps/multiplex_storage-1a2b)`;
 both name the package, and a test is keyed `package::test_path` because a path is only unique per crate.
 
 The file is `{"v": 1, "job", "failed": [key...], "passed": [key...]}`, both sorted. `ignored` tests are
@@ -32,7 +32,7 @@ from pathlib import Path
 VERSION = 1
 # `Running unittests (target/debug/deps/plx_ui-0123abcd) [plx_ui, 3.2s]`  (tools/cargo-test-parallel.py)
 PARALLEL_HEADER = re.compile(r"^\s*Running unittests \(.*\) \[([^,\]]+),")
-# `Running unittests src/main.rs (target/debug/deps/plxnative_storage-0123abcd)`  (cargo itself)
+# `Running unittests src/main.rs (target/debug/deps/multiplex_storage-0123abcd)`  (cargo itself)
 CARGO_HEADER = re.compile(r"^\s*Running unittests \S+ \((.+)\)\s*$")
 TEST_LINE = re.compile(r"^test (\S.*?) \.\.\. (ok|FAILED|ignored)\b")
 HASH_SUFFIX = re.compile(r"-[0-9a-f]{8,}$")

@@ -167,11 +167,11 @@ pub type WatchTransport<'a> = &'a mut dyn FnMut(&WatchRequest) -> Result<WatchRe
 
 #[cfg(feature = "devtriggers")]
 plx_base::devtrig::latched_flag!(
-    /// **The owner's live switch** (`plxnative-watchlist-live` in the install's runtime root, on the
+    /// **The owner's live switch** (`multiplex-watchlist-live` in the install's runtime root, on the
     /// television `/tmp/app.multiplex.native.debug/`): a `devtriggers` build writes to the real service
     /// while it exists. Off by default, read ONCE at boot ([`announce_live_writes`]), so the owner
     /// creates it and relaunches; `/tmp` does not survive a reboot, and `tools/tv-session.sh up` and
-    /// `tests/run.py` sweep every `plxnative-*` trigger, so any agent run turns it off again. **No agent
+    /// `tests/run.py` sweep every `multiplex-*` trigger, so any agent run turns it off again. **No agent
     /// creates this file unless the owner asks for it in that session** (AGENTS.md;
     /// `.claude/hooks/watchlist-live-guard.py` refuses a command that would).
     fn live_armed = "watchlist-live";
@@ -184,11 +184,11 @@ fn live_armed() -> bool {
 /// BOOT: log once that the live switch is on, so an event log always says whether a debug build
 /// could write to the real Watchlist. Silent without the trigger, and in a release build.
 /// The body is gated on its own so the trigger's name never ships in a release binary
-/// (`ci/check-package.py` grades a shipped `plxnative-*` name as dev triggers compiled in).
+/// (`ci/check-package.py` grades a shipped `multiplex-*` name as dev triggers compiled in).
 pub fn announce_live_writes() {
     #[cfg(feature = "devtriggers")]
     if live_armed() {
-        plx_base::eventlog::log("watchlist: LIVE writes enabled by trigger (plxnative-watchlist-live)");
+        plx_base::eventlog::log("watchlist: LIVE writes enabled by trigger (multiplex-watchlist-live)");
     }
 }
 

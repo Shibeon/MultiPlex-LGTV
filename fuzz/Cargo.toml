@@ -21,7 +21,7 @@
 [workspace]
 
 [package]
-name = "plxnative-fuzz"
+name = "multiplex-fuzz"
 version = "0.0.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -46,7 +46,7 @@ plx_net = { path = "../rust-modules/net" }
 plx_media = { path = "../rust-modules/media", features = ["hostsim"] }
 
 [lib]
-name = "plxnative_fuzz"
+name = "multiplex_fuzz"
 path = "src/lib.rs"
 
 [[bin]]

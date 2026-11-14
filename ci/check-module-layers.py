@@ -217,7 +217,7 @@ def cargo_edge_errors(src, layers):
             errors.append(f'{manifest}: invalid Cargo.toml: {error}')
             continue
         package = cargo_package(doc)
-        if package == 'plxnative-modules':
+        if package == 'multiplex-modules':
             layer = 'app'
         elif package and package.startswith('plx_'):
             mount = cargo_mount(doc)

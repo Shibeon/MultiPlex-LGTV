@@ -62,7 +62,7 @@ TYPES = {'github-release', 'github-tags', 'github-commit', 'listing', 'manual'}
 SAFE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]*$')
 REPO = re.compile(r'^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')
 # Only the dependency-graph submission needs these; the detector is this script.
-DETECTOR = {'name': 'plxnative-deps-update', 'version': '1',
+DETECTOR = {'name': 'multiplex-deps-update', 'version': '1',
             'url': 'https://github.com/Shibeon/MultiPlex-LGTV/blob/main/ci/deps-update.py'}
 
 
@@ -80,7 +80,7 @@ class PatchError(BumpError):
 
 def http_get(url, accept=None):
     """The body of `url` as text. The one network read of the lookups, replaced in tests."""
-    headers = {'User-Agent': 'plxnative-deps-update', 'Accept': accept or '*/*'}
+    headers = {'User-Agent': 'multiplex-deps-update', 'Accept': accept or '*/*'}
     token = os.environ.get('GITHUB_TOKEN')
     if token and url.startswith('https://api.github.com/'):
         headers['Authorization'] = 'Bearer ' + token
@@ -265,7 +265,7 @@ def rewritten(dep, release):
 def download_digest(url):
     """sha256 of the bytes at `url`, streamed. The network read of a bump, replaced in tests."""
     h = hashlib.sha256()
-    request = urllib.request.Request(url, headers={'User-Agent': 'plxnative-deps-update'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'multiplex-deps-update'})
     try:
         with urllib.request.urlopen(request, timeout=120) as response:
             for block in iter(lambda: response.read(1 << 20), b''):
@@ -276,7 +276,7 @@ def download_digest(url):
 
 
 def download_to(url, path):
-    request = urllib.request.Request(url, headers={'User-Agent': 'plxnative-deps-update'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'multiplex-deps-update'})
     try:
         with urllib.request.urlopen(request, timeout=120) as response, open(path, 'wb') as out:
             for block in iter(lambda: response.read(1 << 20), b''):
@@ -506,7 +506,7 @@ def snapshot(entries, sha, ref, run_id='0', now=None):
         'version': 0,
         'sha': sha,
         'ref': ref,
-        'job': {'correlator': 'plxnative-deps-manifest', 'id': str(run_id)},
+        'job': {'correlator': 'multiplex-deps-manifest', 'id': str(run_id)},
         'detector': DETECTOR,
         'scanned': (now or datetime.datetime.now(datetime.timezone.utc)).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'manifests': {'ci/dependencies.json': {

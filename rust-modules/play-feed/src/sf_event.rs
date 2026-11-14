@@ -322,7 +322,7 @@ pub fn sf_on_event_inner(ty: c_int, num: i64, s: *const c_char, scope: shared::E
         // through the fault it exists to catch is worse than no instrument, because it is quoted.
         //
         // The real per-frame cadence is only observable from LG's own tracing — `GST_DEBUG=
-        // dualsequencer:6` via `/tmp/plxnative-gstlog`, whose `push_dual` and `lxvideosink`
+        // dualsequencer:6` via `/tmp/multiplex-gstlog`, whose `push_dual` and `lxvideosink`
         // timestamps give one line per frame. That was long avoided as perturbing; it is not, at
         // level 6: the same scene measured 123 LUT misses uninstrumented and 122 with the trace
         // running. Level 9 IS perturbing and is what that reputation came from.
