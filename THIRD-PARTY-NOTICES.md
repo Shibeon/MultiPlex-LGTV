@@ -169,7 +169,8 @@ The upstream headers credit, and we reproduce, the following derivations:
 The following SVG icons are compiled into the binary. All are visually modified from upstream
 (stroke width and/or colour); modifications are stated where the licence requires it.
 
-**Google Material Design Icons** — the `person` icon (`assets/icons/user.svg`)
+**Google Material Design Icons** — the `person` and `lock` icons (`assets/icons/user.svg`,
+`assets/icons/lock.svg`)
 Copyright Google LLC. Licence: **Apache License 2.0** (`licenses/Apache-2.0.txt`).
 *Modified*: the transparent bounding-box path was removed and an explicit white fill added.
 The upstream repository contains no `NOTICE` file, so no NOTICE content is propagated.

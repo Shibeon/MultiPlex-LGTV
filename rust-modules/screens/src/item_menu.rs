@@ -2,8 +2,8 @@
 //! opened by a press-and-hold on a card (or on the detail page's episode still / season tab).
 //!
 //! The reference is **Apple TV's card menu, not Plex's**: a panel anchored BESIDE the focused card
-//! (the card and the rest of the shelf stay where they are, visible behind it), rows of
-//! `[leading icon] [label]`, the focused row a filled light pill spanning the panel, and a hairline
+//! (the card and the rest of the shelf stay where they are, visible behind it), headed by the
+//! title it is about (as the web app's card menu is), rows of `[leading icon] [label]`, the focused row a filled light pill spanning the panel, and a hairline
 //! separator between the navigation actions and the state actions. Plex's own version is a
 //! full-screen sheet; that is deliberately not what this is.
 //!
@@ -67,7 +67,7 @@ use plx_ui::screen::{
     Activate, At, AxisMask, Dir, DrawFrame, EdgeRule, ElemKind, Focusable, GroupKind, GroupSpec,
     Hover, Placed, RenderStrategy, Screen, ScreenEvent, Scrim, Seat, Step, Stop,
 };
-use plx_ui::table::{Row, MENU_MAX_W, MENU_MIN_W};
+use plx_ui::table::{Row, Section, MENU_MAX_W, MENU_MIN_W};
 use plx_ui::widgets::PosterMark;
 use plx_ui::{theme, Rect};
 
@@ -356,7 +356,10 @@ fn build_card(
 ) -> ItemForm {
     let leaf = m.kind == 0 || m.kind == 3;
     let opens_details = from_deck && !deck_press.press_plays();
-    let mut sec = FormSection::new(""); // no header: the card behind the panel IS the title
+    // The title the menu is about heads it, as the web app's card menu does (`.menu-title`): the
+    // panel can stand over neighbouring cards, so it names its own. Server text, so it is exempt
+    // from the fit report and elided to the panel like any other server header.
+    let mut sec = FormSection::from_head(Section::new(card_title(m)).server_header());
 
     // ---- the deck card's own press, when OK no longer plays ----
     // First, so it is where the menu opens. It resumes when there is a resume point and the label
@@ -462,6 +465,16 @@ fn build_card(
         sec = watchlist::push_face(sec, face);
     }
     Form::new().section(sec)
+}
+
+/// The heading of a card's menu: the title the card stands for. An episode or a season is named by
+/// its show (the web app's `labels(item).title`), a movie, show or collection by its own title.
+fn card_title(m: &PmsMovie) -> String {
+    if (m.kind == 2 || m.kind == 3) && !m.show_title.is_empty() {
+        m.show_title.clone()
+    } else {
+        m.title.clone()
+    }
 }
 
 /// The state group every menu ends with: the watch-state row (or ROWS), then (for a leaf) Play from
@@ -1193,7 +1206,7 @@ mod tests {
         let on = build_deck(&item(3, PosterMark::None), true, DeckPress::Details);
         assert_eq!(
             labels(&on),
-            ["Play", "Go to Episode", "—", "Mark as Watched", "Play from Start", "Remove from Deck"]
+            ["Play", "Go to Episode", "—", "Mark as Watched", "Play from Start", "Remove from Continue Watching"]
         );
         assert_eq!(
             on.ids(),
@@ -1210,7 +1223,7 @@ mod tests {
 
         // a movie: no navigation group at all, so no separator — not at the top, not under Play
         let movie = build_deck(&item(0, PosterMark::None), true, DeckPress::Details);
-        assert_eq!(labels(&movie), ["Play", "Mark as Watched", "Play from Start", "Remove from Deck"]);
+        assert_eq!(labels(&movie), ["Play", "Mark as Watched", "Play from Start", "Remove from Continue Watching"]);
         assert!(!movie.offers(ItemRow::GoToItem) && !movie.offers(ItemRow::GoToShow));
         assert!(!labels(&movie).iter().any(|l| l == "—"), "{:?}", labels(&movie));
 
@@ -1219,7 +1232,7 @@ mod tests {
         let mut orphan = item(3, PosterMark::None);
         orphan.show_rk.clear();
         let orphan = build_deck(&orphan, true, DeckPress::Details);
-        assert_eq!(labels(&orphan), ["Play", "Mark as Watched", "Play from Start", "Remove from Deck"]);
+        assert_eq!(labels(&orphan), ["Play", "Mark as Watched", "Play from Start", "Remove from Continue Watching"]);
 
         // an item with a resume point says so, in the hero pill's word
         let resuming = build_deck(&item(0, PosterMark::InProgress), true, DeckPress::Details);
@@ -1447,7 +1460,7 @@ mod tests {
                 "—",
                 "Mark as Watched",
                 "Play from Start",
-                "Remove from Deck"
+                "Remove from Continue Watching"
             ],
             "…and on the deck it is the LAST row, after the watched toggle"
         );
@@ -1632,7 +1645,7 @@ mod tests {
 
         // and no Related row offers the deck action: that shelf is not the Continue Watching deck
         let menu = build(&row(&movie("")), false);
-        assert!(!labels(&menu).iter().any(|l| l == "Remove from Deck"));
+        assert!(!labels(&menu).iter().any(|l| l == "Remove from Continue Watching"));
         assert!(!menu.offers(ItemRow::RemoveFromDeck));
     }
 

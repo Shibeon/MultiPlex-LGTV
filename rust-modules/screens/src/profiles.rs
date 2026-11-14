@@ -1230,6 +1230,14 @@ impl ProfilesScreen {
         self.sync_pin_state();
     }
 
+    /// The padlock on a PIN-protected profile's avatar (`widgets::avatar_badge`), so the picker says
+    /// which profiles will ask for a PIN before one is chosen, as the web app's picker does.
+    fn draw_lock(p: Painter, u: &auth::UserTile, avatar: Rect) {
+        if u.protected {
+            plx_ui::widgets::avatar_badge(p, avatar, plx_ui::icons::Icon::Lock);
+        }
+    }
+
     fn draw_name(
         p: Painter,
         u: &auth::UserTile,
@@ -1772,6 +1780,7 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
                 continue; // draw the focused tile last (ring over neighbours)
             }
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), false, f.measure);
+            Self::draw_lock(p, u, rect);
             Self::draw_name(p, u, cx_, false, f.measure);
             f.stop(
                 p,
@@ -1800,6 +1809,7 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
             Self::draw_name(p, u, cx_, true, f.measure);
             // the click dip folds into the focused avatar's pop (1.0 when idle)
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), true, f.measure);
+            Self::draw_lock(p, u, rect);
             f.stop(
                 p,
                 Stop {

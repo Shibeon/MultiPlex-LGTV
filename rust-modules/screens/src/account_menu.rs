@@ -41,6 +41,7 @@ use plx_ui::screen::{
     Hover, Placed, RenderStrategy, Screen, ScreenEvent, Scrim, Seat, Step, Stop,
 };
 use plx_ui::popover::Popover;
+use plx_ui::icons::Icon;
 use plx_ui::table::{Row, Section, TableView};
 use plx_ui::Rect;
 
@@ -172,6 +173,18 @@ fn account_form(inputs: &AccountInputs) -> (String, Form<Action, Action, Infalli
     (header, Form::new().section(sec))
 }
 
+/// One action's leading glyph. Every row carries one, as on the item and Sort & Filter menus (and
+/// the web app's menus, whose rows all keep an icon column): without it the labels stand indented
+/// past an empty icon column and read as centred.
+fn icon(a: Action) -> Icon {
+    match a {
+        Action::ChangeProfile | Action::SignIn => Icon::User,
+        Action::Settings => Icon::Tune,
+        Action::SendDiagnostics => Icon::Alert,
+        Action::SignOut => Icon::Close,
+    }
+}
+
 /// One action's row. Rows that leave for another screen carry the drill-in chevron ("Sign out"
 /// acts in place); rows whose action ends something in place are destructive and so never where
 /// the menu's focus starts ([`plx_ui::table::TableView::opening_row`]): with *Change profile*
@@ -179,6 +192,7 @@ fn account_form(inputs: &AccountInputs) -> (String, Form<Action, Action, Infalli
 /// anyone out.
 fn action_row(a: Action) -> Row {
     Row::new(label(a))
+        .licon(icon(a))
         .chevron(matches!(a, Action::ChangeProfile | Action::SignIn | Action::Settings))
         .destructive(matches!(a, Action::SignOut))
 }

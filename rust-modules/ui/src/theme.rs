@@ -1080,6 +1080,10 @@ pub const TRACKING_TITLE_TIGHT: f32 = plx_gfx::text::TRACKING_TITLE_TIGHT;
 /// The tick's own soft drop shadow, INSIDE the veil — belt and braces on a bright frame, and what
 /// keeps the mark from dissolving into a busy one (the design's `drop-shadow(0 2px 7px …)`).
 pub const TILE_MARK_SHADOW: [f32; 4] = with_a(BLACK, 0.60);
+/// The disc of an **avatar badge** (`widgets::avatar_badge`: the padlock on a PIN-protected
+/// profile): the panel surface, as the web app's `.profile-lock` sits on `--surface`. Its glyph is
+/// [`TILE_MARK_INK`] and its drop shadow [`TILE_MARK_SHADOW`], the corner marks' own pair.
+pub const AVATAR_BADGE_FILL: [f32; 4] = SURFACE_PANEL;
 /// The ink of a collection's NAME set on its baked fan (`Collections.dc.html` G1:
 /// `.art b { color: rgba(255,255,255,.94) }`), drawn live by `ui::collection_tile::draw_fan_name`.
 pub const FAN_NAME_INK: [f32; 4] = with_a(WHITE, 0.94);

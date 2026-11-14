@@ -340,7 +340,7 @@ card, over the live page. UP/DOWN moves, OK activates, BACK closes. The actions 
 apply to that item; for an in-progress movie on the deck, by default (Continue Watching: *Open
 details*), the menu opens on its first row:
 
-*Continue* · *Mark as Watched* · *Mark as Unwatched* · *Play from Start* · *Remove from Deck*.
+*Continue* · *Mark as Watched* · *Mark as Unwatched* · *Play from Start* · *Remove from Continue Watching*.
 
 With Continue Watching set to *Play*, OK already resumes, so the menu leads with *Go to Movie*
 instead of *Continue*. A show or season card on the deck gets the same *Play* row first in the
@@ -505,7 +505,7 @@ grounds are below, and they are the reason this document exists.
 4. **Every control the app does draw is fully operable by four-way + OK + BACK**, which is the hard
    UX rule (§3). Nothing anywhere in the app is reachable only by the pointer. (The one gesture in
    the app is the card hold of §5.6; its actions are otherwise reachable from the detail page, with
-   the single exception of *Remove from Deck*.)
+   the single exception of *Remove from Continue Watching*.)
 
 ### 6.3 The HUD
 

@@ -1239,6 +1239,29 @@ pub fn corner_mark(p: Painter, card: Rect, rad: f32, icon: crate::icons::Icon) {
     crate::icons::draw(p, icon, tick, theme::TILE_MARK_INK);
 }
 
+/// **A badge on a circular avatar**: `icon` on a small disc standing on the avatar's lower-right
+/// rim, the profile picker's padlock for a PIN-protected profile (the web app's `.profile-lock`:
+/// a 1.9rem disc inset 0.2rem from the corner of an 8rem face). `avatar` is the rect actually
+/// drawn (the SCALED one while the avatar is popped), so the badge rides the pop; its size is
+/// quantized to 4px for the same reason the tick's is.
+pub fn avatar_badge(p: Painter, avatar: Rect, icon: crate::icons::Icon) {
+    let d = ((avatar.w * AVATAR_BADGE_RATIO) / 4.0).round() * 4.0;
+    let ins = avatar.w * AVATAR_BADGE_INSET;
+    let disc = Rect::new(avatar.x + avatar.w - ins - d, avatar.y + avatar.h - ins - d, d, d);
+    p.shadow(disc, d * 0.5, d * TICK_SHADOW_BLUR, d * TICK_SHADOW_DY, theme::TILE_MARK_SHADOW);
+    p.rrect(disc, d * 0.5, d * 0.5, theme::AVATAR_BADGE_FILL);
+    let g = (d * AVATAR_BADGE_GLYPH / 2.0).round() * 2.0;
+    let glyph = Rect::new(disc.x + (d - g) * 0.5, disc.y + (d - g) * 0.5, g, g);
+    crate::icons::draw(p, icon, glyph, theme::TILE_MARK_INK);
+}
+
+/// [`avatar_badge`]'s disc as a fraction of the avatar's width (1.9rem on an 8rem face).
+const AVATAR_BADGE_RATIO: f32 = 1.9 / 8.0;
+/// Its inset from the avatar's bounding corner (0.2rem on 8rem).
+const AVATAR_BADGE_INSET: f32 = 0.2 / 8.0;
+/// Its glyph as a fraction of the disc.
+const AVATAR_BADGE_GLYPH: f32 = 0.5;
+
 /// Person-glyph box as a fraction of a headshot tile — the [`Art::Person`] fallback's one ratio.
 /// Deliberately TIGHTER than [`DISC_ICON_RATIO`] (0.54, the ratio every disc *control* glyph uses,
 /// and what the profile chip's own fallback works out to): a headshot tile is 190px, and 0.54 of it
