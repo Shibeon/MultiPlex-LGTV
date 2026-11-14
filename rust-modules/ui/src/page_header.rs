@@ -1,15 +1,15 @@
-//! **PageHeader** — the one row of plain-text controls a library page wears under the top bar:
-//! the library names on the left (with a "+N" for the ones that do not fit) or a breadcrumb
-//! ("Films › Collections"), and the page's own controls on the right ("Collections · 12",
-//! "Recommended", "≡ Date added ⌄"; the Library's own cluster is the board's: "Collections
-//! · 24 ›  Recommended ›  |  ≡ Date added ⌄", places with a chevron ([`HeaderItem::place`]), a
-//! [`HeaderItem::divider`] and a sort control ([`HeaderItem::sort_control`]) that is a leading
-//! [`HeaderItem::glyph`], its criterion alone ([`HeaderItem::value_only`]: the name "Sort & Filter"
-//! is carried, never drawn) and a quiet down chevron ([`HeaderItem::fold_quiet`]); the criterion has
-//! NO slot, so the control ends at [`TEXT_X1`] and the places slide as its width changes). The
-//! Library, its Collections and Recommended pages and the Watchlist all wear THIS row and the same
-//! sort control: one layout, one draw, one focus group ([`HeaderFocus`]); every new item field
-//! defaults to the look the other pages have.
+//! **PageHeader** — the one row of controls a library page wears under the top bar: items on the
+//! left (the Library's library and filter chips, the "+N" of names that do not fit, a page title) or
+//! a breadcrumb ("Films › Collections"), and the page's own controls on the right. The Library's
+//! cluster is "Collections · 24 ›  Recommended ›  |  Title ⌄  (↑)": places with a chevron
+//! ([`HeaderItem::place`]), a [`HeaderItem::divider`], a sort chip ([`HeaderItem::dropdown`]) and a
+//! round direction button ([`HeaderItem::round`]). The Collections page and the Watchlist end on the
+//! older sort control ([`HeaderItem::sort_control`]: a leading [`HeaderItem::glyph`], its criterion
+//! alone ([`HeaderItem::value_only`]: the name "Sort & Filter" is carried, never drawn) and a quiet
+//! down chevron ([`HeaderItem::fold_quiet`])). Either way the criterion has NO slot, so the control
+//! ends at [`TEXT_X1`] and the places slide as its width changes. The Library, its Collections and
+//! Recommended pages and the Watchlist all wear THIS row: one layout, one draw, one focus group
+//! ([`HeaderFocus`]); every new item field defaults to the look the other pages have.
 //!
 //! Geometry (spec): the text edges are x 96 and x 1771; a selected plate overhangs the text by
 //! [`OVERHANG`] (20), so the container is left 76, right 129, and a focus pill stands a constant
@@ -39,8 +39,18 @@
 //! [`PageHeader::draw`] paints plates first, then each label inked by what is under it, pixel by
 //! pixel: inside a capsule's drawn rounded shape in that capsule's ink and elsewhere in the resting
 //! one ([`TabStrip::pill_ink`]).
+//!
+//! **Chips and the title block (the MultiPlex library page).** An item may wear a [`Chip`] plate
+//! that is drawn at rest, not only under focus or selection: [`HeaderItem::dropdown`] (an outlined
+//! "All genres ⌄" whose value is drawn and whose name is carried), [`HeaderItem::chip_action`] (a
+//! filled "+ More filters") and [`HeaderItem::round`] (a round glyph button, the sort direction).
+//! [`PageHeaderSpec::inset`] stands the row's plates ON the text edges instead of overhanging them,
+//! so the chips line up with the title block above them, and [`PageHeader::layout_at`] lays the same
+//! row out at another top (the Library's filter row stands under its title). The title block itself
+//! is [`draw_title`]: the page's name at [`TITLE_SIZE`] and a muted count pill beside it ("1,284 items",
+//! or a filter read-out), worded by the screen when its row is rebuilt so a frame allocates nothing.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 
 use plx_machine::machine::{EntryId, FocusKey, GroupId, Measure};
 
@@ -137,18 +147,69 @@ pub struct HeaderItem {
     /// item's text); the row keeps its one [`GAP`] between the divider's two neighbours and the
     /// divider adds its own width and two [`DIVIDER_MARGIN`]s to it.
     pub divider: bool,
+    /// The item wears a CHIP ([`Chip`]): a resting plate of its own under the focus capsule, its
+    /// words at full white. `None` is the plain-text control every other page's row wears.
+    pub chip: Option<Chip>,
 }
 
+/// **A chip**: a control that stands on a resting plate of its own (the MultiPlex filter row the
+/// Library wears: "All ⌄", "All genres ⌄", "+ More filters", "Title ⌄" and the round direction
+/// button). The plate is the item's own [`ItemRect::plate`], the same rect the focus capsule
+/// travels to and the pointer hits, so a chip's rest and its focus are one shape; the focus capsule
+/// paints over it. A chip's words rest at full white ([`theme::CONTROL_IDLE_INK`]): the plate,
+/// not a dimmer ink, is what says "control at rest".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Chip {
+    /// A dropdown: [`theme::HEADER_CHIP_FILL`] under a [`CHIP_RIM_W`] [`theme::HEADER_CHIP_RIM`] rim.
+    Outline,
+    /// An action: [`theme::HEADER_CHIP_FILLED`], no rim.
+    Filled,
+    /// A round button that is its [`HeaderItem::glyph`] alone ([`ROUND_W`] of text box, so its plate
+    /// is a [`HEIGHT`] circle), worn like [`Chip::Outline`].
+    Round,
+}
+
+/// A chip's rim width.
+pub const CHIP_RIM_W: f32 = 2.0;
+/// A [`Chip::Round`]'s text box: its plate, [`OVERHANG`] out on both sides, is [`HEIGHT`] square.
+pub const ROUND_W: f32 = HEIGHT - 2.0 * OVERHANG;
+
 impl HeaderItem {
+    /// **A dropdown chip** ([`Chip::Outline`]): `value` and a down chevron. `name` is its identity
+    /// in the row, not drawn ([`Self::value_only`], as the sort control's), so "All genres ⌄" is the
+    /// Genre control whatever genre it shows.
+    pub fn dropdown(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            label: name.into(), value: Some(value.into()), value_only: true, fold_glyph: true,
+            fold_quiet: true, focusable: true, chip: Some(Chip::Outline), ..Default::default()
+        }
+    }
+
+    /// **An action chip** ([`Chip::Filled`]): the leading `glyph` and `label` ("+ More filters").
+    pub fn chip_action(label: impl Into<String>, glyph: Icon) -> Self {
+        Self { label: label.into(), glyph: Some(glyph), focusable: true, chip: Some(Chip::Filled), ..Default::default() }
+    }
+
+    /// **A round chip** ([`Chip::Round`]): `glyph` alone on a circle, `name` its undrawn identity
+    /// (the Library's sort direction, a chevron up or down).
+    pub fn round(name: impl Into<String>, glyph: Icon) -> Self {
+        Self {
+            label: name.into(), glyph: Some(glyph), value_only: true, focusable: true,
+            chip: Some(Chip::Round), ..Default::default()
+        }
+    }
+
     /// **The sort control** (the board's "= Date added v"): the sort icon ([`Icon::Sort`]), the chosen
     /// criterion and a quiet down chevron, and nothing else. `name` is the control's identity in the
     /// row ("Sort & Filter"), which the row's [`HeaderSwap`] and the tests know it by; it is carried
     /// by the item and not drawn (neither on the control nor as the menu's heading, [`Self::value_only`]);
     /// `value` is the criterion, the only text it shows (a narrowing filter is the page's read-out,
     /// not part of it). It is a stop and has no slot: it ends at [`TEXT_X1`] and its neighbours
-    /// slide as the criterion's width changes. The ONE declaration of it: the Library's row, the
-    /// Collections page's Sort and the Watchlist's wear it, so one page's sort button cannot drift
-    /// from another's.
+    /// slide as the criterion's width changes. The Collections page's Sort and the Watchlist's
+    /// control wear it, so those two cannot drift from each other. The Library page itself does NOT:
+    /// it wears the MultiPlex library page's chips, a [`Self::dropdown`] sort chip ("Title ⌄", its
+    /// list the sorts alone) and a [`Self::round`] direction button, so until the Collections page and
+    /// the Watchlist adopt the same pair the Library's sort looks different from theirs.
     pub fn sort_control(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
             label: name.into(), value: Some(value.into()), glyph: Some(Icon::Sort), value_only: true,
@@ -170,6 +231,10 @@ pub struct PageHeaderSpec {
     pub overflow: usize,
     /// The page's controls, left to right.
     pub right: Vec<HeaderItem>,
+    /// The row's PLATES, not its text, stand at the edges: the left group's first plate at
+    /// [`TEXT_X0`] and the right cluster's last at [`TEXT_X1`] (a row of [`Chip`]s, whose plates are
+    /// always drawn, lines up with the grid under it by what it shows). Off, the text does.
+    pub inset: bool,
 }
 
 /// Which part of the spec a laid-out item is.
@@ -238,6 +303,7 @@ const SEP: &str = " \u{b7} ";
 /// ([`PageHeader::draw_face_at`], which walks the same parts in the same order) cannot disagree.
 fn parts(item: &HeaderItem, measure: &dyn Measure, budgeted: bool) -> Vec<Item> {
     if item.divider { return vec![Item::new(DIVIDER_W)]; }
+    if item.chip == Some(Chip::Round) { return vec![Item::new(ROUND_W)]; }
     let w = |s: &str| text_w(s, measure);
     let mut parts = Vec::with_capacity(6);
     let mut lead = 0.0;
@@ -346,7 +412,28 @@ impl PageHeader {
     /// Place every item. `width` is the page width (1920): the right cluster ends at
     /// [`TEXT_X1`] scaled to it (a different width moves the right edge by the same amount).
     pub fn layout(&self, width: f32, measure: &dyn Measure) -> HeaderLayout {
-        let x1 = TEXT_X1 + (width - 1920.0);
+        self.layout_at(width, measure, TOP)
+    }
+
+    /// [`Self::layout`] with the row standing at `top` instead of [`TOP`] (a page with a title block
+    /// above its row, [`TITLE_H`]): every rect, the crumb's glyph included, moves by the same amount.
+    pub fn layout_at(&self, width: f32, measure: &dyn Measure, top: f32) -> HeaderLayout {
+        let mut layout = self.layout_flat(width, measure);
+        let dy = top - TOP;
+        if dy != 0.0 {
+            for item in &mut layout.items {
+                item.text.y += dy;
+                item.plate.y += dy;
+            }
+            if let Some(glyph) = &mut layout.glyph { glyph.y += dy; }
+        }
+        layout
+    }
+
+    fn layout_flat(&self, width: f32, measure: &dyn Measure) -> HeaderLayout {
+        let inset = if self.spec.inset { OVERHANG } else { 0.0 };
+        let x0 = TEXT_X0 + inset;
+        let x1 = TEXT_X1 + (width - 1920.0) - inset;
         let cluster_x0 = x1 - self.cluster_w;
         let mut items = Vec::new();
         let mut glyph = None;
@@ -368,7 +455,7 @@ impl PageHeader {
             let more = HeaderItem { label: format!("+{}", self.spec.overflow), ..Default::default() };
             names.push(Item::new(run_w(&more, measure)));
         }
-        for span in HStack::new(&names, GAP, Align::Leading(TEXT_X0)).placed() {
+        for span in HStack::new(&names, GAP, Align::Leading(x0)).placed() {
             match self.spec.left.get(span.i) {
                 Some(it) => place(Slot::Left(span.i), span.x, span.w, it.focusable && !it.title),
                 None => place(Slot::Overflow, span.x, span.w, true),
@@ -389,7 +476,7 @@ impl PageHeader {
             items,
             glyph,
             cluster_w: self.cluster_w,
-            left_budget: (cluster_x0 - CLUSTER_GAP - TEXT_X0).max(0.0),
+            left_budget: (cluster_x0 - CLUSTER_GAP - x0).max(0.0),
         }
     }
 
@@ -466,6 +553,18 @@ impl PageHeader {
     /// other face as `draw` paints it.
     pub fn draw_with(&self, p: Painter, layout: &HeaderLayout, capsules: &TabStrip, pop: f32, lifted: Option<usize>, swap: &HeaderSwap) {
         let ground = TabGround::Bare { pop, focus: lifted.is_none() };
+        // The chips' resting plates lie under everything the strip paints, so the focus capsule
+        // travels OVER them; a lifted chip is the opener lift's alone (its accent pill covers it).
+        for (index, r) in layout.items.iter().enumerate() {
+            if lifted == Some(index) { continue; }
+            let face = self.face_in(r, swap);
+            if let Some(chip) = face.look.chip { draw_chip(face.fade.map_or(p, |fade| p.alpha(fade.face)), r.plate, chip); }
+        }
+        for (item, text_x, text_w, opacity) in swap.leaving(&self.spec.right, layout) {
+            if let Some(chip) = item.chip {
+                draw_chip(p.alpha(opacity), Rect::new(text_x - OVERHANG, layout.top(), text_w + 2.0 * OVERHANG, HEIGHT), chip);
+            }
+        }
         capsules.draw(p, layout.top(), HEIGHT, ground);
         if let Some(glyph) = layout.glyph {
             icons::draw(p, Icon::Chevron, glyph, breadcrumb::GLYPH_INK);
@@ -532,7 +631,9 @@ impl PageHeader {
     /// label, the swap draws the face twice instead (the old one leaving at its x, the new one
     /// arriving at its own), neither with a replaced value beside it.
     fn draw_face_at(&self, p: Painter, text: Rect, face: &Face<'_>, (dx, dy): (f32, f32), (focus, selected): (f32, f32)) {
-        let (rest, strong) = if face.readout {
+        let (rest, strong) = if face.look.chip.is_some() {
+            (theme::CONTROL_IDLE_INK, theme::CONTROL_IDLE_INK)
+        } else if face.readout {
             (theme::COUNT_FILTERED_INK, theme::COUNT_FILTERED_INK)
         } else if face.title {
             (theme::CONTROL_IDLE_INK, theme::CONTROL_IDLE_INK)
@@ -549,6 +650,15 @@ impl PageHeader {
             // A hairline, vertically centred on the row; it has no text, no plate and no stop.
             let line = Rect::new(text.x + dx + fade.map_or(0.0, |fade| fade.lead), text.y + dy + (text.h - DIVIDER_H) * 0.5, DIVIDER_W, DIVIDER_H);
             p.rrect(line, 0.0, 0.0, theme::HEADER_DIVIDER_INK);
+            return;
+        }
+        if look.chip == Some(Chip::Round) {
+            // The round chip is its mark alone, centred in its circle.
+            if let Some(glyph) = look.glyph {
+                let (cx, cy) = (text.x + dx + text.w * 0.5, text.y + dy + text.h * 0.5);
+                let half = GLYPH_SIZE * 0.5;
+                icons::draw(p, glyph, Rect::new(cx - half, cy - half, GLYPH_SIZE, GLYPH_SIZE), to_accent(strong));
+            }
             return;
         }
         let y = plx_gfx::text::text_vcenter_y(theme::size::BODY, 1, text.y + dy + text.h * 0.5);
@@ -645,11 +755,69 @@ struct Look {
     value_only: bool,
     fold_quiet: bool,
     divider: bool,
+    chip: Option<Chip>,
 }
 
 impl Look {
     fn of(item: &HeaderItem) -> Self {
-        Self { glyph: item.glyph, place: item.place, value_only: item.value_only, fold_quiet: item.fold_quiet, divider: item.divider }
+        Self {
+            glyph: item.glyph, place: item.place, value_only: item.value_only, fold_quiet: item.fold_quiet,
+            divider: item.divider, chip: item.chip,
+        }
+    }
+}
+
+/// A chip's resting plate at `plate` ([`Chip`]): a pill (square, a circle) in the chip's fill, an
+/// outline or round chip with its rim.
+fn draw_chip(p: Painter, plate: Rect, chip: Chip) {
+    let rad = plate.h * 0.5;
+    match chip {
+        Chip::Filled => p.rrect(plate, rad, rad, theme::HEADER_CHIP_FILLED),
+        Chip::Outline | Chip::Round => {
+            p.rrect(plate, rad, rad, theme::HEADER_CHIP_FILL);
+            p.rring(plate, rad, CHIP_RIM_W, theme::HEADER_CHIP_RIM);
+        }
+    }
+}
+
+/// The title block's height ([`draw_title`]).
+pub const TITLE_H: f32 = 80.0;
+/// The air between the title block and the row of controls under it.
+pub const TITLE_ROW_GAP: f32 = theme::space::XS;
+/// The title's size: the scale's top rung, bold.
+pub const TITLE_SIZE: std::ffi::c_int = theme::size::HERO;
+/// The count pill's height, and the air each side of its words.
+pub const COUNT_H: f32 = 44.0;
+pub const COUNT_PAD: f32 = theme::space::SM;
+/// The air between the title's last letter and the count pill.
+pub const TITLE_COUNT_GAP: f32 = theme::space::MD;
+
+/// **A page's big title block** (the MultiPlex library page's "Movies  [240 items]"): `title` at
+/// [`TITLE_SIZE`] bold, left at [`TEXT_X0`], and one [`TITLE_COUNT_GAP`] after it the muted count
+/// pill ([`COUNT_H`] tall, [`COUNT_PAD`] of air each side of [`theme::size::CAPTION`] words in
+/// [`theme::PAGE_COUNT_INK`] on [`theme::HEADER_CHIP_FILL`]). The block is [`TITLE_H`] tall from
+/// `top`; both pieces centre on its middle by their cap bands. A row of controls under it stands at
+/// `top + TITLE_H + TITLE_ROW_GAP` ([`PageHeader::layout_at`]). The two are placed by one
+/// [`HStack`], measured by the painter that draws them.
+pub fn draw_title(p: Painter, top: f32, title: &CStr, count: Option<&CStr>) {
+    let cy = top + TITLE_H * 0.5;
+    let t = title;
+    let title_w = p.text_width_tracked(t.as_ptr(), TITLE_SIZE, 1, 0.0);
+    let count_c = count.filter(|count| !count.is_empty());
+    let count_w = count_c.map(|c| p.text_width_tracked(c.as_ptr(), theme::size::CAPTION, 0, 0.0));
+    // One or two spans on the stack, from a fixed array: a frame allocates nothing for them.
+    let items = [Item::new(title_w), Item::new(count_w.unwrap_or(0.0) + 2.0 * COUNT_PAD).before(TITLE_COUNT_GAP)];
+    let stacked = if count_w.is_some() { 2 } else { 1 };
+    let mut placed = HStack::new(&items[..stacked], 0.0, Align::Leading(TEXT_X0)).placed();
+    let title_x = placed.next().map_or(TEXT_X0, |span| span.x);
+    let count_span = placed.next();
+    let title_y = plx_gfx::text::text_vcenter_y(TITLE_SIZE, 1, cy);
+    p.text(t.as_ptr(), title_x, title_y, TITLE_SIZE, theme::CONTROL_IDLE_INK, 0, 1);
+    if let (Some(c), Some(span)) = (count_c, count_span) {
+        let pill = Rect::new(span.x, cy - COUNT_H * 0.5, span.w, COUNT_H);
+        p.rrect(pill, COUNT_H * 0.5, COUNT_H * 0.5, theme::HEADER_CHIP_FILL);
+        let y = plx_gfx::text::text_vcenter_y(theme::size::CAPTION, 0, cy);
+        p.text(c.as_ptr(), span.x + COUNT_PAD, y, theme::size::CAPTION, theme::PAGE_COUNT_INK, 0, 0);
     }
 }
 

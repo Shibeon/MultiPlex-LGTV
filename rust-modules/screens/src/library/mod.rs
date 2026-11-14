@@ -63,7 +63,7 @@ use plx_ui::{Rect, Spring};
 use plx_ui::xfade::Xfade;
 use identity::{KeyRegistry, KeyRegion, region_of_elem};
 use layout::{Layout, Block, CONTENT_TOP};
-use toolbar::{CollectionsControl, COLLECTIONS, CRUMB_ROOT, RECOMMENDED, SORTFILTER};
+use toolbar::{CollectionsControl, COLLECTIONS, CRUMB_ROOT, DIRECTION, GENRE, RECOMMENDED, SORT, SORTFILTER, WATCH};
 #[cfg(test)]
 use layout::COLS;
 use parts::{GridPart, RailPart, GRID_GROUP, RAIL_GROUP};
@@ -227,11 +227,18 @@ pub struct LibraryScreen {
     values: bool,
     keys: KeyRegistry,
     pair: MasterDetail<RailPart, GridPart, Regions>,
-    /// The visible favorite names, the current library when outside those shortcuts, and the
-    /// persistent `MORE` action after the favorites, followed by any temporary visit.
+    /// The library chip as `(MORE, the section it names)`: the one library stop of the row (its
+    /// menu, the Sources list, switches library). Empty on the Collections page.
     libraries: Vec<(u32, usize)>,
-    /// The directory sections the fold hid behind Library options (what the Sources list shows).
+    /// The filter chips after the library chip, left to right (`WATCH`, `GENRE` where the listing
+    /// filters by genre, `SORTFILTER`). Empty on the Collections page.
+    left_controls: Vec<u32>,
+    /// The favorite libraries of the kind on view, the current one included: the pinned sections the
+    /// library chip's Sources list shows (beside the libraries the servers offer).
     folded: Vec<u32>,
+    /// The title block's words (`header.rs`'s `title_words`): the page's name and its count, worded
+    /// when the row is rebuilt. A projection, not canon.
+    title: header::TitleWords,
     /// The header row as `sync` last built it (`header.rs`): rebuilt only when [`Self::header_key`]
     /// moves (`RowCache`, the one rule the Recommended page and the Watchlist hold their row by).
     /// No row before the first sync.
@@ -361,7 +368,7 @@ impl LibraryScreen {
                 MasterDetailGroups { master: RAIL_GROUP, detail: GRID_GROUP },
                 MasterDetailPolicy::new(MasterSide::Right, Follow::Live), Regions,
             ),
-            libraries: Vec::new(), folded: Vec::new(), header: plx_ui::page_header::RowCache::new(), header_capsules: plx_ui::widgets::TabStrip::new(), header_pop: plx_ui::widgets::CtlPop::new(), header_swap: plx_ui::page_header::HeaderSwap::new(), header_of: None, collections: CollectionsControl::Unknown, collections_sort: false, collections_asked: None,
+            libraries: Vec::new(), left_controls: Vec::new(), folded: Vec::new(), title: Default::default(), header: plx_ui::page_header::RowCache::new(), header_capsules: plx_ui::widgets::TabStrip::new(), header_pop: plx_ui::widgets::CtlPop::new(), header_swap: plx_ui::page_header::HeaderSwap::new(), header_of: None, collections: CollectionsControl::Unknown, collections_sort: false, collections_asked: None,
             type_before_collections: None, unfiltered: None, filtered: None,
             switched: false, enter_remembered: false, section: None, epoch: None, query: None, grid_reset_pending: false,
             layout, target_layout: layout,
@@ -410,18 +417,28 @@ impl LibraryScreen {
         self.header_elems().into_iter().map(|elem| (match elem {
             toolbar::COLLECTIONS => "collections",
             toolbar::RECOMMENDED => "recommended",
-            toolbar::SORTFILTER => "sort",
+            toolbar::SORTFILTER => "filters",
             toolbar::CRUMB_ROOT => "crumb",
-            MORE => "more",
-            _ => "library",
+            toolbar::WATCH => "watch",
+            toolbar::GENRE => "genre",
+            toolbar::SORT => "sort",
+            toolbar::DIRECTION => "direction",
+            MORE => "library",
+            _ => "other",
         }, elem)).collect()
     }
 
-    /// The library names on the row as `(element, section index)`, Library options not among them, and the
-    /// section indexes the Library options list holds: what the fold shows and what it hid.
+    /// The library chip as `(element, section index)`, and the favorite sections its Sources list
+    /// holds.
     #[cfg(any(test, feature = "test-support"))]
     pub fn probe_names(&self) -> (Vec<(u32, usize)>, Vec<u32>) {
-        (self.libraries.iter().filter(|(elem, _)| *elem != MORE).copied().collect(), self.folded.clone())
+        (self.libraries.clone(), self.folded.clone())
+    }
+
+    /// The title block's words: the page's name and its count pill ("" while none is known).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_title(&self) -> (String, String) {
+        (self.title.name.to_string_lossy().into_owned(), self.title.pill().to_string_lossy().into_owned())
     }
 
     /// The rail: every letter (or, for a value sort, every band) as drawn with whether it is empty,
@@ -431,10 +448,11 @@ impl LibraryScreen {
         self.pair.master.probe(focus)
     }
 
-    /// The filter read-out on the header row ("312 of 1,284"), if it carries one.
+    /// The filter read-out in the title's count pill ("312 of 1,284"), if a filter is on and it
+    /// carries one.
     #[cfg(any(test, feature = "test-support"))]
     pub fn probe_readout(&self) -> Option<String> {
-        self.header.row().and_then(|row| row.readout()).map(str::to_owned)
+        self.title.readout.as_ref().map(|readout| readout.to_string_lossy().into_owned())
     }
 
     /// The sort control's criterion on the header row (the one text it draws), if the row has one.
@@ -456,19 +474,10 @@ impl LibraryScreen {
     #[cfg(any(test, feature = "test-support"))]
     pub fn probe_header_builds(&self) -> u32 { self.header.builds() }
 
-    /// The library names on the header row as `(element, directory section index)`, the persistent
-    /// options stop last (its index is `usize::MAX`).
+    /// The library the header's chip names, as `(element, directory section index)`: one entry,
+    /// the library on view.
     #[cfg(any(test, feature = "test-support"))]
     pub fn probe_libraries(&self) -> Vec<(u32, usize)> { self.libraries.clone() }
-
-    /// The directory section index of the library the header's selection plate stands under, read
-    /// from the BUILT row (the same `selected_stop` the row's motion follows), `None` when the row
-    /// has no selected library name, as on the Collections breadcrumb row.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn probe_plate_section(&self) -> Option<usize> {
-        let stop = self.header.row()?.selected_stop()?;
-        self.libraries.iter().find(|(elem, _)| *elem == stop).map(|(_, section)| *section)
-    }
 
     /// `(the focused grid row's poster top on screen at the scroll the page is travelling to, the
     /// first row's poster top at scroll 0, the drawn scroll less the one travelled to)`: the settle
@@ -948,7 +957,7 @@ impl LibraryScreen {
         if let Some((row, col)) = self.grid_position(focus) { return ("grid", row as i32, col as i32, 0.0, self.scroll.pos); }
         let elem = focus.filter(|key| key.entry == self.entry).map(|key| key.elem);
         let region = match elem {
-            Some(elem) if self.toolbar_elems().contains(&elem) => "toolbar", Some(RETRY) => "status",
+            Some(elem) if self.is_control(elem) => "toolbar", Some(RETRY) => "status",
             Some(elem) if region_of_elem(elem) == Some(KeyRegion::Rail) => "rail",
             Some(elem) if elem >= plx_ui::dispatch::STRIP_BASE => "strip",
             Some(_) => "library", None => "none",
@@ -956,8 +965,8 @@ impl LibraryScreen {
         (region, -1, -1, 0.0, self.scroll.pos)
     }
 
-    /// Choose a library: the grid fades out and back in while the header marks the new name.
-    /// A visit appends a temporary pill beside the fixed shortcuts and their menu.
+    /// Choose a library: the grid fades out and back in while the library chip names the new one.
+    /// Callers check first that it is not the library already on view (`choose_library`).
     fn switch_library<H: LibraryLike>(&mut self, target: SectionTarget, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) {
         self.save_cursor(cx, fx);
         self.pending.request_section(target);
@@ -1038,6 +1047,32 @@ impl LibraryScreen {
         }
     }
 
+    /// Choose the directory's library `index` (the scripted soak's next library; a pick from the
+    /// library chip's list arrives as the menu's `Select`): the page switches to it, or, chosen
+    /// back while a switch away from it is pending, cancels that switch.
+    fn choose_library<H: LibraryLike>(&mut self, index: usize, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) -> Handled {
+        let directory = H::directory(cx);
+        if index >= directory.sections().len() { return Handled::No; }
+        if Some(index) == self.pending.section().map(|section| section.index).or(directory.current()) { return Handled::Yes; }
+        if Some(index) == directory.current() && self.pending.section().is_some() {
+            self.pending.cancel();
+            self.page_fade.cancel();
+            self.grid_fade.cancel();
+            self.switched = false;
+            self.enter_remembered = false;
+            self.refresh_header(cx);
+            return Handled::Yes;
+        }
+        let section = &directory.sections()[index];
+        if let (Some(epoch), Some(sid)) = (directory.epoch(), section.sid) {
+            self.switch_library(SectionTarget {
+                epoch, index,
+                identity: LibrarySectionIdentity { sid, key: section.key }, kind: section.kind,
+            }, cx, fx);
+        }
+        Handled::Yes
+    }
+
     fn activate<H: LibraryLike>(&mut self, elem: u32, held: bool, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) -> Handled {
         // Every activation path (OK, a click, a hold, a scripted menu) is a choice made AT the seat,
         // and none of them moves focus, so no `FocusMoved` will release it.
@@ -1056,29 +1091,11 @@ impl LibraryScreen {
             }
             SORTFILTER => { self.open_menu(crate::registry::LibraryMenuKind::SortFilter, elem, cx, fx); return Handled::Yes; }
             MORE => { self.open_menu(crate::registry::LibraryMenuKind::Sources, elem, cx, fx); return Handled::Yes; }
+            WATCH => { self.open_menu(crate::registry::LibraryMenuKind::Watch, elem, cx, fx); return Handled::Yes; }
+            GENRE => { self.open_menu(crate::registry::LibraryMenuKind::Genre, elem, cx, fx); return Handled::Yes; }
+            SORT => { self.open_menu(crate::registry::LibraryMenuKind::Sort, elem, cx, fx); return Handled::Yes; }
+            DIRECTION => return self.flip_direction(cx, fx),
             _ => {}
-        }
-        if let Some((_, index)) = self.libraries.iter().find(|(key, _)| *key == elem) {
-            let directory = H::directory(cx);
-            let index = *index;
-            if Some(index) == self.pending.section().map(|section| section.index).or(directory.current()) { return Handled::Yes; }
-            if Some(index) == directory.current() && self.pending.section().is_some() {
-                self.pending.cancel();
-                self.page_fade.cancel();
-                self.grid_fade.cancel();
-                self.switched = false;
-                self.enter_remembered = false;
-                self.refresh_header(cx);
-                return Handled::Yes;
-            }
-            let section = &directory.sections()[index];
-            if let (Some(epoch), Some(sid)) = (directory.epoch(), section.sid) {
-                self.switch_library(SectionTarget {
-                    epoch, index,
-                    identity: LibrarySectionIdentity { sid, key: section.key }, kind: section.kind,
-                }, cx, fx);
-            }
-            return Handled::Yes;
         }
         if region_of_elem(elem) == Some(KeyRegion::Rail) { self.follow(elem, cx, fx); return Handled::Yes; }
         if let Some(item) = self.focused_item(Some(self.key(elem)), cx).filter(|item| !item.rk.is_empty()) {
@@ -1195,9 +1212,12 @@ impl LibraryScreen {
                 use crate::registry::LibraryMenuKind as Kind;
                 let anchor = match kind {
                     // The scripted single-purpose menus hang off the one control that replaced them.
+                    Kind::Sort if self.toolbar_elems().contains(&SORT) => SORT,
                     Kind::Type | Kind::Sort | Kind::Filter | Kind::SortFilter => SORTFILTER,
                     Kind::Sources if self.libraries.iter().any(|(elem, _)| *elem == MORE) => MORE,
-                    Kind::Sources | Kind::Genre => return Handled::No,
+                    Kind::Watch if self.left_controls.contains(&WATCH) => WATCH,
+                    Kind::Genre if self.left_controls.contains(&GENRE) => GENRE,
+                    Kind::Sources | Kind::Genre | Kind::Watch => return Handled::No,
                 };
                 self.open_menu(kind, anchor, cx, fx);
                 return Handled::Yes;
@@ -1237,13 +1257,14 @@ impl LibraryScreen {
                         self.open_menu(crate::registry::LibraryMenuKind::SortFilter, SORTFILTER, cx, fx);
                         return Handled::Yes;
                     }
-                    // OK on the next library's name, as the reader would press it (menus take 3/8).
+                    // The next favorite library of the kind, as the reader would pick it from the
+                    // library chip's list (menus take 3/8).
                     3 | 8 => {
-                        let names: Vec<u32> = self.libraries.iter().filter(|(elem, _)| *elem != MORE).map(|(elem, _)| *elem).collect();
                         let chosen = self.pending.section().map(|section| section.index).or(H::directory(cx).current());
-                        let at = names.iter().position(|elem| self.libraries.iter().any(|(key, index)| key == elem && Some(*index) == chosen));
-                        if let Some(&elem) = at.and_then(|at| names.get((at + 1) % names.len())) {
-                            return self.activate(elem, false, cx, fx);
+                        let names: Vec<usize> = self.folded.iter().map(|index| *index as usize).collect();
+                        let at = names.iter().position(|index| Some(*index) == chosen);
+                        if let Some(&index) = at.and_then(|at| names.get((at + 1) % names.len())) {
+                            return self.choose_library(index, cx, fx);
                         }
                     }
                     5 | 6 => {
@@ -1412,7 +1433,12 @@ impl LibraryScreen {
                 let directory = H::directory(cx);
                 if directory.epoch() == Some(target.epoch) {
                     if let Some(index) = directory.sections().iter().position(|section| section.sid == Some(target.sid) && section.key == target.section) {
-                        self.switch_library(SectionTarget { epoch: target.epoch, index, identity: LibrarySectionIdentity { sid: target.sid, key: target.section }, kind: directory.sections()[index].kind }, cx, fx);
+                        // The library chip's list opens on the library on view: OK on that ticked
+                        // row (or on the one a pending switch is already going to) changes nothing.
+                        // `choose_library` holds that rule, and the cancel of a pending switch.
+                        let on_view = self.pending.section().map(|section| section.index).or(directory.current());
+                        if Some(index) == on_view { return Handled::Yes; }
+                        self.choose_library(index, cx, fx);
                         // The Sources panel has closed. Move focus as the row changes, before the
                         // asynchronous listing lands and the grid reappears.
                         self.seat_on(LIBRARY_GROUP, cx, fx);

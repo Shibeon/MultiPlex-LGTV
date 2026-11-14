@@ -3,17 +3,17 @@
 use plx_ui::scroll_capsule;
 
 /// A focused row below the first settles with its poster top where the first row's is at rest
-/// (the grid top, y 244): focus reads on one line at the top of a library and deep in it. At the
+/// (the grid top, y 332): focus reads on one line at the top of a library and deep in it. At the
 /// end of the list the document cannot scroll further, so the last row may sit lower.
 #[test]
 fn a_focused_row_settles_at_the_first_rows_resting_y() {
     use super::layout::{Layout, LIBRARY_GRID_TOP};
     let lay = Layout::new(true, 400);
     assert_eq!(lay.row_y(0, lay.row_reveal(0)), LIBRARY_GRID_TOP);
-    assert_eq!(LIBRARY_GRID_TOP, 244.0);
+    assert_eq!(LIBRARY_GRID_TOP, 332.0);
     for row in [1, 2, 5, 40, 200] {
         let focused = lay.with_grid_focus(Some(row));
-        assert_eq!(focused.row_y(row, focused.row_reveal(row)), LIBRARY_GRID_TOP, "row {row} rests at 244");
+        assert_eq!(focused.row_y(row, focused.row_reveal(row)), LIBRARY_GRID_TOP, "row {row} rests at the grid top");
     }
     let last = lay.rows - 1;
     let focused = lay.with_grid_focus(Some(last));

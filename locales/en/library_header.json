@@ -22,5 +22,19 @@
   "library_header.show": {
     "value": "Show",
     "description": "Heading of the first section of the Sort & Filter menu, over the list of what the library page shows (Films, Shows, Seasons, Episodes)."
+  },
+  "library_header.items": {
+    "value": {
+      "one": "{count} item",
+      "other": "{count} items"
+    },
+    "args": {
+      "count": "i64"
+    },
+    "description": "The muted count pill beside a library page's big title (Movies  240 items): how many titles the page lists. Counts every kind of title the page shows, so keep the noun generic."
+  },
+  "library_header.more_filters": {
+    "value": "More filters",
+    "description": "Library filter row: the action chip (after a plus sign) that opens the full Sort & Filter menu, holding the type to show, the sort and every filter. Short: it shares one row with the other filter chips."
   }
 }

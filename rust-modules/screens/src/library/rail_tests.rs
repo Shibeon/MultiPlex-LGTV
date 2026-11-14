@@ -73,7 +73,7 @@ fn the_right_edge_is_the_last_column_of_whatever_the_grid_has() {
 fn a_ladder_of_bands_starts_at_the_grid_top_forty_apart_and_adds_a_step_before_a_scale_change() {
     use super::layout::{BandRows, BAND_PITCH, BAND_RAIL_CX, BAND_STEP_GAP};
     let plain = BandRows::new(6, &[]);
-    assert_eq!(plain.geom(), (244.0, BAND_RAIL_CX, 6.0 * BAND_PITCH, 0.0));
+    assert_eq!(plain.geom(), (332.0, BAND_RAIL_CX, 6.0 * BAND_PITCH, 0.0));
     assert_eq!((BAND_RAIL_CX, BAND_PITCH, BAND_STEP_GAP), (1834.0, 40.0, 8.0));
     assert_eq!((0..6).map(|i| plain.top(i)).collect::<Vec<_>>(), [0.0, 40.0, 80.0, 120.0, 160.0, 200.0]);
     // the extra step goes before the rows named, and only there
@@ -90,12 +90,12 @@ fn a_calendar_rails_rows_stand_where_the_board_puts_them() {
     use super::layout::{BandRows, BAND_PITCH, BAND_STEP_GAP};
     use super::rail_bands::steps;
     use plx_data::browse::bands::{plan, BandFamily};
-    // 31 October 2026: Today, Oct..Jan, 2025, 2024. Rows are 40 apart from y 244, label centred in the row:
+    // 31 October 2026: Today, Oct..Jan, 2025, 2024. Rows are 40 apart from y 332, label centred in the row:
     // Today 264, Oct 304, Jan 664, then 8 more, `2025` at 712 and `2024` at 752.
     let marks: Vec<_> = plan(BandFamily::DateAdded, [2026, 10, 31], 2024).iter().map(|band| band.mark()).collect();
     let rows = BandRows::new(marks.len(), &steps(&marks));
     let centre = |row: isize| rows.geom().0 + rows.top(row) + BAND_PITCH * 0.5;
-    assert_eq!([0, 1, 10, 11, 12].map(centre), [264.0, 304.0, 664.0, 712.0, 752.0]);
+    assert_eq!([0, 1, 10, 11, 12].map(centre), [352.0, 392.0, 752.0, 800.0, 840.0]);
     assert_eq!(rows.top(11) - rows.top(10), BAND_PITCH + BAND_STEP_GAP, "one step before the first year");
     assert_eq!((1..marks.len() as isize).filter(|row| rows.top(*row) - rows.top(row - 1) != BAND_PITCH).count(), 1, "and no other");
     // the first of January has Today and then the years, a pitch apart

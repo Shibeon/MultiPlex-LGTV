@@ -414,26 +414,32 @@ pub struct Geom {
     /// The grid shows a sort value under every poster ([`card_row::SortValue`]): a collapsed row
     /// keeps [`card_row::SORT_VALUE_ROW_GAP`] under its posters instead of 40 px.
     pub value_line: bool,
+    /// Every card is named ([`crate::cards::GridSpec::every_caption`]): every row keeps
+    /// [`card_row::EVERY_CAPTION_ROW_GAP`] under its posters. [`Self::value_line`] outranks it.
+    pub every_caption: bool,
 }
 
 impl Geom {
     #[cfg(test)]
-    pub const DEFAULT: Self = Self { cols: COLS, left: MARGIN_X, w: CARD_W, h: CARD_H, gap: GAP, value_line: false };
+    pub const DEFAULT: Self = Self { cols: COLS, left: MARGIN_X, w: CARD_W, h: CARD_H, gap: GAP, value_line: false, every_caption: false };
 
     pub const fn of(cols: usize, left: f32, style: &RowStyle) -> Self {
-        Self { cols, left, w: style.w, h: style.h, gap: style.gap, value_line: false }
+        Self { cols, left, w: style.w, h: style.h, gap: style.gap, value_line: false, every_caption: false }
     }
 
     /// A COLLAPSED row's pitch.
     pub fn pitch(&self) -> f32 {
         self.h + if self.value_line { card_row::SORT_VALUE_ROW_GAP }
+            else if self.every_caption { card_row::EVERY_CAPTION_ROW_GAP }
             else { LABEL_BAND_COLLAPSED + UNDER_LABEL_AIR }
     }
 
     /// How far under a card's unscaled bottom the focused row's caption reaches for a band of
     /// `band_h`: what the page must keep on screen, and what paging counts back from.
     fn under_reach(&self, band_h: f32) -> f32 {
-        if self.value_line { card_row::SORT_VALUE_REACH } else { shown_band(band_h) }
+        if self.value_line { card_row::SORT_VALUE_REACH }
+        else if self.every_caption { card_row::EVERY_CAPTION_REACH }
+        else { shown_band(band_h) }
     }
 }
 

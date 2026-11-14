@@ -171,7 +171,7 @@ fn all_grid_moves_open_only_the_destination_band_and_use_settled_reveal() {
     let mut page = fixture.screen();
     page.initial = false;
     let mut engine = FocusEngine::new();
-    let first = page.key(page.pair.detail.elem_at(12).unwrap());
+    let first = page.key(page.pair.detail.elem_at(2 * COLS).unwrap());
     page.relayout(Some(first));
     engine.set(OWNER, first, Some(page.pair.groups_config().detail), By::Restore);
     direction(&mut page, &mut engine, &fixture, Dir::Down);
@@ -248,8 +248,8 @@ fn duplicate_across_pages_keeps_full_projection_recovery_metadata() {
         partial.sync(&fixture.cx(None));
         full.pair.detail.clear_projection();
         full.sync(&fixture.cx(None));
-        // The pass visits the wanted window (five rows of six), exactly, not the 60-slot listing.
-        assert_eq!(partial.pair.detail.publication_ops().0, 30);
+        // The pass visits the wanted window (four rows of seven: the window follows the taller named rows), exactly, not the 60-slot listing.
+        assert_eq!(partial.pair.detail.publication_ops().0, 4 * COLS);
         assert!(partial.pair.detail.publication_ops().1 <= 120);
         canonical.push((grid_hash(&partial), grid_hash(&full)));
         observations.push((partial.keys.last_place(duplicate), full.keys.last_place(duplicate)));
@@ -386,7 +386,7 @@ fn owned_rail_keeps_the_fixed_grid_top_origin_and_short_window() {
         page.pair.master.groups(&fixture.cx(Some(page.key(page.pair.detail.elem_at(0).unwrap()))), &mut groups);
         let rail = groups.first().expect("the fixture has a real rail").extent;
         // a short alphabet starts at the grid's top; a long one climbs to the board's 152 first
-        assert_eq!(rail.y, if n == 9 { 244.0 } else { 152.0 }, "the rail is not attached to the scrolling first grid row");
+        assert_eq!(rail.y, if n == 9 { 332.0 } else { 152.0 }, "the rail is not attached to the scrolling first grid row");
         if n == 9 { assert_eq!(rail.h, 9.0 * layout::RAIL_PITCH); }
         else { assert!(rail.h < n as f32 * layout::rail_pitch(n), "an alphabet too long even squeezed scrolls"); }
     }
@@ -1009,7 +1009,7 @@ fn header_controls_sit_in_the_header_row_left_to_right() {
         let rect = page.place(elem, &cx, At::Drawn).unwrap().rect;
         assert!(rect.x >= last, "{elem}: controls read left to right without overlap");
         let lowered = 0.0;
-        assert_eq!(rect.y + rect.h * 0.5, layout::HEADER_Y + lowered + plx_ui::page_header::HEIGHT * 0.5 - page.scroll.pos);
+        assert_eq!(rect.y + rect.h * 0.5, layout::ROW_Y + lowered + plx_ui::page_header::HEIGHT * 0.5 - page.scroll.pos);
         last = rect.x + rect.w;
     }
 }
@@ -1178,7 +1178,8 @@ fn projected_entry_preserves_the_last_item_within_a_letter_then_live_move_jumps(
     let fixture = Fixture::new();
     let mut page = fixture.screen();
     let mut engine = FocusEngine::new();
-    let exact = page.key(page.pair.detail.elem_at(17).unwrap());
+    // The last card of the second row (letter A): Right from it is the rail.
+    let exact = page.key(page.pair.detail.elem_at(2 * COLS - 1).unwrap());
     engine.set(OWNER, exact, Some(page.pair.groups_config().detail), By::Restore);
     assert_eq!(direction(&mut page, &mut engine, &fixture, Dir::Right), 0);
     assert_eq!(engine.current_group(OWNER), Some(page.pair.groups_config().master));
@@ -1189,7 +1190,8 @@ fn projected_entry_preserves_the_last_item_within_a_letter_then_live_move_jumps(
     direction(&mut page, &mut engine, &fixture, Dir::Right);
     assert_eq!(direction(&mut page, &mut engine, &fixture, Dir::Down), 1);
     direction(&mut page, &mut engine, &fixture, Dir::Left);
-    assert_eq!(page.grid_position(engine.current(OWNER)), Some((3, 0)));
+    // Z's first title, the 19th card.
+    assert_eq!(page.grid_position(engine.current(OWNER)), Some((18 / COLS, 18 % COLS)));
 }
 
 #[test]
@@ -1205,7 +1207,7 @@ fn removed_grid_key_keeps_its_typed_master_detail_reconciliation_path() {
     page.sync(&fixture.cx(Some(original)));
     assert_eq!(<LibraryScreen as Focusable<HostFixture>>::group_of(&page, &original.elem, &fixture.cx(Some(original))), None);
     let recovered = <LibraryScreen as Focusable<HostFixture>>::reconcile(&page, original, &fixture.cx(Some(original)));
-    assert_eq!(page.grid_position(Some(recovered)), Some((2, 5)));
+    assert_eq!(page.grid_position(Some(recovered)), Some((17 / COLS, 17 % COLS)));
 }
 
 #[test]
@@ -1214,7 +1216,7 @@ fn direct_rail_activation_jumps_even_when_the_letter_was_already_selected() {
     let fixture = Fixture::new();
     let mut page = fixture.screen();
     let mut engine = FocusEngine::new();
-    let exact = page.key(page.pair.detail.elem_at(17).unwrap());
+    let exact = page.key(page.pair.detail.elem_at(2 * COLS - 1).unwrap());
     engine.set(OWNER, exact, Some(page.pair.groups_config().detail), By::Restore);
     direction(&mut page, &mut engine, &fixture, Dir::Right);
     let letter = engine.current(OWNER).unwrap().elem;
@@ -1235,7 +1237,7 @@ fn sort_chosen_during_section_fade_commits_to_the_incoming_library() {
     let mut output = Vec::new();
     let mut present = plx_machine::present::Present::new();
     let mut fx = Effects::new(&mut output, MachineId::Instance(InstanceId(19)), &mut present);
-    page.activate(page.libraries[1].0, false, &fixture.cx(None), &mut fx);
+    page.choose_library(1, &fixture.cx(None), &mut fx);
     page.activate(SORTFILTER, false, &fixture.cx(None), &mut fx);
     drop(fx);
     let incoming = SectionAddress { epoch: 1, sid, section: 2 };
@@ -1255,9 +1257,9 @@ fn sort_chosen_during_section_fade_commits_to_the_incoming_library() {
         }))) if *target == incoming && key == "titleSort")), "leaving flushes selection and semantic sort in one addressed store command");
 }
 
-/// A singleton keeps its direct shortcut and the Library options control.
+/// A singleton keeps its library chip (and its Library options list) and the filter chips.
 #[test]
-fn a_single_favourite_library_keeps_its_shortcut_and_options() {
+fn a_single_favourite_library_keeps_its_library_chip_and_filters() {
     let _guard = plx_base::testlock::serial();
     let mut fixture = Fixture::new();
     fixture.directory = plx_data::browse::view::DirectorySnapshot::fixture(1, 0, vec![
@@ -1265,17 +1267,17 @@ fn a_single_favourite_library_keeps_its_shortcut_and_options() {
             kind: SecKind::Movie, row: plx_data::browse::SrcRow { section: 0, title: "Cinema".into(),
                 pinned: true, current: true, ..Default::default() } }]);
     let page = fixture.screen();
-    assert_eq!(page.libraries.len(), 2, "a library shortcut and options");
+    assert_eq!(page.libraries.len(), 1, "the library chip");
     assert!(page.layout.libraries, "the header row is always reserved, names or not");
     let cx = fixture.cx(None);
     let mut groups = Vec::new();
     page.groups(&cx, &mut groups);
-    assert_eq!(page.header_elems().len(), page.toolbar_elems().len() + 2);
+    assert_eq!(page.header_elems().len(), page.toolbar_elems().len() + 1 + page.left_controls.len());
+    assert_eq!(page.left_controls, [WATCH, GENRE, SORTFILTER], "All, All genres, + More filters");
     let mut draw = DrawFrame::new(&cx, plx_ui::Painter::root());
     page.record_stops(&mut draw);
     let stops = draw.into_stops();
-    assert!(stops.iter().any(|stop| region_of_elem(stop.key.elem) == Some(KeyRegion::Library)),
-        "the direct library shortcut registers its pointer stop");
+    assert!(stops.iter().any(|stop| stop.key.elem == MORE), "the library chip registers its pointer stop");
 }
 
 #[test]
@@ -1292,13 +1294,13 @@ fn favorite_library_row_uses_shared_strip_geometry_and_incoming_type() {
     let cx = fixture.cx(None);
     for (elem, _) in page.libraries.clone() {
         let rect = page.place(&elem, &cx, At::Drawn).unwrap().rect;
-        assert_eq!(rect.y + rect.h * 0.5, layout::HEADER_Y + plx_ui::page_header::HEIGHT * 0.5, "names sit in the header row");
+        assert_eq!(rect.y + rect.h * 0.5, layout::ROW_Y + plx_ui::page_header::HEIGHT * 0.5, "the library chip sits in the header row");
     }
     page.pending.request_section(SectionTarget { epoch: 1, index: 3,
         identity: LibrarySectionIdentity { sid, key: 4 }, kind: SecKind::Show });
     page.sync(&cx);
-    assert_eq!(page.libraries.iter().filter(|(elem, _)| *elem != MORE).map(|(_, section)| *section).collect::<Vec<_>>(), vec![2, 3],
-        "the favorite row must not keep movie libraries beneath the incoming Shows type");
+    assert_eq!(page.libraries, [(MORE, 3)], "the chip names the incoming library");
+    assert_eq!(page.folded, [2, 3], "the chip's list must not keep movie libraries beneath the incoming Shows type");
 }
 
 /// **The page glyph and the Library's own live tab strip never overlap.** They used to (measured
@@ -1349,7 +1351,7 @@ fn the_page_glyph_and_the_librarys_live_tab_strip_never_overlap() {
     let mut solo = Fixture::new();
     solo.listing = solo.listing.clone().with_fetch(SecFetch::Failed, -1);
     let page = solo.screen();
-    assert_eq!(page.libraries.len(), 2, "a singleton keeps its shortcut and Library options");
+    assert_eq!(page.libraries.len(), 1, "a singleton keeps its library chip");
     let cx = solo.cx(Some(page.key(RETRY)));
     let (caption, reason) = page.status_text(&cx);
     let overlay = page.status_overlay(&cx, &caption, reason.as_deref());
@@ -1447,7 +1449,8 @@ fn a_hover_moves_no_grid_and_a_click_brings_it_to_its_card() {
     let mut page = fixture.screen();
     page.initial = false;
     let mut engine = FocusEngine::new();
-    let elems: Vec<u32> = [12, 18, 24].iter().map(|&i| deep(&mut page, &fixture, i)).collect();
+    let cols = page.layout.cols();
+    let elems: Vec<u32> = [2 * cols, 3 * cols, 4 * cols].iter().map(|&i| deep(&mut page, &fixture, i)).collect();
     let keys: Vec<_> = elems.iter().map(|&e| page.key(e)).collect();
     let (row2, row3, row4) = (keys[0], keys[1], keys[2]);
     page.relayout(Some(row2));
@@ -1504,7 +1507,7 @@ fn a_rating_sorted_listing_gets_a_rail_of_its_bands_with_the_empty_ones_dimmed()
     let mut groups = Vec::new();
     rail.groups(&fixture.cx(Some(page.key(page.pair.detail.elem_at(0).unwrap()))), &mut groups);
     let extent = groups.first().expect("the bands are a focus group").extent;
-    assert_eq!((extent.y, extent.h), (244.0, 6.0 * 40.0));
+    assert_eq!((extent.y, extent.h), (332.0, 6.0 * 40.0));
     assert!((extent.x + extent.w * 0.5 - 1834.0).abs() < 0.01, "centred on 1834, not the letters' 1844: {extent:?}");
 }
 
@@ -1515,6 +1518,7 @@ fn moving_in_the_bands_rail_scrolls_the_grid_to_the_band_at_once_and_left_return
     let mut page = fixture.screen();
     let mut engine = FocusEngine::new();
     let cols = page.layout.cols();
+    assert_eq!(cols, layout::VALUE_COLS, "a rating sort shows its values, six posters across");
     // the last card of 85%: one Right from the rail
     let exact = page.key(page.pair.detail.elem_at(17).unwrap());
     engine.set(OWNER, exact, Some(page.pair.groups_config().detail), By::Restore);
@@ -1622,8 +1626,8 @@ fn a_date_sorted_listing_gets_a_rail_of_today_the_months_and_the_years_with_one_
     let empty: Vec<&str> = bands.iter().filter(|(_, empty)| *empty).map(|(label, _)| label.as_str()).collect();
     assert_eq!((empty, focused), (vec!["Sep", "Jul", "Jun", "Apr", "Mar", "Feb"], None), "the bands that hold no film are dimmed");
     // the owner's board: Today at y 264, a month every 40, Jan at 664, then 8 more for `2025` at 712
-    let mut expected: Vec<f32> = (0..=10).map(|i| 264.0 + 40.0 * i as f32).collect();
-    expected.extend([712.0, 752.0]);
+    let mut expected: Vec<f32> = (0..=10).map(|i| 352.0 + 40.0 * i as f32).collect();
+    expected.extend([800.0, 840.0]);
     assert_eq!(rail_centres(&page, &fixture), expected);
     let rail = &page.pair.master;
     assert_eq!((rail.current_for_item(0), rail.current_for_item(3), rail.current_for_item(9), rail.current_for_item(19), rail.current_for_item(20), rail.current_for_item(33)),
@@ -1632,7 +1636,7 @@ fn a_date_sorted_listing_gets_a_rail_of_today_the_months_and_the_years_with_one_
     let mut groups = Vec::new();
     rail.groups(&fixture.cx(Some(page.key(page.pair.detail.elem_at(0).unwrap()))), &mut groups);
     let extent = groups.first().expect("the bands are a focus group").extent;
-    assert_eq!((extent.y, extent.h), (244.0, 13.0 * 40.0 + 8.0));
+    assert_eq!((extent.y, extent.h), (332.0, 13.0 * 40.0 + 8.0));
     assert!((extent.x + extent.w * 0.5 - 1834.0).abs() < 0.01, "centred on 1834: {extent:?}");
 }
 
@@ -1684,8 +1688,8 @@ fn an_ascending_date_sort_reads_the_bands_oldest_first_with_its_step_at_the_same
     let page = fixture.screen();
     assert_eq!(labels_of(&page), ["2024", "2025", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Today"]);
     // two years, then the step (the months begin), then ten months and Today
-    let mut expected = vec![264.0, 304.0];
-    expected.extend((0..=10).map(|i| 352.0 + 40.0 * i as f32));
+    let mut expected = vec![352.0, 392.0];
+    expected.extend((0..=10).map(|i| 440.0 + 40.0 * i as f32));
     assert_eq!(rail_centres(&page, &fixture), expected);
     let rail = &page.pair.master;
     assert_eq!((rail.current_for_item(1), rail.current_for_item(2), rail.current_for_item(35)), (None, Some(0), Some(12)),
@@ -1702,7 +1706,7 @@ fn a_release_sorted_listing_gets_the_year_then_the_decades_with_a_step_before_th
     let (bands, _) = page.probe_rail(None);
     assert_eq!(bands, [("2026".to_owned(), false), ("2020s".to_owned(), false), ("2010s".to_owned(), true),
         ("2000s".to_owned(), false), ("1990s".to_owned(), false)]);
-    assert_eq!(rail_centres(&page, &fixture), [264.0, 312.0, 352.0, 392.0, 432.0], "8 px more before the first decade only");
+    assert_eq!(rail_centres(&page, &fixture), [352.0, 400.0, 440.0, 480.0, 520.0], "8 px more before the first decade only");
     // Right from the 2000s lands on it, Up skips the empty 2010s
     let mut engine = FocusEngine::new();
     let cols = page.layout.cols();
@@ -1755,11 +1759,11 @@ fn a_day_turn_changes_the_rails_labels_and_where_its_step_falls() {
     let page = fixture.screen();
     let december = labels_of(&page);
     assert_eq!((december.len(), december[1].as_str(), december[12].as_str(), december[13].as_str()), (14, "Dec", "Jan", "2025"));
-    assert_eq!(rail_centres(&page, &fixture)[13], 264.0 + 13.0 * 40.0 + 8.0, "the step is before 2025");
+    assert_eq!(rail_centres(&page, &fixture)[13], 352.0 + 13.0 * 40.0 + 8.0, "the step is before 2025");
     // …and the next morning: no month has gone by, so `Today` is followed by the years directly
     let counts: Vec<u32> = (1..=3).map(|i| 4 * i).collect();
     let fixture = dated_fixture(BandFamily::DateAdded, "addedAt", [2027, 1, 1], 2025, &counts, true);
     let page = fixture.screen();
     assert_eq!(labels_of(&page), ["Today", "2026", "2025"]);
-    assert_eq!(rail_centres(&page, &fixture), [264.0, 304.0, 344.0], "Today and the year after it are a pitch apart, no step");
+    assert_eq!(rail_centres(&page, &fixture), [352.0, 392.0, 432.0], "Today and the year after it are a pitch apart, no step");
 }

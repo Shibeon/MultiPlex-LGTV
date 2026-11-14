@@ -13,8 +13,8 @@ pub(super) fn settle(page: &mut LibraryScreen, engine: &mut FocusEngine<u32>, fi
 
 fn strictly_between(v: f32, a: f32, b: f32) -> bool { v > a.min(b) + 1.0e-3 && v < a.max(b) - 1.0e-3 }
 
-/// Owner report items 4, 5 and 7: the tile losing focus returns to rest over frames, and the
-/// rows open and close their caption band over frames — sideways, down, and out of the grid.
+/// Owner report items 4, 5 and 7: the tile losing focus returns to rest over frames. Every card
+/// of the grid is named, so no row opens or closes a band as focus walks it: Down moves no row.
 #[test]
 fn an_all_grid_tile_and_its_rows_animate_back_when_focus_leaves() {
     let _guard = plx_base::testlock::serial();
@@ -37,19 +37,13 @@ fn an_all_grid_tile_and_its_rows_animate_back_when_focus_leaves() {
     settle(&mut page, &mut engine, &fixture, 2016);
     assert_eq!(page.pair.detail.rect_at(&fixture.cx(engine.current(OWNER)), 12).w, rest);
 
-    let below = page.layout.row_y(4, page.scroll.pos);
+    let pitch = |page: &LibraryScreen| page.layout.row_y(4, 0.0) - page.layout.row_y(3, 0.0);
+    let before = pitch(&page);
     direction(&mut page, &mut engine, &fixture, Dir::Down);
     frame(&mut page, &mut engine, &fixture, 5000);
-    assert!(strictly_between(page.layout.row_expansion(2), 0.0, 1.0), "row 2 closes over frames");
-    assert!(strictly_between(page.layout.row_expansion(3), 0.0, 1.0), "row 3 opens over frames");
+    assert_eq!(pitch(&page), before, "a row of named cards opens no band");
     settle(&mut page, &mut engine, &fixture, 5016);
-    assert!(page.layout.row_y(4, page.scroll.pos) != below, "the settled layout moved row 4");
-
-    for _ in 0..4 { direction(&mut page, &mut engine, &fixture, Dir::Up); }
-    assert!(engine.current(OWNER).is_some_and(|key| page.pair.detail.index_of(key.elem).is_none()),
-        "focus left the grid for its heading");
-    frame(&mut page, &mut engine, &fixture, 9000);
-    assert!(strictly_between(page.layout.row_expansion(3), 0.0, 1.0), "leaving the grid closes its band over frames");
+    assert_eq!(pitch(&page), before, "the settled layout keeps every row's pitch");
 }
 
 /// Focus leaving the grid's cards for the header: the frame that handles the key draws before any
@@ -383,10 +377,10 @@ fn a_membership_requery_under_a_page_keeps_focus_and_scroll_when_refilled_after_
     a_membership_refresh_under_a_page_push(false, false);
 }
 
-/// The Under posters setting reaches the grid: a policy that shows nothing opens no caption band, so
-/// focusing a tile moves no row below it, while the default opens one and pushes them down.
+/// The Under posters setting reaches the grid's words, never its rows: every poster is named under
+/// every row, so whatever the policy, focusing a tile moves no row below it.
 #[test]
-fn the_under_posters_policy_sizes_the_focused_rows_band() {
+fn no_under_posters_policy_opens_a_band_under_the_focused_row() {
     use plx_plex::plex::session::{UnderPosters, UnderPostersLadder};
     let _guard = plx_base::testlock::serial();
     let below_focus = |setting: UnderPosters| {
@@ -407,8 +401,8 @@ fn the_under_posters_policy_sizes_the_focused_rows_band() {
     let two_lines = below_focus(UnderPosters { title: true, details: UnderPostersLadder::Genre.movie_parts(), show_details: UnderPostersLadder::Genre.show_parts(), sort_value: false });
     crate::registry::captions::TEST_UNDER_POSTERS.with(|cell| cell.set(None));
     assert!(nothing.abs() < 0.01, "a policy showing nothing opens no band: {nothing}");
-    assert!((one_line - 40.0).abs() < 0.01, "one line opens 80 - 40 px: {one_line}");
-    assert!((two_lines - 72.0).abs() < 0.01, "two lines open 112 - 40 px: {two_lines}");
+    assert!(one_line.abs() < 0.01, "one line opens no band: {one_line}");
+    assert!(two_lines.abs() < 0.01, "two lines open no band: {two_lines}");
 }
 
 /// **A grid lists one kind of tile, so its band is that kind's.** Movie details Nothing with the show
@@ -468,18 +462,18 @@ fn value_mode_keeps_the_real_library_focus_and_restores_the_caption_geometry() {
     let focus = engine.current(OWNER);
     let pitch = page.layout.grid_pitch();
     assert_eq!(pitch - page.layout.card_h(), 60.0, "rows are 60 px apart while values show");
-    // Sort value Off: the grid draws as it did before, 40 px rows and the Title/Details band.
+    // Sort value Off: the grid names every card again, a named block between the rows.
     crate::registry::captions::TEST_UNDER_POSTERS.with(|c| c.set(Some(UnderPosters { sort_value: false, ..UnderPosters::DEFAULT })));
     frame(&mut page, &mut engine, &fixture, 5000);
     assert!(!page.layout.value_line());
-    assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), 40.0);
+    assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), plx_ui::cards::EVERY_CAPTION_ROW_GAP);
     assert_eq!(engine.current(OWNER), focus, "turning values off keeps the selected poster");
     // Back On, but sorted by Title: no value to show, so the same plain geometry.
     crate::registry::captions::TEST_UNDER_POSTERS.with(|c| c.set(Some(UnderPosters::DEFAULT)));
     fixture.listing = fixture.listing.clone().with_sort_key("titleSort");
     frame(&mut page, &mut engine, &fixture, 8000);
     assert!(!page.layout.value_line(), "Title and Random sorts show no value");
-    assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), 40.0);
+    assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), plx_ui::cards::EVERY_CAPTION_ROW_GAP);
     // And a sort a later server declares, which the table does not word, keeps the captions too.
     fixture.listing = fixture.listing.clone().with_sort_key("futureServerSort");
     frame(&mut page, &mut engine, &fixture, 11000);
@@ -501,7 +495,11 @@ fn value_mode_keeps_the_real_library_focus_and_restores_the_caption_geometry() {
     settle(&mut page, &mut engine, &deep, 0);
     assert!(page.layout.value_line() && row >= 10, "values show at a deep row ({row})");
     // Where a focus move seats a row: its poster top where the first row's is at rest.
-    let seated = |page: &LibraryScreen| page.layout.row_y(row, page.scroll.pos) - page.layout.row_y(0, 0.0);
+    // (Its row in the layout on view: values off, the posters go seven across.)
+    let seated = |page: &LibraryScreen| {
+        let row = 90 / page.layout.cols();
+        page.layout.row_y(row, page.scroll.pos) - page.layout.row_y(0, 0.0)
+    };
     assert!(seated(&page).abs() < 1.0, "with values the focused row is seated at the grid top: {}", seated(&page));
     crate::registry::captions::TEST_UNDER_POSTERS.with(|c| c.set(Some(UnderPosters { sort_value: false, ..UnderPosters::DEFAULT })));
     frame(&mut page, &mut engine, &deep, 5000);

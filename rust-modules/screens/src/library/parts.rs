@@ -38,6 +38,17 @@ pub(super) fn grid_art(item: &plx_data::pms::PmsMovie) -> Art<'_> {
 /// The standard focused caption policy; a grid sorted by a value draws its value line instead.
 pub(super) fn caption_policy() -> CaptionPolicy { crate::registry::captions::policy() }
 
+/// What a grid that names EVERY card ([`Layout::every`]) says under each: the title always (it is
+/// the card's name, and the wall is read by it), then the details line the Under posters setting
+/// chose (by default "Year · Length"; Length unticked, the year alone).
+pub(super) fn every_policy() -> CaptionPolicy { CaptionPolicy { title: true, ..caption_policy() } }
+
+/// The label policy of a grid laid out as `layout`: [`every_policy`] when it names every card,
+/// otherwise [`caption_policy`].
+fn label_policy(layout: &Layout) -> CaptionPolicy {
+    if layout.every() { every_policy() } else { caption_policy() }
+}
+
 /// A grid card's label under `policy`: the focused caption band shows exactly what the Under
 /// posters setting chose, for every POSTER (a season is named for its show by the one builder, like
 /// a season on Home; a collection's details line is its size, and a name its face cuts rides it). An episode is a landscape still, not a poster, and keeps its own block in the
@@ -45,6 +56,12 @@ pub(super) fn caption_policy() -> CaptionPolicy { crate::registry::captions::pol
 pub(super) fn grid_label(item: &plx_data::pms::PmsMovie, policy: &CaptionPolicy) -> ui_cards::TileLabel {
     if item.kind == 3 { return crate::registry::captions::still_label(item, ""); }
     crate::registry::captions::label(policy, &tile_facts::caption_facts(item), None)
+}
+
+/// [`grid_label`] for a card of a grid that names every card: held to its own tile
+/// (`TileLabel::within_tile`), so a long title never reaches into a neighbour's words.
+fn every_label(item: &plx_data::pms::PmsMovie, policy: &CaptionPolicy) -> ui_cards::TileLabel {
+    ui_cards::TileLabel { within_tile: true, ..grid_label(item, policy) }
 }
 
 #[derive(Default)]
@@ -108,6 +125,8 @@ struct CaptionCache {
     sort: String,
     /// The calendar date the labels were worded for: "Today" and "Yesterday" go stale at midnight.
     today: Option<[i32; 3]>,
+    /// The policy the labels were worded under (`None`: sort value lines).
+    policy: Option<CaptionPolicy>,
     labels: HashMap<usize, (usize, ui_cards::TileLabel)>,
 }
 
@@ -241,7 +260,7 @@ impl GridPart {
     pub(super) fn on<H: LibraryLike>(&mut self, ev: &ScreenEvent<H>, cx: &Cx<'_, H>,
         fx: &mut Effects<'_, H>, scroll: f32) -> f32 {
         self.grid.set_page(CONTENT_TOP + self.layout.grid_top(), scroll);
-        let src = GridSrc { total: self.total, windows: &self.windows, indexes: &self.indexes, view: H::listing(cx), policy: caption_policy(), values: self.layout.value_line(), today: H::today(cx), captions: &self.captions };
+        let src = GridSrc { total: self.total, windows: &self.windows, indexes: &self.indexes, view: H::listing(cx), policy: label_policy(&self.layout), values: self.layout.value_line(), every: self.layout.every(), today: H::today(cx), captions: &self.captions };
         let _ = self.grid.on(ev, cx, &src, fx);
         if !matches!(ev, ScreenEvent::Tick(_)) { return 0.0; }
         // The re-list's landing started on this tick or has ended: once it is no longer playing
@@ -297,6 +316,7 @@ impl GridPart {
         self.scroll_target = scroll_target;
         self.grid.set_columns(layout.cols(), layout.style(), MARGIN_X);
         self.grid.set_value_line(layout.value_line());
+        self.grid.set_every_caption(layout.every());
         self.grid.set_caption_policy(Some(caption_policy()));
         self.grid.set_page(CONTENT_TOP + layout.grid_top(), scroll);
     }
@@ -526,7 +546,7 @@ impl GridPart {
 
     /// The grid's content, read off the published items. O(1) to build: borrows, no copy.
     fn source<'a, 'v, H: LibraryLike>(&'a self, cx: &Cx<'v, H>) -> GridSrc<'a, 'v> {
-        GridSrc { total: self.total, windows: &self.windows, indexes: &self.indexes, view: H::listing(cx), policy: caption_policy(), values: self.layout.value_line(), today: H::today(cx), captions: &self.captions }
+        GridSrc { total: self.total, windows: &self.windows, indexes: &self.indexes, view: H::listing(cx), policy: label_policy(&self.layout), values: self.layout.value_line(), every: self.layout.every(), today: H::today(cx), captions: &self.captions }
     }
 
     /// The painter the grid draws and registers stops through: the page's alpha, and the stops
@@ -605,6 +625,9 @@ struct GridSrc<'a, 'v> {
     /// The grid draws a sort value line under every card rather than the Title/Details caption (an
     /// Episodes view's legacy two-line caption included).
     values: bool,
+    /// The grid names every card ([`Layout::every`]): each label is [`every_label`]'s, worded once
+    /// and kept in the cache like a value line, since every visible card asks for its own each frame.
+    every: bool,
     /// The calendar date the application handed in (`LibraryLike::today`).
     today: Option<[i32; 3]>,
     captions: &'a std::cell::RefCell<CaptionCache>,
@@ -618,22 +641,25 @@ impl GridSrc<'_, '_> {
     /// The label the grid draws under tile `i`: the one [`CardSource::label`] answers.
     fn with_tile_label<R>(&self, i: usize, read: impl FnOnce(&ui_cards::TileLabel) -> R) -> R {
         let Some(item) = self.view.item(i) else { return read(&ui_cards::TileLabel::default()) };
-        if self.values {
-            let key = sort_key(&self.view);
+        if self.values || self.every {
+            let key = if self.values { sort_key(&self.view) } else { "" };
+            let policy = (!self.values).then_some(self.policy);
             let locale = plx_platform::i18n::current();
             let mut cache = self.captions.borrow_mut();
             if cache.language != Some(locale.language()) || cache.format != locale.format_locale() || cache.sort != key
-                || cache.today != self.today {
+                || cache.today != self.today || cache.policy != policy {
                 cache.labels.clear(); cache.language = Some(locale.language());
                 cache.format = locale.format_locale().to_owned(); cache.sort = key.to_owned();
-                cache.today = self.today;
+                cache.today = self.today; cache.policy = policy;
             }
             let owner = item as *const plx_data::pms::PmsMovie as usize;
             if let Some((_, label)) = cache.labels.get(&i).filter(|(old, _)| *old == owner) {
                 return read(label);
             }
-            let entry = cache.labels.entry(i).or_insert_with(|| (owner, crate::registry::sort_info::label(item, key, self.today)));
-            if entry.0 != owner { *entry = (owner, crate::registry::sort_info::label(item, key, self.today)); }
+            let word = || if self.values { crate::registry::sort_info::label(item, key, self.today) }
+                else { every_label(item, &self.policy) };
+            let entry = cache.labels.entry(i).or_insert_with(|| (owner, word()));
+            if entry.0 != owner { *entry = (owner, word()); }
             return read(&entry.1);
         }
         read(&grid_label(item, &self.policy))
@@ -785,7 +811,7 @@ impl<H: LibraryLike> Part<H> for GridPart {
             // Under the cards that slide over their cells.
             let view = H::listing(f.cx);
             let sort = self.layout.value_line().then(|| sort_key(&view));
-            let ghosts = GhostSrc { items: self.grid.ghost_keys().map(|key| self.ghosts.get(&key)).collect(), policy: caption_policy(), sort, today: H::today(f.cx) };
+            let ghosts = GhostSrc { items: self.grid.ghost_keys().map(|key| self.ghosts.get(&key)).collect(), policy: label_policy(&self.layout), sort, today: H::today(f.cx) };
             self.grid.paint_ghosts(f, p, &ghosts);
         }
         let src = self.source(f.cx);
@@ -808,7 +834,7 @@ mod caption_cache_review_tests {
         let cache = std::cell::RefCell::new(CaptionCache::default());
         let indexes = GridIndexes::default();
         let mut src = GridSrc { total: 1, windows: &[], indexes: &indexes, view: listing.view(),
-            policy: CaptionPolicy::default(), values: true, today: Some([2026, 10, 30]), captions: &cache };
+            policy: CaptionPolicy::default(), values: true, every: false, today: Some([2026, 10, 30]), captions: &cache };
         let pointer = |label: &ui_cards::TileLabel| label.value.as_ref().unwrap().text.as_ptr() as usize;
         let first = src.with_tile_label(0, pointer);
         assert_eq!(first, pointer(&cache.borrow().labels[&0].1), "read the cached CString itself");

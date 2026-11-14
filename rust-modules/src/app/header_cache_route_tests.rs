@@ -38,11 +38,11 @@ fn idle_frames_and_a_key_walk_build_no_header_row_on_any_page_that_wears_one() {
 fn a_library_switch_builds_the_row_and_the_frames_after_it_settle_build_none() {
     let mut r = World::movies_library("header-cache-switch", true);
     let before = r.header_builds();
-    let film_club = r.library().probe_libraries().iter().find(|(_, section)| *section == FILM_CLUB).map(|(elem, _)| *elem)
-        .expect("premise: Film Club names a stop");
-    r.walk_header_to(film_club);
-    assert_eq!(r.header_builds(), before, "focus alone on the second name builds no row");
-    r.press(Key::Ok);
+    let chip = r.library().probe_header_stops().into_iter().find(|(stop, _)| *stop == "library").map(|(_, elem)| elem)
+        .expect("premise: the library chip is a stop");
+    r.walk_header_to(chip);
+    assert_eq!(r.header_builds(), before, "focus alone on the library chip builds no row");
+    r.pick_library(FILM_CLUB);
     r.frames(90);
     let settled = r.header_builds();
     assert!(settled > before, "the switch is an input of the row: it was rebuilt for the new library");

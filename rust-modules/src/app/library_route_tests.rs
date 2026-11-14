@@ -328,7 +328,8 @@ fn the_crumb_root_pops_to_the_library_and_up_from_it_is_the_movies_pill() {
 
 // ---- R5: the "+N" list ---------------------------------------------------------------------------
 
-/// Eleven Movie libraries: the header names the first two and folds the rest behind "+N".
+/// Eleven Movie libraries: the header's library chip names the one on view, and its list holds
+/// every favorite (0, 4, 6, 8, 10, 12) beside the libraries that are no favorite (2).
 fn many_libraries(w: &mut World) {
     {
         let mut browse = w.bridge.stores.browse.borrow_mut();
@@ -340,17 +341,17 @@ fn many_libraries(w: &mut World) {
     w.open_library();
     w.climb_into_header();
     let (names, folded) = w.library().probe_names();
-    assert_eq!(names.iter().map(|(_, section)| *section).collect::<Vec<_>>(), [0, 4], "premise: the visible names");
-    assert_eq!(folded, [6, 8, 10, 12], "premise: the folded libraries");
+    assert_eq!(names.iter().map(|(_, section)| *section).collect::<Vec<_>>(), [0], "premise: the chip names library 0");
+    assert_eq!(folded, [0, 4, 6, 8, 10, 12], "premise: the favorites in the chip's list");
 }
 
-/// Picking a non-favorite changes the store and preserves the favorite shortcuts and opener.
+/// Picking a non-favorite changes the store, names it on the chip and keeps the favorites listed.
 fn the_pick_kept_the_favorite_shortcuts(w: &mut World) -> Vec<String> {
     let (names, folded) = w.library().probe_names();
     let visible: Vec<_> = names.iter().map(|(_, index)| *index).collect();
     let mut fails = Vec::new();
-    if visible != [0, 4, 2] || folded != [6, 8, 10, 12] {
-        fails.push(format!("temporary selection moved the favorite prefix: {visible:?}, folded {folded:?}"));
+    if visible != [2] || folded != [0, 4, 6, 8, 10, 12] {
+        fails.push(format!("the pick is not on the chip, or the favorites moved: {visible:?}, folded {folded:?}"));
     }
     if w.bridge.stores.browse.borrow().current_for_test() != 2 { fails.push("the selected non-favorite is not on view".into()); }
     if here(w) != "header:name2" { fails.push(format!("focus missed the selected pill: {}", here(w))); }
@@ -362,7 +363,7 @@ fn nothing_was_picked(w: &mut World) -> Vec<String> {
     let (names, folded) = w.library().probe_names();
     let visible: Vec<usize> = names.iter().map(|(_, section)| *section).collect();
     let mut fails = Vec::new();
-    if visible != [0, 4] || folded != [6, 8, 10, 12] { fails.push(format!("the fold changed: names {visible:?}, list {folded:?}")); }
+    if visible != [0] || folded != [0, 4, 6, 8, 10, 12] { fails.push(format!("the chip changed: names {visible:?}, list {folded:?}")); }
     let current = w.bridge.stores.browse.borrow().current_for_test();
     if current != 0 { fails.push(format!("the store left library 0 for {current}")); }
     fails
@@ -376,10 +377,10 @@ fn library_options_selects_a_non_favorite_without_moving_shortcuts_and_back_sele
             setup: many_libraries,
             start: "header:name0",
             steps: vec![
-                press(Key::Right, "", "library", "header:name4"),
-                press(Key::Right, "", "library", "header:more"),
-                // The list holds the folded libraries (6, 8, 10, 12) as `section:<source>:<key>`.
-                press(Key::Ok, "library:Menu { kind: Sources", "library", "menu:section:1:1"),
+                // The list opens on the library on view, as `section:<server>:<key>`; the
+                // non-favorite (library 2) is the next row down.
+                press(Key::Ok, "library:Menu { kind: Sources", "library", "menu:section:0:1"),
+                press(Key::Down, "", "library", "menu:section:1:1"),
                 press(Key::Ok, "", "library", "header:name2"),
             ],
             end: |w| { w.frames(90); the_pick_kept_the_favorite_shortcuts(w) },
@@ -389,11 +390,9 @@ fn library_options_selects_a_non_favorite_without_moving_shortcuts_and_back_sele
             setup: many_libraries,
             start: "header:name0",
             steps: vec![
-                press(Key::Right, "", "library", "header:name4"),
-                press(Key::Right, "", "library", "header:more"),
-                press(Key::Ok, "library:Menu { kind: Sources", "library", "menu:section:1:1"),
-                press(Key::Down, "", "library", "menu:section:1:11"),
-                press(Key::Back, "", "library", "header:more"),
+                press(Key::Ok, "library:Menu { kind: Sources", "library", "menu:section:0:1"),
+                press(Key::Down, "", "library", "menu:*"),
+                press(Key::Back, "", "library", "header:name0"),
             ],
             end: |w| { w.frames(90); nothing_was_picked(w) },
         },
@@ -402,8 +401,8 @@ fn library_options_selects_a_non_favorite_without_moving_shortcuts_and_back_sele
 
 /// **Every header opener stays the lifted, focused control while its menu is up** (design review
 /// S12): the dispatcher names the page's element as the surface's lifted opener, the one decision
-/// the dispatcher's lift pass paints from, for the `+N` list as for Sort & Filter. The `+N` list named
-/// none, so its page capsule sat dimmed under the scrim.
+/// the dispatcher's lift pass paints from, for the library chip's list as for Sort & Filter. The
+/// list (then the `+N` list) named none, so its page capsule sat dimmed under the scrim.
 fn the_menu_lifts_its_opener(stop: &'static str) -> impl Fn(&mut World) -> Vec<String> {
     move |w: &mut World| {
         w.frames(30);
@@ -418,19 +417,17 @@ fn the_menu_lifts_its_opener(stop: &'static str) -> impl Fn(&mut World) -> Vec<S
 }
 
 #[test]
-fn the_plus_n_list_and_sort_filter_both_lift_their_opener() {
+fn the_library_list_and_sort_filter_both_lift_their_opener() {
     // `end` is a plain `fn`: one per stop, the closure's `stop` carried by the function's body.
-    fn plus_n(w: &mut World) -> Vec<String> { the_menu_lifts_its_opener("more")(w) }
-    fn sort(w: &mut World) -> Vec<String> { the_menu_lifts_its_opener("sort")(w) }
+    fn plus_n(w: &mut World) -> Vec<String> { the_menu_lifts_its_opener("library")(w) }
+    fn sort(w: &mut World) -> Vec<String> { the_menu_lifts_its_opener("filters")(w) }
     run(vec![
         Row {
-            name: "s12-plus-n",
+            name: "s12-library-list",
             setup: many_libraries,
             start: "header:name0",
             steps: vec![
-                press(Key::Right, "", "library", "header:name4"),
-                press(Key::Right, "", "library", "header:more"),
-                press(Key::Ok, "library:Menu { kind: Sources", "library", "menu:section:1:1"),
+                press(Key::Ok, "library:Menu { kind: Sources", "library", "menu:section:0:1"),
             ],
             end: plus_n,
         },
@@ -461,7 +458,7 @@ fn the_sort_filter_pill_is_painted_after_the_panel_in_the_dispatchers_own_draw()
     let mut w = World::movies_library("route-sort-lift-order", false);
     w.climb_into_header();
     header_stop(&mut w, "collections");
-    for (key, at) in [(Key::Right, "header:recommended"), (Key::Right, "header:sort"), (Key::Ok, "menu:unwatched")] {
+    for (key, at) in [(Key::Left, "header:filters"), (Key::Ok, "menu:unwatched")] {
         w.press(key);
         w.frames(30);
         assert_eq!(here(&w), at, "premise: {key:?} lands on {at}");
@@ -476,8 +473,9 @@ fn the_sort_filter_pill_is_painted_after_the_panel_in_the_dispatchers_own_draw()
     });
     let words: Vec<&str> = words.iter().map(|(s, _)| s.as_str()).collect();
     let at = |word: &str| words.iter().position(|w| *w == word);
-    // The control draws its criterion and never its name ("Sort & Filter"): the pill's run is "Title".
-    let pills: Vec<usize> = (0..words.len()).filter(|i| words[*i] == "Title").collect();
+    // The "+ More filters" chip draws its label: the pill's run is "More filters".
+    let pill = plx_platform::i18n::msg::library_header_more_filters();
+    let pills: Vec<usize> = (0..words.len()).filter(|i| words[*i] == pill).collect();
     let (panel_first, panel_last) = (at("SORT").expect("the panel drew its Sort section"), at("Genre").expect("…and its last Filter row"));
     assert_eq!(pills.len(), 1, "the pill is drawn once, by the lift (the page pass left it out): {words:?}");
     assert!(pills[0] > panel_last && panel_first < panel_last,
@@ -511,12 +509,10 @@ fn a_library_without_collections_has_no_collections_stop() {
 
 // ---- R6: Sort & Filter and the "N of M" read-out ---------------------------------------------------
 
-/// The Sort & Filter control, from the Library's arrival on the Collections control.
+/// The "+ More filters" chip (the whole Sort & Filter menu), from the Library's arrival on the
+/// Collections control: the chip stands just left of it.
 fn to_sort_filter() -> Vec<Step> {
-    vec![
-        press(Key::Right, "", "library", "header:recommended"),
-        press(Key::Right, "", "library", "header:sort"),
-    ]
+    vec![press(Key::Left, "", "library", "header:filters")]
 }
 
 fn with_genres(w: &mut World) {
@@ -542,14 +538,15 @@ fn a_filter_shows_n_of_m_beside_the_control_and_clears_when_reset() {
             press(Key::Ok, "", "library", "menu:unwatched"),
             // …and Back closes it onto the control that opened it. The filtered answer is not in
             // yet, so the row says nothing (the grid is mid-fade, the count would be a guess).
-            press(Key::Back, "", "library", "header:sort*"),
-            // The server answered: 37 of the library's 120.
-            after(films_answered::<37>, press(Key::Right, "", "library", "header:sort [37 of 120 films]")),
+            press(Key::Back, "", "library", "header:filters*"),
+            // The server answered: 37 of the library's 120, in the title's count pill.
+            after(films_answered::<37>, press(Key::Left, "", "library", "header:genre [37 of 120 films]")),
             // Reset it, from the same control.
+            press(Key::Right, "", "library", "header:filters [37 of 120 films]"),
             press(Key::Ok, "library:Menu { kind: SortFilter", "library", "menu:unwatched"),
             press(Key::Ok, "", "library", "menu:unwatched"),
-            press(Key::Back, "", "library", "header:sort*"),
-            after(films_answered::<120>, press(Key::Right, "", "library", "header:sort")),
+            press(Key::Back, "", "library", "header:filters*"),
+            after(films_answered::<120>, press(Key::Left, "", "library", "header:genre")),
         ]);
         steps
     };
@@ -567,8 +564,8 @@ fn a_filter_shows_n_of_m_beside_the_control_and_clears_when_reset() {
                     // The Genre row opens the genre list in place; a pick closes the menu.
                     press(Key::Ok, "", "library", "menu:genre:all"),
                     press(Key::Down, "", "library", "menu:genre:g1"),
-                    press(Key::Ok, "", "library", "header:sort*"),
-                    after(films_answered::<37>, press(Key::Right, "", "library", "header:sort [37 of 120 films]")),
+                    press(Key::Ok, "", "library", "header:filters*"),
+                    after(films_answered::<37>, press(Key::Left, "", "library", "header:genre [37 of 120 films]")),
                 ]);
                 steps
             },
@@ -613,6 +610,7 @@ fn the_rail_is_entered_only_from_the_last_column_and_walks_over_empty_letters() 
                     press(Key::Right, "", "library", "grid:0,3"),
                     press(Key::Right, "", "library", "grid:0,4"),
                     press(Key::Right, "", "library", "grid:0,5"),
+                    press(Key::Right, "", "library", "grid:0,6"),
                     // The last column: Right enters the rail on the letter under the card.
                     press(Key::Right, "", "library", "rail:A"),
                     press(Key::Right, "", "library", "rail:A"),
@@ -639,15 +637,17 @@ fn the_rail_is_entered_only_from_the_last_column_and_walks_over_empty_letters() 
                 // Row 2, last column: Right enters the rail and Left comes back to the SAME card.
                 steps.extend(grid_column(Key::Right, 2..=2, 4));
                 steps.extend(grid_column(Key::Right, 2..=2, 5));
+                steps.extend(grid_column(Key::Right, 2..=2, 6));
                 steps.extend([press(Key::Right, "", "library", "rail:A"), press(Key::Left, "", "library", "@-1")]);
-                // Row 7 is in C (items 30-59): the rail opens on C and Left returns to row 7.
-                steps.extend(grid_column(Key::Down, 3..=7, 5));
+                // Row 7's last card is in C (items 30-59): the rail opens on C and Left returns to row 7.
+                steps.extend(grid_column(Key::Down, 3..=7, 6));
                 steps.extend([press(Key::Right, "", "library", "rail:C"), press(Key::Left, "", "library", "@-1")]);
                 // Having moved on the rail, Left lands on the first card of the letter it is on.
                 steps.extend([
                     press(Key::Right, "", "library", "rail:C"),
                     press(Key::Down, "", "library", "rail:M"),
-                    press(Key::Left, "", "library", "grid:10,0"),
+                    // M begins at item 60: row 8, column 4.
+                    press(Key::Left, "", "library", "grid:8,4"),
                 ]);
                 steps
             },
@@ -666,13 +666,14 @@ fn the_rail_is_entered_only_from_the_last_column_and_walks_over_empty_letters() 
                     // The answer lands under the page's own seat, which follows it into the first tile.
                     after(collections_lettered, press(Key::Right, "", "collections", "grid:0,1")),
                 ];
-                steps.extend((2..=5).map(|col| press(Key::Right, "", "collections", format!("grid:0,{col}"))));
+                steps.extend((2..=6).map(|col| press(Key::Right, "", "collections", format!("grid:0,{col}"))));
+                // The last card of the first row is the first M (A holds six): the rail opens on M.
                 steps.extend([
-                    press(Key::Right, "", "collections", "rail:A"),
+                    press(Key::Right, "", "collections", "rail:M"),
                     press(Key::Left, "", "collections", "@-1"),
-                    press(Key::Right, "", "collections", "rail:A"),
-                    press(Key::Down, "", "collections", "rail:M"),
-                    press(Key::Left, "", "collections", "grid:1,0"),
+                    press(Key::Right, "", "collections", "rail:M"),
+                    press(Key::Up, "", "collections", "rail:A"),
+                    press(Key::Left, "", "collections", "grid:0,0"),
                 ]);
                 steps
             },
@@ -820,9 +821,14 @@ fn a_non_favorite_visit_survives_child_returns_and_ends_when_leaving_library() {
         let mut w = World::new("temporary-library-visit");
         w.open_library();
         w.climb_into_header();
-        header_stop(&mut w, "more");
+        header_stop(&mut w, "library");
         w.press(Key::Ok);
-        assert!(here(&w).starts_with("menu:section:1:1"));
+        // The chip's list opens on the library on view; walk to the non-favorite (library 2).
+        for _ in 0..12 {
+            if here(&w).starts_with("menu:section:1:1") { break; }
+            w.press(Key::Down);
+        }
+        assert!(here(&w).starts_with("menu:section:1:1"), "the list holds library 2: {}", here(&w));
         w.press(Key::Ok);
         w.frames(90);
         assert_eq!(w.bridge.stores.browse.borrow().current_for_test(), 2);

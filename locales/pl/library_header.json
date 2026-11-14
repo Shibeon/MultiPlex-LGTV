@@ -3,5 +3,12 @@
   "library_header.recommended": "Polecane",
   "library_header.sort_filter": "Sortuj i filtruj",
   "library_header.filtered_of": "{shown} z {total}",
-  "library_header.show": "Pokaż"
+  "library_header.show": "Pokaż",
+  "library_header.items": {
+    "one": "{count} pozycja",
+    "few": "{count} pozycje",
+    "many": "{count} pozycji",
+    "other": "{count} pozycji"
+  },
+  "library_header.more_filters": "Więcej filtrów"
 }

@@ -882,6 +882,34 @@ impl World {
         panic!("the top page wears no header row");
     }
 
+    /// Switch the Library to the directory's library `index` with the keys, as a reader does: the
+    /// header's library chip, OK on it (its list), Down to that library's row and OK. The OK is the
+    /// last key; the caller steps the frames the switch takes.
+    pub(super) fn pick_library(&mut self, index: usize) {
+        let row = {
+            let view = self.bridge.directory.view();
+            let section = &view.sections()[index];
+            format!("section:{}:{}", section.sid.expect("premise: the library has an address").raw(), section.key)
+        };
+        let chip = self.library().probe_header_stops().into_iter().find(|(stop, _)| *stop == "library")
+            .expect("premise: the header has its library chip").1;
+        self.walk_header_to(chip);
+        self.press(Key::Ok);
+        self.frames(30);
+        let at = |w: &World| {
+            let focus = w.d.focus();
+            w.focused_screen().and_then(|screen| screen.as_any())
+                .and_then(|any| any.downcast_ref::<plx_screens::library::menu::LibraryMenu>())
+                .and_then(|menu| menu.probe_row(focus).map(str::to_owned))
+        };
+        for _ in 0..16 {
+            if at(self).as_deref() == Some(row.as_str()) { break; }
+            self.press(Key::Down);
+        }
+        assert_eq!(at(self).as_deref(), Some(row.as_str()), "premise: the chip's list holds library {index}");
+        self.press(Key::Ok);
+    }
+
     /// Walk along the Library header (Right, or Left when the stop lies behind focus) to the stop
     /// `elem` (an element id) and stop there. The page arrives in its first poster, so a walk that
     /// starts below the header climbs into it with Up first.

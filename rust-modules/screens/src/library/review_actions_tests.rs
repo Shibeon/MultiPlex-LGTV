@@ -464,7 +464,7 @@ fn rail_keyboard_ok_and_back_return_the_exact_engine_remembered_item() {
         let fixture = Fixture::new();
         let mut page = fixture.screen();
         let mut engine = FocusEngine::new();
-        let grid = page.key(page.pair.detail.elem_at(17).unwrap());
+        let grid = page.key(page.pair.detail.elem_at(3 * page.layout.cols() - 1).unwrap());
         engine.set(
             OWNER,
             grid,

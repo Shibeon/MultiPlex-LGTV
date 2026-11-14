@@ -3,5 +3,12 @@
   "library_header.recommended": "Рэкамендацыі",
   "library_header.sort_filter": "Сартаванне і фільтр",
   "library_header.filtered_of": "{shown} з {total}",
-  "library_header.show": "Паказваць"
+  "library_header.show": "Паказваць",
+  "library_header.items": {
+    "one": "{count} элемент",
+    "few": "{count} элементы",
+    "many": "{count} элементаў",
+    "other": "{count} элемента"
+  },
+  "library_header.more_filters": "Яшчэ фільтры"
 }

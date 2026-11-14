@@ -3,5 +3,10 @@
   "library_header.recommended": "Empfohlen",
   "library_header.sort_filter": "Sortieren & Filtern",
   "library_header.filtered_of": "{shown} von {total}",
-  "library_header.show": "Anzeigen"
+  "library_header.show": "Anzeigen",
+  "library_header.items": {
+    "one": "{count} Titel",
+    "other": "{count} Titel"
+  },
+  "library_header.more_filters": "Weitere Filter"
 }

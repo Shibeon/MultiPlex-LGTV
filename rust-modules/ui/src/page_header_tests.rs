@@ -527,8 +527,8 @@ fn a_shared_row_names_the_row_a_rebuild_replaced_and_only_then() {
     assert_eq!(row.builds(), 3);
 }
 
-/// **The sort control is ONE declaration** ([`HeaderItem::sort_control`]): the Library, the
-/// Collections page and the Watchlist wear it. A stop; the sort icon, the criterion and the quiet
+/// **The sort control is ONE declaration** ([`HeaderItem::sort_control`]): the
+/// Collections page and the Watchlist wear it (the Library wears a dropdown chip and a round button). A stop; the sort icon, the criterion and the quiet
 /// chevron; its name carried and never drawn; no slot, so it ends at the text edge.
 #[test]
 fn the_sort_control_is_a_value_only_stop_that_ends_at_the_text_edge() {
@@ -1631,5 +1631,49 @@ fn the_slide_wakes_the_gate_while_it_runs_and_goes_quiet_at_rest() {
         plx_machine::idle::frame_begin(DT);
         swap.step(DT);
         assert!(!plx_machine::idle::page_moving() && !swap.is_active(), "frame {frame} after landing: a settled swap asks for nothing");
+    }
+}
+
+/// **An inset row aligns its plates, not its text, to the page edges** (the Library's chip row: a
+/// chip's plate starts where the title's letters do), and `layout_at` stands the same row lower
+/// without moving anything sideways.
+#[test]
+fn an_inset_row_puts_its_plates_on_the_text_edges_and_layout_at_only_moves_it_down() {
+    let spec = PageHeaderSpec {
+        left: vec![HeaderItem::dropdown("Library", "Films"), HeaderItem::chip_action("More filters", crate::icons::Icon::Plus)],
+        right: vec![HeaderItem::dropdown("Sort", "Title"), HeaderItem::round("Direction", crate::icons::Icon::ChevronUp)],
+        inset: true,
+        ..Default::default()
+    };
+    let header = PageHeader::new(spec, &[], &Fixed);
+    let flat = header.layout(1920.0, &Fixed);
+    let first = flat.items.first().unwrap();
+    let last = flat.items.last().unwrap();
+    assert!((first.plate.x - TEXT_X0).abs() < 0.01, "{:?}", first.plate);
+    assert!((last.plate.x + last.plate.w - TEXT_X1).abs() < 0.01, "{:?}", last.plate);
+    assert!((last.text.w - ROUND_W).abs() < 0.01, "the round button is a circle: {:?}", last.text);
+    let lower = header.layout_at(1920.0, &Fixed, TOP + 88.0);
+    for (a, b) in flat.items.iter().zip(&lower.items) {
+        assert_eq!((a.plate.x, a.plate.w, a.plate.h), (b.plate.x, b.plate.w, b.plate.h));
+        assert!((b.plate.y - a.plate.y - 88.0).abs() < 0.01);
+    }
+    assert_eq!(flat.left_budget, lower.left_budget);
+}
+
+/// **A chip wears its plate at rest** (an outline or a filled ground under its text), so a chip row
+/// with no focus on it still reads as chips.
+#[test]
+fn chips_draw_their_plates_at_rest() {
+    let spec = PageHeaderSpec {
+        left: vec![HeaderItem::dropdown("Library", "Films"), HeaderItem::chip_action("More filters", crate::icons::Icon::Plus)],
+        inset: true,
+        ..Default::default()
+    };
+    let header = PageHeader::new(spec, &[], &Fixed);
+    let layout = header.layout(1920.0, &Fixed);
+    let rects = crate::draw_census::capture(|| header.draw(Painter::recording(), &layout, &TabStrip::new(), 1.0, None));
+    for item in &layout.items {
+        assert!(rects.iter().any(|(_, r)| (r.x - item.plate.x).abs() < 0.5 && (r.w - item.plate.w).abs() < 0.5),
+            "{:?}: its plate is drawn with no focus on the row", item.slot);
     }
 }

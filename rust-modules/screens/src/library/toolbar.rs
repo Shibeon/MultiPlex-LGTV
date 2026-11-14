@@ -6,9 +6,19 @@ use super::*;
 /// The header's controls. Their ids sit beside the other page controls (`SORT`, `FILTER`, ...).
 pub(super) const COLLECTIONS: u32 = 8;
 pub(super) const RECOMMENDED: u32 = 9;
+/// "+ More filters" on the Library's filter row (the Collections page's Sort): the whole Sort &
+/// Filter menu.
 pub(super) const SORTFILTER: u32 = 10;
 /// The Collections page's crumb root ("Films"): OK returns to the page below.
 pub(super) const CRUMB_ROOT: u32 = 11;
+/// The filter row's watch chip ("All ⌄"): the All / Unwatched list.
+pub(super) const WATCH: u32 = 12;
+/// The filter row's genre chip ("All genres ⌄"): the genre list.
+pub(super) const GENRE: u32 = 13;
+/// The sort chip ("Title ⌄"): the sort list.
+pub(super) const SORT: u32 = 14;
+/// The round direction button: flips the sort's order in one press.
+pub(super) const DIRECTION: u32 = 15;
 
 /// What the Collections control knows about its count (`LibraryLike::collections_count`).
 ///
@@ -42,14 +52,19 @@ impl CollectionsControl {
 }
 
 impl LibraryScreen {
-    /// The controls on the row, left to right. The Collections control is on it only with a known
-    /// count: an unknown or hidden one is not.
+    /// The controls of the row's right cluster, left to right. The Collections control is on it
+    /// only with a known count: an unknown or hidden one is not.
     pub(super) fn toolbar_elems(&self) -> &'static [u32] {
         // The Collections page's row: the crumb (its own element, `CRUMB_ROOT`) and, only when the
         // server declares two sorts, the one Sort control. No Collections, Recommended or menu.
         if self.listing == Listing::Collections { return if self.collections_sort { &[SORTFILTER] } else { &[] }; }
-        if matches!(self.collections, CollectionsControl::Count(_)) { &[COLLECTIONS, RECOMMENDED, SORTFILTER] }
-        else { &[RECOMMENDED, SORTFILTER] }
+        if matches!(self.collections, CollectionsControl::Count(_)) { &[COLLECTIONS, RECOMMENDED, SORT, DIRECTION] }
+        else { &[RECOMMENDED, SORT, DIRECTION] }
+    }
+
+    /// Is `elem` one of the row's controls (a filter chip on the left, or the right cluster's)?
+    pub(super) fn is_control(&self, elem: u32) -> bool {
+        self.toolbar_elems().contains(&elem) || self.left_controls.contains(&elem)
     }
 
 

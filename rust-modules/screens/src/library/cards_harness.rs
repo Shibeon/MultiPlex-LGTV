@@ -316,7 +316,9 @@ impl CardHarness for Harness {
 /// read through `Focusable::place` and `Grid::scale_of`, the values the draw and the stops share.
 mod pop_tests {
     use super::*;
-    use plx_ui::consts::{CARD_H, CARD_W};
+    // The Library's own poster: seven columns fill the band before the rail.
+    const CARD_W: f32 = crate::library::layout::GRID_CARD_W;
+    const CARD_H: f32 = CARD_W * (RowStyle::HOME.h / RowStyle::HOME.w);
     use crate::library::parts::OVERLAID;
 
     fn width(h: &Harness, elem: u32) -> f32 { h.place(elem, At::Drawn).unwrap().rect.w }

@@ -342,8 +342,8 @@ machine name (`nas-home`) only in the Sources list and the failure read-out.
   once/sec heartbeat's `route=` field no longer reads `onboard` for the Settings-opened case — only
   for the first-run one. A picker that could
   turn into an editor would let a library be un-favourited from inside the list of favourites and
-  then vanish out of it under the cursor. **Browse** is a picker — one tick, OK closes. The "+N"
-  panel scopes it to the favourites the header fold hid; the Library's Sort & Filter menu draws the
+  then vanish out of it under the cursor. **Browse** is a picker — one tick, OK closes. The Library header's
+  library chip opens it over every favourite of the kind, the library on view ticked, and the libraries the servers offer; the Library's Sort & Filter menu draws the
   same level over every library of the type that is a favourite or sits on a server the list would
   open. **On Home** is a toggle — the word `On`/`Off` at the
   trailing edge, OK flips, the list stays open.
@@ -393,14 +393,14 @@ not move with the words: `BrowseSection::pinned`, `HomePins`, `plex/pins.rs` and
 than upgrade. What still comes from the GRANT and not from the setting: access itself, the grid,
 sort, the A–Z rail, and Search, which stays grant-wide and only RANKS favourite-library hits first.
 The grant decides what you can reach; the favourite decides what the app offers, with one
-exception: Library options (the persistent ellipsis) offers hidden favorites and available
-non-favorites of the viewed type. The favorite shortcuts and their ellipsis stay in place. A hidden
-current library appears as a selected temporary pill after the ellipsis and is ticked in the
-picker. A library pill shows its owner's handle only when the full credit fits. A non-favorite
+exception: the Library header's library chip names the library on view, and its list offers every
+favorite of the viewed type and the available non-favorites. The library on view, favorite or not,
+is the one the chip names and the one ticked in the list; picking it again changes nothing. The chip
+shows a library's owner's handle only when the full credit fits. A non-favorite
 visit survives child-page returns, including Settings, without replacing
 the saved favorite. Leaving Library or switching media types clears that visit; the next entry
 returns to the last-used favorite. Sort & Filter changes only the listing.
-Library options also refreshes shared libraries and opens the favorites editor with a library
+The chip's list also refreshes shared libraries and opens the favorites editor with a library
 breadcrumb. Back and Done return directly to that opener.
 
 **Two divergences between the canvas and main, both because main moved while it was drawn**, neither

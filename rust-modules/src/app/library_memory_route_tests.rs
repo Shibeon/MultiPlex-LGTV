@@ -126,10 +126,8 @@ fn the_collections_page_repays_its_loan_on_back_and_asks_again_for_the_library_s
     w.frames(60);
     assert_eq!(listed(&w), (LibraryType::Primary, Some(movies)), "the grid on top again puts the query back on films");
 
-    // Switch to the second library with the keys: its name, then OK.
-    let name = w.library().probe_libraries().iter().find(|(_, section)| *section == FILM_CLUB).expect("premise: Film Club is named").0;
-    w.walk_header_to(name);
-    w.press(Key::Ok);
+    // Switch to the second library with the keys: the library chip's list, then its row.
+    w.pick_library(FILM_CLUB);
     w.frames(60);
     w.bridge.stores.browse.borrow_mut().seed_items_for_test(120);
     w.frames(60);

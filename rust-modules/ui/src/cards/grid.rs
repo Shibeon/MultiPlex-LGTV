@@ -84,12 +84,18 @@ pub struct GridSpec {
     /// Every visible cell carries its sort value line ([`card_row::SortValue`]) and the grid's
     /// rows are [`card_row::SORT_VALUE_ROW_GAP`] apart, opening [`card_row::SORT_VALUE_OPEN`] on focus.
     pub value_line: bool,
+    /// **Every card is named**, not only the focused row's ([`card_row::draw_label_every`]): the
+    /// source's label is drawn under every visible card, rows stand [`card_row::EVERY_CAPTION_ROW_GAP`]
+    /// apart whatever has focus, and no row opens a band on focus ([`card_row::EVERY_CAPTION_BAND_H`]).
+    /// A placement, not a caption setting: what the block SAYS is still the source's (its caption
+    /// policy). [`Self::value_line`] outranks it: a grid showing sort values draws those instead.
+    pub every_caption: bool,
 }
 
 impl GridSpec {
     /// A grid that scrolls home when focus leaves it.
     pub const fn new(top: f32, edge: f32) -> Self {
-        Self { top, edge, home_when_unfocused: true, cols: COLS, style: STYLE, left: MARGIN_X, scroll: ScrollMode::Own, landings: false, rests: false, value_line: false }
+        Self { top, edge, home_when_unfocused: true, cols: COLS, style: STYLE, left: MARGIN_X, scroll: ScrollMode::Own, landings: false, rests: false, value_line: false, every_caption: false }
     }
 
     /// **A grid whose rows rest where the first row does** (the Library's rule, `poster_grid::rest_scroll`):
@@ -139,7 +145,12 @@ impl GridSpec {
     }
 
     fn geom(&self) -> Geom {
-        Geom { value_line: self.value_line, ..Geom::of(self.cols, self.left, &self.style) }
+        Geom { value_line: self.value_line, every_caption: self.every_caption, ..Geom::of(self.cols, self.left, &self.style) }
+    }
+
+    /// Every card carries its caption block ([`Self::every_caption`], unless value lines show).
+    fn names_every(&self) -> bool {
+        self.every_caption && !self.value_line
     }
 }
 
@@ -299,10 +310,14 @@ impl Grid {
     /// Draw every tile's sort value line, and space the rows for it.
     pub fn set_value_line(&mut self, on: bool) { self.spec.value_line = on; }
 
+    /// Name every card, and space the rows for it ([`GridSpec::every_caption`]).
+    pub fn set_every_caption(&mut self, on: bool) { self.spec.every_caption = on; }
+
     /// The focused band's height: [`card_row::SORT_VALUE_BAND_H`] while value lines show, else the
     /// policy's (0 / 80 / 112) or the legacy band.
     pub fn band_h(&self) -> f32 {
         if self.spec.value_line { return card_row::SORT_VALUE_BAND_H; }
+        if self.spec.names_every() { return card_row::EVERY_CAPTION_BAND_H; }
         self.caption_policy.as_ref().map_or(card_row::LEGACY_BAND_H, crate::caption_policy::band_h)
     }
 
@@ -1048,11 +1063,13 @@ impl Grid {
         let rect = super::to_local(p, self.slot(i, src.len(), bands)).scaled(s);
         let visible = if self.spec.value_line {
             card_row::paint_visible_with_label_h(p, rect, s, card_row::SORT_VALUE_REACH)
+        } else if self.spec.names_every() {
+            card_row::paint_visible_with_label_h(p, rect, s, card_row::EVERY_CAPTION_REACH)
         } else { card_row::paint_visible(p, rect, s, open.is_some()) };
         if !visible { return None; }
         // A value line's words stay in the source cache until draw_caption borrows them. Legacy bands
         // retain their per-frame reveal, including the focused ghost's held caption.
-        let label = if self.spec.value_line { None } else {
+        let label = if self.spec.value_line || self.spec.names_every() { None } else {
             open.map(|open| {
                 let label = if focused && self.caption_held() { super::TileLabel::default() } else { src.label(i) };
                 label.revealed(self.band_h(), open, self.rise_below(cards, f.cx, src, i, bands))
@@ -1072,7 +1089,7 @@ impl Grid {
     fn with_caption<H: Host, S: CardSource<H> + ?Sized, R>(
         &self, src: &S, i: usize, paint: &CardPaint, read: impl FnOnce(&super::TileLabel) -> R,
     ) -> Option<R> {
-        if self.spec.value_line { Some(src.with_label(i, read)) }
+        if self.spec.value_line || self.spec.names_every() { Some(src.with_label(i, read)) }
         else { paint.label.as_ref().map(read) }
     }
 
@@ -1088,6 +1105,14 @@ impl Grid {
         #[cfg(not(feature = "devtriggers"))]
         let _ = focused;
         if self.spec.value_line { return; }
+        if self.spec.names_every() {
+            // Every card's block, whole (no band reveals it): the focused card's glides where it
+            // does not fit, every other card's is elided and still.
+            src.with_label(i, |label| {
+                card_row::draw_label_every(paint.p, paint.rect, s, &self.spec.style, label, f.measure, focused);
+            });
+            return;
+        }
         self.with_caption(src, i, paint, |label| {
             card_row::draw_label(paint.p, paint.rect, s, &self.spec.style, label, f.measure);
         });
@@ -1338,6 +1363,11 @@ impl Grid {
             // In value-line mode every ghost keeps its own value line while it fades.
             if self.spec.value_line {
                 self.draw_value(f, ghosts, j, &CardPaint { rect, p: pr, label: None }, s, false);
+                continue;
+            }
+            // …and with every card named, its own caption block, at rest.
+            if self.spec.names_every() {
+                self.draw_caption(f, ghosts, j, &CardPaint { rect, p: pr, label: None }, s, false);
                 continue;
             }
             // The focused card's caption stays as drawn until the landing steps: from then on it is

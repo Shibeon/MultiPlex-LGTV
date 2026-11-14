@@ -68,6 +68,9 @@ pub enum Icon {
     /// be two circles saying one thing. Its user is the detail hero's *mark unwatched* disc, beside
     /// a `Check` on the same ground: the pair `detail::hero_ctls` draws for a part-watched item.
     Minus,
+    /// A bare plus, the stroke of [`Icon::Minus`] crossed: the leading mark of an action chip that
+    /// ADDS to what a page shows (the Library's "+ More filters", `page_header::Chip::Filled`).
+    Plus,
     /// The player row's Previous/Next episode discs.
     Previous,
     Next,
@@ -339,6 +342,7 @@ fn src(id: Icon) -> &'static str {
         Icon::CheckCircleFill => include_str!("../../../assets/icons/check-circle-fill.svg"),
         Icon::MinusCircleFill => include_str!("../../../assets/icons/minus-circle-fill.svg"),
         Icon::Minus => include_str!("../../../assets/icons/minus.svg"),
+        Icon::Plus => include_str!("../../../assets/icons/plus.svg"),
         Icon::Play => include_str!("../../../assets/icons/play.svg"),
         Icon::Pause => include_str!("../../../assets/icons/pause.svg"),
         Icon::Rewind => include_str!("../../../assets/icons/rewind.svg"),

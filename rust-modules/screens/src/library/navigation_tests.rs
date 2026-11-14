@@ -329,16 +329,8 @@ fn an_external_sources_selection_reseats_the_library_row_once_not_on_metadata_re
         &mut engine,
         ScreenEvent::StoreChanged(StoreId::Browse.ord(), 1),
     );
-    let selected = page
-        .libraries
-        .iter()
-        .position(|(_, index)| *index == 2)
-        .unwrap();
-    assert!(
-        selected > 0,
-        "a first-slot fallback must not accidentally satisfy this test"
-    );
-    let wanted = page.key(page.libraries[selected].0);
+    assert_eq!(page.libraries, [(MORE, 2)], "the library chip names the library picked");
+    let wanted = page.key(MORE);
     fixture.step(
         &mut page,
         &mut engine,
@@ -352,7 +344,7 @@ fn an_external_sources_selection_reseats_the_library_row_once_not_on_metadata_re
         Some(wanted),
         "the row must seat the library selected in Sources"
     );
-    engine.set(OWNER, page.key(MORE), Some(LIBRARY_GROUP), By::Dir);
+    engine.set(OWNER, page.key(WATCH), Some(LIBRARY_GROUP), By::Dir);
     fixture.publish(2, 24);
     fixture.step(
         &mut page,
@@ -369,35 +361,35 @@ fn an_external_sources_selection_reseats_the_library_row_once_not_on_metadata_re
     );
     assert_eq!(
         engine.current(OWNER),
-        Some(page.key(MORE)),
+        Some(page.key(WATCH)),
         "same-selection refresh must not leash the cursor"
     );
 }
 
 #[test]
-fn choosing_a_non_favorite_seats_its_temporary_pill_without_changing_shortcuts() {
+fn choosing_a_non_favorite_names_it_on_the_library_chip_and_keeps_the_favorites_list() {
     let _guard = plx_base::testlock::serial();
     let mut fixture = Fixture::new(3, 12, 0);
     fixture.sections[2].row.pinned = false;
     fixture.publish(0, 12);
     let mut page = fixture.screen();
     page.initial = false;
-    let before = page.libraries.clone();
+    let favorites = page.folded.clone();
     let mut engine = FocusEngine::new();
     engine.set(OWNER, page.key(MORE), Some(LIBRARY_GROUP), By::Restore);
-    engine.remember_projected(ENTRY, LIBRARY_GROUP, before[0].0);
+    engine.remember_projected(ENTRY, LIBRARY_GROUP, MORE);
     fixture.step(&mut page, &mut engine, ScreenEvent::App(AppMsg::LibrarySelect(SectionAddress {
         epoch: fixture.epoch, sid: plx_plex::plex::ServerId::UNSET, section: 3,
     })));
-    let selected = page.libraries.iter().find(|(_, index)| *index == 2).unwrap().0;
-    assert_eq!(engine.current(OWNER), Some(page.key(selected)), "focus changes with the header, before the listing lands");
+    assert_eq!(page.libraries, [(MORE, 2)], "the chip names the pick before the listing lands");
+    let selected = MORE;
+    assert_eq!(engine.current(OWNER), Some(page.key(selected)), "focus stays on the chip");
     fixture.step(&mut page, &mut engine, ScreenEvent::Tick(Tick { ms: 80, dt_us: 80_000 }));
     fixture.publish(2, 12);
     fixture.step(&mut page, &mut engine, ScreenEvent::StoreChanged(StoreId::Browse.ord(), 1));
     fixture.step(&mut page, &mut engine, ScreenEvent::Tick(Tick { ms: 96, dt_us: 16_000 }));
-    assert_eq!(page.libraries[..2], before[..2]);
+    assert_eq!(page.folded, favorites, "the chip's list keeps the favorites");
     assert_eq!(engine.current(OWNER), Some(page.key(selected)));
-    assert_eq!(page.header.row().unwrap().selected_stop(), Some(selected));
     fixture.publish(2, 24);
     fixture.step(&mut page, &mut engine, ScreenEvent::StoreChanged(StoreId::Browse.ord(), 2));
     fixture.step(&mut page, &mut engine, ScreenEvent::Tick(Tick { ms: 112, dt_us: 16_000 }));
@@ -508,13 +500,13 @@ fn source_controls_and_document_groups_match_bare_full_and_failed_content() {
             for _ in 0..elems.len() {
                 fixture.direction(&mut page, &mut engine, Dir::Left);
             }
-            assert_eq!(engine.current(OWNER).unwrap().elem, elems[0], "Left stops at the first name");
+            assert_eq!(engine.current(OWNER).unwrap().elem, elems[0], "Left stops at the library chip");
             for want in elems.iter().skip(1) {
                 fixture.direction(&mut page, &mut engine, Dir::Right);
-                assert_eq!(engine.current(OWNER).unwrap().elem, *want, "Right walks names, +N, then the controls");
+                assert_eq!(engine.current(OWNER).unwrap().elem, *want, "Right walks the chips, then the controls");
             }
             fixture.direction(&mut page, &mut engine, Dir::Right);
-            assert_eq!(engine.current(OWNER).unwrap().elem, SORTFILTER, "Right stops at Sort & Filter");
+            assert_eq!(engine.current(OWNER).unwrap().elem, DIRECTION, "Right stops at the direction button");
         }
     }
 }

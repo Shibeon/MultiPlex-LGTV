@@ -1,6 +1,6 @@
 //! Meaningful legacy caption and landscape assertions, on the owned production helpers.
 use plx_data::pms::PmsMovie;
-use plx_ui::cards::{self as ui_cards, RowStyle};
+use plx_ui::cards::{self as ui_cards};
 use plx_ui::consts::{self, CARD_H, CARD_W, MARGIN_X};
 use plx_ui::fixture::FixtureMeasure;
 use plx_machine::machine::{EntryId, InstanceId};
@@ -52,16 +52,15 @@ fn focused_grid_labels_keep_the_shared_trailing_fact_including_under_a_menu() {
 #[test]
 fn a_focused_grid_caption_stays_inside_the_rail_reserved_band() {
     let p = Painter::root();
+    let style = Layout::new(false, 40).style();
     let card = |col: usize| {
         Rect::new(
-            MARGIN_X + col as f32 * (CARD_W + layout::GRID_GAP),
+            MARGIN_X + col as f32 * (style.w + layout::GRID_GAP),
             CONTENT_TOP + Layout::new(false, 40).grid_top(),
-            CARD_W,
-            CARD_H,
+            style.w,
+            style.h,
         )
     };
-
-    let style = Layout::new(false, 40).style();
     let (x, w) = ui_cards::label_band(p, card(COLS - 1), &style);
     assert!(
         x + w <= GRID_RIGHT + 0.01,
@@ -69,12 +68,9 @@ fn a_focused_grid_caption_stays_inside_the_rail_reserved_band() {
         x + w,
     );
 
+    // Every card is named from its left edge: the first column's label starts at its tile.
     let (x0, w0) = ui_cards::label_band(p, card(0), &style);
-    let (home_x0, _) = ui_cards::label_band(p, card(0), &RowStyle::HOME);
-    assert_eq!(
-        x0, home_x0,
-        "the right-edge rail reserve must not move the first-column label: {x0} vs {home_x0}",
-    );
+    assert!((x0 - card(0).x).abs() < 0.01, "the first column's label starts at its tile: {x0}");
     assert!(x0 >= 0.0 && x0 + w0 <= GRID_RIGHT + 0.01);
 }
 
@@ -180,10 +176,11 @@ fn a_focused_poster_tile_always_fills_the_caption_rung_it_reserves() {
         use plx_ui::consts::{CARD_DY, ROW_PITCH, TITLE_DY, UNDER_LABEL_AIR};
         let home_air = ROW_PITCH - TITLE_DY - CARD_DY - CARD_H - ui_cards::UNDER_LABEL_H;
         let focused = Layout::new(false, 2).with_grid_focus(Some(0));
+        // The Library names every card: its block reaches EVERY_CAPTION_REACH under the poster.
         let library_air = focused.row_y(1, 0.0) - focused.row_y(0, 0.0)
-            - CARD_H - ui_cards::UNDER_LABEL_H;
+            - focused.card_h() - ui_cards::EVERY_CAPTION_REACH;
         assert_eq!(home_air, UNDER_LABEL_AIR);
-        assert_eq!(library_air, UNDER_LABEL_AIR);
+        assert!((library_air - UNDER_LABEL_AIR).abs() < 0.01, "{library_air}");
         assert_eq!(
             home_air, library_air,
             "Home and Library must agree on the air under a focused label"

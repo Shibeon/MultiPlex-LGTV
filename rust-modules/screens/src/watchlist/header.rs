@@ -3,12 +3,12 @@
 //! left as plain text (`HeaderItem::title`: no plate, which means "current among siblings", and no
 //! pill, which means "focusable"; design review S10); on the right a filter
 //! read-out ("12 of 40", only while a Type or Show filter narrows the list, at the read-out ink and
-//! one [`GAP`](plx_ui::page_header::GAP) before the control) and the one control, the Library's own
-//! sort control (`HeaderItem::sort_control`): the sort icon, the chosen sort and a quiet down
+//! one [`GAP`](plx_ui::page_header::GAP) before the control) and the one control, the shared
+//! sort control (`HeaderItem::sort_control`, the Collections page's too; the Library page wears a sort chip and a direction button instead): the sort icon, the chosen sort and a quiet down
 //! chevron, with "Sort & Filter" as its name, carried by the item and never drawn. The criterion is
 //! the SORT alone (a Type or Show filter is the read-out's "N of M", never part of the control), has
 //! no slot (the control ends at the row's right text edge and keeps its chevron) and a changed one
-//! swaps on the row's `HeaderSwap`, as the Library's does.
+//! swaps on the row's `HeaderSwap`, as the Library's sort chip does.
 //!
 //! This file DECLARES the row ([`Row::new`]); its layout, paint, motion (the focus capsule that
 //! travels, the pop, the criterion's swap) and focus group are the ui's, the same ones the Library,

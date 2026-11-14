@@ -101,8 +101,10 @@ fn seasons_and_episodes_views_space_their_rows_for_a_value_only_when_the_sort_ha
     for (listed, sort, shows) in table {
         let page = tv_screen(&tv_values(listed, 36, sort));
         assert_eq!(page.layout.value_line(), shows, "{listed:?} {sort}");
-        assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), if shows { 60.0 } else { 40.0 }, "{listed:?} {sort}");
-        assert_eq!(page.layout.cols(), if listed == LibraryType::Episodes { 4 } else { 6 }, "{listed:?}: the columns are the view's own");
+        let gap = if shows { 60.0 } else if listed == LibraryType::Episodes { 40.0 } else { plx_ui::cards::EVERY_CAPTION_ROW_GAP };
+        assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), gap, "{listed:?} {sort}");
+        let cols = if listed == LibraryType::Episodes { 4 } else if shows { layout::VALUE_COLS } else { layout::COLS };
+        assert_eq!(page.layout.cols(), cols, "{listed:?}: the columns are the view's own");
         assert_eq!(page.layout.is_episodes(), listed == LibraryType::Episodes);
     }
     // The setting Off: every view keeps the old geometry, a sort with a value included.
@@ -110,13 +112,14 @@ fn seasons_and_episodes_views_space_their_rows_for_a_value_only_when_the_sort_ha
     for listed in [LibraryType::Episodes, LibraryType::Seasons] {
         let page = tv_screen(&tv_values(listed, 36, "addedAt"));
         assert!(!page.layout.value_line(), "{listed:?}");
-        assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), 40.0, "{listed:?}");
+        let gap = if listed == LibraryType::Episodes { 40.0 } else { plx_ui::cards::EVERY_CAPTION_ROW_GAP };
+        assert_eq!(page.layout.grid_pitch() - page.layout.card_h(), gap, "{listed:?}");
     }
 }
 
 /// The focused row opens 26 px past its 60 px rest while values show, whatever the Title switch says (a
 /// value replaces the title and the details line); with the switch Off the Episodes view opens its legacy
-/// 114 px band (74 past the rest) and the Seasons view the Under posters policy's band.
+/// 114 px band (74 past the rest) and the Seasons view names every season, opening nothing.
 #[test]
 fn the_focused_row_opens_for_the_value_and_the_setting_off_restores_the_old_band() {
     let _guard = plx_base::testlock::serial();
@@ -134,7 +137,7 @@ fn the_focused_row_opens_for_the_value_and_the_setting_off_restores_the_old_band
         assert!((opened(listed, title_on) - 26.0).abs() < 0.01, "{listed:?}: the Title switch does not widen a value's band");
     }
     assert!((opened(LibraryType::Episodes, off()) - 74.0).abs() < 0.01, "Off: the Episodes view's legacy 114 px band");
-    assert!((opened(LibraryType::Seasons, off()) - 40.0).abs() < 0.01, "Off: the Seasons view's one-line policy band (80 px)");
+    assert!(opened(LibraryType::Seasons, off()).abs() < 0.01, "Off: the Seasons view names every season and opens no band");
 }
 
 /// What a card says: with a value the focused episode's caption IS the value (bold, once, under the
@@ -189,7 +192,7 @@ fn every_episode_and_season_value_fits_its_card_in_every_shipped_language() {
     use plx_platform::i18n::{language_on_this_thread_for_test, SHIPPED};
     let _guard = plx_base::testlock::serial();
     let episode_w = layout::Layout::new(true, 10).with_episodes(true).card_w();
-    let season_w = layout::Layout::new(true, 10).card_w();
+    let season_w = layout::Layout::new(true, 10).with_value_line(true).card_w();
     assert!(episode_w > season_w, "an episode's card is wider than a poster ({episode_w} vs {season_w}): no new truncation risk");
     let keys = ["originallyAvailableAt", "rating", "audienceRating", "userRating", "contentRating", "duration", "viewOffset",
         "viewCount", "addedAt", "lastViewedAt", "mediaHeight", "mediaBitrate", "year", "unviewedLeafCount"];

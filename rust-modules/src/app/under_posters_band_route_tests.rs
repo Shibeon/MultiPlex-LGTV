@@ -107,22 +107,55 @@ pub(super) fn focus_first_poster(w: &mut World, surface: &str) {
     panic!("{surface}: premise: Down brought focus onto a poster");
 }
 
-/// **The band the Library grid opens under its focused row is the policy's** (112 / 80 / 0 px).
-#[test]
-fn the_library_grid_opens_the_band_its_setting_asks_for() {
-    let mut w = World::movies_library("band-grid", false);
+/// **A Library page's grid names EVERY card and opens no band** (the web library's grid): its rows
+/// stand `EVERY_CAPTION_ROW_GAP` apart under every setting, focus opens nothing, and the caption
+/// under the focused card AND under an unfocused neighbour ends above the next row's tiles.
+fn grade_every_caption(w: &mut World, surface: &str) {
     let _cell = Cell::default();
+    focus_first_poster(w, surface);
+    let below = |w: &World| {
+        let first = w.poster_cell(0);
+        (1..64).map(|i| w.poster_cell(i)).find(|cell| cell.y > first.y + first.h)
+            .unwrap_or_else(|| panic!("{surface}: premise: the grid holds a second row"))
+    };
+    for title in [false, true] {
+        for details in PICKERS {
+            set(w, title, details);
+            let (card, next) = (w.poster_cell(0), below(w));
+            let gap = next.y - (card.y + card.h);
+            assert!((gap - plx_ui::cards::EVERY_CAPTION_ROW_GAP).abs() < 0.5,
+                "{surface}: the rows stand {gap} px apart for title {title}, {details:?}; every-caption rows stand {}",
+                plx_ui::cards::EVERY_CAPTION_ROW_GAP);
+            let drawn = w.drawn();
+            for cell in [card, w.poster_cell(1)] {
+                let under: Vec<_> = drawn.runs.iter()
+                    .filter(|run| run.at.y >= cell.y + cell.h && run.at.y < next.y && run.at.x < cell.x + cell.w && run.at.x + run.at.w > cell.x)
+                    .collect();
+                assert!(!under.is_empty(), "{surface}: the card at x {} is named ({title}, {details:?})", cell.x);
+                for line in under {
+                    assert!(line.at.y + line.at.h.max(line.size as f32) <= next.y,
+                        "{surface}: {:?} ends under the next row (title {title}, {details:?})", line.text);
+                }
+            }
+        }
+    }
+}
+
+/// **The Library grid names every card whatever the setting**, with no band opening on focus.
+#[test]
+fn the_library_grid_names_every_card_and_opens_no_band() {
+    let mut w = World::movies_library("band-grid", false);
     w.bridge.stores.browse.borrow_mut().seed_items_for_test(120);
     w.frames(30);
     assert_eq!(w.grid_cell(), Some((0, 0)), "premise: the library opens on its first poster");
-    grade_grid_bands(&mut w, "Library");
+    grade_every_caption(&mut w, "Library");
 }
 
 /// The Collections page's tiles are posters in the same grid.
 #[test]
-fn the_collections_page_opens_the_band_its_setting_asks_for() {
+fn the_collections_page_names_every_card_and_opens_no_band() {
     let mut w = World::collections("band-collections", false);
-    grade_grid_bands(&mut w, "Collections");
+    grade_every_caption(&mut w, "Collections");
 }
 
 /// The Watchlist's titles are posters in the same grid.

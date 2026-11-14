@@ -103,10 +103,10 @@ fn both_sort_and_filter_panels_name_facts_and_directions_the_same_way() {
         entry("originallyAvailableAt", "Release Date", true), entry("rating", "Critic Rating", true),
         entry("lastViewedAt", "Date Viewed", true)], Vec::new());
     w.frames(30);
-    // The page arrives in its first poster (design review F2): the Sort & Filter control is one Up
+    // The page arrives in its first poster (design review F2): the "+ More filters" chip is one Up
     // and a walk along the header away, and OK on it opens the panel.
-    let sort = w.library().probe_header_stops().into_iter().find(|(name, _)| *name == "sort").map(|(_, elem)| elem)
-        .expect("premise: the Library's header has a Sort & Filter stop");
+    let sort = w.library().probe_header_stops().into_iter().find(|(name, _)| *name == "filters").map(|(_, elem)| elem)
+        .expect("premise: the Library's header has its + More filters stop (the whole Sort & Filter menu)");
     w.walk_header_to(sort);
     w.press(Key::Ok);
     let lib = library_panel(&w);

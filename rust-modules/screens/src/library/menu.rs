@@ -416,6 +416,32 @@ fn sort_filter_draft(
 }
 
 
+/// The filter row's watch-state chip ("All ⌄"): All and Unwatched as a pick list, the one in force
+/// ticked. A pick commits and closes, as a genre does; the toggle in Sort & Filter stays the other
+/// way to the same edit.
+fn watch_draft(unwatched: bool) -> MenuDraft {
+    let section = choice(
+        MenuSection::new(plx_platform::i18n::msg::browse_library_filter()),
+        "watch:all".into(),
+        Action::Edit(QueryEdit::Unwatched(false)),
+        Row::new(plx_platform::i18n::msg::browse_library_all()).checked(!unwatched),
+    );
+    let section = choice(
+        section,
+        "watch:unwatched".into(),
+        Action::Edit(QueryEdit::Unwatched(true)),
+        Row::new(plx_platform::i18n::msg::browse_library_unwatched()).checked(unwatched),
+    );
+    let mut stamp = Stamp::default();
+    stamp.tag(15);
+    stamp.bool(unwatched);
+    MenuDraft {
+        stamp: stamp.finish(),
+        form: MenuForm::new().section(section),
+        selected: Some(if unwatched { "watch:unwatched" } else { "watch:all" }.to_string()),
+    }
+}
+
 fn genre_draft(genres: &[GenreEntry], current: Option<&GenreEntry>) -> MenuDraft {
     let mut section = choice(
         MenuSection::new(plx_platform::i18n::msg::browse_library_genre()),
@@ -500,7 +526,7 @@ impl LibraryMenu {
     /// Hugs its rows: width is the shared menu rule ([`TableView::menu_panel_width_from`]: the
     /// rows, never narrower than the control's focused pill), hung off the opener's near edge
     /// ([`plx_ui::popover::hang_x`]) and held inside the safe frame. ONE placement for every kind: the
-    /// "+N" list opens under its "+N" pill exactly as Sort & Filter does; it differs only in its
+    /// library chip's list opens under its chip exactly as Sort & Filter does; it differs only in its
     /// ceiling, because its rows are library NAMES a user chose: as wide as the widest, up to the
     /// safe width, never cut with room to spare.
     fn frame(&self, measure: &dyn plx_machine::machine::Measure) -> Rect {
@@ -590,6 +616,7 @@ impl LibraryMenu {
             LibraryMenuKind::Genre => plx_platform::i18n::msg::browse_library_genre(),
             LibraryMenuKind::Sources => plx_platform::i18n::msg::browse_library_libraries(),
             LibraryMenuKind::SortFilter => plx_platform::i18n::msg::library_header_sort_filter(),
+            LibraryMenuKind::Watch => plx_platform::i18n::msg::browse_library_filter(),
         };
         let mut section = MenuSection::new(title);
         match self.kind {
@@ -607,6 +634,9 @@ impl LibraryMenu {
             }
             LibraryMenuKind::Genre => {
                 return genre_draft(listing.genres(), listing.genre());
+            }
+            LibraryMenuKind::Watch => {
+                return watch_draft(self.desired_unwatched.unwrap_or(listing.unwatched()));
             }
             LibraryMenuKind::Sources => {
                 if let Some(current) = directory.current() {
@@ -667,7 +697,9 @@ impl LibraryMenu {
                     self.desired_unwatched = Some(*desired);
                     self.refresh(cx);
                 }
-                let close = !matches!(edit, QueryEdit::Unwatched(_));
+                // The Sort & Filter toggle stays open for the next edit; a pick from the watch
+                // chip's own list is the whole errand, and closes like a genre's.
+                let close = !matches!(edit, QueryEdit::Unwatched(_)) || self.kind == LibraryMenuKind::Watch;
                 fx.push(Fx::Deliver(
                     MachineId::Instance(self.arg.host),
                     Delivery::Screen(ScreenEvent::App(AppMsg::LibraryEdit {
@@ -854,7 +886,8 @@ impl<H: LibraryLike> Screen<H> for LibraryMenu {
         self.motion.transitioning()
     }
 
-    /// The header control the panel grew out of, for every kind of menu ("+N" included): the page
+    /// The header control the panel grew out of, for every kind of menu (the library chip's list
+    /// included): the page
     /// leaves it out of its pass (`DrawFrame::lifted`) and the opener lift draws it focused above
     /// the scrim (`LibraryScreen::draw_header_opener`), so the control the panel is about stays
     /// lit while it is open (design review S12).
@@ -1180,6 +1213,21 @@ impl LibraryLike for HostFixture {
         // The same checked row names a different menu in the other kind of library.
         assert_ne!(type_draft(SecKind::Movie, LibraryType::Collections).stamp,
             lay(type_draft(SecKind::Show, LibraryType::Collections)).stamp);
+    }
+
+    /// The watch chip's list: All and Unwatched as a pick list, the one in force ticked and selected,
+    /// each row the edit that puts it in force.
+    #[test]
+    fn the_watch_list_picks_all_or_unwatched_and_ticks_the_one_in_force() {
+        for unwatched in [false, true] {
+            let draft = lay(watch_draft(unwatched));
+            assert_eq!(draft.sections[0].rows.iter().map(|row| row.label.as_str()).collect::<Vec<_>>(), ["All", "Unwatched"]);
+            assert_eq!((draft.sections[0].rows[0].checked, draft.sections[0].rows[1].checked), (!unwatched, unwatched));
+            assert_eq!(draft.selected, i32::from(unwatched));
+            assert!(matches!(draft.rows[0].1, Action::Edit(QueryEdit::Unwatched(false))));
+            assert!(matches!(draft.rows[1].1, Action::Edit(QueryEdit::Unwatched(true))));
+        }
+        assert_ne!(lay(watch_draft(false)).stamp, lay(watch_draft(true)).stamp);
     }
 
     #[test]
@@ -1553,7 +1601,7 @@ impl LibraryLike for HostFixture {
 
     /// **A header menu GROWS out of the control it opened from** (design review S11), as the
     /// Watchlist's Sort & Filter does: one opener rule, one morph path (`Popover::morphing` +
-    /// `open_from`), whichever kind opens ("+N" included). Red while the panel was laid at its
+    /// `open_from`), whichever kind opens (the library chip's list included). Red while the panel was laid at its
     /// final rect on its first frame and only faded in: three frames in, the glass is still the
     /// control's size or a little over, and the settled panel is exactly `frame()`.
     #[test]

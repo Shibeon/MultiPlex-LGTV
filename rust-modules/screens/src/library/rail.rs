@@ -574,8 +574,8 @@ impl LibraryLike for RailHost {
         }
         assert_eq!(rail_pitch(27), 32.0, "# and A to Z keep the full 32 pitch");
         let (top27, ..) = rail_geom(27);
-        assert!(top27 < 244.0, "27 letters start above the grid top ({top27}) rather than shrink");
-        assert_eq!(rail_geom(9).0, 244.0, "a short alphabet starts at the grid top");
+        assert!(top27 < 332.0, "27 letters start above the grid top ({top27}) rather than shrink");
+        assert_eq!(rail_geom(9).0, 332.0, "a short alphabet starts at the grid top");
         assert!(rail_geom(60).3 > 0.0, "a script too long even at the least pitch still scrolls");
     }
 
@@ -776,13 +776,13 @@ impl LibraryLike for RailHost {
         let rig = BandRig::rating(true);
         let rail = rig.rail();
         assert_eq!((BAND_RAIL_CX, BAND_PITCH), (1834.0, 40.0));
-        assert_eq!(rail.rect.y, 244.0, "the first band starts at the grid's top");
+        assert_eq!(rail.rect.y, 332.0, "the first band starts at the grid's top");
         assert!((rail.rect.x + rail.rect.w * 0.5 - 1834.0).abs() < 0.01, "centred on 1834: {:?}", rail.rect);
         // the fixture measures a byte as half the size: `<75%` is 4 x 11 = 44 wide
         assert_eq!(rail.rect.w, 44.0 + 2.0 * BAND_PILL_PAD, "wider than the letters' 44 once a pill must fit");
         assert_eq!(rail.rect.h, 6.0 * 40.0);
         for i in 0..6 {
-            assert_eq!(rail.slot(i, At::Drawn).y, 244.0 + i as f32 * 40.0);
+            assert_eq!(rail.slot(i, At::Drawn).y, 332.0 + i as f32 * 40.0);
             assert_eq!(rail.slot(i, At::Drawn).h, 40.0);
         }
         assert!(rail.rect.x + rail.rect.w <= 1920.0);

@@ -35,7 +35,7 @@ fn keyboard_rail_ok_down_up_returns_without_arming_or_requesting_a_card() {
     frame(&mut d, &mut rig, AppArg::Library, tick(0), vec![]);
     Bridge::library_command(
         &mut d,
-        plx_screens::registry::LibraryCmd::FocusGrid { row: 2, col: 5 },
+        plx_screens::registry::LibraryCmd::FocusGrid { row: 2, col: 6 },
     );
     for i in 1..80 {
         frame(&mut d, &mut rig, AppArg::Library, tick(i), vec![]);
@@ -256,7 +256,7 @@ fn library_sweep_visits_the_whole_document_and_reverses_at_its_ends() {
         if region == "grid" {
             grid_rows.insert(row);
         }
-        if region == "library" && grid_rows.contains(&19) {
+        if region == "library" && grid_rows.contains(&17) {
             returned = true;
             break;
         }
@@ -269,7 +269,7 @@ fn library_sweep_visits_the_whole_document_and_reverses_at_its_ends() {
         "{path:?}"
     );
     assert!(shelves.is_empty(), "the production page mounts without shelves");
-    assert_eq!(grid_rows, (0..20).collect());
+    assert_eq!(grid_rows, (0..18).collect(), "120 items, seven to a row: 18 rows");
     assert!(
         returned,
         "the real engine sweep reverses and returns to the document head"

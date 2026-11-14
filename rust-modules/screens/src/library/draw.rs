@@ -203,7 +203,7 @@ impl LibraryScreen {
 
     pub fn redraw_focused<H: LibraryLike>(&self, f: &mut DrawFrame<'_, '_, H>, focus: Option<FocusKey<u32>>) {
         let Some(key) = focus.filter(|key| key.entry == self.entry) else { return };
-        // A header control a menu opened from (Sort & Filter, `+N`) is lit by the row itself, with
+        // A header control a menu opened from (a chip, the sort chip, the library chip) is lit by the row itself, with
         // no card to place: the row knows its own stops.
         self.draw_header_opener(f, key.elem);
         let Some(placed) = <Self as Focusable<H>>::place(self, &key.elem, f.cx, At::Drawn) else { return };

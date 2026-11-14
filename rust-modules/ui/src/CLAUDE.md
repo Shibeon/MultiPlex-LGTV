@@ -171,7 +171,8 @@ so still asks only from focus; Detail's Related and Search's rows are not gated.
 
 `GridSpec::new(top, edge)` is the six-column `cards::GRID_STYLE` grid from `MARGIN_X`;
 `.columns(cols, style, left)` sets the column count, card style and left edge (a rail-aware or
-episode grid), and `.external()` selects `ScrollMode::External`, for a grid inside a document whose page scroll
+episode grid; the Library's poster grid is seven columns, six while it shows sort values, four for
+episodes), `GridSpec::every_caption` (`Grid::set_every_caption`) names EVERY card (below), and `.external()` selects `ScrollMode::External`, for a grid inside a document whose page scroll
 another owner drives: the Library's grid runs under the Library's scroll and every grid section
 of a `cards::Stack` under the stack's. Both shipped grids are external; `ScrollMode::Own` is the
 default a spec is built with and no screen runs it, so a scroll fault on a stack page is in
@@ -448,7 +449,7 @@ presentation in a design pass.
    rect. The glass is laid whole at the morphing rect and the rows come in over it (from 30%,
    opaque by 60%, clipped to the current rect), all on one clock (the slower rect spring).
    **The header menus morph the glass ONLY (design review S11/S12):** Library Sort & Filter, the
-   Library's `+N` list and the Watchlist's Sort & Filter all open this way, and their opener is
+   Library's library chip list (once its `+N` list) and the Watchlist's Sort & Filter all open this way, and their opener is
    never part of the morph. A morphing surface names its opener (`Screen::opener`), the page
    leaves it out of its pass (`DrawFrame::lifted`: a pill left on the page sits under the menu's
    glass, and the rim's lens refracts its label into the panel's edge), and the dispatcher's lift
@@ -749,9 +750,13 @@ screen's members; `Shelf::set_caption_policy(Some(policy))` sizes the band a she
 `caption_policy::band_h`, and a `Stack` page hands it to a shelf or grid section through `StackPage::caption_policy`; a shelf or grid with
 no policy (`None`: a landscape still row or a headshot row, and the Library's Episodes listing, a grid of stills) keeps the legacy 114 px
 band and its two-line block, under every setting; the band must follow the label, never the setting):
-only the focused row opens its caption (the one exception: the Library's Movies, TV Shows, Seasons and Episodes grids while they show their
+only the focused row opens its caption (two exceptions: the Library's Movies, TV Shows, Seasons and Episodes grids while they show their
 sort value, Sort value On, draw one value line under EVERY card, a poster or an episode still, `card_row::draw_sort_value`, in place of the caption, whatever the grid's policy, the
-Episodes view's `None` included); a bounded set of springs closes rows left behind, and
+Episodes view's `None` included; and otherwise a Library page's poster grid, its Collections page's too, is an every-caption grid
+(`GridSpec::every_caption`, the MultiPlex library page; `Grid::set_every_caption`): a bold title and a muted details line under EVERY card, `card_row::draw_label_every`
+at `card_row::EVERY_CAPTION_DROP` under the unscaled poster, with the Title line forced on (`library::parts::every_policy`), rows
+`card_row::EVERY_CAPTION_ROW_GAP` apart whether focused or not and no band opening on focus, `card_row::EVERY_CAPTION_BAND_H`; the focused
+card's lines still glide through the one marquee); a bounded set of springs closes rows left behind, and
 each LINE of a row's caption is drawn only once the room under its card holds the line's box, and
 never beyond its band's own expansion (`card_row::line_reveal_for`, one rule for a shelf and a grid), so
 a move hands the title over from the departing row to the arriving one with no line over what is under

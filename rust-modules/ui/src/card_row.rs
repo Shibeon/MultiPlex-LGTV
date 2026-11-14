@@ -1429,7 +1429,35 @@ pub fn draw_label(
     if lines.iter().flatten().all(|l| l.alpha <= 0.0) {
         return;
     }
-    draw_label_block(p, rect, sty, label, lines, bottom, measure);
+    draw_label_block(p, rect, sty, label, lines, bottom, measure, false);
+}
+
+/// **A caption under EVERY card** ([`EVERY_CAPTION_DROP`]): the same block [`draw_label`] draws,
+/// held to its own tile ([`TileLabel::within_tile`]'s window whatever the label says, so twenty
+/// neighbours' words never reach into one another's room). The FOCUSED card's lines that do not fit
+/// glide on the shared marquee, as every focused caption does; every other card's end in an
+/// ellipsis and stay still, the rule a cast shelf's names follow ([`draw_credit_label`]): they are on
+/// every card at once, and twenty gliding titles would be noise, not information.
+pub fn draw_label_every(
+    p: Painter,
+    rect: Rect,
+    s: f32,
+    sty: &RowStyle,
+    label: &TileLabel,
+    measure: &dyn plx_machine::machine::Measure,
+    focused: bool,
+) {
+    let bottom = label_bottom(rect, s, sty);
+    let lines = label.lines();
+    if lines.iter().flatten().all(|l| l.alpha <= 0.0) {
+        return;
+    }
+    if label.within_tile {
+        draw_label_block(p, rect, sty, label, lines, bottom, measure, !focused);
+    } else {
+        let held = TileLabel { within_tile: true, ..label.clone() };
+        draw_label_block(p, rect, sty, &held, lines, bottom, measure, !focused);
+    }
 }
 
 /// The sort value line's box: CAPTION 24 on a 24 px line.
@@ -1449,6 +1477,22 @@ pub const SORT_VALUE_BAND_H: f32 = COLLAPSED_GAP + SORT_VALUE_OPEN;
 /// Room under an UNSCALED poster bottom a value line can reach (the lifted card's shift, the focused
 /// gap and the box), what the grid culls and reveals with.
 pub const SORT_VALUE_REACH: f32 = 56.0;
+
+/// **Every card's caption** (a grid that names every poster, the MultiPlex library page: a bold title
+/// and a muted details line under EVERY card, `cards::GridSpec::every_caption`). The block hangs
+/// this far under the UNSCALED poster bottom ([`RowStyle::with_label_drop`]), clear of the focused
+/// card's 1.09 pop (about 15 px on a 324 px poster), so the pop never meets its own words.
+pub const EVERY_CAPTION_DROP: f32 = crate::theme::space::MD;
+/// How far under an unscaled poster bottom an every-card block reaches: its drop and its two lines
+/// ([`TileLabel::block_h`]'s stack). What the grid culls with.
+pub const EVERY_CAPTION_REACH: f32 = EVERY_CAPTION_DROP + UNDER_LINE_H + UNDER_LINE_GAP + UNDER_CAPTION_H;
+/// The gap a row keeps under its posters while every card is named: the block and the air before
+/// the next row ([`crate::consts::UNDER_LABEL_AIR`]). Every row keeps it, focused or not.
+pub const EVERY_CAPTION_ROW_GAP: f32 = EVERY_CAPTION_REACH + crate::consts::UNDER_LABEL_AIR;
+/// The band an every-card grid reports ([`crate::caption_policy::band_h`]'s unit): the collapsed
+/// gap, so no row OPENS on focus. The words are already under every card, and a row that opened
+/// would move every caption below it for nothing.
+pub const EVERY_CAPTION_BAND_H: f32 = COLLAPSED_GAP;
 /// The rating mark beside a value: a 20 px box, the board's size, hung [`SORT_VALUE_MARK_GAP`] to the
 /// left of the number. A tomato is drawn past its box by `icons::mark_zoom` so its body is the board's
 /// 15 px disc (its viewBox leaves room for the stem), centred in the same box.
@@ -2081,6 +2125,7 @@ pub fn label_band(p: Painter, rect: Rect, sty: &RowStyle) -> (f32, f32) {
 /// caption — placed ONCE by [`place_label_wide`] from the wider of its two runs (plus the uncapped
 /// `want`), so both lines share one alignment: centred together, starting together at the card's
 /// leading edge, or ending together at its trailing edge when the room to the right is too small.
+#[allow(clippy::too_many_arguments)]
 fn draw_label_block(
     p: Painter,
     rect: Rect,
@@ -2089,6 +2134,7 @@ fn draw_label_block(
     lines: [Option<LineBox>; 2],
     bottom: f32,
     measure: &dyn plx_machine::machine::Measure,
+    still: bool,
 ) {
     // Every run of the block is a label block's to a recording census, whatever its ink.
     #[cfg(any(test, feature = "test-support"))]
@@ -2117,6 +2163,29 @@ fn draw_label_block(
     {
         let placed = p.to_screen(Rect::new(at.x, 0.0, at.w, 1.0)).0;
         crate::card_probe::caption(placed.x, placed.w);
+    }
+    if still {
+        // A card at rest under an every-card grid ([`draw_label_every`]): each line that does not fit
+        // its window ends in an ellipsis and stays still. It takes no part in the shared marquee
+        // clock, which belongs to the focused card's block.
+        let room = at.w.max(0.0);
+        let [title_line, caption_line] = lines.map(|line| line.filter(|l| l.alpha > 0.0));
+        if let (Some(t), Some(line)) = (&label.title, title_line) {
+            let fit = measure.fit_line(&t.to_string_lossy(), room, title_size, title_bold);
+            let w = measure.width(&fit, title_size, title_bold);
+            title_marquee(p.alpha(line.alpha), at, fit.as_ptr(), bottom + line.top + label.title_face.map_or(0.0, |f| f.offset_y), w,
+                None, label.shadowed, false, label.title_face, UNDER_LINE_H);
+        }
+        if let (Some(tc), Some(line)) = (&label.caption, caption_line) {
+            let fit = measure.fit_line(&tc.to_string_lossy(), room, csz, false);
+            let w = measure.width(&fit, csz, false);
+            let (p, y, tx) = (p.alpha(line.alpha), bottom + line.top, at.run_x(w).max(at.x));
+            if label.shadowed {
+                p.text(fit.as_ptr(), tx, y + crate::caption_policy::CAPTION_SHADOW_DY, csz, crate::caption_policy::CAPTION_SHADOW, 0, 0);
+            }
+            p.text(fit.as_ptr(), tx, y, csz, theme::CAPTION_DETAIL_INK, 0, 0);
+        }
+        return;
     }
 
     // Which lines of the block do not fit it? They glide together on ONE clock and ONE cycle (the

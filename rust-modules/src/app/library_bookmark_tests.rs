@@ -209,7 +209,7 @@ fn retired_library_entry_seeds_its_previous_section_card_and_viewport() {
         );
     }
     assert!(saves.0.iter().any(|(target, cursor)| target.sid == item.sid
-        && matches!(&cursor.at, plx_data::stores::browse::CursorAt::ItemKey { sid, rk, slot: 52 } if *sid == item.sid && rk == &item.rk)),
+        && matches!(&cursor.at, plx_data::stores::browse::CursorAt::ItemKey { sid, rk, slot: 60 } if *sid == item.sid && rk == &item.rk)),
         "section switching must emit the outgoing A snapshot through the StoreCmd drain");
     assert_eq!(
         rig.directory.view().current(),
@@ -246,7 +246,7 @@ fn retired_library_entry_seeds_its_previous_section_card_and_viewport() {
         d.prune(&report.unmounted);
     }
     assert!(saves.0.iter().any(|(target, cursor)| target.sid == b_item.sid
-        && matches!(&cursor.at, plx_data::stores::browse::CursorAt::ItemKey { sid, rk, slot: 19 } if *sid == b_item.sid && rk == &b_item.rk)),
+        && matches!(&cursor.at, plx_data::stores::browse::CursorAt::ItemKey { sid, rk, slot: 22 } if *sid == b_item.sid && rk == &b_item.rk)),
         "outgoing WillLeave must emit B's snapshot before its engine memory is retired");
     assert!(
         d.nav.entry(old_entry).is_none(),
@@ -280,6 +280,6 @@ fn retired_library_entry_seeds_its_previous_section_card_and_viewport() {
         .library_selection(&d, entry, d.focus())
         .expect("the switched-to grid takes focus on Down");
     assert_eq!(returned.sid, item.sid, "the grid is the library that was switched to");
-    assert_eq!(returned.rk, item.rk, "Down lands on the tile the library was left at (slot 52, not the first row)");
+    assert_eq!(returned.rk, item.rk, "Down lands on the tile the library was left at (slot 60, row 8 column 4 of seven, not the first row)");
     let _ = before;
 }

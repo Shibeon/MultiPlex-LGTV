@@ -1,27 +1,35 @@
 //! Pure geometry for the owned Library's single vertical document.
 
-use plx_ui::consts::{CARD_W, MARGIN_X, MARGIN_Y, SCR_H, SCR_W};
+use plx_ui::consts::{MARGIN_X, MARGIN_Y, SCR_H, SCR_W};
 use plx_ui::cards::RowStyle;
 use plx_ui::theme;
 
-pub(super) const COLS: usize = 6;
+/// The poster grid's columns: seven across, the MultiPlex library page's wall.
+pub(super) const COLS: usize = 7;
+/// The poster grid's columns while it shows sort values: a value ("999 reproducciones", 239 px)
+/// is a wider fact than a year, and a value is never cut, so these posters keep six across.
+pub(super) const VALUE_COLS: usize = 6;
 const EPISODE_COLS: usize = 4;
-pub(super) const MAX_LIBRARY_PILLS: usize = 8;
 pub(super) use plx_ui::cards::{GridBand, MAX_GRID_BANDS};
-/// Where the page's header row stands (`PageHeader`'s top): the document starts here.
+/// Where the page's head stands: the title block's top (`page_header::draw_title`, at the shared
+/// row's [`plx_ui::page_header::TOP`]). The document starts here.
 pub(super) const HEADER_Y: f32 = plx_ui::page_header::TOP;
 pub(super) const CONTENT_TOP: f32 = HEADER_Y;
-/// The header block: the header row (56) and the air under it, so the grid's first tile top lands
-/// on [`LIBRARY_GRID_TOP`] (244), 96 under the row's top.
-pub(super) const HEADER_BLOCK_H: f32 = plx_ui::page_header::BLOCK_H;
+/// Where the row of controls stands (`PageHeader::layout_at`): one title block and its air under
+/// [`HEADER_Y`].
+pub(super) const ROW_Y: f32 = HEADER_Y + plx_ui::page_header::TITLE_H + plx_ui::page_header::TITLE_ROW_GAP;
+/// The header block: the title, the row of controls (56) and the air under it, so the grid's first
+/// tile top lands on [`LIBRARY_GRID_TOP`], the shared row block's 96 under the row's top.
+pub(super) const HEADER_BLOCK_H: f32 = ROW_Y - HEADER_Y + plx_ui::page_header::BLOCK_H;
 pub(super) const LIBRARY_ROW_H: f32 = HEADER_BLOCK_H;
 /// Screen y of the first grid row's tile top at rest.
 #[cfg(test)]
-pub(super) const LIBRARY_GRID_TOP: f32 = plx_ui::page_header::GRID_TOP;
+pub(super) const LIBRARY_GRID_TOP: f32 = HEADER_Y + HEADER_BLOCK_H;
+/// The air between two poster columns.
+pub(super) const GRID_GAP: f32 = theme::space::SM;
+/// A collapsed poster row's pitch (every card named).
 #[cfg(test)]
-pub(super) const GRID_PITCH: f32 = plx_ui::consts::CARD_H
-    + plx_ui::cards::LABEL_BAND_COLLAPSED
-    + plx_ui::consts::UNDER_LABEL_AIR;
+pub(super) const GRID_PITCH: f32 = GRID_CARD_W * (RowStyle::HOME.h / RowStyle::HOME.w) + plx_ui::cards::EVERY_CAPTION_ROW_GAP;
 pub(super) const RAIL_TRACK_W: f32 = 44.0;
 /// The letter pitch of a short alphabet (the most a letter is given).
 pub(super) const RAIL_PITCH: f32 = 32.0;
@@ -30,8 +38,12 @@ pub(super) const RAIL_MIN_PITCH: f32 = 26.0;
 pub(super) const RAIL_CAP_PAD: f32 = 10.0;
 pub(super) const RAIL_BAND: f32 = RAIL_TRACK_W + theme::space::XS;
 pub(super) const GRID_RIGHT: f32 = SCR_W - MARGIN_X - RAIL_BAND;
-pub(super) const GRID_GAP: f32 =
-    (GRID_RIGHT - MARGIN_X - COLS as f32 * CARD_W) / (COLS as f32 - 1.0);
+/// A poster's width: [`COLS`] posters and their gaps fill the band before the rail.
+#[cfg(test)]
+pub(super) const GRID_CARD_W: f32 = poster_w(COLS);
+
+/// The width of a poster when `cols` of them and their gaps fill the band before the rail.
+const fn poster_w(cols: usize) -> f32 { (GRID_RIGHT - MARGIN_X - (cols as f32 - 1.0) * GRID_GAP) / cols as f32 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Block {
@@ -109,7 +121,9 @@ impl Layout {
     }
 
     fn band_growth_before(&self, row: usize) -> f32 {
-        plx_ui::cards::grid_growth_before_for(self.band_h, row.min(self.rows), &self.grid_bands)
+        // Named posters keep their block under every row: a focused row opens nothing.
+        let band_h = if self.every() { plx_ui::cards::EVERY_CAPTION_BAND_H } else { self.band_h };
+        plx_ui::cards::grid_growth_before_for(band_h, row.min(self.rows), &self.grid_bands)
     }
 
     fn row_top(&self, row: usize) -> f32 {
@@ -118,18 +132,34 @@ impl Layout {
 
     pub(super) fn is_episodes(&self) -> bool { self.episodes }
 
-    pub(super) fn cols(&self) -> usize { if self.episodes { EPISODE_COLS } else { COLS } }
+    pub(super) fn cols(&self) -> usize {
+        if self.episodes { EPISODE_COLS } else if self.value_line { VALUE_COLS } else { COLS }
+    }
+
+    /// **Every poster is named** (the MultiPlex library wall: a title and a details line under every
+    /// card, `cards::GridSpec::every_caption`): every listing of posters, unless the grid shows sort
+    /// values. The Episodes listing's stills keep their legacy focused block.
+    pub(super) fn every(&self) -> bool { !self.episodes && !self.value_line }
 
     /// The grid keeps the shared episode treatment and gap, fitting four stills in the band
-    /// before the alphabet rail. Its height follows the shared aspect, so the grid's hit boxes,
-    /// scroll window and draws all describe the same cards.
+    /// before the alphabet rail; posters are [`COLS`] of the shared poster aspect across the same
+    /// band ([`VALUE_COLS`] while they show sort values), [`GRID_GAP`] apart. Its height follows the shared aspect, so the grid's hit boxes,
+    /// scroll window and draws all describe the same cards. Named posters hang their block
+    /// [`plx_ui::cards::EVERY_CAPTION_DROP`] under the poster, every line from its left edge.
     pub(super) fn style(&self) -> RowStyle {
         let style = if self.episodes {
             let base = RowStyle::EPISODE;
             let w = (GRID_RIGHT - MARGIN_X - (EPISODE_COLS - 1) as f32 * base.gap)
                 / EPISODE_COLS as f32;
             RowStyle { w, h: w * base.h / base.w, ..base }
-        } else { RowStyle { gap: GRID_GAP, ..RowStyle::HOME } };
+        } else {
+            let base = RowStyle::HOME;
+            let w = poster_w(self.cols());
+            RowStyle { w, h: w * base.h / base.w, gap: GRID_GAP, ..base }
+        };
+        let style = if self.every() {
+            style.with_label_drop(plx_ui::cards::EVERY_CAPTION_DROP).with_leading_labels()
+        } else { style };
         style.with_right_reserve(SCR_W - GRID_RIGHT)
     }
 
@@ -139,6 +169,7 @@ impl Layout {
 
     pub(super) fn grid_pitch(&self) -> f32 {
         self.card_h() + if self.value_line { plx_ui::cards::SORT_VALUE_ROW_GAP }
+            else if self.every() { plx_ui::cards::EVERY_CAPTION_ROW_GAP }
             else { plx_ui::cards::LABEL_BAND_COLLAPSED + plx_ui::consts::UNDER_LABEL_AIR }
     }
 
@@ -168,7 +199,7 @@ impl Layout {
     }
 
     /// The scroll that seats `row` with its poster top where the FIRST row's is at rest (the grid
-    /// top, y 244), so focus reads on one line whether you are at the top of the library or deep in
+    /// top, [`LIBRARY_GRID_TOP`] 332 under the title block and the filter row), so focus reads on one line whether you are at the top of the library or deep in
     /// it. Never below 0 and never past the end of the document: the last rows of a list settle
     /// lower. The Library's grid and the Collections page's are this one layout.
     pub(super) fn row_reveal(&self, row: usize) -> f32 {
@@ -198,7 +229,7 @@ impl Layout {
     /// viewport leaves every row at least this far below it undrawn. The grid head band only
     /// pushes rows further down, so the document's head shows no more than this either.
     pub(super) fn rows_per_screen(&self) -> usize {
-        ((SCR_H - CONTENT_TOP) / self.grid_pitch()).ceil() as usize
+        ((SCR_H - CONTENT_TOP - self.grid_top()) / self.grid_pitch()).ceil() as usize
     }
 
     pub(super) fn visible_rows(&self, scroll: f32) -> (usize, usize) {
@@ -354,8 +385,11 @@ mod tests {
     fn all_rows_without_focus_use_the_shared_collapsed_band() {
         for episodes in [false, true] {
             let layout = Layout::new(false, 10_000).with_episodes(episodes);
-            let pitch = layout.card_h() + plx_ui::cards::under_band(0.0)
-                + plx_ui::consts::UNDER_LABEL_AIR;
+            // Posters name every card: every row keeps the named block's gap; stills keep the
+            // shared collapsed band.
+            let gap = if episodes { plx_ui::cards::under_band(0.0) + plx_ui::consts::UNDER_LABEL_AIR }
+                else { plx_ui::cards::EVERY_CAPTION_ROW_GAP };
+            let pitch = layout.card_h() + gap;
             assert!((layout.row_y(1, 0.0) - layout.row_y(0, 0.0) - pitch).abs() < 0.001);
         }
     }
@@ -366,11 +400,14 @@ mod tests {
         for episodes in [false, true] {
             let compact = Layout::new(true, 40)
                 .with_episodes(episodes);
+            // Stills open their band under the focused row; named posters keep their block
+            // under every row, so focus opens nothing.
+            let open = if episodes { BAND_OPEN } else { 0.0 };
             for focused in [0, 3, 39] {
                 let layout = compact.with_grid_focus(Some(focused));
-                assert!((layout.doc_h() - compact.doc_h() - BAND_OPEN).abs() < 0.002);
+                assert!((layout.doc_h() - compact.doc_h() - open).abs() < 0.002);
                 for row in [0, 3, 39] {
-                    let growth = if row > focused { BAND_OPEN } else { 0.0 };
+                    let growth = if row > focused { open } else { 0.0 };
                     assert!((layout.row_y(row, 0.0) - compact.row_y(row, 0.0) - growth).abs() < 0.002);
                     assert_eq!(layout.row_expansion(row), f32::from(row == focused));
                 }
@@ -449,7 +486,7 @@ mod tests {
     }
 
     /// Row snapping seats the focused row with its poster top where the FIRST row's is at rest
-    /// (y 244), clamped to the document — not the minimal reveal `card_row::reveal` performs, which
+    /// ([`LIBRARY_GRID_TOP`], y 332), clamped to the document — not the minimal reveal `card_row::reveal` performs, which
     /// is right for a shelf inside a page and wrong for a wall of posters you walk down.
     #[test]
     fn row_snapping_seats_every_row_at_the_first_rows_resting_y() {
@@ -534,15 +571,16 @@ mod sort_value_layout_tests {
     }
 
     #[test]
-    fn rows_are_sixty_px_apart_with_values_and_forty_without() {
+    fn rows_are_sixty_px_apart_with_values_and_a_named_block_apart_without() {
         let (with, without) = (value_layout(17, true), value_layout(17, false));
         assert!(with.value_line() && !without.value_line());
+        let named = plx_ui::cards::EVERY_CAPTION_ROW_GAP;
         assert_eq!(with.grid_pitch() - with.card_h(), 60.0);
-        assert_eq!(without.grid_pitch() - without.card_h(), 40.0);
+        assert_eq!(without.grid_pitch() - without.card_h(), named);
         assert_eq!(SORT_VALUE_ROW_GAP, 60.0);
         // No row is focused: every row is one pitch from the next.
         assert!((with.row_y(5, 0.0) - with.row_y(4, 0.0) - (with.card_h() + 60.0)).abs() < 0.01);
-        assert!((without.row_y(5, 0.0) - without.row_y(4, 0.0) - (without.card_h() + 40.0)).abs() < 0.01);
+        assert!((without.row_y(5, 0.0) - without.row_y(4, 0.0) - (without.card_h() + named)).abs() < 0.01);
     }
 
     #[test]

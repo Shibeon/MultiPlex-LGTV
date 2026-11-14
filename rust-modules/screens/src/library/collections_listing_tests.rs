@@ -94,25 +94,25 @@ fn the_page_shows_none_of_the_films_while_the_collections_are_in_flight() {
 
 /// **The Collections page settles like the library's grid.** The page is the library grid in
 /// `Listing::Collections` mode, so a focused row below the first rests with its posters where the
-/// first row's are at rest (the grid top, y 244), through the same `row_reveal`. Pinned here on the
+/// first row's are at rest (the grid top, y 332), through the same `row_reveal`. Pinned here on the
 /// mounted collections page, with focus moved by the real DOWN, so a rule that held for the films
 /// grid alone (`scroll_chrome_tests`) could not stand in for it.
 #[test]
-fn a_focused_collections_row_below_the_first_rests_with_its_posters_at_244() {
+fn a_focused_collections_row_below_the_first_rests_with_its_posters_at_the_grid_top() {
     let _guard = plx_base::testlock::serial();
     let fixture = as_collections(60);
     let mut page = collections_page();
     run(&mut page, &fixture, ScreenEvent::Mount);
     page.initial = false;
     let mut engine = FocusEngine::new();
-    let first = page.key(page.pair.detail.elem_at(12).unwrap());
+    let first = page.key(page.pair.detail.elem_at(2 * page.layout.cols()).unwrap());
     page.relayout(Some(first));
     engine.set(OWNER, first, Some(page.pair.groups_config().detail), By::Restore);
     direction(&mut page, &mut engine, &fixture, Dir::Down);
     let next = engine.current(OWNER).unwrap();
     assert_eq!(page.grid_position(Some(next)), Some((3, 0)), "DOWN reached the fourth row of collections");
     assert!(page.scroll_target > 0.0, "the page scrolled to it");
-    assert_eq!(page.target_layout.row_y(3, page.scroll_target), 244.0, "its posters rest at the grid top");
+    assert_eq!(page.target_layout.row_y(3, page.scroll_target), 332.0, "its posters rest at the grid top");
     assert!(page.target_layout.max_scroll() > page.scroll_target, "…and nothing clamped it short");
 }
 

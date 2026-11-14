@@ -5616,6 +5616,47 @@ fn a_value_line_grid_borrows_labels_only_after_culling() {
     assert!(!src.reads.borrow().is_empty(), "visible captions use the borrowed path");
 }
 
+/// **A grid that names every card** (`GridSpec::every_caption`, the Library's poster wall) draws a
+/// caption under every visible card with no focus on the grid, borrows each label only after
+/// culling, and keeps one band under every row (a focused row opens nothing more).
+#[test]
+fn an_every_caption_grid_names_every_visible_card_and_opens_no_band() {
+    struct CachedCards {
+        cards: Cards,
+        label: TileLabel,
+        reads: std::cell::RefCell<Vec<usize>>,
+    }
+    impl CardSource<FixtureHost> for CachedCards {
+        fn len(&self) -> usize { self.cards.len() }
+        fn elem(&self, i: usize) -> u32 { self.cards.elem(i) }
+        fn index_of(&self, e: &u32) -> Option<usize> { self.cards.index_of(e) }
+        fn art(&self, _: usize) -> Art<'_> { Art::Poster(None) }
+        fn label(&self, _: usize) -> TileLabel { panic!("every-card painting must borrow the cached label") }
+        fn with_label<R>(&self, i: usize, read: impl FnOnce(&TileLabel) -> R) -> R {
+            self.reads.borrow_mut().push(i);
+            read(&self.label)
+        }
+    }
+    let _guard = plx_base::testlock::serial();
+    let sources = std::rc::Rc::new(std::cell::RefCell::new(crate::frame::backdrop::Sources::default()));
+    sources.borrow_mut().begin(vec![]);
+    let _discovery = crate::frame::backdrop::discover(sources);
+    let view = FixtureView::default();
+    let cx = cx9(&view, 0, 1.0, None);
+    let painter = Painter::root();
+    let frame = DrawFrame::new(&cx, painter);
+    let mut grid = Grid::new(ENTRY, GRID.columns(GRID.cols, GRID.style, 5000.0));
+    grid.set_every_caption(true);
+    assert_eq!(grid.band_h(), super::EVERY_CAPTION_BAND_H, "one band under every row");
+    let src = CachedCards { cards: Cards::new((100..130).collect(), false),
+        label: TileLabel::titled("Cached", "1997"), reads: Default::default() };
+    assert!(grid.caption_probe(&frame, painter, &src).is_empty());
+    assert!(src.reads.borrow().is_empty(), "culled tiles must not ask for words");
+    grid.set_columns(GRID.cols, GRID.style, crate::consts::MARGIN_X);
+    let drawn = grid.caption_probe(&frame, painter, &src);
+    assert!(drawn.len() > GRID.cols, "every visible card is named, with no focus on the grid: {}", drawn.len());
+}
+
 /// **A Shelf takes its style by value** (`docs/hud-plugins.md` D11): a style built at runtime, here a
 /// package's 288 x 162 chapter cards, lives in the Shelf and is read back unchanged, and the pitch every
 /// geometry reads is that style's, not a `'static` constant's.

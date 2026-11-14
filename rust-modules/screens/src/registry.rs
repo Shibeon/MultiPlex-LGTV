@@ -386,6 +386,8 @@ pub enum LibraryMenuKind {
     /// Favorite libraries block. `Sort`, `Filter` and
     /// `Type` remain as the single-purpose menus the scripted pipeline names.
     SortFilter,
+    /// The filter row's watch-state chip: All / Unwatched as a pick list.
+    Watch,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -410,7 +412,7 @@ impl plx_machine::machine::LogicalState for LibraryMenuArg {
             .u64(self.target.section as u64).u32(match self.kind {
                 LibraryMenuKind::Sort => 0, LibraryMenuKind::Filter => 1,
                 LibraryMenuKind::Genre => 2, LibraryMenuKind::Sources => 3, LibraryMenuKind::Type => 4,
-                LibraryMenuKind::SortFilter => 5,
+                LibraryMenuKind::SortFilter => 5, LibraryMenuKind::Watch => 6,
             });
         for value in self.anchor { c.u32(value); }
         c.seq(self.folded.len());

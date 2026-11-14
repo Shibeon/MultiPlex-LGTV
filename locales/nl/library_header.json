@@ -3,5 +3,10 @@
   "library_header.recommended": "Aanbevolen",
   "library_header.sort_filter": "Sorteren & filteren",
   "library_header.filtered_of": "{shown} van {total}",
-  "library_header.show": "Toon"
+  "library_header.show": "Toon",
+  "library_header.items": {
+    "one": "{count} item",
+    "other": "{count} items"
+  },
+  "library_header.more_filters": "Meer filters"
 }

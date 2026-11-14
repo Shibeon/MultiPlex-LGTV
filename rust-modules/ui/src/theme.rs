@@ -139,6 +139,22 @@ pub const COUNT_FILTERED_INK: [f32; 4] = with_a(WHITE, 0.50);
 pub const HEADER_PLACE_INK: [f32; 4] = with_a(WHITE, 0.45);
 /// The hairline between the header's places and its sort control (2 x 32 px): white at 16%.
 pub const HEADER_DIVIDER_INK: [f32; 4] = with_a(WHITE, 0.16);
+/// A header CHIP's resting plate (`page_header::Chip`, the Library's MultiPlex filter row: "All ⌄",
+/// "All genres ⌄", "Title ⌄" and the round direction button): the overlay ramp's lightest weight, the
+/// same .07 as [`OVERLAY_FOCUS_SOFT`] (a role of its own: retuning one must not restyle the other), so
+/// the pill reads as a control at rest and the focus capsule's solid accent still owns focus.
+pub const HEADER_CHIP_FILL: [f32; 4] = with_a(WHITE, 0.07);
+/// The 2 px rim a resting outline chip wears over [`HEADER_CHIP_FILL`]: white at 14%, the glass
+/// rim's weight, so the pill's edge holds on a bright wash.
+pub const HEADER_CHIP_RIM: [f32; 4] = with_a(WHITE, 0.14);
+/// A FILLED chip's plate ("+ More filters"): a step heavier than [`HEADER_CHIP_FILL`] and no rim,
+/// the selected-plate weight ([`TAB_PLATE_SELECTED`]'s .20), so the action reads apart from the
+/// dropdowns beside it.
+pub const HEADER_CHIP_FILLED: [f32; 4] = with_a(WHITE, 0.20);
+/// The count pill beside a page's big title ("240 items", `page_header::draw_title`): its plate is
+/// [`HEADER_CHIP_FILL`]'s weight and its words this quiet 65%, the header label's resting ink, so
+/// the count reads as a fact about the page and not as a control.
+pub const PAGE_COUNT_INK: [f32; 4] = with_a(WHITE, 0.65);
 /// The details line under a focused poster (Under posters: "2019 · 2h 6m"): white at 82%, a step
 /// below the title above it and neutral where [`TEXT_SECONDARY`] read bluish over the ground.
 pub const CAPTION_DETAIL_INK: [f32; 4] = with_a(WHITE, 0.82);
