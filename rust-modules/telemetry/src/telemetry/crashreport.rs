@@ -51,7 +51,7 @@
 //!
 //! # Sending twice is worse than not sending
 //!
-//! `plxnative-crash.log` is append-only and survives relaunch **by design** — `docs/agent-reference.md` calls it the
+//! `multiplex-crash.log` is append-only and survives relaunch **by design** — `docs/agent-reference.md` calls it the
 //! thing to read after a crash-and-restart, and `tools/crash-report.sh` parses it. So this module
 //! may not truncate it. Instead it records how many bytes it has already reported and skips them,
 //! which means a human and this module can both read the file without either disturbing the other.
@@ -1189,7 +1189,7 @@ fn debug_images(
 ///
 /// **A record is filed under the release that ran it, not the one that found it.** Recovery runs
 /// on the NEXT launch, so after an upgrade the binary building the body is a newer build than the
-/// one that crashed (PLX-NATIVE-26: a 0.9.0 SIGSEGV filed as `plxnative@0.10.0`). That poisons
+/// one that crashed (PLX-NATIVE-26: a 0.9.0 SIGSEGV filed as `multiplex@0.10.0`). That poisons
 /// per-release crash counts and Sentry's regression detection right after every release, exactly
 /// when they are watched. The record names the executable it ran as, its `img:` line, and
 /// `running_build_id` is the build id of the binary recovering it:
@@ -1279,7 +1279,7 @@ pub fn sentry_body(
         "level": "fatal",
         "environment": super::sender::ENVIRONMENT,
         "dist": effective_build_id,
-        "sdk": {"name": "plxnative-fallback", "version": super::app_version()},
+        "sdk": {"name": "multiplex-fallback", "version": super::app_version()},
         // **The value is built from the NAME and the ADDRESS, both of which this crate owns.** Not
         // the record's own line, which would be one line of code and would make the no-text
         // guarantee depend on what the C tracer happens to write.
@@ -1358,7 +1358,7 @@ pub fn panic_sentry_body(
         "platform": "native",
         "level": "fatal",
         "environment": super::sender::ENVIRONMENT,
-        "sdk": {"name": "plxnative-fallback", "version": super::app_version()},
+        "sdk": {"name": "multiplex-fallback", "version": super::app_version()},
         "exception": {"values": [{
             "type": "panic",
             // The hash, NOT the message. See the module doc: this is the field a Rust panic would
@@ -1616,7 +1616,7 @@ pub fn freeze_sentry_body(
         "level": "error",
         "environment": super::sender::ENVIRONMENT,
         "dist": effective_build_id,
-        "sdk": {"name": "plxnative-fallback", "version": super::app_version()},
+        "sdk": {"name": "multiplex-fallback", "version": super::app_version()},
         "tags": tags,
         "exception": {"values": [{
             "type": "MainThreadFreeze",
@@ -1714,7 +1714,7 @@ pub fn exit_sentry_body(
         "level": "error",
         "environment": super::sender::ENVIRONMENT,
         "dist": effective_build_id,
-        "sdk": {"name": "plxnative-fallback", "version": super::app_version()},
+        "sdk": {"name": "multiplex-fallback", "version": super::app_version()},
         "tags": tags,
         "exception": {"values": [{
             "type": "Exit",
@@ -2005,7 +2005,7 @@ fn prefix_hash_from(seed: u64, bytes: &[u8]) -> u64 {
 fn log_path() -> std::path::PathBuf {
     #[cfg(any(test, feature = "test-support"))]
     if let Some(root) = TEST_ROOT.lock().unwrap().as_ref() {
-        return root.join("plxnative-crash.log");
+        return root.join("multiplex-crash.log");
     }
     plx_base::paths::in_runtime_dir(plx_base::paths::runtime_file::CRASH)
 }
@@ -2496,7 +2496,7 @@ fn write_mark(mark: &Mark) -> bool {
 /// is one of two prefixes (`/media/developer/…` or `/media/cryptofs/…`) and reporting which would
 /// say how the person installed the app — a small fact about them rather than about the crash.
 /// Sentry only uses this string to label the image in the UI; the pairing is done by `debug_id`.
-const CODE_FILE: &str = "plxnative";
+const CODE_FILE: &str = "multiplex";
 
 #[cfg(test)]
 mod tests {
@@ -2507,7 +2507,7 @@ mod tests {
                        *** SIGNAL 11 (SIGSEGV) addr=0x0 pc=0x88ef8 lr=0x4bccd0\n\
                        reg: sp=0xbe8f1a90 fp=0x0 ip=0x1 cpsr=0x60000010 r0=0x0 r1=0x2a\n\
                        at: b6f00000-b6f21000 r-xp 00000000 fe:01 1234 /lib/libc.so.6\n\
-                       bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/plxnative\n";
+                       bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/multiplex\n";
 
     fn extra() -> FaultExtra {
         FaultExtra { native_path: NativePath::NoEnvelope, modules: Vec::new() }
@@ -2663,8 +2663,8 @@ mod tests {
         *** SIGNAL 11 (SIGSEGV) addr=0x0 pc=0xb6f10123 lr=0x4bccd0\n\
         reg: sp=0xbe8f1a90 fp=0x0 ip=0x1 cpsr=0x60000010 r0=0x0 r1=0x2a\n\
         at: b6f00000-b6f21000 r-xp 00000000 fe:01 1234 /usr/lib/libwayland-client.so.0\n\
-        at: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/plxnative\n\
-        bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/plxnative\n";
+        at: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/multiplex\n\
+        bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/multiplex\n";
 
     /// A little-endian ELF32 shared object whose only program header is a `PT_NOTE` holding one
     /// GNU build-id note: all `gnu_build_id` needs, with every offset stated once.
@@ -3067,7 +3067,7 @@ mod tests {
         let old: serde_json::Value =
             serde_json::from_slice(&sentry_body(&only_fault(REC), "e", "b", None, None, &extra())).unwrap();
         assert!(old.get("threads").is_none() && old["tags"].get("crash.thread").is_none());
-        assert_eq!(old["tags"]["crash.pc_module"], "plxnative", "pc is inside the app's own image");
+        assert_eq!(old["tags"]["crash.pc_module"], "multiplex", "pc is inside the app's own image");
         assert_eq!(old["tags"]["crash.lr_offset"], "0x4accd0");
     }
 
@@ -3136,7 +3136,7 @@ mod tests {
         let did = super::super::sentry::debug_id("11223344556677889900aabbccddeeff00112233");
         assert_eq!(
             fault_fingerprint(&f, "os", &[], did.as_deref()).unwrap(),
-            ["SIGSEGV", "libc.so.6", "0x20123", "plxnative", "-"]
+            ["SIGSEGV", "libc.so.6", "0x20123", "multiplex", "-"]
         );
     }
 
@@ -3427,7 +3427,7 @@ mod tests {
     }
 
     /// PLX-NATIVE-26: a 0.9.0 process crashed, the next launch was 0.10.0, and the report it queued
-    /// from 0.9.0's crash log was filed under `plxnative@0.10.0`, which poisons per-release crash
+    /// from 0.9.0's crash log was filed under `multiplex@0.10.0`, which poisons per-release crash
     /// counts and regression detection right after every release. The record names the image it ran
     /// (its `img:` line); a recovering binary whose own build id differs may not claim the report.
     ///
@@ -3528,7 +3528,7 @@ mod tests {
     fn the_reported_image_path_says_nothing_about_the_install() {
         let body =
             String::from_utf8(sentry_body(&only_fault(REC), "e", "b", Some("d"), None, &extra())).unwrap();
-        assert!(body.contains("plxnative"));
+        assert!(body.contains("multiplex"));
         assert!(
             !body.contains("/media/"),
             "the install prefix must not be reported"
@@ -4002,10 +4002,10 @@ mod tests {
             return; // a developer build with a DSN compiled in cannot exercise this branch
         }
         let dir = std::env::temp_dir()
-            .join(format!("plxnative-crashreport-nodsn-{}", std::process::id()));
+            .join(format!("multiplex-crashreport-nodsn-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        let log = dir.join("plxnative-crash.log");
+        let log = dir.join("multiplex-crash.log");
         std::fs::write(&log, REC).unwrap();
         let spool_file = dir.join("spool.bin");
         spool::set_test_path(Some(spool_file.clone()));
@@ -4036,7 +4036,7 @@ mod tests {
                        reg: sp=0xbe8f1a90 fp=0xbe8f1aa0 ip=0x1 cpsr=0x60000010 r0=0x0 r1=0x2a\n\
                        frames: 0x4bccd0 0x4a1234 0xb6f01000\n\
                        at: b6f00000-b6f21000 r-xp 00000000 fe:01 1234 /lib/libc.so.6\n\
-                       bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/plxnative\n\
+                       bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/multiplex\n\
                        freeze-end: seq=1 bucket=10-30s\n";
 
     fn only_freeze(log: &str) -> Freeze {
@@ -4194,7 +4194,7 @@ mod tests {
         let f = only_freeze(FRZ);
         // pc is parked in libc (offset 0x10000); the first frame in the app's own image names the
         // call that waited: 0x4bccd0 less the image base 0x10000.
-        assert_eq!(freeze_json(&f)["fingerprint"], serde_json::json!(["freeze", "plxnative+0x4accd0"]));
+        assert_eq!(freeze_json(&f)["fingerprint"], serde_json::json!(["freeze", "multiplex+0x4accd0"]));
 
         // The same stall at another duration is the same issue.
         let long = Freeze { bucket: FreezeBucket::Long, ..f.clone() };
@@ -4270,12 +4270,12 @@ mod tests {
             let body = freeze_json(&only_freeze(&frz_with_leg_at(place)));
             assert_eq!(body["tags"]["freeze.leg"], "update", "{place}");
             assert_eq!(body["tags"]["freeze"], "10-30s", "{place}");
-            assert_eq!(body["fingerprint"], serde_json::json!(["freeze", "plxnative+0x4accd0", "update"]), "{place}");
+            assert_eq!(body["fingerprint"], serde_json::json!(["freeze", "multiplex+0x4accd0", "update"]), "{place}");
         }
         // An old record, written before the line existed, keeps its tags and its grouping.
         let old = freeze_json(&only_freeze(FRZ));
         assert!(old["tags"].get("freeze.leg").is_none());
-        assert_eq!(old["fingerprint"], serde_json::json!(["freeze", "plxnative+0x4accd0"]));
+        assert_eq!(old["fingerprint"], serde_json::json!(["freeze", "multiplex+0x4accd0"]));
     }
 
     #[test]
@@ -4299,7 +4299,7 @@ mod tests {
                 assert_eq!(f.leg, None, "{bad:?} {place}");
                 let body = freeze_json(&f);
                 assert!(body["tags"].get("freeze.leg").is_none(), "{bad:?} {place}");
-                assert_eq!(body["fingerprint"], serde_json::json!(["freeze", "plxnative+0x4accd0"]), "{bad:?} {place}");
+                assert_eq!(body["fingerprint"], serde_json::json!(["freeze", "multiplex+0x4accd0"]), "{bad:?} {place}");
                 let text = String::from_utf8(freeze_sentry_body(&f, "e", BUILD, Some("did"), None, &[])).unwrap();
                 assert!(!text.contains("SecretMovie"), "{bad:?} {place}");
             }
@@ -4403,7 +4403,7 @@ mod tests {
         assert_eq!(old.leg, None);
         assert_eq!(freeze_json(&old)["fingerprint"], serde_json::json!(["freeze", "libc.so.6+0x10000"]));
         // And an old record with an app frame is untouched, as the test above pins.
-        assert_eq!(freeze_json(&only_freeze(FRZ))["fingerprint"], serde_json::json!(["freeze", "plxnative+0x4accd0"]));
+        assert_eq!(freeze_json(&only_freeze(FRZ))["fingerprint"], serde_json::json!(["freeze", "multiplex+0x4accd0"]));
     }
 
     /// What a freeze report can carry is what `PRIVACY.md` lists: the tag and every word of the
@@ -4443,7 +4443,7 @@ mod tests {
             let stored = Stored {
                 sid: "11111111-1111-4111-8111-111111111111".into(),
                 did: "d".into(),
-                release: "plxnative@1.2.3".into(),
+                release: "multiplex@1.2.3".into(),
                 environment: "production".into(),
                 started: 1_800_000_000,
                 last_active: 1_800_000_100,
@@ -4584,7 +4584,7 @@ mod tests {
             .iter()
             .map(|i| i["code_file"].as_str().unwrap())
             .collect();
-        assert_eq!(files, ["plxnative", "libSDL2-2.0.so.0"]);
+        assert_eq!(files, ["multiplex", "libSDL2-2.0.so.0"]);
         assert_eq!(images[1]["image_addr"], "0xb6ef0000");
         // The event's time is the record's own second, inside `crash_timestamp`'s window.
         let recent = now_secs().saturating_sub(60);
@@ -4603,7 +4603,7 @@ mod tests {
         // Nothing about the executable's own mapping: the tracer writes no `bin:` line for an exit,
         // and one that appears is not read.
         let with_bin = format!(
-            "{}bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/plxnative\n",
+            "{}bin: 00010000-00600000 r-xp 00000000 fe:01 99 /media/developer/x/multiplex\n",
             exit_log()
         );
         assert_eq!(only_exit(&with_bin), e);
@@ -4728,13 +4728,13 @@ mod tests {
         let body = exit_json(&only_exit(&own));
         assert_eq!(
             body["fingerprint"],
-            serde_json::json!(["exit", "plxnative+0x4acccf"])
+            serde_json::json!(["exit", "multiplex+0x4acccf"])
         );
         assert_eq!(
             body["exception"]["values"][0]["value"],
-            "exit(7) from plxnative"
+            "exit(7) from multiplex"
         );
-        assert_eq!(body["tags"]["exit_module"], "plxnative");
+        assert_eq!(body["tags"]["exit_module"], "multiplex");
     }
 
     #[test]
@@ -4887,7 +4887,7 @@ mod tests {
         let stored = Stored {
             sid: "11111111-1111-4111-8111-111111111111".into(),
             did: "d".into(),
-            release: "plxnative@1.2.3".into(),
+            release: "multiplex@1.2.3".into(),
             environment: "production".into(),
             started: 1_800_000_000,
             last_active: 1_800_000_100,

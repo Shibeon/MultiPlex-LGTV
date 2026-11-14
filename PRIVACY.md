@@ -1,21 +1,21 @@
-# PlxNative Privacy Policy
+# MultiPlex Privacy Policy
 
-Applies to PlxNative 0.6.0. Last updated 9 November 2026.
+Applies to MultiPlex 0.6.0. Last updated 9 November 2026.
 
-## Who is responsible for PlxNative data
+## Who is responsible for MultiPlex data
 
-Gleb Linnik is responsible only for data PlxNative stores locally and for optional reports you
-choose to share.
+Shibeon, who maintains MultiPlex, is responsible only for data MultiPlex stores locally and for
+optional reports you choose to share.
 
 ## Plex services
 
-PlxNative is an independent client for Plex. To sign you in, discover servers and provide Plex
+MultiPlex is an independent client for Plex. To sign you in, discover servers and provide Plex
 account features, the app communicates directly with Plex services. Plex processes information
 received by those services under [Plex’s own Privacy
-Policy](https://www.plex.tv/about/privacy-legal/). PlxNative’s developer does not receive that
+Policy](https://www.plex.tv/about/privacy-legal/). MultiPlex’s developer does not receive that
 information.
 
-Continue Watching artwork. For each title in a Continue Watching row, PlxNative asks Plex’s catalog
+Continue Watching artwork. For each title in a Continue Watching row, MultiPlex asks Plex’s catalog
 (discover.provider.plex.tv) for the title’s own cover artwork. The request carries the title’s Plex
 catalog identifier (which your Plex Media Server lists with the title), the language of the app, the
 app’s client identifier and, only when the profile has one, its Plex account token, so it tells
@@ -25,25 +25,25 @@ title’s card is first shown and this television has no saved answer for it; ag
 answer is more than a day old and the card is shown; again on a later start or after a profile
 switch when an earlier attempt saved nothing, and when the card is shown again after Plex’s catalog
 could not be reached (at most once every 45 seconds while it cannot be reached); and again after the saved artwork was removed to make room, by signing out, or
-by changing the app’s language. PlxNative’s developer does not receive these requests.
+by changing the app’s language. MultiPlex’s developer does not receive these requests.
 
 ## Plex Media Servers
 
-To browse and play media, update watch progress and use server features, PlxNative communicates
+To browse and play media, update watch progress and use server features, MultiPlex communicates
 directly with the Plex Media Servers you select. Those requests are handled by the selected server
-and its operator. PlxNative’s developer does not receive them.
+and its operator. MultiPlex’s developer does not receive them.
 
 ## Data stored on this television
 
-PlxNative has a developer-only input/frame recorder used to reproduce and test bugs. It is not
+MultiPlex has a developer-only input/frame recorder used to reproduce and test bugs. It is not
 part of the app you installed: a release build has the developer-trigger inputs, including the
 recorder, compiled out — there is no code path in a release binary that can open, write or read a
-recording, on this television or off it. The unconditional `plxnative-*.log` files are create-only
+recording, on this television or off it. The unconditional `multiplex-*.log` files are create-only
 diagnostics, not trigger inputs. The recorder exists only in development builds used to build and
-test PlxNative itself, is started only by explicitly arming it on that build, and its recordings
+test MultiPlex itself, is started only by explicitly arming it on that build, and its recordings
 never leave the device it was made on.
 
-PlxNative stores your Plex account token and a separate token for each server you use. For every
+MultiPlex stores your Plex account token and a separate token for each server you use. For every
 profile on your account you have switched to on this television, it also keeps that profile's own
 server access token(s), so a later switch still works with no internet, and, for a PIN-protected
 profile, a one-way check computed from that PIN rather than the PIN itself. It also keeps the
@@ -62,7 +62,7 @@ when a fresh check of the server no longer reaches the same address, at a sign-i
 a profile switch unless the new profile reaches that server at the same address, or when the app
 returns from the background).
 It keeps no bookmark of its own for where you stopped watching: playback position is held by your
-Plex Media Server. The Settings screen can sign out and remove PlxNative data from this television.
+Plex Media Server. The Settings screen can sign out and remove MultiPlex data from this television.
 
 Those lifetimes differ. Signing out removes the sign-in, the servers registered with it and their
 tokens, every profile's own cached server access token(s) and PIN check, the cached profile
@@ -77,11 +77,11 @@ its category off or sign out. The event log and the error-output log are emptied
 kept until the television restarts (the television clears its temporary storage then), and the storage
 snapshot is replaced when its bounded status changes. **webOS gives an application no way to run code as it
 is removed**, so the sign-in and the reporting answers can survive an uninstall — use Delete all
-local data before uninstalling if you want nothing of PlxNative left on the television.
+local data before uninstalling if you want nothing of MultiPlex left on the television.
 
 ## Optional crash reports
 
-Crash reporting is off until you choose to share it. If enabled, PlxNative sends technical crash
+Crash reporting is off until you choose to share it. If enabled, MultiPlex sends technical crash
 details to Sentry in Germany. A report may include the signal, code addresses, thread information,
 internal component labels, app and webOS versions, television model and hardware compatibility
 details needed to reproduce and symbolicate the failure.
@@ -100,17 +100,17 @@ They are collected only while crash reporting is enabled and accompany a crash r
 sent as usage events. Disabling crash reports removes the local trace.
 
 When the television's own crash reporter leaves nothing for a crash that was a native fault (a
-signal such as a segmentation fault), PlxNative sends a simpler report built from its own crash
+signal such as a segmentation fault), MultiPlex sends a simpler report built from its own crash
 log instead. It carries the same kernel name and release, webOS and hardware compatibility
 details as a native report (plus the same `probe` fact and the exact firmware `build` described
 for playback-error reports below), and the file name (never the folder) and build identifier of each
-library (a library of the television's firmware or one bundled with PlxNative) the faulting
+library (a library of the television's firmware or one bundled with MultiPlex) the faulting
 address and the return address were in, with the library's load address and size. A library that
 has no build identifier (the television's own C library has none), or whose file could not be matched to the one that crashed, is still named, with its load
 address and size and an all-zero placeholder identifier, as the native report lists it. It carries the
 time of the crash, to the second, as the television's clock read it when the crash was logged (it
 is left out when that clock reads an implausible time), which thread it happened on (the thread's number,
-whether it was the main thread, and the thread's own name, a technical label set by PlxNative or a library),
+whether it was the main thread, and the thread's own name, a technical label set by MultiPlex or a library),
 whether the app was running, shutting down or exiting, and how many seconds it had been running; none of
 this is personal data. It also says in
 one fixed word why the primary report is missing: `no_envelope` (no usable report was left:
@@ -120,18 +120,18 @@ folder or other file content is sent.
 
 When the crash was a Rust panic rather than a fault, the fallback report is smaller still: the
 source file and line of the panic, a hash of the panic message (the message itself is never sent),
-the app version and build identifier of PlxNative, the `environment` label of the build (`production`
+the app version and build identifier of MultiPlex, the `environment` label of the build (`production`
 or `development`), the time of the panic (read and bounded as above), the same kernel name and release,
 webOS and hardware compatibility details (including the `probe` fact and the firmware `build`) that the fault fallback report carries, and
 the Crash report ID below. It carries none of the library details above.
 
 A main-thread freeze (the app not responding for five seconds or more while it is open on screen) is reported like a crash, under the same choice: code addresses and register values, one of three duration ranges (5 to 10 s, 10 to 30 s, 30 s or more) or "unrecovered", the step of the app's own frame loop the app was in when it stopped responding (`freeze.leg`: one fixed word from a list of eleven naming a phase of the loop, never anything about what was on screen or playing: `event-ingest`, `results`, `dev-scenarios`, `playback-pump`, `land-results`, `navcommit`, `dispatcher-frame`, `update`, `prepare-window`, `present-and-swap` or `frame-report`), and the details above, without stopping the app.
 
-When another part of the television's software ends PlxNative by calling `exit()` (for example the system closing it), the app records the call and reports it like a crash, under the same choice: the exit status (a number), which thread made the call (its number, whether it was the main thread, and its own name, a technical label set by PlxNative or a library), the library the call came from (its file name, never the folder, with its build identifier, load address and size, as for a crash report above) and the code address of the call, the time of the call to the second, and the details above.
+When another part of the television's software ends MultiPlex by calling `exit()` (for example the system closing it), the app records the call and reports it like a crash, under the same choice: the exit status (a number), which thread made the call (its number, whether it was the main thread, and its own name, a technical label set by MultiPlex or a library), the library the call came from (its file name, never the folder, with its build identifier, load address and size, as for a crash report above) and the code address of the call, the time of the call to the second, and the details above.
 
 A report built from the crash log (a fault, a Rust panic, a freeze or an `exit()` call, as above) is
 sent the next time the app starts, which after an update is a newer build than the one that left
-the record. When the record names a different build of PlxNative than the one sending it, the report's
+the record. When the record names a different build of MultiPlex than the one sending it, the report's
 `release` (the app version it is filed under) is left out rather than filed under the newer
 version, and it carries two tags instead: `crash.uploaded_by`, the app version that sent it, and
 `crash.build_id`, the build identifier of the build that crashed. Both are an app version and a
@@ -148,7 +148,7 @@ Settings shows it while crash reports are on. Turning crash reports off, or sign
 the local identifier; enabling them later creates a new one. Reports already sent keep the old
 identifier.
 
-While crash reports are on, PlxNative also sends one small **session record** for each stretch of
+While crash reports are on, MultiPlex also sends one small **session record** for each stretch of
 use, even when nothing crashed, so that crash-free sessions can be counted per release: the start
 time, its length, how it ended (exited, crashed or ended abnormally), a crash count, the Crash
 report ID, the app version and the build's `environment` label — no content, title, account or
@@ -304,7 +304,7 @@ automatically.
 ## Optional product analytics
 
 Product analytics is a separate choice and is off until you choose to share it. If enabled,
-PlxNative sends typed screen and feature events, broad sign-in and playback outcome classes and,
+MultiPlex sends typed screen and feature events, broad sign-in and playback outcome classes and,
 when you leave a screen, broad classes of how smoothly the app ran on it (`route.left`: late
 frames, frozen frames, the app not responding, a remote key pressed repeatedly with nothing
 happening) to PostHog in Germany. The last is performance data about the app, never what you
@@ -326,7 +326,7 @@ Every product analytics event also carries this bounded compatibility and connec
 
 | property | value |
 |---|---|
-| `app_version` | the PlxNative package version |
+| `app_version` | the MultiPlex package version |
 | `webos_release` | the webOS release reported by nyx |
 | `webos_api` | the webOS API version reported by nyx |
 | `webos_codename` | the webOS firmware family reported by nyx |
@@ -385,5 +385,5 @@ sign-in problem report is sent only when you press Send report.
 Security vulnerabilities may be reported privately through GitHub Security Advisories for
 `Shibeon/MultiPlex-LGTV`.
 
-PlxNative is an independent, unofficial application. It is not produced by, endorsed by, or
+MultiPlex is an independent, unofficial application. It is not produced by, endorsed by, or
 affiliated with Plex, Inc. or LG Electronics Inc.

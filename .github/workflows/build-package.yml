@@ -88,13 +88,13 @@ on:
       fwcompat:
         description: >
           Run the per-binary firmware-database compatibility check (tools/fwcompat.py) against
-          pkg/plxnative and pkg/plxnative-storage, in addition to webosbrew-ipk-verify. Nightly and
+          pkg/multiplex and pkg/multiplex-storage, in addition to webosbrew-ipk-verify. Nightly and
           release both pass this true; a non-publishing caller can still opt out.
         type: boolean
         default: false
       upload-debug-files:
         description: >
-          Upload pkg/plxnative.debug and the binary to Sentry. Defaults true, the fail-closed
+          Upload pkg/multiplex.debug and the binary to Sentry. Defaults true, the fail-closed
           choice: a release or a real nightly whose native crashes could not be symbolicated is
           not a working crash-reporting build. Only a nightly's dry run on a PULL REQUEST passes
           false (nightly.yml): that run publishes nothing, so the upload would only fill Sentry
@@ -135,10 +135,9 @@ jobs:
             production|development) ;;
             *) echo "::error::telemetry must be production or development, got '$TELEMETRY'"; exit 1 ;;
           esac
-          # A manifest is keyed to the app id it was generated for, and only two installs have a
-          # Homebrew Channel listing: stable (the webosbrew catalogue's) and nightly (the
-          # project's own repository, `ci/nightly.py repo-json`). Debug is a developer build with
-          # no listing anywhere, so a manifest for it would name a package nothing tracks. Caught
+          # A manifest is keyed to the app id it was generated for, and only two installs carry
+          # one: stable (the webosbrew catalogue's listing) and nightly (attached to its
+          # prerelease beside the package). Debug is a developer build with no listing anywhere, so a manifest for it would name a package nothing tracks. Caught
           # here rather than left to fail later on a stray file mismatch.
           if [ "$HOMEBREW_MANIFEST" = true ] && [ "$FLAVOR" = debug ]; then
             echo "::error::homebrew-manifest is only meaningful for flavor: stable or nightly, got '$FLAVOR'"
@@ -255,8 +254,8 @@ jobs:
           # nobody shipped.
           grep -q '+symbols' pkg/.build-config \
             || { echo "::error::SYMBOLS=1 did not take — pkg/.build-config says [$(cat pkg/.build-config)]"; exit 1; }
-          test -s pkg/plxnative.debug \
-            || { echo "::error::pkg/plxnative.debug is missing or empty"; exit 1; }
+          test -s pkg/multiplex.debug \
+            || { echo "::error::pkg/multiplex.debug is missing or empty"; exit 1; }
           # Every bundled shared object has a symbol file, and nothing else is in the directory.
           # `make symbols-libs` already refused a library without a build id or symbols; this is the
           # count, so a library added to the package without being added to the target cannot ship
@@ -273,9 +272,9 @@ jobs:
           # The build id is what pairs the two. Assert it here rather than trusting the upload:
           # `sentry-cli` will happily accept a .debug whose id matches nothing that shipped.
           idof() { readelf -n "$1" | awk '/Build ID/{print $3}'; }
-          [ "$(idof pkg/plxnative)" = "$(idof pkg/plxnative.debug)" ] \
+          [ "$(idof pkg/multiplex)" = "$(idof pkg/multiplex.debug)" ] \
             || { echo "::error::build id mismatch between the shipped binary and its .debug"; exit 1; }
-          echo "build-id $(idof pkg/plxnative)"
+          echo "build-id $(idof pkg/multiplex)"
           if [ "$TELEMETRY" = production ]; then
             # **The telemetry configuration FAILS CLOSED here, and only here.** For a local build,
             # "no endpoint -> telemetry compiled out" is the right default and the safe one. For an
@@ -302,10 +301,10 @@ jobs:
             # literals are not NUL-terminated and adjacent ones merge into one `strings` record.
             # `strings` runs to a file first: `grep -q` quits on its match, and under pipefail the
             # producer's SIGPIPE (141) would fail the step although the string was found.
-            strings pkg/plxnative > "$RUNNER_TEMP/plxnative.strings"
-            grep -qF "$PLX_SENTRY_DSN" "$RUNNER_TEMP/plxnative.strings" \
+            strings pkg/multiplex > "$RUNNER_TEMP/multiplex.strings"
+            grep -qF "$PLX_SENTRY_DSN" "$RUNNER_TEMP/multiplex.strings" \
               || { echo "::error::the packaged binary does not carry the production Sentry DSN"; exit 1; }
-            grep -qF "$PLX_POSTHOG_KEY" "$RUNNER_TEMP/plxnative.strings" \
+            grep -qF "$PLX_POSTHOG_KEY" "$RUNNER_TEMP/multiplex.strings" \
               || { echo "::error::the packaged binary does not carry the production PostHog key"; exit 1; }
             # Fingerprints, not values. These are publishable, but they are also usable to write junk
             # into the project and burn a free-tier quota, and a workflow log is a far more casually
@@ -319,7 +318,7 @@ jobs:
             [ -n "$PLX_POSTHOG_KEY_DEV" ] || { echo '::error::PLX_POSTHOG_KEY_DEV is required for a development-telemetry build.'; exit 1; }
             [ -z "$PLX_SENTRY_DSN$PLX_POSTHOG_KEY" ] || { echo '::error::production telemetry is present in a development-telemetry build.'; exit 1; }
             grep -q 'tel:' pkg/.build-config
-            python3 -c 'import os; b=open("pkg/plxnative","rb").read(); assert os.environ["PLX_SENTRY_DSN_DEV"].encode() in b; assert os.environ["PLX_POSTHOG_KEY_DEV"].encode() in b'
+            python3 -c 'import os; b=open("pkg/multiplex","rb").read(); assert os.environ["PLX_SENTRY_DSN_DEV"].encode() in b; assert os.environ["PLX_POSTHOG_KEY_DEV"].encode() in b'
           fi
           # ...and carry the stamp to the caller's downstream jobs under a NON-HIDDEN name:
           # upload-artifact silently drops dotfiles, so `pkg/.build-config` would never arrive and
@@ -338,7 +337,7 @@ jobs:
             || { echo "::error::packaged the wrong flavour — pkg/ holds $(ls pkg/*.ipk 2>&1)"; exit 1; }
 
       - name: Upload debug files to Sentry
-        # **In the same job as the build, deliberately.** `pkg/plxnative.debug` is 75 MB and exists
+        # **In the same job as the build, deliberately.** `pkg/multiplex.debug` is 75 MB and exists
         # only here; carrying it between jobs as an artifact would cost an upload and a download to
         # move a file whose only consumer is this step. It also keeps the pairing local: the binary
         # and its .debug are asserted to share a build id twenty lines up, and nothing can come
@@ -384,13 +383,13 @@ jobs:
           # The CLI is the version pinned in tools/package.json (Dependabot bumps it with its lockfile).
           npm ci --prefix tools
           SENTRY_CLI="$PWD/tools/node_modules/.bin/sentry-cli" \
-            python3 ci/check-debug-files.py pkg/plxnative.debug pkg/symbols/*.debug
+            python3 ci/check-debug-files.py pkg/multiplex.debug pkg/symbols/*.debug
           if [ "$UPLOAD" != true ]; then
             echo "Skipping the Sentry upload: upload-debug-files is '$UPLOAD' (a pull request's nightly dry run)."
             exit 0
           fi
           tools/node_modules/.bin/sentry-cli debug-files upload \
-              --include-sources pkg/plxnative.debug pkg/plxnative
+              --include-sources pkg/multiplex.debug pkg/multiplex
           # The bundled libraries: `sentry-crash` is deliberately NOT uploaded (a separate process
           # that sends nothing, so no event frame lands in it). No `--include-sources`: the
           # libraries' DWARF names third-party source files, not this repository's.
@@ -442,8 +441,8 @@ jobs:
         if: inputs.fwcompat
         run: |
           set -euo pipefail
-          ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data --min-release 4.4.2 pkg/plxnative | tee -a "$GITHUB_STEP_SUMMARY"
-          ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data --min-release 4.4.2 pkg/plxnative-storage | tee -a "$GITHUB_STEP_SUMMARY"
+          ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data --min-release 4.4.2 pkg/multiplex | tee -a "$GITHUB_STEP_SUMMARY"
+          ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data --min-release 4.4.2 pkg/multiplex-storage | tee -a "$GITHUB_STEP_SUMMARY"
           # The bundled FFmpeg libraries are dlopen'd, so neither line above nor webosbrew-ipk-verify
           # (which grades the app and service executables only) resolves THEIR DT_NEEDED against a
           # firmware; #235's `libz.so.1` on libavformat was graded by nobody. `--shipped pkg` takes
@@ -477,7 +476,7 @@ jobs:
           set -euo pipefail
           # The manifest is named for the app id it describes — `app.multiplex.native` for stable,
           # which release.yml and the webosbrew listing resolve by that exact name, and
-          # `app.multiplex.native.nightly` for nightly, which `ci/nightly.py repo-json` reads.
+          # `app.multiplex.native.nightly` for nightly, which nightly.yml attaches to its prerelease.
           if [ "$FLAVOR" = nightly ]; then
             app_id=app.multiplex.native.nightly
             # The nightly tile's own artwork (130 px, badged), so the listing shows the badge
@@ -591,11 +590,11 @@ jobs:
           # bundle 0.6.0 that way). A stable build's is the one in the ipk's own filename (the
           # Makefile's IPK_VERSION). A nightly's is NOT: its package version carries the cut date as
           # its patch (`X.Y.<date>`), so `<filename version>-nightly-<date>` would name a version
-          # nothing reports and sit beside an ipk called plxnative-v<X.Y.Z>-nightly-<date>.ipk.
+          # nothing reports and sit beside an ipk called multiplex-v<X.Y.Z>-nightly-<date>.ipk.
           # `ci/check-package.py --print-nightly-label` derives the reported `X.Y.Z-nightly-<date>`
           # from Cargo.toml and the `+nightly:<date>` field of pkg/.build-config — the Makefile's
           # record of the date it built with, the same stamp the binary is graded against. It
-          # prints nothing for a build with no such field, which keeps plxnative-source-X.Y.Z.
+          # prints nothing for a build with no such field, which keeps multiplex-source-X.Y.Z.
           version=${ipk##*/"${appid}"_}; version=${version%_arm.ipk}
           nightly_label=$(python3 ci/check-package.py --print-nightly-label pkg/.build-config)
           rc=$(python3 ci/check-package.py --print-rc pkg/.build-config)
@@ -605,7 +604,7 @@ jobs:
           label="${nightly_label:-$version${rc:+-rc.$rc}}"
           [[ "$label" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-nightly-[0-9]{8}|-rc\.[1-9][0-9]*)?$ ]] \
             || { echo "::error::cannot name the source bundle: got version label '$label' from $ipk"; exit 1; }
-          source="pkg/plxnative-source-$label.tar.gz"
+          source="pkg/multiplex-source-$label.tar.gz"
           python3 ci/prepare-source-release.py --inputs "$RUNNER_TEMP/gpl-source-inputs" \
             --output "$source" --rust-toolchain "$RUST_TOOLCHAIN" --binary "$ipk" --private-values "$private_values"
           snapshot=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_snapshot_sha256"])' "$source.release.json")
@@ -625,12 +624,12 @@ jobs:
             pkg/ipk-verify.md
             pkg/gates.md
             pkg/build-config.txt
-            pkg/plxnative-source-*.tar.gz*
+            pkg/multiplex-source-*.tar.gz*
             pkg/source-rebuild.json
           if-no-files-found: error
 
       # The bundled libraries' symbol files, kept as a build artifact of their own: small (~0.1 MB
-      # each), so unlike pkg/plxnative.debug (75 MB, uploaded to Sentry in the step above and
+      # each), so unlike pkg/multiplex.debug (75 MB, uploaded to Sentry in the step above and
       # nowhere else) they cost nothing to keep, and a crash inside one can be re-symbolicated by
       # hand from the build that shipped it. A SEPARATE artifact, because the one above becomes
       # the release's `dist/` and these are not release assets.

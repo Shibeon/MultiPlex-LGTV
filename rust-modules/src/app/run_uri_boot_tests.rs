@@ -481,7 +481,7 @@ mod uri_boot_tests {
             "the service reported the seek done: the startup plan goes on to the first Play");
     }
 
-    // ---- the URI dev route (`plxnative-uridev`): the production composition, ACB-bound ----
+    // ---- the URI dev route (`multiplex-uridev`): the production composition, ACB-bound ----
 
     /// The pair `install_uri_product` builds on an ACB-bound set (evidence nothing certifies, the
     /// production qualifier), handed through the dev route's `compose` with `trigger`. The host has

@@ -1027,7 +1027,7 @@ impl Sources {
                         )
                     });
                 }
-                // Armed probe only (`plxnative-framedrop`): name the draw that made the compare
+                // Armed probe only (`multiplex-framedrop`): name the draw that made the compare
                 // unequal. Unarmed this is one relaxed load and nothing else.
                 if e.valid && current != captured && plx_base::diag::spans::armed() {
                     let region = e.members.iter().copied().reduce(union).map_or([0.0; 4], |r| {

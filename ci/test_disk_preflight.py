@@ -188,7 +188,7 @@ class StaticWiring(unittest.TestCase):
         # A parser that stopped matching would pass every other test here with an empty set.
         builders = self.builders()
         for target in ("lint", "sim-macos", "test-fast", "check-ass", "check-ffmpeg", "site-video-sim",
-                       "pkg/plxnative-storage", self.config["RUST_LIB"], "test-crate", "macapp", "build-bench"):
+                       "pkg/multiplex-storage", self.config["RUST_LIB"], "test-crate", "macapp", "build-bench"):
             self.assertIn(target, builders, "the detector no longer sees %s as a build" % target)
 
     def test_every_cargo_running_target_is_a_disk_entry(self):
@@ -257,7 +257,7 @@ class StaticWiring(unittest.TestCase):
 
     def test_the_query_and_the_phony_are_side_effect_free(self):
         # `make print-disk-entries` / `make disk-preflight` must not reset the build stamp (and so delete
-        # pkg/plxnative) the way a goal that builds does.
+        # pkg/multiplex) the way a goal that builds does.
         joined = self.text.replace("\\\n", " ")
         self.assertRegex(joined, r"(?m)^QUERY_GOALS\s*=[^\n]*\bprint-disk-entries\b")
         self.assertRegex(joined, r"(?m)^SIDE_EFFECT_FREE\s*=[^\n]*\bdisk-preflight\b")

@@ -1,6 +1,6 @@
-# Help translate PlxNative
+# Help translate MultiPlex
 
-PlxNative's interface is available in English, Spanish, French, Italian, European Portuguese, German, Hungarian, Russian, Polish, Dutch and Belarusian
+MultiPlex's interface is available in English, Spanish, French, Italian, European Portuguese, German, Hungarian, Russian, Polish, Dutch and Belarusian
 (official Cyrillic orthography). Help improve a translation or contribute another language through a pull request
 at https://github.com/Shibeon/MultiPlex-LGTV.
 
@@ -72,12 +72,12 @@ the Library's Sort & Filter menu, and the
 collection page's meta line and season marks. When one of these tests fails, shorten
 the wording; do not abbreviate it past readability.
 
-Review the affected screens with the desktop simulator. `PLXNATIVE_LOCALE=es`, `fr`, `it`, `pt`, `de`, `hu`, `ru`, `pl`, `nl`, `be` or `en`
-selects a language for a simulator launch; `PLXNATIVE_FORMAT_LOCALE=de-DE` exercises separate
-regional formatting. Set `PLXNATIVE_CLOCK` to `12`, `24` or `locale` to exercise the player HUD clock.
+Review the affected screens with the desktop simulator. `MULTIPLEX_LOCALE=es`, `fr`, `it`, `pt`, `de`, `hu`, `ru`, `pl`, `nl`, `be` or `en`
+selects a language for a simulator launch; `MULTIPLEX_FORMAT_LOCALE=de-DE` exercises separate
+regional formatting. Set `MULTIPLEX_CLOCK` to `12`, `24` or `locale` to exercise the player HUD clock.
 Time-of-day formatting uses ICU hour-minute patterns and day periods for the format locale. The
 formatter requires only time data and reuses the existing decimal data. It adds no calendar or
-time-zone tables. `PLXNATIVE_LOCALE=qps-ploc` expands and accents text to reveal cramped
+time-zone tables. `MULTIPLEX_LOCALE=qps-ploc` expands and accents text to reveal cramped
 layouts; English-only diagnostics text is not expanded. These environment overrides do not operate in the shipping TV build.
 
 Open a pull request describing which language and screens changed, and how you checked the
@@ -92,7 +92,7 @@ the wording (the author, or someone they asked). A pull request from a non-nativ
 for a native reviewer before it is merged.
 
 The reviewer does not need to build anything. Send them the catalog files in `locales/<tag>/` and
-screenshots of the affected screens (desktop simulator with `PLXNATIVE_LOCALE=<tag>`, or the TV),
+screenshots of the affected screens (desktop simulator with `MULTIPLEX_LOCALE=<tag>`, or the TV),
 so they can see each string in its place: the same words read differently in a button, a menu and
 a sentence. Note any wording they changed and why.
 

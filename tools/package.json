@@ -1,5 +1,5 @@
 {
-  "name": "plxnative-tools",
+  "name": "multiplex-tools",
   "private": true,
   "description": "Node command-line tools that the Makefile and the workflows run, pinned here so Dependabot can bump them and the lockfile records what ran. Install: npm ci --prefix tools",
   "devDependencies": {

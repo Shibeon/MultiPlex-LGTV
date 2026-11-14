@@ -1,9 +1,9 @@
-//! PlxNative — an unofficial native Plex client for LG webOS.
+//! MultiPlex — an unofficial native Plex client for LG webOS.
 //! Copyright © 2026 Gleb Linnik. Licensed under GPL-3.0-or-later; see LICENSE at the repository
 //! root, and THIRD-PARTY-NOTICES.md for the components this links or redistributes.
 //! Not affiliated with, endorsed by, or sponsored by Plex GmbH or LG Electronics.
 //!
-//! plxnative-modules — the Rust app core, built as a staticlib and linked into the C
+//! multiplex-modules — the Rust app core, built as a staticlib and linked into the C
 //! boot shim. The crate's C surface is tiny: C calls `plex_run` (port.rs), writes the fallback
 //! image marker through `plx_crash_write_image_marker`, re-enters the native-crash spool through
 //! `plx_sentry_spool_external`, and forwards the two library-thread callbacks (`sf_on_event`,
@@ -17,7 +17,7 @@ compile_error!("native playback requires play-uri or play-feed");
 mod app; // run_application — the Rust app core / event loop (the entry inverted from main.c; port.rs's `plex_run` hands over to it)
 mod capture; // dev live UI capture stream: own-GLES-frame grab → MPEG1/TS or JPEG → TCP (UI plane only)
 mod coldstart; // retires old last-page bookmarks; authenticated cold boots now stay on Home
-mod dev; // the /tmp/plxnative-* trigger surface, behind one `devtriggers` feature — read it before adding a trigger
+mod dev; // the /tmp/multiplex-* trigger surface, behind one `devtriggers` feature — read it before adding a trigger
 mod focusprobe; // dev: one diffable line naming everything app.rs's key ladder can move, logged when it changes
 // The simulator's HUD tools (`--hud-lint`, `--hud-schema`, `--hud-export`): a library function the thin
 // `src/bin/sim.rs` calls before it reads a PMS host. `pub` because that binary is a separate crate; absent
@@ -53,7 +53,7 @@ pub fn sim_runtime_dir() -> std::path::PathBuf {
     plx_base::paths::runtime_dir().to_path_buf()
 }
 
-/// Publish a webOS major version for this simulator run (`PLXNATIVE_SIM_WEBOS_MAJOR`, read by the
+/// Publish a webOS major version for this simulator run (`MULTIPLEX_SIM_WEBOS_MAJOR`, read by the
 /// binary): the simulator has no firmware file, so it otherwise reports "unknown" and the
 /// webOS-1-3-only Interface resolution row stays hidden.
 #[cfg(feature = "hostsim")]
@@ -73,7 +73,7 @@ pub fn sim_events_log() -> std::path::PathBuf {
 }
 
 /// The port holds `plex_run`, the C entry the simulator binary calls too. It is reached by path
-/// (`plxnative_modules::port::plex_run`) so the SAME entry the C shim calls is the one called, with
+/// (`multiplex_modules::port::plex_run`) so the SAME entry the C shim calls is the one called, with
 /// the compiler checking the signature. It previously re-declared `plex_run` in its own `extern "C"`
 /// block, which meant the one binary whose whole premise is "cannot drift from the shipped boot
 /// path" was the one place a signature change would become a silent ABI mismatch instead of a

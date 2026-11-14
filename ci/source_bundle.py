@@ -25,7 +25,7 @@ PKG_FILES = {'OFL.txt', 'appfont.ttf', 'appfont-bold.ttf', 'appfont-cjk.ttf', 'a
              'appinfo.json', 'icon.png', 'icon160.png', 'icon320.png', 'icon400.png',
              'largeIcon.png', 'splash.png', 'telemetry.local.json.example'}
 # `tv-host`/`tv-mac` (no dot) are the per-user copies of the first two (tools/tv-config.sh,
-# ~/.config/plxnative/): outside every checkout, but a copy dropped into the tree must not ship.
+# ~/.config/multiplex/): outside every checkout, but a copy dropped into the tree must not ship.
 PRIVATE_NAMES = {'.tv-host', '.tv-mac', 'tv-host', 'tv-mac', '.tv-dpad-pass', '.tv-remote-url',
                  'config.local.h', 'manifest.local.json', 'auth.json', 'lab.json',
                  'telemetry.local.json', 'local.env', '.env', 'id_rsa', 'id_ed25519'}
@@ -56,7 +56,7 @@ def safe_name(name):
     p = PurePosixPath(name)
     if not name or p.is_absolute() or '..' in p.parts or '\\' in name or str(p) != name:
         fail('unsafe archive path: ' + name)
-    if any(part in PRIVATE_NAMES or part in {'.git', 'plxnative-recordings'} for part in p.parts):
+    if any(part in PRIVATE_NAMES or part in {'.git', 'multiplex-recordings'} for part in p.parts):
         fail('private path forbidden: ' + name)
     return p
 
@@ -149,11 +149,6 @@ PUBLIC_SAMPLE_FILES = {
         (PRIVATE_KEY_PATTERN, 'be6a429443a8687241f20f9bd2511614b9b8a150e52ed89e445960fbd2ae1906'),
     'cargo-vendor/rcgen/src/certificate.rs':
         (PRIVATE_KEY_PATTERN, '04d367a1ffb3a4c6f74154b68721690fef8e319fe591118211eb039a672963a1'),
-    # The unit-test PEM keys in `ed25519-compact` 2.6.0's `ed25519_tests` module: the verify-only
-    # dependency of the signed HUD registry index (Cargo.lock pins the crate's checksum). They sign
-    # nothing the app ships or trusts; the registry's keys are public keys compiled in as bytes.
-    'cargo-vendor/ed25519-compact/src/pem.rs':
-        (PRIVATE_KEY_PATTERN, 'ba3b0792845a9f5819ef4f52fb6ddf780ea84953a06fe69c916bc4c17e20145c'),
 }
 
 def scan(data, name, private_values=(), depth=0, budget=None):
@@ -167,7 +162,7 @@ def scan(data, name, private_values=(), depth=0, budget=None):
         if value and value in data:
             fail('private value found in: ' + name)  # Never print the matched value.
     patterns = [PRIVATE_KEY_PATTERN,
-                rb'PLXNATIVE_' + rb'PRIVATE_SENTINEL_[A-Za-z0-9]+',
+                rb'MULTIPLEX_' + rb'PRIVATE_SENTINEL_[A-Za-z0-9]+',
                 rb'\bgh[pousr]_[A-Za-z0-9]{30,}',
                 rb'\bAKIA[A-Z0-9]{16}\b',
                 SENTRY_DSN_PATTERN,

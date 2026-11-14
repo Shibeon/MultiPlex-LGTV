@@ -2,7 +2,7 @@
 """Exercise playback navigation against synthetic Plex media, using the shared simulator driver.
 
 Generate media with tests/fixtures/make_fixtures.py --only mockverify --out <directory>, then
-run this with --sim rust-modules/target-sim/debug/plxnative-sim --media <directory>.
+run this with --sim rust-modules/target-sim/debug/multiplex-sim --media <directory>.
 No television, household credentials, or external Plex account is used.
 """
 import argparse
@@ -23,9 +23,9 @@ def verify(binary, media, output, instant_dpad=False):
     port = server.server_address[1]
     stand_in = f"http://127.0.0.1:{port}"
     sim = SimRun(binary.resolve(), port, {
-        "plxnative-plextv": stand_in, "plxnative-discover": stand_in,
-        "plxnative-clocksink": "", "plxnative-noidle": "", "plxnative-focus": "",
-        "plxnative-play": str(mock_pms.V1_RATING_KEY),
+        "multiplex-plextv": stand_in, "multiplex-discover": stand_in,
+        "multiplex-clocksink": "", "multiplex-noidle": "", "multiplex-focus": "",
+        "multiplex-play": str(mock_pms.V1_RATING_KEY),
     }, output)
 
     def wait(pattern, after=0, timeout=25):
@@ -149,8 +149,8 @@ def verify_rapid(binary, media, output):
     port = server.server_address[1]
     url = f"http://127.0.0.1:{port}"
     sim = SimRun(binary.resolve(), port, {
-        "plxnative-plextv": url, "plxnative-discover": url, "plxnative-clocksink": "",
-        "plxnative-noidle": "", "plxnative-focus": "", "plxnative-play": str(mock_pms.V1_RATING_KEY),
+        "multiplex-plextv": url, "multiplex-discover": url, "multiplex-clocksink": "",
+        "multiplex-noidle": "", "multiplex-focus": "", "multiplex-play": str(mock_pms.V1_RATING_KEY),
     }, output)
 
     def wait(pattern, after=0):

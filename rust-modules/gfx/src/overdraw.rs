@@ -11,11 +11,11 @@
 //!    quad the app actually issues, on the CPU, exactly, with one exception: `draw_ambient` books
 //!    its quad before it decides to draw a flat ground as a clear, so a wash of one colour is booked
 //!    as `ambient` fragments though none is shaded (`OVERDRAW` over-reports `ambient` on those
-//!    frames; HWCNT does not). `/tmp/plxnative-overdraw` arms it and it logs one `OVERDRAW` line a
+//!    frames; HWCNT does not). `/tmp/multiplex-overdraw` arms it and it logs one `OVERDRAW` line a
 //!    second. This is immune to the two traps that make per-phase HWCNT
 //!    cycle counts a bad budget — it is not `glFinish`-serialised and it cannot be billed for
 //!    another process's work.
-//! 2. **What does a class COST?** `/tmp/plxnative-drawmask=<classes>` refuses every draw of the
+//! 2. **What does a class COST?** `/tmp/multiplex-drawmask=<classes>` refuses every draw of the
 //!    named classes, so a whole-frame `frame.ui` HWCNT A/B against the unmasked control prices that
 //!    class *as the frame sees it*, un-serialised. `drawmask=all` draws nothing at all and is
 //!    therefore the **compositor floor**: whatever `frame.ui` still costs with an empty page is
@@ -29,11 +29,11 @@
 //!    them as `cardpath`. The class
 //!    ledger above counts logical composites and cannot see this (a split card is one composite and
 //!    five GL draws); this can, and it is how a stalled spring that kept every visited card on the
-//!    focus program was found. `/tmp/plxnative-nocardsplit` ([`set_card_split`]) switches the split
+//!    focus program was found. `/tmp/multiplex-nocardsplit` ([`set_card_split`]) switches the split
 //!    off for a leg, so one binary measures it on and off interleaved. A region drawn once into a
 //!    texture (`gfx::region_paint`, the Under posters preview) has two switches of its own:
-//!    `/tmp/plxnative-nopreviewcache` ([`set_region_cache`]) draws it live again, and
-//!    `/tmp/plxnative-previewsnap` ([`set_region_snap`]) puts its quad on whole pixels.
+//!    `/tmp/multiplex-nopreviewcache` ([`set_region_cache`]) draws it live again, and
+//!    `/tmp/multiplex-previewsnap` ([`set_region_snap`]) puts its quad on whole pixels.
 //!
 //! A masked leg is deliberately a BROKEN PICTURE. This is a measurement knob, not a feature — the
 //! mask exists so a control-leg difference can be taken, and every leg it produces except the
@@ -82,7 +82,7 @@ pub enum Class {
 
 pub const NCLASS: usize = 10;
 
-/// The name each class answers to in `/tmp/plxnative-drawmask`, in [`Class`] order.
+/// The name each class answers to in `/tmp/multiplex-drawmask`, in [`Class`] order.
 pub const NAMES: [&str; NCLASS] = [
     "ambient", "grad", "rect", "shadow", "card", "image", "text", "glass", "blur", "field",
 ];
@@ -113,7 +113,7 @@ pub const NPATH: usize = 6;
 /// The name each path answers to on the window line, in [`CardPath`] order.
 pub const PATH_NAMES: [&str; NPATH] = ["split", "focus", "clip", "nointerior", "plain", "off"];
 
-/// A PART of the card class's work that `/tmp/plxnative-drawmask` can refuse on its own, beside the
+/// A PART of the card class's work that `/tmp/multiplex-drawmask` can refuse on its own, beside the
 /// whole classes of [`Class`]. They exist to split a `card` delta into its pieces on the TV: the
 /// whole class is one number, and what to do about it (cut the interior's texture cost, bake the
 /// ring, retire the focus program for a spring that has all but landed) depends on which part holds
@@ -134,7 +134,7 @@ pub enum CardPart {
 
 pub const NPART: usize = 3;
 
-/// The name each part answers to in `/tmp/plxnative-drawmask`, in [`CardPart`] order. The dot is
+/// The name each part answers to in `/tmp/multiplex-drawmask`, in [`CardPart`] order. The dot is
 /// part of the word: `card` masks the whole class, `card.ring` only the ring of the split cards.
 pub const PART_NAMES: [&str; NPART] = ["card.interior", "card.ring", "card.focus"];
 
@@ -180,7 +180,7 @@ mod imp {
     }
 
     /// Switch the resting-card split off (`false`) or back on, for an A/B on one binary
-    /// (`/tmp/plxnative-nocardsplit`). Off, a card that could be split is drawn whole and booked
+    /// (`/tmp/multiplex-nocardsplit`). Off, a card that could be split is drawn whole and booked
     /// as [`CardPath::Off`].
     pub fn set_card_split(on: bool) {
         SPLIT.with(|f| f.set(on));
@@ -193,7 +193,7 @@ mod imp {
     }
 
     /// Switch the region cache off (`false`) or back on, for an A/B on one binary
-    /// (`/tmp/plxnative-nopreviewcache`). Off, a region is drawn live every frame again.
+    /// (`/tmp/multiplex-nopreviewcache`). Off, a region is drawn live every frame again.
     pub fn set_region_cache(on: bool) {
         REGION_CACHE.with(|f| f.set(on));
     }
@@ -204,7 +204,7 @@ mod imp {
         REGION_CACHE.with(|f| f.get())
     }
 
-    /// Put a cached region's quad on whole pixels (`true`), for a leg (`/tmp/plxnative-previewsnap`).
+    /// Put a cached region's quad on whole pixels (`true`), for a leg (`/tmp/multiplex-previewsnap`).
     pub fn set_region_snap(on: bool) {
         REGION_SNAP.with(|f| f.set(on));
     }
@@ -248,7 +248,7 @@ mod imp {
         ((x1 - x0).max(0.0) * (y1 - y0).max(0.0)) as f64
     }
 
-    /// Arm the ledger (`/tmp/plxnative-overdraw`).
+    /// Arm the ledger (`/tmp/multiplex-overdraw`).
     pub fn set_ledger(on: bool) {
         ON.with(|f| f.set(on));
         if on {

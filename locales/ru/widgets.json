@@ -118,7 +118,7 @@
     "many": "{heading} · {count} ДОРОЖЕК",
     "other": "{heading} · {count} ДОРОЖКИ"
   },
-  "widgets.reason.jail_help": "Для исправления нужны root-доступ к телевизору и Homebrew Channel. Инструкция: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem",
+  "widgets.reason.jail_help": "Для исправления нужны root-доступ к телевизору и Homebrew Channel.",
   "widgets.tracks.empty": "Нет дорожек",
   "widgets.tracks.bytes": {
     "one": "{count} байт",

@@ -21,6 +21,9 @@ pub mod state;
 #[path = "../storage_service/wire.rs"]
 pub mod wire;
 
+/// The record wrapper's format tag. Written into every record already stored on a television, so it
+/// keeps the name it was written under (before the plxnative -> multiplex rename): a new tag would
+/// make every existing record unreadable.
 const FORMAT: &str = "plxnative-record";
 const VERSION: u64 = 1;
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
@@ -931,7 +934,7 @@ mod tests {
     #[test]
     fn ordinary_missing_file_is_reported_absent_by_the_production_helper() {
         let path =
-            std::env::temp_dir().join(format!("plxnative-cleanup-missing-{}", std::process::id()));
+            std::env::temp_dir().join(format!("multiplex-cleanup-missing-{}", std::process::id()));
         let _ = std::fs::remove_file(&path);
         assert_eq!(
             remove_file_or_prove_absent(&path).unwrap(),
@@ -944,7 +947,7 @@ mod tests {
     impl Scratch {
         fn new() -> Self {
             let p = std::env::temp_dir().join(format!(
-                "plxnative-storage-{}-{}",
+                "multiplex-storage-{}-{}",
                 std::process::id(),
                 rand_suffix()
             ));

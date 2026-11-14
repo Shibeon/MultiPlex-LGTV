@@ -447,15 +447,15 @@ class CargoDeclarations(unittest.TestCase):
     def test_workspace_inheritance_resolves_alias_and_root_relative_path(self):
         root = ('[workspace]\nmembers = ["low", "high"]\n'
                 '[workspace.dependencies]\nback = { package = "plx_high", path = "high" }\n'
-                '[package]\nname = "plxnative-modules"\n')
+                '[package]\nname = "multiplex-modules"\n')
         code, out = self.run_cargo_gate('[dependencies]\nback = { workspace = true, optional = true }\n',
                                         root_manifest=root)
         self.assertEqual(code, 1, out)
         self.assertIn('back declares [low] -> [high]', out)
 
     def test_app_root_is_checked_and_cannot_be_a_hidden_upward_path_target(self):
-        root = '[package]\nname = "plxnative-modules"\n[dependencies]\nplx_high = { path = "high" }\n'
-        code, out = self.run_cargo_gate('[dependencies]\napp = { package = "plxnative-modules", path = ".." }\n',
+        root = '[package]\nname = "multiplex-modules"\n[dependencies]\nplx_high = { path = "high" }\n'
+        code, out = self.run_cargo_gate('[dependencies]\napp = { package = "multiplex-modules", path = ".." }\n',
                                         root_manifest=root)
         self.assertEqual(code, 1, out)
         self.assertIn('app declares [low] -> [app]', out)

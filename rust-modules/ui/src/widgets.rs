@@ -247,8 +247,8 @@ fn panel_tint_sweep() -> Option<f32> {
 /// move; what changed instead is that the panel now also gets the extra sample the bar declines,
 /// because lightening the shared snapshot for the bar had lightened the menus with it.
 ///
-/// `/tmp/plxnative-material=<ultrathin|thin|regular|thick|ultrathick>` swaps the whole material,
-/// and `/tmp/plxnative-panelfrost=<a>` still overrides the density alone for a finer sweep.
+/// `/tmp/multiplex-material=<ultrathin|thin|regular|thick|ultrathick>` swaps the whole material,
+/// and `/tmp/multiplex-panelfrost=<a>` still overrides the density alone for a finer sweep.
 fn panel_material() -> theme::Material {
     material_sweep().unwrap_or(theme::PANEL_MATERIAL)
 }
@@ -375,12 +375,6 @@ pub enum Art<'a> {
 }
 
 impl Art<'_> {
-    /// A credential-free PNG whose filename is its SHA-256. Resolved by the shared image cache,
-    /// never through a media server; the source verifies both network responses and disk hits.
-    pub fn content_png(url: &str) -> Art<'_> {
-        Art::Thumb { sid: crate::tex::CONTENT_SOURCE, key: url, res: (1920, 1080) }
-    }
-
     fn motion_identity(&self) -> Option<crate::card_motion::Identity> {
         use std::hash::{Hash, Hasher};
         let (owner, sid, key, kind) = match self {
@@ -393,153 +387,6 @@ impl Art<'_> {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         (sid, key, kind).hash(&mut hash);
         Some(crate::card_motion::Identity { owner, asset: hash.finish() })
-    }
-}
-
-/// A display-only cycle of equivalent, content-addressed PNGs. The owner supplies the frames
-/// and Tick time; image requests still use the shared card source. Holds are quiet, hidden
-/// owners pause, and a slow next image never replaces the current picture with a skeleton.
-#[derive(Default)]
-pub struct ArtCycle {
-    frames: Vec<String>,
-    current: usize,
-    clock: plx_machine::motion::Ramp,
-    mix: f32,
-    fading: bool,
-    ready: std::cell::Cell<bool>,
-}
-
-impl ArtCycle {
-    const HOLD_MS: u32 = 6000;
-    const FADE_MS: u32 = 1200;
-
-    pub fn set_frames(&mut self, frames: &[&str]) {
-        let mut unique = Vec::new();
-        for frame in frames {
-            if !unique.contains(frame) { unique.push(*frame); }
-        }
-        if self.frames.iter().map(String::as_str).eq(unique.iter().copied()) { return; }
-        self.frames = unique.into_iter().map(str::to_owned).collect();
-        self.current = 0;
-        self.clock = plx_machine::motion::Ramp::default();
-        self.mix = 0.0;
-        self.fading = false;
-        self.ready.set(false);
-        plx_machine::idle::invalidate();
-    }
-
-    pub fn is_empty(&self) -> bool { self.frames.is_empty() }
-
-    /// Pause at the lifecycle event itself; no ticks are required while suspended.
-    pub fn pause(&mut self, t: plx_machine::machine::Tick) { self.clock.pause(t); }
-
-    pub fn tick(&mut self, t: plx_machine::machine::Tick, active: bool,
-        present: &mut plx_machine::machine::PresentHandle<'_>) {
-        if !active || self.frames.len() < 2 || !self.ready.get() {
-            self.clock.pause(t);
-            return;
-        }
-        self.clock.resume(t);
-        if self.clock.len_ms == 0 { self.clock.start(t, Self::HOLD_MS); }
-        if !self.fading {
-            if self.clock.sample(t) < 1.0 { return; }
-            self.fading = true;
-            self.clock.start(t, Self::FADE_MS);
-        }
-        self.mix = self.clock.advance(t, present);
-        if self.mix >= 1.0 {
-            self.current = (self.current + 1) % self.frames.len();
-            self.clock = plx_machine::motion::Ramp::default();
-            self.mix = 0.0;
-            self.fading = false;
-            self.ready.set(false);
-            present.note(plx_machine::present::PresentEvent::Motion);
-        }
-    }
-
-    pub fn draw(&self, p: Painter, r: Rect, radius: f32) {
-        let Some(url) = self.frames.get(self.current) else { return };
-        let art = Art::content_png(url);
-        if p.is_recording() {
-            card(p, r, art, radius, false, 1.0, 0.0);
-            return;
-        }
-        let image = resolve_card_art(p, r, &art);
-        let next_url = &self.frames[(self.current + 1) % self.frames.len()];
-        let next_art = Art::content_png(next_url);
-        let next = if self.frames.len() > 1 { resolve_card_art(p, r, &next_art) } else { image };
-        let ready = image.tex != 0 && next.tex != 0 && image.w == next.w && image.h == next.h;
-        self.ready.set(ready);
-        if self.fading && ready && p.tex_carded_blend(image.tex, next.tex,
-            crate::xfade::smooth(self.mix), art_uv(&art, image.w, image.h, r), r, radius) { return; }
-        card_named_led(p, r, art, None, radius, false, 1.0, 0.0, Some(image));
-    }
-}
-
-#[cfg(test)]
-mod art_cycle_tests {
-    use super::ArtCycle;
-    use plx_machine::machine::{PresentHandle, Tick};
-    use plx_machine::present::Present;
-
-    fn tick(ms: u32) -> Tick { Tick { ms, dt_us: 16_000 } }
-
-    #[test]
-    fn equivalent_frames_cycle_without_changing_the_owners_scene() {
-        let _g = plx_base::testlock::serial();
-        let mut cycle = ArtCycle::default();
-        let mut present = Present::new();
-        cycle.set_frames(&["coast", "painted", "city"]);
-        cycle.ready.set(true);
-        let _ = present.take(0);
-        cycle.tick(tick(16), true, &mut PresentHandle(&mut present));
-        cycle.tick(tick(5000), true, &mut PresentHandle(&mut present));
-        assert_eq!(cycle.current, 0);
-        assert!(!cycle.fading);
-        assert!(!present.take(0), "the hold must not redraw at 60 FPS");
-        cycle.tick(tick(6000), true, &mut PresentHandle(&mut present));
-        assert!(cycle.fading);
-        assert!(present.take(0), "the first fade frame must wake the idle gate");
-        for frame in 1..60 {
-            cycle.tick(tick(6000 + frame * 16), true, &mut PresentHandle(&mut present));
-            assert!(present.take(0), "every overlapping frame must be presented");
-        }
-        cycle.tick(tick(7300), true, &mut PresentHandle(&mut present));
-        assert_eq!(cycle.current, 1);
-        assert!(!cycle.fading);
-        assert!(present.take(0), "the final frame must be presented too");
-        cycle.ready.set(true);
-        cycle.tick(tick(7316), true, &mut PresentHandle(&mut present));
-        assert!(!present.take(0));
-    }
-
-    #[test]
-    fn slow_images_hidden_owners_and_single_frames_never_animate() {
-        let _g = plx_base::testlock::serial();
-        let mut cycle = ArtCycle::default();
-        let mut present = Present::new();
-        cycle.set_frames(&["one", "two"]);
-        let _ = present.take(0);
-        cycle.tick(tick(1000), true, &mut PresentHandle(&mut present));
-        assert_eq!(cycle.clock.len_ms, 0);
-        assert!(!present.take(0));
-        cycle.ready.set(true);
-        cycle.tick(tick(1016), true, &mut PresentHandle(&mut present));
-        cycle.pause(tick(1100));
-        cycle.tick(tick(20000), false, &mut PresentHandle(&mut present));
-        cycle.tick(tick(21000), true, &mut PresentHandle(&mut present));
-        assert!(!cycle.fading, "suspension must not consume the hold");
-        assert!(!present.take(0));
-        cycle.set_frames(&["one", "one"]);
-        let _ = present.take(0);
-        cycle.ready.set(true);
-        cycle.tick(tick(100000), true, &mut PresentHandle(&mut present));
-        assert_eq!(cycle.frames.len(), 1);
-        assert!(!present.take(0));
-        cycle.set_frames(&["two", "three"]);
-        assert_eq!(cycle.current, 0);
-        assert_eq!(cycle.clock.len_ms, 0);
-        assert!(!cycle.ready.get(), "a new pack cannot inherit readiness");
     }
 }
 
@@ -2547,7 +2394,7 @@ pub fn tracked_run(
 }
 
 plx_base::devtrig::latched_flag!(
-    /// **`/tmp/plxnative-tileglass` — an episode still's label band as a frosted MATERIAL instead
+    /// **`/tmp/multiplex-tileglass` — an episode still's label band as a frosted MATERIAL instead
     /// of a black gradient.** An EXPERIMENT, default off, and it exists to be measured rather than
     /// to be shipped by whoever finds it.
     ///
@@ -2756,7 +2603,7 @@ impl TopFocus {
 // document shape no longer has; `git log -S nav_scrim` is the recipe if a route ever grows a fixed
 // bar again.
 //
-// It took `/tmp/plxnative-navglass` with it — the frosted-material prototype of the same band. The
+// It took `/tmp/multiplex-navglass` with it — the frosted-material prototype of the same band. The
 // idea (content should FROST under the top chrome rather than dissolve into flat grey) keeps coming
 // back, and the reason it lost is a television measurement, not a taste: both screens held a
 // flawless 60 fps with nothing over 20.6 ms, and the material put every second's worst frame at
@@ -7114,7 +6961,7 @@ fn track_density_step(dt: f32, d: &mut TrackDensity) {
 /// The weight is [`track_density`]'s — [`track_alpha_for`]'s solve after the attack/release spring,
 /// never the raw solve. The override bypasses both, which is what makes it a fixed-weight leg.
 ///
-/// `/tmp/plxnative-tabglassdim=<0..1>` replaces [`theme::TAB_GLASS_TOP`]'s alpha and keeps the
+/// `/tmp/multiplex-tabglassdim=<0..1>` replaces [`theme::TAB_GLASS_TOP`]'s alpha and keeps the
 /// authored spread to the bottom stop, so a sweep moves ONE variable. Absent, the theme's own
 /// values are returned and the draw is byte-identical.
 ///
@@ -7192,7 +7039,7 @@ fn track_lift(ground: [f32; 3], a: f32) -> f32 {
     0.0
 }
 
-/// The lift's floor, swept by `/tmp/plxnative-tracklift=<floor>`.
+/// The lift's floor, swept by `/tmp/multiplex-tracklift=<floor>`.
 ///
 /// `0` is the material as it was before the floor existed, which is what makes an A/B one launch
 /// rather than one build. Read once per process, like every other material sweep here.
@@ -7301,7 +7148,7 @@ fn track_alpha_for(ground: [f32; 3]) -> f32 {
     hi
 }
 
-/// `/tmp/plxnative-trackmax=<a>` — the density CEILING, swept.
+/// `/tmp/multiplex-trackmax=<a>` — the density CEILING, swept.
 ///
 /// The ceiling is what decides how dark this bar is allowed to get over bright artwork, and it is
 /// the one remaining number between our material and the reference. Measured on a stripe ground:
@@ -7393,7 +7240,7 @@ fn track_rim(density: f32) -> ([f32; 4], [f32; 4]) {
     )
 }
 
-/// `/tmp/plxnative-rimmax=<a>` — the ceiling that ramp climbs toward, swept.
+/// `/tmp/multiplex-rimmax=<a>` — the ceiling that ramp climbs toward, swept.
 ///
 /// It exists because the ramp's ceiling is the one number that decides whether the edge reads as a
 /// LIT EDGE or as a drawn white outline, and it had never been held against the reference. Measured
@@ -7462,7 +7309,7 @@ fn lstar(c: [f32; 4]) -> f32 {
 /// grab is `blur_region_for(false, ..)`, 68 px past the members and not 88. The profile chip is
 /// a pill inside the track (its right end), so there is no second capsule for a width to reach.
 ///
-/// `/tmp/plxnative-flattabs` takes the material away, which is how the two are compared on one
+/// `/tmp/multiplex-flattabs` takes the material away, which is how the two are compared on one
 /// television without a second binary — and the one thing that made the flat track the answer for a
 /// while is gone: the density is no longer a constant that had to be legible over every possible
 /// hero at once, so it is not forced up to the flat capsule's own weight. See [`track_alpha_for`].
@@ -7477,11 +7324,11 @@ fn tab_glass_on() -> bool {
 use plx_base::devtrig::latched_flag;
 
 latched_flag!(
-    /// `/tmp/plxnative-flattabs` — the material off, for an A/B against the flat capsule.
+    /// `/tmp/multiplex-flattabs` — the material off, for an A/B against the flat capsule.
     fn flat_tabs_armed = "flattabs";
 );
 latched_flag!(
-    /// `/tmp/plxnative-groundlog` — what the sampler read and what density it chose.
+    /// `/tmp/multiplex-groundlog` — what the sampler read and what density it chose.
     fn ground_log_armed = "groundlog";
 );
 
@@ -7871,7 +7718,7 @@ impl StripRender {
         let glass_on = tab_glass_on();
         let groundlog = ground_log_armed();
         let ground = band.prepare(p, track, settled, glass_on);
-        // `/tmp/plxnative-groundlog` — the density is now a FUNCTION of something invisible, so the
+        // `/tmp/multiplex-groundlog` — the density is now a FUNCTION of something invisible, so the
         // instrument that says what it read and what it chose is not optional. It is how the first
         // version of this was caught reading Plex's `UltraBlurColors`, which gave (0.30,0.23,0.18)
         // for a hero whose top edge is (0.00,0.68,0.91) and left the bar at its floor.

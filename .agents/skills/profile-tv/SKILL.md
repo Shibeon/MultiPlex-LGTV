@@ -1,7 +1,7 @@
 ---
 name: profile-tv
 description: >
-  Diagnose a live PlxNative process that is slow, janky, frozen or consuming unexpected CPU/GPU
+  Diagnose a live MultiPlex process that is slow, janky, frozen or consuming unexpected CPU/GPU
   on the rooted LG TV. Use for stack samples, a missing heartbeat while the PID still exists,
   frame pacing, Mali IRQ activity, HWCNT attribution, or deciding which graphics profiler explains
   a regression. If the process died, use crash-triage instead.
@@ -9,13 +9,13 @@ description: >
 
 # Profile a live app on the TV
 
-This is opt-in developer tooling. None of it runs in PlxNative unless a command or dev trigger was
+This is opt-in developer tooling. None of it runs in MultiPlex unless a command or dev trigger was
 explicitly armed, and the stack/IRQ helpers are temporary root processes that never enter an ipk.
 
 ## First split: dead or alive
 
 Resolve the selected install through `make -s print-appdir print-rundir print-eventlog FLAVOR=<f>`
-and find its process with `fuser <appdir>/plxnative`, never `pidof plxnative` (stable and debug have
+and find its process with `fuser <appdir>/multiplex`, never `pidof multiplex` (stable and debug have
 the same executable name).
 
 - No matching PID: use **`crash-triage`**.
@@ -28,10 +28,10 @@ tools also wrap themselves in `tv-lock.sh with` when invoked alone.
 ## Live stacks
 
 ```bash
-tools/plxnative-sample snapshot                         # all LWPs once
-tools/plxnative-sample profile --seconds 5 --hz 10      # render/main statistical sample
-tools/plxnative-sample profile --all-threads            # invasive, when ownership is unclear
-tools/plxnative-sample watch --stall-ms 2500             # foreground opt-in watchdog
+tools/multiplex-sample snapshot                         # all LWPs once
+tools/multiplex-sample profile --seconds 5 --hz 10      # render/main statistical sample
+tools/multiplex-sample profile --all-threads            # invasive, when ownership is unclear
+tools/multiplex-sample watch --stall-ms 2500             # foreground opt-in watchdog
 ```
 
 `watch` captures three all-thread snapshots for each heartbeat-stall episode and rearms only after
@@ -48,7 +48,7 @@ consumed CPU.
 
 With an ASS/SSA track rendering, the event log carries `assperf:` lines, one per worker `w` (the primary and up to two helpers a moving cue starts; `window_ms` the span the counts cover, render and whole-job p95/max, bytes
 published and uploaded in that window, Normal+Ahead `jobs`, `ahead_hit`, `shown` (pipeline frames promoted: updates a second), `late`, `stale`, `nwait`, the libass/composite split `lib_p95_us` / `comp_p95_us` (wall) and `lib_cpu_p95_us` / `comp_cpu_p95_us` (the worker thread's CPU time in the same phases: wall far above CPU means it waited for the CPU, not that it computed) with the `images_p95` / `img_kpx_p95` it drew, `scale` (the smallest size a job of the window was drawn at, `1.00` / `0.67` / `0.50`: a heavy moving stretch is drawn smaller, read the figures at their own scale, and each move is one `ass: render scale A -> B` line), and `worker w= tid= nice=`) and `FRAMEDROP spans=` gains `assup` (the
-UI-thread GL upload; needs `/tmp/plxnative-framedrop` armed). Read these before attributing a late frame to subtitles; follow the worker
+UI-thread GL upload; needs `/tmp/multiplex-framedrop` armed). Read these before attributing a late frame to subtitles; follow the worker
 with `tools/tv-sched-trace.sh --tid <tid>`. See `docs/ass-subtitles.md`.
 
 ## Three graphics layers
@@ -83,9 +83,9 @@ The bundle has three deliberately different meanings:
    phases and builds in the same leg; take true late counts from a FRAMEDROP or
    `tools/tv-sched-trace.sh` run with HWCNT off.
 
-If layer 1 says frames are slow, use `/tmp/plxnative-framedrop` and then
-`/tmp/plxnative-cpuprof` to localize render-thread wall time. Use asynchronous
-`/tmp/plxnative-profile` for GPU phase time. Arm only one profiler mode per launch. The HWCNT and
+If layer 1 says frames are slow, use `/tmp/multiplex-framedrop` and then
+`/tmp/multiplex-cpuprof` to localize render-thread wall time. Use asynchronous
+`/tmp/multiplex-profile` for GPU phase time. Arm only one profiler mode per launch. The HWCNT and
 GL-timer triggers invalidate production pacing even when their output looks plausible.
 
 ## Why a back buffer is late (kernel trace)
@@ -93,7 +93,7 @@ GL-timer triggers invalidate production pacing even when their output looks plau
 A frame whose first framebuffer command waits a tick (8.33 ms) or more longer than usual missed a
 compositor pass; which side made it miss (the app's CPU, the app's GPU job, or the compositor) is
 answered by a kernel trace, not by a count of late frames. During an fps leg armed with
-`--extra-trigger plxnative-framecb --extra-trigger plxnative-framering=17 --save-logs DIR` (framecb
+`--extra-trigger multiplex-framecb --extra-trigger multiplex-framering=17 --save-logs DIR` (framecb
 adds `wait_at=` to the FRAMEDROP lines; the ring writes the slow frames and their neighbours; it
 needs framedrop armed, see the doc), take 6 s windows with
 `tools/tv-sched-trace.sh --app --secs 6 --out w1.gz` (`--app [FLAVOR]` finds that install's pid by
@@ -109,7 +109,7 @@ with HWCNT off.
 
 ## Mali T820 facts for reading the counters
 
-Measured facts for reading HWCNT, `plxnative-drawmask` and bench output. For `plxnative-drawmask`
+Measured facts for reading HWCNT, `multiplex-drawmask` and bench output. For `multiplex-drawmask`
 itself (the draw classes, `all`, `glass`, the comma list) see `docs/backdrop-blur-profiling.md`.
 
 **The GPU clock is fixed at 672 MHz (dev set, measured 2026-10-24).** The TV's `mali_kbase.ko`
@@ -181,7 +181,7 @@ kill $(cat $PIDF); rm -f $PIDF
 - A control run at a flat 39-42 °C with the CPU pinned at 1008 MHz showed the normal miss rate, so
   neither thermal throttling nor CPU frequency drives the misses.
 
-**Reading `plxnative-herobench` misses.**
+**Reading `multiplex-herobench` misses.**
 
 - (a) A cycle-1 `swap` of 13-16 ms on the frame after the event-log line
   `egl surface (after 120 presents)` is the one-shot `EGL_BUFFER_AGE` query in
@@ -195,13 +195,13 @@ kill $(cat $PIDF); rm -f $PIDF
   `GPU_ACTIVE` p50 per frame (about 70 % busy at 672 MHz):
   - 5-14 misses at 8.1M or more;
   - 1-5 at 7.9M or less;
-  - 0-3 at the 3.1M floor (`plxnative-drawmask=all`).
+  - 0-3 at the 3.1M floor (`multiplex-drawmask=all`).
 
   These are single runs per mask. The control spread in cycles 2-60 was 7-15: `hero-pong` 14, 7
   and 9 and `grid-pong` 15, 11 and 9 in #980's device runs (2026-10-24), and `grid-pong` 8, 9, 13
   and 14 in the controls above. Late frames wait in `clear` (back-buffer release) while the CPU is
   idle. That is the GPU queue, not the UI thread.
-- (c) `plxnative-drawmask=glass` also skips the glass source pass, an early post-swap FBO
+- (c) `multiplex-drawmask=glass` also skips the glass source pass, an early post-swap FBO
   submission. A `-glass` leg is therefore not a clean measurement of glass cost.
 - (d) The Home p95 was bimodal: the ground probe's 1-in-`GROUND_SAMPLE_EVERY` kick frame added
   1.7-1.9M cycles while the top bar's probe copied framebuffer 0 mid-page. The bar's copy is now made
@@ -211,7 +211,7 @@ kill $(cat $PIDF); rm -f $PIDF
   (`sample_control_ground`) still copies framebuffer 0 on its call and was not measured separately.
 
 **Home pong census** (release build, 2026-10-24; `GPU_ACTIVE` saved per frame by removing one draw
-class with `plxnative-drawmask`):
+class with `multiplex-drawmask`):
 
 - hero: ramp bands up to 2.4M (upper bound; it includes about 35 chrome rects), photos 2.1M, wedge
   1.1M, glass + source + blur 1.05M, floor 3.1M.

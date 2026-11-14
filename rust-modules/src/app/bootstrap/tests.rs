@@ -46,13 +46,13 @@ fn session_app_initial_probe_only() {
     let bytes = serde_json::to_vec(&initial).unwrap();
     assert_eq!(bytes.as_slice(), include_bytes!("../fixtures/session-codec-v5/initial-v5.json"));
     let frozen_hashes: serde_json::Value = serde_json::from_str(include_str!("../fixtures/session-codec-v5/initial-hashes.json")).unwrap();
-    assert_eq!(frozen_hashes["canon_finish"].as_u64(), Some(14618251649147468963u64));
-    assert_eq!(frozen_hashes["outer_hash"].as_u64(), Some(14618251649147468963u64));
+    assert_eq!(frozen_hashes["canon_finish"].as_u64(), Some(5191274203899479873u64));
+    assert_eq!(frozen_hashes["outer_hash"].as_u64(), Some(5191274203899479873u64));
     let mut canon = Canon::new();
     initial.write(&mut canon);
     let outer_hash = initial.hash();
-    assert_eq!(canon.finish(), 14618251649147468963u64);
-    assert_eq!(outer_hash, 14618251649147468963u64);
+    assert_eq!(canon.finish(), 5191274203899479873u64);
+    assert_eq!(outer_hash, 5191274203899479873u64);
     assert_eq!(initial.version, 1);
     assert_eq!(Initial::decode(value.clone(), outer_hash).unwrap().hash(), outer_hash);
     assert!(Initial::decode(value.clone(), outer_hash ^ 1).is_err());
@@ -116,7 +116,7 @@ fn filmography_initial_requires_complete_typed_inputs() {
     value["content"] = serde_json::json!({"detail":"1001", "detailsec":1,
         "detailok":true, "filmography":true, "personcredits":9, "nowan":true});
     for trigger in ["detail", "detailsec", "detailok", "filmography", "personcredits", "nowan"] {
-        value["triggers"].as_array_mut().unwrap().push(serde_json::json!(format!("plxnative-{trigger}")));
+        value["triggers"].as_array_mut().unwrap().push(serde_json::json!(format!("multiplex-{trigger}")));
     }
     let initial = Initial::from_value(value.clone()).expect("complete filmography boot");
     assert_ne!(initial.hash(), Initial::synthetic_home(1, 32498, None).unwrap().hash());
@@ -166,7 +166,7 @@ fn controlled_script_input_roundtrips_without_claiming_a_physical_key() {
 fn settings_initial_is_typed_hashed_and_bound_to_its_trigger() {
     let initial = Initial::synthetic_home(17, 32517, Some("root".into())).unwrap();
     assert_eq!(initial.settings.as_deref(), Some("root"));
-    assert!(initial.triggers.iter().any(|trigger| trigger == "plxnative-settings"));
+    assert!(initial.triggers.iter().any(|trigger| trigger == "multiplex-settings"));
     let encoded = serde_json::to_value(&initial).unwrap();
     let decoded = Initial::from_value(encoded).unwrap();
     assert_eq!(decoded.hash(), initial.hash());
@@ -181,7 +181,7 @@ fn settings_initial_is_typed_hashed_and_bound_to_its_trigger() {
     assert_eq!(bad_value.validate(), Err("unsupported initial Settings input"));
 
     let mut missing_trigger = initial.clone();
-    missing_trigger.triggers.retain(|trigger| trigger != "plxnative-settings");
+    missing_trigger.triggers.retain(|trigger| trigger != "multiplex-settings");
     assert_eq!(missing_trigger.validate(), Err("incoherent initial Settings input"));
 
     let plain = Initial::synthetic_home(17, 32517, None).unwrap();

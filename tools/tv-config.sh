@@ -18,7 +18,7 @@
 #   2. the same file in the MAIN checkout (a linked worktree has none of its own; setups that keep
 #      the file only there keep working),
 #   3. `tv-host` / `tv-mac` in the per-USER directory
-#         ${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/plxnative}
+#         ${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/multiplex}
 #      -- set it ONCE per machine and every checkout and worktree sees it. That is the reason it
 #      exists: the address and MAC are properties of the television and of this person's network,
 #      not of a checkout, and copying a file into each worktree goes stale the day the TV's DHCP
@@ -38,6 +38,16 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 user_dir() {
   if [ -n "${PLX_TV_CONFIG_DIR:-}" ]; then printf '%s' "$PLX_TV_CONFIG_DIR"
+  elif [ -n "${XDG_CONFIG_HOME:-}" ]; then printf '%s/multiplex' "$XDG_CONFIG_HOME"
+  elif [ -n "${HOME:-}" ]; then printf '%s/.config/multiplex' "$HOME"
+  fi
+}
+
+# The directory a checkout from before the plxnative -> multiplex rename wrote, read LAST so an
+# existing per-user address and MAC keep working until they are moved (`mv` the directory).
+# Nothing writes it any more; an explicit PLX_TV_CONFIG_DIR replaces both.
+legacy_dir() {
+  if [ -n "${PLX_TV_CONFIG_DIR:-}" ]; then :
   elif [ -n "${XDG_CONFIG_HOME:-}" ]; then printf '%s/plxnative' "$XDG_CONFIG_HOME"
   elif [ -n "${HOME:-}" ]; then printf '%s/.config/plxnative' "$HOME"
   fi
@@ -59,6 +69,10 @@ lookup() {
   fi
   if [ -z "$v" ]; then
     dir="$(user_dir)"
+    [ -z "$dir" ] || v="$(cat "$dir/tv-$name" 2>/dev/null | strip)"
+  fi
+  if [ -z "$v" ]; then
+    dir="$(legacy_dir)"
     [ -z "$dir" ] || v="$(cat "$dir/tv-$name" 2>/dev/null | strip)"
   fi
   printf '%s' "$v"

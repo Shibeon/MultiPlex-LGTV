@@ -80,7 +80,7 @@ fn frames(page: &mut LibraryScreen, fixture: &Fixture, n: usize, ahead: usize) {
 fn with_no_trigger_lookahead_is_three_rows_and_prepare_reaches_the_source() {
     let _guard = plx_base::testlock::serial();
     reset(usize::MAX);
-    assert_eq!(lookahead::rows_for(None), 3, "no plxnative-lookahead trigger: the default depth");
+    assert_eq!(lookahead::rows_for(None), 3, "no multiplex-lookahead trigger: the default depth");
     assert_eq!(lookahead::rows(), lookahead::rows_for(None), "unit tests never read the host's trigger file");
     let fixture = Fixture::art_listing(false);
     let mut page = fixture.screen();

@@ -32,8 +32,8 @@
 #
 # --app [FLAVOR] picks the thread for you: the pid of the running app of that install (debug,
 # stable or nightly; default $FLAVOR, else debug), found on the set by its /proc/<pid>/exe. A jailed
-# app's exe reads `/var/palm/jail/<app id>/<appdir>/plxnative`, so it matches by SUFFIX against
-# `make -s print-appdir`'s `<appdir>/plxnative` (a prefix match finds nothing). It refuses with one line,
+# app's exe reads `/var/palm/jail/<app id>/<appdir>/multiplex`, so it matches by SUFFIX against
+# `make -s print-appdir`'s `<appdir>/multiplex` (a prefix match finds nothing). It refuses with one line,
 # before touching the set, when zero or more than one pid matches. `--tid` and `--app` are exclusive.
 #
 # The THREAD TABLE: a ftrace line names a thread by comm and pid only, never by the process it belongs
@@ -113,7 +113,7 @@ if [ "$TEST" != 1 ]; then
   # linked worktree has no .tv-host of its own, so tools/tv-config.sh also reads the main checkout's
   # and the per-user one).
   TV_HOST="${TV_HOST:-$("$HERE/tv-config.sh" host 2>/dev/null || true)}"
-  [ -n "$TV_HOST" ] || { echo "tv-sched-trace: no TV configured (~/.config/plxnative/tv-host, .tv-host or TV_HOST)" >&2; exit 1; }
+  [ -n "$TV_HOST" ] || { echo "tv-sched-trace: no TV configured (~/.config/multiplex/tv-host, .tv-host or TV_HOST)" >&2; exit 1; }
   TV="$TV_HOST" "$HERE/tv-lock.sh" require --quiet --why "tv-sched-trace.sh" || exit 1
   # A trace of the fast-profile (tvdev, no LTO) binary does not show the shipped build's waits: stop
   # (one line naming the fix) rather than record it. Read-only; names the profile on stderr.
@@ -329,14 +329,14 @@ resolve_app() {
   if [ "$TEST" = 1 ]; then dir="${TV_SCHED_TRACE_APPDIR:?}"
   else dir="$(make -s -C "$HERE/.." FLAVOR="$flavor" print-appdir 2>/dev/null)"; fi
   case "$dir" in /*) ;; *) fail "cannot resolve the $flavor install directory from the Makefile" ;; esac
-  r="$(remote findapp "$dir/plxnative")" || fail "the television is unreachable"
+  r="$(remote findapp "$dir/multiplex")" || fail "the television is unreachable"
   pids="$(sed -n 's/^pid=\([0-9][0-9]*\)$/\1/p' <<<"$r" | tr '\n' ' ')"
   stale="$(sed -n 's/^stale=\([0-9][0-9]*\)$/\1/p' <<<"$r" | head -1)"
   n="$(wc -w <<<"$pids" | tr -d ' ')"
   case "$n" in
     1) tid="${pids% }" ;;
-    0) fail "no $flavor app is running on the set (no process runs $dir/plxnative)${stale:+; pid $stale still runs a replaced binary, close it and relaunch}" ;;
-    *) fail "more than one process runs $dir/plxnative (pids ${pids% }); pass --tid with the one to trace" ;;
+    0) fail "no $flavor app is running on the set (no process runs $dir/multiplex)${stale:+; pid $stale still runs a replaced binary, close it and relaunch}" ;;
+    *) fail "more than one process runs $dir/multiplex (pids ${pids% }); pass --tid with the one to trace" ;;
   esac
   echo "tv-sched-trace: --app $flavor: pid $tid" >&2
 }

@@ -1011,7 +1011,7 @@ def default_root():
     and `.gitignore` as the only defence against committing media has been got wrong here before.
     """
     return os.path.join(
-        os.environ.get("FIXTURES_OUT") or os.path.expanduser("~/plxnative-fixtures"), "pipeline")
+        os.environ.get("FIXTURES_OUT") or os.path.expanduser("~/multiplex-fixtures"), "pipeline")
 
 
 def lan_ip(peer=None):
@@ -1099,7 +1099,7 @@ def main():
         return _selftest(a.root, a.port)
     srv, base = serve(a.root, a.port, sink=lambda m: print(m, flush=True))
     print(f"serving {a.root}")
-    print(f"  {base}/<file>   (this is the address to put in plxnative-url)")
+    print(f"  {base}/<file>   (this is the address to put in multiplex-url)")
     print("  ^C to stop")
     try:
         threading.Event().wait()

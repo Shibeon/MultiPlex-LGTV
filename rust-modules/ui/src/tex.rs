@@ -52,10 +52,6 @@ use super::frame::{Budget, Class};
 use plx_machine::machine::{PosterKey, PresentHandle};
 use plx_machine::present::{PresentEvent, Provenance, ResourceKind};
 
-/// Render-source namespace for immutable public content. The application's source adapter must
-/// handle this separately from authenticated media servers and verify the content digest.
-pub const CONTENT_SOURCE: u16 = u16::MAX;
-
 /// What a prefetch did — which is what lets a caller spend exactly ONE key per frame: a prefetch
 /// loop walks its candidates and stops at the first `Claimed`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -77,7 +73,7 @@ pub trait Source {
     /// texture may still be waiting for upload). A miss claims a slot and starts the fetch —
     /// UNLESS the source declines the request, which it may do for its own admission reasons
     /// (today: an unknown card placement, a fast-moving one only under the dev
-    /// trigger `plxnative-cardspeed`, and a slot cooling down from rapid re-eviction). So `None` means empty, DEFERRED, in flight or failed, and
+    /// trigger `multiplex-cardspeed`, and a slot cooling down from rapid re-eviction). So `None` means empty, DEFERRED, in flight or failed, and
     /// the cache must go on drawing its placeholder without inferring that work is under way —
     /// asking again next frame is how a deferred request is eventually honoured. Touches the
     /// source's LRU.

@@ -44,12 +44,12 @@ CASES = [
     (BLOCK, "tools/tv-session.sh sound on"),
     (BLOCK, "tools/tv-session.sh sound status"),
     (BLOCK, "tools/capture-screen.sh out.png DISPLAY"),
-    (BLOCK, "ssh root@192.0.2.10 'cat /tmp/plxnative-events.log'"),
-    (BLOCK, "sshpass -p alpine scp pkg/plxnative root@192.0.2.10:/tmp/"),
+    (BLOCK, "ssh root@192.0.2.10 'cat /tmp/multiplex-events.log'"),
+    (BLOCK, "sshpass -p alpine scp pkg/multiplex root@192.0.2.10:/tmp/"),
     # tools/tv-ssh is the shared key-first ssh/scp wrapper every TV caller goes through; it spells
     # the television as the literal word `tv` (no `root@<ip>`), so the raw-ssh pattern cannot see it.
-    (BLOCK, "tools/tv-ssh ssh tv 'cat /tmp/plxnative-events.log'"),
-    (BLOCK, "tools/tv-ssh scp pkg/plxnative tv:/tmp/"),
+    (BLOCK, "tools/tv-ssh ssh tv 'cat /tmp/multiplex-events.log'"),
+    (BLOCK, "tools/tv-ssh scp pkg/multiplex tv:/tmp/"),
     (BLOCK, "./tools/tv-ssh ssh tv true"),
     (BLOCK, "tools/tv-sched-trace.sh --secs 20 --out /tmp/t.gz"),
     (BLOCK, "echo hi && make deploy"),
@@ -184,7 +184,7 @@ def blocked(cmd):
 # checkout there; only an `isolation: worktree` subagent reports its own), so it names its lane by
 # prefixing `PLX_TV_LOCK_LANE=<its worktree>` on the command itself. These cases run the SAME
 # decision `main()` makes, `guard.decide()` (classify each segment, resolve its lane, check
-# `lease_for()`), against a throwaway mirror directory, never the real `~/.plxnative/tv-lock` a
+# `lease_for()`), against a throwaway mirror directory, never the real `~/.multiplex/tv-lock` a
 # live `tools/tv-lock.sh` writes to.
 import shutil
 import tempfile

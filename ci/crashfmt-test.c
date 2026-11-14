@@ -1,4 +1,4 @@
-/* PlxNative — an unofficial native Plex client for LG webOS.
+/* MultiPlex — an unofficial native Plex client for LG webOS.
  * Copyright © 2026 Gleb Linnik. Licensed under GPL-3.0-or-later; see LICENSE at the repository root.
  *
  * crashfmt-test.c — host test for `src/crashfmt.h`, the pure half of the crash tracer.
@@ -14,7 +14,7 @@
  * `app.multiplex.native` is a PREFIX of `app.multiplex.native.debug`.
  *
  * **Written by watching it fail.** `plx_names_our_binary` was reverted to the bare substring test
- * before this file was trusted, and exactly one assertion below went red — `plxnative-sim`. That
+ * before this file was trusted, and exactly one assertion below went red — `multiplex-sim`. That
  * result is itself the finding: it disproved the justification `src/main.c` had carried since the
  * tracer was written (that a substring test would also match `libturbojpeg.so.0` beside the
  * binary), because the needle carries a slash and the directory component is `/app.multiplex.native`.
@@ -116,9 +116,9 @@ int main(void) {
      * outside [A-Za-z0-9_.-] (a space, a newline) can never reach the log as itself. */
     {
         char out[96];
-        size_t n = plx_fmt_thread(out, sizeof out - 1, 4242, 1, "plxnative");
+        size_t n = plx_fmt_thread(out, sizeof out - 1, 4242, 1, "multiplex");
         out[n] = 0;
-        eq_str("thread line", out, "thread: tid=4242 main=1 name=plxnative\n");
+        eq_str("thread line", out, "thread: tid=4242 main=1 name=multiplex\n");
         n = plx_fmt_thread(out, sizeof out - 1, 7, 0, "a b\nc*");
         out[n] = 0;
         eq_str("thread line, hostile name", out, "thread: tid=7 main=0 name=a?b?c?\n");
@@ -157,9 +157,9 @@ int main(void) {
      * `pc` sits inside the executable's text mapping, which is the ordinary case. */
     static const char BIN[] =
         "00010000-0097f000 r-xp 00000000 b3:35 12345 "
-        "/media/developer/apps/usr/palm/applications/app.multiplex.native/plxnative\n";
-    /* Deployed beside the binary, inside a directory whose own name ends in `.plxnative`. NOT a
-     * trap, in the end: the needle is `/plxnative` and this path's slash is followed by `c`, so
+        "/media/developer/apps/usr/palm/applications/app.multiplex.native/multiplex\n";
+    /* Deployed beside the binary, inside a directory whose own name ends in `.multiplex`. NOT a
+     * trap, in the end: the needle is `/multiplex` and this path's slash is followed by `c`, so
      * even a bare substring test rejects it. Kept because it is the shape main.c's comment named
      * for years, and a case that pins "this is not our binary" is worth having whichever argument
      * makes it true. */
@@ -174,33 +174,33 @@ int main(void) {
     eq_int("our binary, not containing it", kind(BIN, 0xb5100000UL, 0), PLX_MAP_BIN);
     eq_int("a library beside the binary is NOT the binary", kind(JPEG, 0x00020000UL, 0), 0);
     /* THE case the separator actually buys, and the only assertion that went red when the token
-     * test was reverted to a substring one. `plxnative-sim` is the host simulator and
-     * `plxnative.new` is what `make deploy` scp's before renaming it over the running binary;
+     * test was reverted to a substring one. `multiplex-sim` is the host simulator and
+     * `multiplex.new` is what `make deploy` scp's before renaming it over the running binary;
      * neither is mapped on a television today, which is what makes this a test rather than a
      * hope — nothing else would notice if the guard were dropped. */
-    eq_int("plxnative.new is a different name",
+    eq_int("multiplex.new is a different name",
            kind("00010000-00020000 r-xp 0 0:0 1 /media/developer/apps/usr/palm/applications/"
-                "app.multiplex.native/plxnative.new\n", 0, 0), 0);
+                "app.multiplex.native/multiplex.new\n", 0, 0), 0);
     eq_int("a library beside it, containing the pc", kind(JPEG, 0xb6a10000UL, 0), PLX_MAP_AT);
     eq_int("a TV library containing the pc", kind(LGLIB, 0xb5100000UL, 0), PLX_MAP_AT);
 
     /* The `(deleted)` form, and the other half of what the separator buys. `make deploy` writes
-     * `plxnative.new` and renames it over the running binary (the ETXTBSY dance), so the kernel
+     * `multiplex.new` and renames it over the running binary (the ETXTBSY dance), so the kernel
      * appends this on every development iteration — the space-terminated spelling is the NORMAL
-     * one while iterating, and a test for `"/plxnative\n"` alone would fail to find our own binary
+     * one while iterating, and a test for `"/multiplex\n"` alone would fail to find our own binary
      * exactly when it is being worked on. */
     static const char DELETED[] =
         "00010000-0097f000 r-xp 00000000 b3:35 12345 "
-        "/media/developer/apps/usr/palm/applications/app.multiplex.native/plxnative (deleted)\n";
+        "/media/developer/apps/usr/palm/applications/app.multiplex.native/multiplex (deleted)\n";
     eq_int("the (deleted) form is still our binary", kind(DELETED, 0, 0), PLX_MAP_BIN);
 
     /* And the flavoured install, whose directory name has `.debug` after the token — the prefix
      * trap from the other side. Still our binary: both installs' executables are named
-     * `plxnative`, and it is `crash-report.sh` that decides WHICH install a `bin:` line belongs
+     * `multiplex`, and it is `crash-report.sh` that decides WHICH install a `bin:` line belongs
      * to, by matching the app id in the path. This test pins that division of labour. */
     static const char DEBUG_BIN[] =
         "00010000-0097f000 r-xp 00000000 b3:35 12347 "
-        "/media/developer/apps/usr/palm/applications/app.multiplex.native.debug/plxnative\n";
+        "/media/developer/apps/usr/palm/applications/app.multiplex.native.debug/multiplex\n";
     eq_int("the debug install's binary is also a bin: line", kind(DEBUG_BIN, 0, 0), PLX_MAP_BIN);
 
     /* The LR is checked as well as the PC: on a jump through a bad function pointer the PC is
@@ -219,7 +219,7 @@ int main(void) {
     eq_int("a truncated range", kind("00010000-\n", 0, 0), 0);
     eq_int("an empty line", kind("\n", 0, 0), 0);
 
-    eq_int("plxnative-sim is a different name", kind("00010000-00020000 r-xp 0 0:0 1 /x/plxnative-sim\n", 0, 0), 0);
+    eq_int("multiplex-sim is a different name", kind("00010000-00020000 r-xp 0 0:0 1 /x/multiplex-sim\n", 0, 0), 0);
 
     /* ---- the EXIT record (`plx_fmt_exit`) ---- */
     {
@@ -285,7 +285,7 @@ int main(void) {
     {
         struct plx_range r;
         eq_int("an r-xp line is executable",
-               plx_map_line_exec("00010000-0097f000 r-xp 00000000 b3:35 1 /x/plxnative\n", 56, &r), 1);
+               plx_map_line_exec("00010000-0097f000 r-xp 00000000 b3:35 1 /x/multiplex\n", 56, &r), 1);
         eq_int("lo of the range", (long)r.lo, 0x10000);
         eq_int("hi of the range", (long)r.hi, 0x97f000);
         const char *rw = "b5000000-b5001000 rw-p 00000000 00:00 0 \n";

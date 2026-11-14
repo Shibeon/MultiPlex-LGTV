@@ -8,7 +8,7 @@ use super::*;
 #[cfg(any(feature = "hostsim", test))]
 #[derive(Clone, Copy)]
 enum WindowAsk {
-    /// `PLXNATIVE_WIN=<w>x<h>`: a DRAWABLE of exactly this many pixels, on any display.
+    /// `MULTIPLEX_WIN=<w>x<h>`: a DRAWABLE of exactly this many pixels, on any display.
     Drawable(c_int, c_int),
     /// No override: the largest whole fraction of the canvas whose window fits this usable display
     /// area (`SDL_GetDisplayUsableBounds`, in points).
@@ -64,7 +64,7 @@ impl Density {
     }
 }
 
-/// `PLXNATIVE_WIN`'s value: `<w>x<h>`, both positive. Anything else is no override.
+/// `MULTIPLEX_WIN`'s value: `<w>x<h>`, both positive. Anything else is no override.
 #[cfg(any(feature = "hostsim", test))]
 fn parse_window_override(v: &str) -> Option<(c_int, c_int)> {
     let (w, h) = v.split_once(['x', 'X'])?;
@@ -122,11 +122,11 @@ fn plan_desktop_window(ask: WindowAsk, density: Density) -> (c_int, c_int) {
 #[cfg(feature = "hostsim")]
 const WINDOWPOS_CENTERED: c_int = 0x2FFF_0000u32 as c_int;
 
-/// What this process is asked for: `PLXNATIVE_WIN` if it holds a size, else the fit to the display,
+/// What this process is asked for: `MULTIPLEX_WIN` if it holds a size, else the fit to the display,
 /// or the canvas itself if SDL cannot say how big the display is.
 #[cfg(feature = "hostsim")]
 fn desktop_window_ask() -> WindowAsk {
-    if let Some((w, h)) = std::env::var_os("PLXNATIVE_WIN").and_then(|v| parse_window_override(&v.to_string_lossy())) {
+    if let Some((w, h)) = std::env::var_os("MULTIPLEX_WIN").and_then(|v| parse_window_override(&v.to_string_lossy())) {
         return WindowAsk::Drawable(w, h);
     }
     let mut r = [0 as c_int; 4]; // SDL_Rect: x, y, w, h
@@ -145,7 +145,7 @@ fn desktop_window_ask() -> WindowAsk {
 /// `SDL_GetWindowSize` says how many pixels that bought per point. On a 1x display nothing happens.
 /// On a 2x display the window is resized (and put back in the middle of the display, since it was
 /// centred at the old size) to the points that give the drawable that was asked for:
-/// `PLXNATIVE_WIN=1920x1080` is a 960x540-point window, not a 1920x1080-point one with a 3840x2160
+/// `MULTIPLEX_WIN=1920x1080` is a 960x540-point window, not a 1920x1080-point one with a 3840x2160
 /// drawable. Called before `surface::probe`, which reads the drawable once and for good.
 #[cfg(feature = "hostsim")]
 unsafe fn fit_window_to_density(win: *mut c_void, ask: WindowAsk) {
@@ -185,13 +185,13 @@ mod desktop_window_tests {
         (points, (density.pixels(points.0), density.pixels(points.1)))
     }
 
-    /// `PLXNATIVE_WIN=1920x1080` on a 1x display is the 1920x1080 window it always was.
+    /// `MULTIPLEX_WIN=1920x1080` on a 1x display is the 1920x1080 window it always was.
     #[test]
     fn a_1x_display_gives_the_override_as_asked() {
         assert_eq!(plan(Drawable(1920, 1080), Density::UNIT), ((1920, 1080), (1920, 1080)));
     }
 
-    /// THE BUG: `PLXNATIVE_WIN=1920x1080` on a 2x display was a 1920x1080-POINT window, whose
+    /// THE BUG: `MULTIPLEX_WIN=1920x1080` on a 2x display was a 1920x1080-POINT window, whose
     /// drawable is 3840x2160 (`scale=2.000`) and which breached the render-set ceiling on every
     /// frame of a Library scroll. The override is the DRAWABLE, so the window is half of it.
     #[test]
@@ -311,11 +311,11 @@ pub(crate) fn install_panic_logger() {
             &line,
             plx_telemetry::telemetry::crashreport::now_secs(),
         );
-        default(info); // preserve default behaviour (stderr -> plxnative-stderr.log)
+        default(info); // preserve default behaviour (stderr -> multiplex-stderr.log)
     }));
 }
 
-/// Append the panic's record to the crash log at `path` (`plxnative-crash.log`, which `src/main.c`
+/// Append the panic's record to the crash log at `path` (`multiplex-crash.log`, which `src/main.c`
 /// opens and the signal tracer appends to).
 ///
 /// **Two disciplines, both the event log's** (the crash log is group-readable for the same Dev Mode
@@ -468,7 +468,7 @@ mod seam_order_tests {
     /// shipping build, panics when asked for it earlier, so the hand-in has to be the first thing
     /// the one entry point does: nothing before it can build a header or a `User-Agent`. It also
     /// has to hand in `PLX_VERSION` itself, the string `ci/check-package.py` grades in the binary
-    /// (as `plxnative@` + version, see the telemetry hand-in below), and no second production site
+    /// (as `multiplex@` + version, see the telemetry hand-in below), and no second production site
     /// may hand in anything else. Reads the source, like the tests
     /// below, because no host test can run `enter_application`.
     #[test]
@@ -491,7 +491,7 @@ mod seam_order_tests {
         // `plx_telemetry` reports the release it is handed the same way (and also panics when asked
         // earlier in a shipping build). It is composed here with `concat!`, not by the telemetry
         // crate, because `ci/check-package.py` greps the packaged binary for that exact string.
-        let release = concat!("plx_telemetry::telemetry::", "set_release(concat!(\"plxnative@\", env!(\"PLX_VERSION\")));");
+        let release = concat!("plx_telemetry::telemetry::", "set_release(concat!(\"multiplex@\", env!(\"PLX_VERSION\")));");
         let second = body
             .lines()
             .map(str::trim)
@@ -878,7 +878,7 @@ unsafe fn show_through(door: CursorDoor, shown: &std::sync::atomic::AtomicUsize)
     }
 }
 /// The window to ask for when it is not the 1920x1080 canvas, `None` for the canvas (1:1): whatever
-/// `/tmp/plxnative-drawable=<W>x<H>` says when that trigger is armed (debug builds only; it
+/// `/tmp/multiplex-drawable=<W>x<H>` says when that trigger is armed (debug builds only; it
 /// outranks the setting and is bounded to 640x360..=1920x1080 so a typo cannot ask for nonsense),
 /// else, on webOS 1-3 only, the install-wide Settings > System > Interface resolution choice.
 /// **Automatic is the canvas on every set**, and webOS 4+ is always the canvas; a smaller window is
@@ -1250,8 +1250,8 @@ pub(crate) fn loop_tick(iters_ct: &mut i32, loop_t: &mut u32, loop_shown: &mut i
     *loop_t = now;
     true
 }
-/// How many times a finished `plxnative-playurl` playback may start itself AGAIN — the
-/// `/tmp/plxnative-replay` trigger's content, as a number (LG App Self Checklist #46).
+/// How many times a finished `multiplex-playurl` playback may start itself AGAIN — the
+/// `/tmp/multiplex-replay` trigger's content, as a number (LG App Self Checklist #46).
 ///
 /// A named function rather than a closure at the one call site, for `note_global_press`'s reason
 /// one step removed: the call site is inside the SDL event loop, which no host test can enter, and
@@ -1309,7 +1309,7 @@ mod replay_budget_tests {
 
 /// Resolve the server half of a direct dev-screen request.
 ///
-/// An absent trigger preserves the historical `plxnative-play=<rk>` contract and uses the current
+/// An absent trigger preserves the historical `multiplex-play=<rk>` contract and uses the current
 /// server. Once an explicit slot was written, however, failure is terminal: rating keys are local
 /// to one PMS, so falling back could open a different item on another server.
 pub(crate) fn resolve_direct_server(
@@ -1626,7 +1626,7 @@ pub(crate) unsafe fn construct(
     #[cfg(feature = "hostsim")]
     let title = c"MultiPlex";
     #[cfg(not(feature = "hostsim"))]
-    let title = c"plxnative";
+    let title = c"multiplex";
     // A frame dump's drawable is exactly the window's size in points: it is the one desktop window
     // that does not ask for ALLOW_HIGHDPI (0x2000), so its window is the 1920x1080 points of the
     // canonical Linux host on a Retina display too, and `fit_window_to_density` finds nothing to
@@ -1664,7 +1664,7 @@ pub(crate) unsafe fn construct(
     #[cfg(feature = "hostsim")]
     fit_window_to_density(win, desktop_ask);
     plx_base::surface::probe(win);
-    // vsync on → the frame rate locks to the panel refresh. `/tmp/plxnative-novsync` uncaps it so
+    // vsync on → the frame rate locks to the panel refresh. `/tmp/multiplex-novsync` uncaps it so
     // `fps=` reports the true GPU render rate. WSLg's X11/GLX swap accepts interval 1 without
     // blocking, so the software budget in `run` follows the same switch.
     // A frame dump never waits on the display: every iteration is a render, at swap interval 0 and
@@ -1723,7 +1723,7 @@ pub(crate) unsafe fn construct(
     ));
 
     plx_platform::tv::window::grab(win);
-    // EXPERIMENT (`/tmp/plxnative-opaque`), no-op without the trigger: build the full-surface
+    // EXPERIMENT (`/tmp/multiplex-opaque`), no-op without the trigger: build the full-surface
     // wl_region once, so `opaque_route` below can declare the UI plane opaque on every screen
     // that has nothing behind it. See `system.rs`'s section on it.
     plx_platform::tv::window::arm_opaque_region();
@@ -1759,7 +1759,7 @@ pub(crate) unsafe fn construct(
 
     // NO token is compiled into this binary. PMS access comes from the signed-in session,
     // or — for automated runs only (the regression harness, headless captures) — from the
-    // /tmp/plxnative-token dev trigger. The value is NEVER logged (only that one is in effect).
+    // /tmp/multiplex-token dev trigger. The value is NEVER logged (only that one is in effect).
     let dev_token = match &initial {
         Some(initial) => {
             let plx_session::auth::owner::BootstrapAuthority::DevPms { primary, .. } = &initial.session.authority
@@ -1768,20 +1768,20 @@ pub(crate) unsafe fn construct(
         }
         _ => crate::dev::scenarios::dev_token(),
     };
-    // dev: /tmp/plxnative-servers — credentials for a SECOND (third, …) server, so an automated
+    // dev: /tmp/multiplex-servers — credentials for a SECOND (third, …) server, so an automated
     // run can reach a friend's SHARED server beside the one above. A shared server is its own
     // authority: its own machineIdentifier, its own per-(user,server) access token, and a 401
-    // for anybody else's — which is precisely what ONE `plxnative-token` cannot express, and
+    // for anybody else's — which is precisely what ONE `multiplex-token` cannot express, and
     // why no two-source state could be graded headlessly before this.
     //
-    // ADDITIVE and nothing more. The primary is still `plxnative-token` (or the stored session)
+    // ADDITIVE and nothing more. The primary is still `multiplex-token` (or the stored session)
     // against the configured host/port (or the explicit dev-only pms-origin fixture override),
     // so an ordinary run that names one server behaves as before. `dev::servers()` is the accessor — memoized, so the harness's
     // /tmp wipe cannot change what this boot was handed — and `dev::DevServer` is the shape.
     //
     // It is NOT on the DIAG exemption list (`dev.rs`), deliberately: unlike a log or the anim
     // overlay, this file names a host AND the token to trust it with, so it must mark the boot
-    // automated and skip the who's-watching picker exactly as `plxnative-token` does. A run
+    // automated and skip the who's-watching picker exactly as `multiplex-token` does. A run
     // that landed on the picker instead of Home would grade the wrong screen.
     //
     // Tokens are never logged: `DevServer` has no `Debug`, and `describe()` prints all of it
@@ -1791,7 +1791,7 @@ pub(crate) unsafe fn construct(
         // `_e`: the only reader is the gated log line (see `dev.rs` on why literals are gated).
         Err(_e) => {
             #[cfg(feature = "devtriggers")]
-            log(&format!("servers: /tmp/plxnative-servers IGNORED — not valid JSON: {_e}"));
+            log(&format!("servers: /tmp/multiplex-servers IGNORED — not valid JSON: {_e}"));
         }
         Ok(v) if !v.is_empty() => {
             let usable = v.iter().filter(|s| s.usable()).count();
@@ -1839,14 +1839,14 @@ pub(crate) unsafe fn construct(
     // so the boot who's-watching picker is skipped. Pure diagnostics (the logs, the profiler,
     // the anim overlay) don't count as automation.
     // The scan itself, and the DIAG exemption list that decides what does NOT count as
-    // automation, live in `dev::any_trigger_present` — together with the `plxnative-anim.log`
+    // automation, live in `dev::any_trigger_present` — together with the `multiplex-anim.log`
     // bug that list was rewritten for. It is the one dev-trigger surface that names no file,
     // so it is also the one a release build had to be taught about explicitly.
     let automated_boot = || controlled || crate::dev::any_trigger_present();
 
     // Boot gate. Order matters:
-    //  1. /tmp/plxnative-login forces the QR login screen (to exercise the flow on demand).
-    //  2. /tmp/plxnative-token (the harness / headless runs) beats the stored session — automation
+    //  1. /tmp/multiplex-login forces the QR login screen (to exercise the flow on demand).
+    //  2. /tmp/multiplex-token (the harness / headless runs) beats the stored session — automation
     //     must run as the injected test identity no matter who is signed in on the TV.
     //  3. A stored session (offline-capable LAN server) → Home. A multi-user Plex Home roster
     //     still goes through the who's-watching picker first on interactive boots, unless
@@ -1855,38 +1855,38 @@ pub(crate) unsafe fn construct(
     //  4. Nothing → the QR sign-in flow (no credentials are compiled in — like a real client).
     // The destination itself is [`BootTo`], at module scope with the rest of the vocabulary.
     //
-    // dev: /tmp/plxnative-pickuser=<index> — force the boot picker even on an automated boot and
+    // dev: /tmp/multiplex-pickuser=<index> — force the boot picker even on an automated boot and
     // auto-select that roster tile once it's up (headless exercise of the who's-watching flow).
     let pick_user: Option<usize> = if controlled { None } else { crate::dev::scenarios::pickuser_index() };
     // The remembered server keys of the session this boot runs on, handed over before any request
     // can leave: a captured session was never READ through the cache that projects them.
     plx_plex::plex::session::project_server_keys(&session, false);
-    // dev: /tmp/plxnative-tls-selftest — exercises the wrong-clock TLS fallback on both planes with
+    // dev: /tmp/multiplex-tls-selftest — exercises the wrong-clock TLS fallback on both planes with
     // no account (a no-op without the trigger; absent in shipping builds). Armed HERE, after the
     // projection above, and not beside `global_init`: the projection replaces the key table
     // wholesale, and the self-test's pin is filed under a machine no session holds, so a projection
     // landing while round 1's first handshake is in flight would wipe it and the round be refused.
     #[cfg(feature = "devtriggers")]
     crate::dev::scenarios::tls_selftest::arm_at_boot();
-    // dev: /tmp/plxnative-toast=<text> — asks the TV's notification service for a system toast,
+    // dev: /tmp/multiplex-toast=<text> — asks the TV's notification service for a system toast,
     // once plain and once as the app, and logs each full outcome (`toast-probe …`).
     #[cfg(feature = "devtriggers")]
     crate::dev::scenarios::toast_probe::arm_at_boot();
     #[cfg(feature = "devtriggers")]
     crate::dev::scenarios::arm_hud_text_metrics();
-    // dev: /tmp/plxnative-clockfact=nokey|keychanged|engaged[:<year>] — plants a wrong-clock fact
+    // dev: /tmp/multiplex-clockfact=nokey|keychanged|engaged[:<year>] — plants a wrong-clock fact
     // (`net::keypin`) so the Home/Library read-out and the toast can be looked at with no
     // television. Armed after the projection above, whose sign-out arm only clears bound hosts.
     #[cfg(feature = "devtriggers")]
     crate::dev::scenarios::clock_fact::arm_at_boot();
-    // dev: /tmp/plxnative-hintoff — the hold hint taught for this run, on every screen, read
+    // dev: /tmp/multiplex-hintoff — the hold hint taught for this run, on every screen, read
     // once here on the frame thread (the hint's latches are thread-local). The site demo film is
     // shot with it: the capsule is a one-time teaching overlay, and a film has no viewer to teach.
     #[cfg(feature = "devtriggers")]
     if plx_base::devtrig::flag("hintoff") {
         plx_ui::hold_hint::teach_all_for_dev();
     }
-    // dev: /tmp/plxnative-hintfresh — this run starts with the hold hint untaught, though the install
+    // dev: /tmp/multiplex-hintfresh — this run starts with the hold hint untaught, though the install
     // was taught: the seed below is skipped, so the hint can be looked at again. Nothing on disk is
     // un-written; a read showing then writes taught again (an idempotent write).
     // The hold hint offers itself once per INSTALL: seed what an earlier run taught, before frame one.
@@ -1926,7 +1926,7 @@ pub(crate) unsafe fn construct(
         plx_ui::containers::transition::PageDip::new(),
     ));
     restore_player_preferences(&session, controlled);
-    // dev: /tmp/plxnative-audioenh=off|boost|loudness — force the enhancement preference right after
+    // dev: /tmp/multiplex-audioenh=off|boost|loudness — force the enhancement preference right after
     // the restore. Nobody is seated yet, so this sets the live cell alone (the door refuses to save
     // for nobody), which is all a dev-token boot, which never seats, gets. A boot that seats a
     // profile runs the arm again, writing THAT profile's record, at the seat change
@@ -1941,7 +1941,7 @@ pub(crate) unsafe fn construct(
         pages.frame_with(bridge, plx_machine::machine::Tick::default(), Vec::new(), Vec::new(),
             rec, false);
         #[cfg(feature = "devtriggers")]
-        log("boot: /tmp/plxnative-login — starting QR login");
+        log("boot: /tmp/multiplex-login — starting QR login");
         BootTo::Login
     } else if !dev_token.is_empty() {
         // `Origin::http` names the assumption out loud: the host and port compiled into the
@@ -2041,22 +2041,22 @@ pub(crate) unsafe fn construct(
         super::adapters::backends::acb_init(&mt); // every backend set: the plane owner's boot facts
         plx_media_codecs::ffi::boot(); // Codec resource boot; controlled Home cannot invoke ABI probes.
     }
-                       // dev: /tmp/plxnative-logintest validates the plex.tv account path end-to-end on the device — a
+                       // dev: /tmp/multiplex-logintest validates the plex.tv account path end-to-end on the device — a
                        // real typed create_pin() through the libcurl transport + DTO deserialize. Logs only the
                        // public pin id + code length + that authToken is still null (never a token/secret).
     if !controlled { crate::dev::scenarios::arm_logintest(); }
-    // dev: the animation-diagnostic overlay is OFF by default; /tmp/plxnative-anim enables it (its
-    // trace goes to /tmp/plxnative-anim.log, a separate stream from the main event log)
+    // dev: the animation-diagnostic overlay is OFF by default; /tmp/multiplex-anim enables it (its
+    // trace goes to /tmp/multiplex-anim.log, a separate stream from the main event log)
     if !controlled { crate::dev::scenarios::arm_anim(); }
-    // dev: /tmp/plxnative-stillclock=<ms> holds every free-running animation clock (spinners)
+    // dev: /tmp/multiplex-stillclock=<ms> holds every free-running animation clock (spinners)
     // still, so a screenshot of a waiting screen settles on one deterministic frame.
     if !controlled { crate::dev::scenarios::arm_stillclock(); }
     // dev: profile is asynchronous EXT_disjoint_timer_query timing; hwcnt is the serialized
     // direct Mali counter-attribution run. Their content names ONE phase (empty = frame.ui).
     // Combining them would perturb the timer result, so fail closed when both are present.
-    // dev: /tmp/plxnative-glassload is the backdrop-glass LOAD DIAL — a sweep of glass-surface
+    // dev: /tmp/multiplex-glassload is the backdrop-glass LOAD DIAL — a sweep of glass-surface
     // count, size and refresh cadence that cycles its own steps inside one launch, so legs are
-    // interleaved by construction. /tmp/plxnative-navblur is the blurred-route-transition
+    // interleaved by construction. /tmp/multiplex-navblur is the blurred-route-transition
     // prototype. Both live in `ui::glassload`; both are absent from a release build.
     // The plan is built HERE rather than in the `App` literal below so the dial is armed at the
     // point in boot it always was: `configure` logs what it will run, and that line's position in
@@ -2067,10 +2067,10 @@ pub(crate) unsafe fn construct(
         crate::dev::scenarios::arm_navblur(&mut glass);
     }
     // dev: the two OVERDRAW surfaces (`ui::overdraw`, docs/backdrop-blur-profiling.md Part 5).
-    // `plxnative-overdraw` arms the CPU-side per-draw-class ledger — how much screen-visible
+    // `multiplex-overdraw` arms the CPU-side per-draw-class ledger — how much screen-visible
     // quad area this app submits, per primitive family, per frame. It is not billed for the
     // wayland compositor's work and is not `glFinish`-serialised, which is what the GPU's
-    // global FRAG_QUADS_RAST cannot say. `plxnative-drawmask=<classes>` REFUSES every draw of
+    // global FRAG_QUADS_RAST cannot say. `multiplex-drawmask=<classes>` REFUSES every draw of
     // the named classes, so a whole-frame `frame.ui` A/B against the unmasked control prices
     // that class as the frame sees it; `all` draws nothing and is therefore the compositor
     // floor. A masked leg is a broken picture on purpose.
@@ -2079,15 +2079,15 @@ pub(crate) unsafe fn construct(
         crate::dev::scenarios::arm_drawmask();
         crate::dev::scenarios::arm_cardsplit();
     }
-    // dev: /tmp/plxnative-nobudget — the frame budget's A/B CONTROL leg (spec §8.1). Read here
+    // dev: /tmp/multiplex-nobudget — the frame budget's A/B CONTROL leg (spec §8.1). Read here
     // with the other boot triggers; applied to the one `Budget` below, once the tree exists.
     let nobudget = !controlled && crate::dev::scenarios::nobudget_armed();
     if !controlled { crate::dev::scenarios::arm_profile_hwcnt(); }
-    // dev: /tmp/plxnative-cpuprof — the render thread's OWN time per phase, every phase at
+    // dev: /tmp/multiplex-cpuprof — the render thread's OWN time per phase, every phase at
     // once, no glFinish. The one mode that can see a frame the frame-drop detector reports as
     // all `draw=` and no `swap=`; the two GPU modes above are blind to it by construction.
     if !controlled { crate::dev::scenarios::arm_cpuprof(); }
-    // dev: /tmp/plxnative-noidle turns the whole-frame present gate (plx_machine::idle) OFF, so a still
+    // dev: /tmp/multiplex-noidle turns the whole-frame present gate (plx_machine::idle) OFF, so a still
     // screen goes back to repainting at panel rate. It is a DIAG trigger (see the list above)
     // precisely so an A/B costs one file and does not also change which screen you boot to —
     // and so that if a frame ever looks wrong on the panel, ruling this feature out is one
@@ -2099,10 +2099,10 @@ pub(crate) unsafe fn construct(
     if let Some(initial) = &initial {
         plx_machine::idle::set_enabled(!plx_base::devtrig::listed(&initial.triggers, "noidle"));
     } else { crate::dev::scenarios::arm_noidle(); }
-    // dev: /tmp/plxnative-detailosc (read once at boot, like the other triggers) makes the detail scroll
+    // dev: /tmp/multiplex-detailosc (read once at boot, like the other triggers) makes the detail scroll
     // perpetually swing hero<->bottom so the FPS heartbeat samples the transition, not the ends.
     let detail_osc = !controlled && crate::dev::scenarios::detailosc_armed();
-    // dev: /tmp/plxnative-homeosc — perpetually sweep the home grid focus DOWN to the bottom then
+    // dev: /tmp/multiplex-homeosc — perpetually sweep the home grid focus DOWN to the bottom then
     // UP to the top (~3s each way, one row per 350ms), so a headless run reproduces the top↔bottom
     // vertical-scroll judder for the frame-drop detector / retui profiler.
     let home_osc = !controlled && crate::dev::scenarios::homeosc_armed();
@@ -2116,23 +2116,23 @@ pub(crate) unsafe fn construct(
     let home_fold_osc = !controlled && crate::dev::scenarios::homefoldosc_armed();
     let home_fold_osc_last = 0u32;
     let home_fold_down = true;
-    // dev: /tmp/plxnative-libosc — the Library twin of homeosc: sweep the browse grid focus
+    // dev: /tmp/multiplex-libosc — the Library twin of homeosc: sweep the browse grid focus
     // down↔up perpetually for the library_scroll FPS scene.
     let lib_osc = !controlled && crate::dev::scenarios::libosc_armed();
     let lib_osc_last = 0u32;
-    // dev: /tmp/plxnative-libswitch — exercise EVERY Library switch on a timer (tab switch,
+    // dev: /tmp/multiplex-libswitch — exercise EVERY Library switch on a timer (tab switch,
     // sort menu open/move/close, unwatched on/off, filter open/close) for the library_switch
     // FPS scene, so the re-query + popover paths are perf-gated, not just the scroll.
     let lib_switch = !controlled && crate::dev::scenarios::libswitch_armed();
     let lib_switch_last = 0u32;
     let lib_switch_step = 0u32;
-    // dev: /tmp/plxnative-searchosc — the Search twin of homeosc/libosc: sweep the result
+    // dev: /tmp/multiplex-searchosc — the Search twin of homeosc/libosc: sweep the result
     // shelves' focus down↔up perpetually for the `fps:search-type` scene. It does NOT reach the
-    // screen on its own — pair it with `/tmp/plxnative-search=<query>`, and with a query the
+    // screen on its own — pair it with `/tmp/multiplex-search=<query>`, and with a query the
     // library actually matches, or there are no shelves to sweep and the scene grades nothing.
     let search_osc = !controlled && crate::dev::scenarios::searchosc_armed();
     let search_osc_last = 0u32;
-    // dev: /tmp/plxnative-settings=<root|home|privacy|legal|playback|picker-quality> opens the Settings modal (and,
+    // dev: /tmp/multiplex-settings=<root|home|privacy|legal|playback|picker-quality> opens the Settings modal (and,
     // optionally, one of its real child panels) once Home is available. `settingsosc` turns
     // that settled modal into a continuous render-throughput scene: it alternates the focused
     // row and explicitly keeps the present gate awake. Without the latter an efficient,
@@ -2147,19 +2147,19 @@ pub(crate) unsafe fn construct(
     let settings_osc = !controlled && crate::dev::scenarios::settingsosc_armed();
     let settings_osc_last = 0u32;
     let settings_osc_down = true;
-    // dev: /tmp/plxnative-modalosc — with `plxnative-settings=root`, OPEN and DISMISS the
+    // dev: /tmp/multiplex-modalosc — with `multiplex-settings=root`, OPEN and DISMISS the
     // Settings modal every 1500 ms through the same `open`/`on_back` the chip and BACK use, so
     // `fps:modal-ramp` grades the appear/disappear RAMP (host snapshot, scrim, ground) under
     // `worst_ceiling_ms` rather than a settled modal. It reverses on a clock because the ramp
     // itself has no end the app reports.
     let modal_osc = !controlled && crate::dev::scenarios::modalosc_armed();
     let modal_osc_last = 0u32;
-    // dev: /tmp/plxnative-legaldoc — with `plxnative-settings=legal`, press OK on the Legal
+    // dev: /tmp/multiplex-legaldoc — with `multiplex-settings=legal`, press OK on the Legal
     // index ONCE so the boot lands on a pushed DOCUMENT (the reader over the frozen ground),
     // which no boot trigger reached before: `fps:legal-document`.
     let legal_doc = !controlled && crate::dev::scenarios::legaldoc_armed();
     let legal_doc_tried = false;
-    // dev: /tmp/plxnative-alert — with `plxnative-settings=privacy`, open the "Delete all local
+    // dev: /tmp/multiplex-alert — with `multiplex-settings=privacy`, open the "Delete all local
     // data?" DECISION ALERT once the privacy panel is up. It is the one shared yes/no alert in
     // the app and nothing headless could reach it: `fps:decision-alert`. Opening it is all this
     // does — nothing is deleted, and Cancel is what a BACK would press.
@@ -2187,7 +2187,7 @@ pub(crate) unsafe fn construct(
     let onboard_osc = !controlled && crate::dev::scenarios::onboardosc_armed();
     let onboard_osc_last = 0u32;
     let onboard_osc_right = true;
-    // dev: /tmp/plxnative-navosc — bounce the ROUTE on a timer, so the page cross-fade
+    // dev: /tmp/multiplex-navosc — bounce the ROUTE on a timer, so the page cross-fade
     // (`ui::nav`) is FPS-gated like every other motion in the app. These are the only scenes
     // that change route, and therefore the only ones that sample a whole-screen cascade alpha
     // over both screens' full draw. 1400 ms matches `libswitch`: long enough that the ~225 ms
@@ -2204,10 +2204,10 @@ pub(crate) unsafe fn construct(
     let nav_osc_rk = nav_osc_rk.unwrap_or_default();
     let nav_osc_last = 0u32;
 
-    // dev: /tmp/plxnative-pushbench[=<n>[,<ratingKey>]] — the counted, deterministic stress
+    // dev: /tmp/multiplex-pushbench[=<n>[,<ratingKey>]] — the counted, deterministic stress
     // benchmark twin of `navosc` (spec: `docs/agent-reference.md`'s fps-scene section). Its
     // Detail leg reuses `navosc`'s own ratingKey when the bench's own trigger carries none, so
-    // `plxnative-navosc=<rk>` alone is enough to point both oscillators at the same item.
+    // `multiplex-navosc=<rk>` alone is enough to point both oscillators at the same item.
     let push_bench = (!controlled)
         .then(crate::dev::scenarios::pushbench_value)
         .flatten()
@@ -2215,7 +2215,7 @@ pub(crate) unsafe fn construct(
             let rk = if rk.is_empty() { nav_osc_rk.clone() } else { rk };
             crate::dev::scenarios::bench::PushBench::new(n, rk)
         });
-    // dev: /tmp/plxnative-modalbench[=<n>[,<ratingKey>]] — the modal-ramp twin of the above, same
+    // dev: /tmp/multiplex-modalbench[=<n>[,<ratingKey>]] — the modal-ramp twin of the above, same
     // n,rk shape. Its item-menu leg reuses `navosc`'s ratingKey ONLY when the bench's own trigger
     // carries none, exactly like the push leg above — see `modalbench_value`'s doc for why a
     // scene that wants the item menu but not navosc's own competing bounce sets its own rk here
@@ -2228,7 +2228,7 @@ pub(crate) unsafe fn construct(
             let rk = if rk.is_empty() { nav_osc_rk.clone() } else { rk };
             crate::dev::scenarios::bench::ModalBench::new(n, rk)
         });
-    // dev: /tmp/plxnative-deepbench[=<depth>[,<ratingKey>]] — the DEEP-stack twin of the two
+    // dev: /tmp/multiplex-deepbench[=<depth>[,<ratingKey>]] — the DEEP-stack twin of the two
     // above: pushes `depth` pages with no pop in between (rotating Detail/Person — never Library,
     // see `bench::DeepBench::targets`'s doc), then pops all the way back to the root one page at a
     // time. Same empty-ratingKey resolution against `navosc`'s own value as the two legs above.
@@ -2239,20 +2239,20 @@ pub(crate) unsafe fn construct(
             let rk = if rk.is_empty() { nav_osc_rk.clone() } else { rk };
             crate::dev::scenarios::bench::DeepBench::new(depth, rk)
         });
-    // dev: /tmp/plxnative-herobench[=<n>[,<period_ms>]] — flips the real Home hero carousel back and
+    // dev: /tmp/multiplex-herobench[=<n>[,<period_ms>]] — flips the real Home hero carousel back and
     // forth over three titles (`bench::HeroBench`), one `bench:` line per two flips.
     let hero_bench = (!controlled)
         .then(crate::dev::scenarios::herobench_value)
         .flatten()
         .map(|(n, period, target)| crate::dev::scenarios::bench::HeroBench::new(n, period, target));
-    // dev: /tmp/plxnative-holdbench[=<n>[,<period_ms>[,tap]]] — a REAL press-and-hold (or press-and-
+    // dev: /tmp/multiplex-holdbench[=<n>[,<period_ms>[,tap]]] — a REAL press-and-hold (or press-and-
     // cancel) on the focused card, cycle after cycle (`bench::PressBench`).
     let hold_bench = (!controlled)
         .then(crate::dev::scenarios::holdbench_value)
         .flatten()
         .map(|(n, period, kind)| crate::dev::scenarios::bench::PressBench::new(n, period, kind));
 
-    // dev: /tmp/plxnative-framedrop — the FRAME-DROP DETECTOR. When present, each frame is timed with
+    // dev: /tmp/multiplex-framedrop — the FRAME-DROP DETECTOR. When present, each frame is timed with
     // the high-res perf counter (pump / draw / swap, NO glFinish so it doesn't perturb the pipeline),
     // and any frame whose total exceeds a threshold (ms; file content overrides the 22ms default) is
     // logged with its phase breakdown + GL texture-upload count — so a scroll judder shows *what* stalled
@@ -2305,7 +2305,7 @@ pub(crate) unsafe fn construct(
     // ungated, and `on_auto_repeat`'s doc for the one thing left on the legacy side (the
     // deferred press's liveness beat, and nothing else since phase 12).
     let modal_repeat = RepeatGate::IDLE;
-    let marker_tried = false; // dev: the /tmp/plxnative-marker jump has been resolved
+    let marker_tried = false; // dev: the /tmp/multiplex-marker jump has been resolved
     let player = plx_media::player::machine::Player::new();
     // The token stops being an argument here and becomes a field. `PlayerAdapter::new` CONSUMES
     // it, so the adapter is the only thing in the process that holds one, and a `&mut` to it is
@@ -2330,10 +2330,10 @@ pub(crate) unsafe fn construct(
     // values share one name (every `Route::Player` is "player"), and an overlay
     // opening is not a screen change.
     let last_route_reported: &'static str = "";
-    let press_tried = false; // dev: /tmp/plxnative-press fires one simulated grid-card press
+    let press_tried = false; // dev: /tmp/multiplex-press fires one simulated grid-card press
     let press_release_at = 0u32; // …and the tick at which that simulated press releases
-    let itemmenu_tried = false; // dev: /tmp/plxnative-itemmenu opens the card context menu once
-    let acct_tried = false; // dev: /tmp/plxnative-acct opens the profile menu once
+    let itemmenu_tried = false; // dev: /tmp/multiplex-itemmenu opens the card context menu once
+    let acct_tried = false; // dev: /tmp/multiplex-acct opens the profile menu once
     let ptr = Pointer::IDLE;
 
     // Initial route from the boot gate: Login when we have no usable creds, Profiles for the
@@ -2350,9 +2350,9 @@ pub(crate) unsafe fn construct(
     // has a real answer by this line. An AUTOMATED boot is exempt for the reason the picker is
     // — a harness run must land on a deterministic Home.
     //
-    // dev: `/tmp/plxnative-firstrun` forces it — a screen that is by definition asked once is
+    // dev: `/tmp/multiplex-firstrun` forces it — a screen that is by definition asked once is
     // otherwise unreachable the moment you have answered it, and the two-source roster it
-    // needs comes from `/tmp/plxnative-servers`, which marks the boot automated. Both halves
+    // needs comes from `/tmp/multiplex-servers`, which marks the boot automated. Both halves
     // are why looking at this screen headlessly requires a trigger of its own.
     bridge.refresh_browse_directory();
     let ask_first_run = || !controlled && (crate::dev::scenarios::firstrun_armed()
@@ -2390,7 +2390,7 @@ pub(crate) unsafe fn construct(
         BootTo::Login => AppArg::Login,
         BootTo::Profiles => AppArg::Profiles,
     };
-    // (dev: /tmp/plxnative-acct used to open the profile menu HERE, beside a
+    // (dev: /tmp/multiplex-acct used to open the profile menu HERE, beside a
     // `route = Route::Account { over: BarHost::Home }`. The menu is a `ModalStack` surface since
     // phase 10 and the container does not exist yet at this point in the boot, so the trigger is
     // an ordinary per-frame arm — `dev::scenarios::acct_arm`, beside `itemmenu_arm`.)
@@ -2405,7 +2405,7 @@ pub(crate) unsafe fn construct(
     // `PageDip`.)
 
     let auto_tried = false;
-    // dev: `/tmp/plxnative-replay[=N]` — how many times a finished `plxnative-playurl`
+    // dev: `/tmp/multiplex-replay[=N]` — how many times a finished `multiplex-playurl`
     // playback may be started AGAIN (LG App Self Checklist #46, "replay after completion").
     //
     // A COUNTER re-arming `auto_tried`, rather than the latch being lifted: `auto_tried` also
@@ -2424,14 +2424,14 @@ pub(crate) unsafe fn construct(
     let grid_tried = false;
     let settings_tried = settings_boot.is_none();
     let seek_tried = false;
-    // /tmp/plxnative-autoseek seek script (see the parse site): pending steps, the tick of
+    // /tmp/multiplex-autoseek seek script (see the parse site): pending steps, the tick of
     // the last fired step, the gap between steps, and the last REQUESTED target (the base
     // for "+10"/"-10" tap-relative steps, like taps on the HUD's frozen scrub playhead).
     let seek_script: Vec<String> = Vec::new();
     let seek_script_at = 0u32;
     let seek_gap_ms = 300u32;
     let seek_script_last = 0i64;
-    // /tmp/plxnative-qualityswitch: the rungs still to switch to, the tick of the last one
+    // /tmp/multiplex-qualityswitch: the rungs still to switch to, the tick of the last one
     // fired, and the gap between them. Same shape as the seek script above, for the same
     // reason — a person changing quality mid-playback does it more than once.
     let quality_script: Vec<plx_plex::plex::session::PlaybackQuality> = Vec::new();
@@ -2446,7 +2446,7 @@ pub(crate) unsafe fn construct(
     let menupick_tried = false;
     let menupick_target = None;
     let pause_tried = false;
-    // `/tmp/plxnative-autopause`: an authored Pause edge, plus the optional Resume edge which
+    // `/tmp/multiplex-autopause`: an authored Pause edge, plus the optional Resume edge which
     // owns the same script. External effects retry until the synchronized player state machine
     // accepts them; a busy native transition cannot silently consume the test operation.
     let pause_script: Option<(u32, Option<u32>, Option<u32>)> = None;
@@ -2459,7 +2459,7 @@ pub(crate) unsafe fn construct(
     let refresh_hubs = false;
 
     let ev = [0u8; 128];
-    // dev/testing remote: drain any tokens written to /tmp/plxnative-remote and push
+    // dev/testing remote: drain any tokens written to /tmp/multiplex-remote and push
     // them as synthetic key events BEFORE the poll loop, so they're consumed this frame
     // by the ONE real key handler (see crate::remote / tools/stream-screen.py).
     let remote = crate::remote::Remote::open();
@@ -2613,7 +2613,7 @@ pub(crate) unsafe fn construct(
             },
         },
     };
-    // dev: /tmp/plxnative-nobudget — put the ONE frame budget (the tree's, spec §2.2) into its
+    // dev: /tmp/multiplex-nobudget — put the ONE frame budget (the tree's, spec §2.2) into its
     // pre-phase-11 shape for the A/B's control leg. The tree exists now, which is why this is
     // here rather than beside the trigger read.
     //
@@ -2623,12 +2623,12 @@ pub(crate) unsafe fn construct(
     if app.scenarios.dev.nobudget {
         app.pages.budget = plx_ui::frame::Budget::pre_phase_11();
         #[cfg(feature = "devtriggers")]
-        plx_base::eventlog::log("budget: pre-phase-11 admission (quota only) by /tmp/plxnative-nobudget");
+        plx_base::eventlog::log("budget: pre-phase-11 admission (quota only) by /tmp/multiplex-nobudget");
     }
-    // dev: /tmp/plxnative-watchlist-live — the owner's switch that lets a debug build write to the
+    // dev: /tmp/multiplex-watchlist-live — the owner's switch that lets a debug build write to the
     // real plex.tv Watchlist; latched here, and logged once when it is on.
     plx_plex::plex::watchlist::announce_live_writes();
-    // dev: /tmp/plxnative-discover (or the plextv redirect) — resolve where Discover lives NOW, so
+    // dev: /tmp/multiplex-discover (or the plextv redirect) — resolve where Discover lives NOW, so
     // the event log says whether this boot's person and Watchlist reads reach a stand-in, the real
     // provider, or nothing, before any request is made.
     plx_plex::plex::account::announce_discover();

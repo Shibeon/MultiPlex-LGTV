@@ -383,7 +383,7 @@ class Completeness(unittest.TestCase):
     def test_the_command_runs_offline_and_passes_with_the_list_in_place(self):
         r = subprocess.run([sys.executable, str(ROOT / "tools" / "demo_library.py"), "check", "--complete"],
                            capture_output=True, text=True,
-                           env=dict(os.environ, PLXNATIVE_DEMO_CACHE=str(ROOT / "no-such-cache")))
+                           env=dict(os.environ, MULTIPLEX_DEMO_CACHE=str(ROOT / "no-such-cache")))
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("pending", r.stdout)
 
@@ -729,7 +729,7 @@ class HeroGeometry(unittest.TestCase):
     def _run(self, *args):
         return subprocess.run([sys.executable, str(ROOT / "tools" / "demo_library.py"), *args],
                               capture_output=True, text=True,
-                              env=dict(os.environ, PLXNATIVE_DEMO_CACHE=str(ROOT / "no-such-cache")))
+                              env=dict(os.environ, MULTIPLEX_DEMO_CACHE=str(ROOT / "no-such-cache")))
 
     def test_hero_report_prints_each_eligible_title_offline(self):
         r = self._run("hero-report")
@@ -786,7 +786,7 @@ class People(unittest.TestCase):
         self.assertEqual(kinds, {"headshot", "still"})
         tool.check_assets_complete(self.assets)
 
-    def test_the_site_videos_title_has_a_portrait_for_its_whole_cast(self):
+    def test_the_third_continue_watching_title_has_a_portrait_for_its_whole_cast(self):
         film = next(m for m in self.catalog["movies"] if m["id"] == self.catalog["continue_watching"][2]["item"])
         self.assertEqual(film["id"], "tears-of-steel", "the third Continue Watching card, the one the film opens")
         self.assertEqual([c["name"] for c in film["cast"]], list(self.catalog["people"]))
@@ -1383,7 +1383,7 @@ class Qr(unittest.TestCase):
 
 
 class PlexTvStandIn(unittest.TestCase):
-    """`plxnative-plextv` points the sign-in at the mock: the pin never links."""
+    """`multiplex-plextv` points the sign-in at the mock: the pin never links."""
 
     def setUp(self):
         self.pms = mock_pms.MockPms(mock_pms.Library())

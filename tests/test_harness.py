@@ -271,10 +271,10 @@ class FocusFpAccounting(unittest.TestCase):
                    'result_diffs=0 land_diffs=0 effect_diffs=0 focus_diffs=0 hit_diffs=0 verdict=SAME')
         for mode in ('--replay', '--targets', '--resolve'):
             expected = 'resolve' if mode == '--resolve' else 'targets'
-            script = ('#!/bin/sh\nroot="$PLXNATIVE_RUNTIME_DIR"\n'
-                      'test "$(sed -n 1p "$root/plxnative-recplay")" = v1 || exit 3\n'
-                      f'test "$(sed -n 2p "$root/plxnative-recplay")" = {expected} || exit 3\n'
-                      f'printf "hubs: landed\\n{summary}\\n" > "$root/plxnative-events.log"\n')
+            script = ('#!/bin/sh\nroot="$MULTIPLEX_RUNTIME_DIR"\n'
+                      'test "$(sed -n 1p "$root/multiplex-recplay")" = v1 || exit 3\n'
+                      f'test "$(sed -n 2p "$root/multiplex-recplay")" = {expected} || exit 3\n'
+                      f'printf "hubs: landed\\n{summary}\\n" > "$root/multiplex-events.log"\n')
             result = self._run_isolated_focusfp(script, '--only', '1', mode=mode)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for pair in (('--rec', '--replay'), ('--targets', '--resolve'), ('--resolve', '--replay'),
@@ -285,8 +285,8 @@ class FocusFpAccounting(unittest.TestCase):
         for field in ('input_diffs', 'focus_diffs', 'hit_diffs'):
             for bad in (summary.replace(field + '=0', field + '=1'),
                         summary.replace(' ' + field + '=0', '')):
-                script = ('#!/bin/sh\nroot="$PLXNATIVE_RUNTIME_DIR"\n'
-                          f'printf "hubs: landed\\n{bad}\\n" > "$root/plxnative-events.log"\n')
+                script = ('#!/bin/sh\nroot="$MULTIPLEX_RUNTIME_DIR"\n'
+                          f'printf "hubs: landed\\n{bad}\\n" > "$root/multiplex-events.log"\n')
                 result = self._run_isolated_focusfp(script, '--only', '1', mode='--resolve')
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 
@@ -328,15 +328,15 @@ class FocusFpAccounting(unittest.TestCase):
     def test_replay_counts_pass_skip_and_failure_separately(self):
         """A missing replay fixture is a skip, not a successful flow."""
         script = """#!/bin/sh
-root="$PLXNATIVE_RUNTIME_DIR"
-if [ -e "$root/plxnative-settings" ]; then
+root="$MULTIPLEX_RUNTIME_DIR"
+if [ -e "$root/multiplex-settings" ]; then
     marker='overlay=settings'
-elif [ -e "$root/plxnative-filmography" ]; then
+elif [ -e "$root/multiplex-filmography" ]; then
     marker='route=person'
 else
     marker='hubs: landed'
 fi
-printf '%s\\nreplay: done frames=1 graded=1 diverged=0 present_diffs=0 input_diffs=0 result_diffs=0 land_diffs=0 effect_diffs=0 focus_diffs=0 hit_diffs=0 verdict=SAME\\n' "$marker" > "$root/plxnative-events.log"
+printf '%s\\nreplay: done frames=1 graded=1 diverged=0 present_diffs=0 input_diffs=0 result_diffs=0 land_diffs=0 effect_diffs=0 focus_diffs=0 hit_diffs=0 verdict=SAME\\n' "$marker" > "$root/multiplex-events.log"
 exit 0
 """
         result = self._run_isolated_focusfp(script)
@@ -346,8 +346,8 @@ exit 0
 
     def test_only_counts_a_failed_simulator_and_the_tv_root_as_selected_outcomes(self):
         script = """#!/bin/sh
-root="$PLXNATIVE_RUNTIME_DIR"
-printf 'hubs: landed\\n' > "$root/plxnative-events.log"
+root="$MULTIPLEX_RUNTIME_DIR"
+printf 'hubs: landed\\n' > "$root/multiplex-events.log"
 exit 0
 """
         result = self._run_isolated_focusfp(script, "--only", "1,10")
@@ -375,8 +375,8 @@ class ReplayFixtures(unittest.TestCase):
             fixtures = os.path.join(root, "tests", "fixtures", "replay")
             os.makedirs(fixtures)
             os.makedirs(os.path.join(root, "tools"))
-            tool = os.path.join(root, "tools", "plxnative-rec")
-            shutil.copy(os.path.join(REPO_ROOT, "tools", "plxnative-rec"), tool)
+            tool = os.path.join(root, "tools", "multiplex-rec")
+            shutil.copy(os.path.join(REPO_ROOT, "tools", "multiplex-rec"), tool)
             shutil.copy(os.path.join(self.FIXTURES, "ALPHABET.json"), fixtures)
             hook = os.path.join(REPO_ROOT, ".claude", "hooks", "outbound-guard.py")
 
@@ -391,17 +391,17 @@ class ReplayFixtures(unittest.TestCase):
             negatives = ["UnlistedHouseholdName", "UNLISTEDHOUSEHOLDNAME",
                          "UnlistedHouseholdName(Instance(4))",
                          "Landing(UnlistedHouseholdName(4))",
-                         "plxnative-unlistedhouseholdname", "route=unlistedhouseholdname",
+                         "multiplex-unlistedhouseholdname", "route=unlistedhouseholdname",
                          "pat:unlistedhouseholdname", "txt:deadbeefcafebabe",
                          "12345678-1234-4234-8234-123456789abc",
                          "ABCDEFPrivateToken", "s01234567\n",
-                         "plxnative-rec=unlistedhouseholdname",
+                         "multiplex-rec=unlistedhouseholdname",
                          "route=home overlay=unlistedhouseholdname",
                          "Landing(Instance(4))"]
             positives = ["Mount", "Session", "Landing(Instance(InstanceId(4)))",
                          "Landing(Store(StoreOrd(3)))", "Landing(Session)",
                          "Resource(Texture)", "Timer(TimerId(7))", "s01234567",
-                         "route=home overlay=account", "plxnative-rec",
+                         "route=home overlay=account", "multiplex-rec",
                          "pat:solid:120:50", "txt:s01234567+s89abcdef"]
             for index, value in enumerate(negatives + positives):
                 accepted = index >= len(negatives)
@@ -464,8 +464,8 @@ class ReplayFixtures(unittest.TestCase):
             fixtures = os.path.join(root, "tests", "fixtures", "replay")
             os.makedirs(fixtures)
             os.makedirs(os.path.join(root, "tools"))
-            tool = os.path.join(root, "tools", "plxnative-rec")
-            shutil.copy(os.path.join(REPO_ROOT, "tools", "plxnative-rec"), tool)
+            tool = os.path.join(root, "tools", "multiplex-rec")
+            shutil.copy(os.path.join(REPO_ROOT, "tools", "multiplex-rec"), tool)
             alphabet_path = os.path.join(fixtures, "ALPHABET.json")
             shutil.copy(os.path.join(self.FIXTURES, "ALPHABET.json"), alphabet_path)
 
@@ -594,7 +594,7 @@ class ReplayFixtures(unittest.TestCase):
 
         `schema` alone is not the only way a fixture goes stale: two anchors can share `schema`
         while their `state_fp` (the recorded state SHAPE — route/overlay/focus/tree/session/
-        consent/initial) has moved apart, which is exactly what `tools/plxnative-rec rerecord`
+        consent/initial) has moved apart, which is exactly what `tools/multiplex-rec rerecord`
         reports as a load-time REFUSED and what the README documents happened to fixture 12. So
         this also checks every non-quarantined fixture's `state_fp` agrees with the majority
         value among committed anchors, and reports (without reddening `make check`) any
@@ -620,7 +620,7 @@ class ReplayFixtures(unittest.TestCase):
             checked += 1
             self.assertEqual(manifest.get("schema"), schema,
                               "%s/manifest.json: schema %r does not match ui/rec.rs SCHEMA=%d "
-                              "(tools/plxnative-rec rerecord it)"
+                              "(tools/multiplex-rec rerecord it)"
                               % (name, manifest.get("schema"), schema))
             fps[name] = manifest.get("state_fp")
         self.assertGreater(checked, 0)
@@ -632,7 +632,7 @@ class ReplayFixtures(unittest.TestCase):
             for name, fp in live_fps.items():
                 self.assertEqual(fp, current_fp,
                                   "%s/manifest.json: state_fp %r does not match the other "
-                                  "committed anchors' %r (tools/plxnative-rec rerecord it, or "
+                                  "committed anchors' %r (tools/multiplex-rec rerecord it, or "
                                   "quarantine it in QUARANTINED_FIXTURES with a reason)"
                                   % (name, fp, current_fp))
             for name, reason in self.QUARANTINED_FIXTURES.items():
@@ -645,7 +645,7 @@ class ReplayFixtures(unittest.TestCase):
                     print("QUARANTINED: %s/manifest.json — %s" % (name, reason))
 
     def _tool(self, *args):
-        tool = os.path.join(os.path.dirname(self.FIXTURES), "..", "..", "tools", "plxnative-rec")
+        tool = os.path.join(os.path.dirname(self.FIXTURES), "..", "..", "tools", "multiplex-rec")
         return subprocess.run([sys.executable, os.path.abspath(tool), *args],
                               capture_output=True, text=True)
 
@@ -723,10 +723,10 @@ class ReplayFixtures(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             fixtures = os.path.join(tmp, "fixtures")
             os.makedirs(fixtures)
-            env_tool = os.path.join(os.path.dirname(self.FIXTURES), "..", "..", "tools", "plxnative-rec")
+            env_tool = os.path.join(os.path.dirname(self.FIXTURES), "..", "..", "tools", "multiplex-rec")
             src = open(os.path.abspath(env_tool), encoding="utf-8").read()
             # point the tool at a throwaway fixture directory
-            tool = os.path.join(tmp, "plxnative-rec")
+            tool = os.path.join(tmp, "multiplex-rec")
             with open(tool, "w", encoding="utf-8") as f:
                 f.write(src.replace('FIXTURES = os.path.join(ROOT, "tests", "fixtures", "replay")',
                                     'FIXTURES = %r' % fixtures))
@@ -843,7 +843,7 @@ class ReplayFixtures(unittest.TestCase):
         for v in ("Film Club Night", "The Godfather", "10.203.0.10", "nas-home",
                   "UnlistedHouseholdName", "UnlistedUppercaseWord", "ABCDEFPrivateToken"):
             self.assertFalse(v in lits or any(p.fullmatch(v) for p in pats), "rejected case")
-        for v in ("s0a1b2c3d", "tick", "inst:3", "0.7.0-dev", "Landing(Instance(InstanceId(4)))", "plxnative-rec"):
+        for v in ("s0a1b2c3d", "tick", "inst:3", "0.7.0-dev", "Landing(Instance(InstanceId(4)))", "multiplex-rec"):
             self.assertTrue(v in lits or any(p.fullmatch(v) for p in pats), "protocol case")
 
     def test_home_payload_alphabet_accepts_only_the_mock_protocol_and_synthetic_words(self):
@@ -864,12 +864,12 @@ class ReplayFixtures(unittest.TestCase):
     def test_controlled_init_alphabet_is_a_finite_source_vocabulary(self):
         lits, pats = self._alphabet()
         accepts = lambda value: value in lits or any(p.fullmatch(value) for p in pats)
-        for value in ("controlled=home version=1", "plxnative-app-init", "127.0.0.1",
+        for value in ("controlled=home version=1", "multiplex-app-init", "127.0.0.1",
                       "http://127.0.0.1:32517", "Idle", "Boot", "ActivateDevBootstrap",
                       "AlreadyInstalled", "Request", "owned", "Sdl", "RemoteFifo", "Script", "Replay",
                       "Up", "Down", "Left", "Right", "Repeat", "discovery", "reset", "refetch"):
             self.assertTrue(accepts(value), "source protocol constant")
-        for value in ("UnlistedHouseholdName", "UnlistedUppercaseWord", "plxnative-app-init=secret",
+        for value in ("UnlistedHouseholdName", "UnlistedUppercaseWord", "multiplex-app-init=secret",
                       "http://192.0.2.1:32517", "https://127.0.0.1:32517", "http://127.0.0.1:325170",
                       "http://127.0.0.1:32517?X-Plex-Token=secret", "http://127.0.0.1:32517@private",
                       "01234567-89ab-4cde-8fab-0123456789ab"):
@@ -878,7 +878,7 @@ class ReplayFixtures(unittest.TestCase):
 
 class TeardownProcessTable(unittest.TestCase):
     def test_non_utf8_argv_cannot_hide_or_crash_a_run_stream_pid(self):
-        marker = "/tmp/app.multiplex.native.debug/plxnative-events.log"
+        marker = "/tmp/app.multiplex.native.debug/multiplex-events.log"
         raw = b"431 ssh " + marker.encode("ascii") + b" \xdflegacy\n"
         fake = mock.Mock(return_value=subprocess.CompletedProcess([], 0, stdout=raw))
         with mock.patch.object(run, "RUN_STREAM_MARK", marker):
@@ -887,7 +887,7 @@ class TeardownProcessTable(unittest.TestCase):
 
 
 class CrashGate(unittest.TestCase):
-    """`crash_gate`: a case whose app died keeps `plxnative-stderr.log` (the next launch truncates
+    """`crash_gate`: a case whose app died keeps `multiplex-stderr.log` (the next launch truncates
     it) and FAILS, unless the case declares `expect_crash`."""
 
     SIGLINE = "*** SIGNAL 6 (SIGABRT) addr=0x0 pc=0x76a1b2c4 lr=0x76a1b2c8"
@@ -907,7 +907,7 @@ class CrashGate(unittest.TestCase):
         (passed, results), out, shown = self._gate({}, ["loop=60"], f"old\n{self.SIGLINE}\n", 0)
         self.assertFalse(passed)
         self.assertEqual(results[-1][0], "app_alive")
-        kept = os.path.join(out, "plxnative-crash-evidence", "case_a.stderr.log")
+        kept = os.path.join(out, "multiplex-crash-evidence", "case_a.stderr.log")
         with open(kept) as f:
             self.assertEqual(f.read(), "abort: assertion failed\n")
         self.assertIn(kept, " ".join(str(c) for c in shown.call_args_list))
@@ -921,7 +921,7 @@ class CrashGate(unittest.TestCase):
         (passed, results), out, _shown = self._gate({}, ["loop=60"], f"{self.SIGLINE}\n", 1)
         self.assertTrue(passed)
         self.assertEqual(len(results), 1)
-        self.assertFalse(os.path.exists(os.path.join(out, "plxnative-crash-evidence")))
+        self.assertFalse(os.path.exists(os.path.join(out, "multiplex-crash-evidence")))
 
     def test_expect_crash_keeps_evidence_without_failing(self):
         (passed, results), out, _shown = self._gate(
@@ -929,7 +929,7 @@ class CrashGate(unittest.TestCase):
         self.assertTrue(passed)
         self.assertEqual(len(results), 1)
         self.assertTrue(os.path.exists(
-            os.path.join(out, "plxnative-crash-evidence", "case_a.crash.log")))
+            os.path.join(out, "multiplex-crash-evidence", "case_a.crash.log")))
 
     def test_save_logs_keeps_stderr_even_for_a_clean_case(self):
         save = tempfile.mkdtemp()
@@ -944,7 +944,7 @@ class CrashGate(unittest.TestCase):
             done = subprocess.CompletedProcess([], 0, stdout="3\n", stderr="")
             with mock.patch.object(run, "ssh", return_value=done) as ssh:
                 run.apply_triggers("192.0.2.20", [])
-            self.assertIn("plxnative-crash.log", ssh.call_args.args[1])
+            self.assertIn("multiplex-crash.log", ssh.call_args.args[1])
             self.assertEqual(run._CRASH_BASELINE, 3)
         finally:
             run.RUNDIR = saved
@@ -1231,8 +1231,8 @@ class FpsIdentity(unittest.TestCase):
         self.assertNotIn("needs_shared_server", sources)
         self.assertGreaterEqual(sources["loop_floor"], 50)
         self.assertGreaterEqual(sources["fps_floor"], 50)
-        self.assertTrue(sources["triggers"]["plxnative-firstrun"])
-        self.assertTrue(sources["triggers"]["plxnative-onboardosc"])
+        self.assertTrue(sources["triggers"]["multiplex-firstrun"])
+        self.assertTrue(sources["triggers"]["multiplex-onboardosc"])
 
         for name, stage in (("consent-crash", "crash"), ("consent-product", "product")):
             with self.subTest(scene=name):
@@ -1241,8 +1241,8 @@ class FpsIdentity(unittest.TestCase):
                 self.assertEqual(scene["overlay"], "consent")
                 self.assertGreaterEqual(scene["loop_floor"], 50)
                 self.assertGreaterEqual(scene["fps_floor"], 50)
-                self.assertEqual(scene["triggers"]["plxnative-consent"], stage)
-                self.assertTrue(scene["triggers"]["plxnative-consentosc"])
+                self.assertEqual(scene["triggers"]["multiplex-consent"], stage)
+                self.assertTrue(scene["triggers"]["multiplex-consentosc"])
 
     def test_settings_scenes_carry_the_50_fps_contract_and_idle_inverse(self):
         scenes = {s["name"]: s for s in _manifest()["fps_scenes"]}
@@ -1264,7 +1264,7 @@ class FpsIdentity(unittest.TestCase):
                 self.assertEqual(scene["overlay"], overlay)
                 self.assertGreaterEqual(scene["loop_floor"], 50)
                 self.assertGreaterEqual(scene["fps_floor"], 50)
-                self.assertTrue(scene["triggers"]["plxnative-settingsosc"])
+                self.assertTrue(scene["triggers"]["multiplex-settingsosc"])
 
         # each Settings v2 page scene boots its own page, and no scene can be satisfied by the root
         for name, boot in (("settings-language", "language"),
@@ -1275,7 +1275,7 @@ class FpsIdentity(unittest.TestCase):
                            ("settings-player-hud", "player-hud"),
                            ("settings-diagnostics", "diagnostics")):
             with self.subTest(scene=name, boot=boot):
-                self.assertEqual(scenes[name]["triggers"]["plxnative-settings"], boot)
+                self.assertEqual(scenes[name]["triggers"]["multiplex-settings"], boot)
                 self.assertNotEqual(scenes[name]["overlay"], "settings")
         # the two details pickers answer one heartbeat word each, so neither scene can be satisfied by the other
         self.assertNotEqual(scenes["settings-under-posters-movie"]["overlay"],
@@ -1285,7 +1285,7 @@ class FpsIdentity(unittest.TestCase):
         self.assertEqual(idle["overlay"], "settings")
         self.assertGreaterEqual(idle["loop_floor"], 50)
         self.assertLessEqual(idle["fps_ceiling"], 5)
-        self.assertNotIn("plxnative-settingsosc", idle["triggers"])
+        self.assertNotIn("multiplex-settingsosc", idle["triggers"])
 
     def test_fps_filter_can_isolate_the_new_screen_without_changing_tiers(self):
         scenes = [
@@ -1442,7 +1442,7 @@ class ColdOpenGate(unittest.TestCase):
 
     def test_the_gate_does_not_arm_the_frame_drop_detector(self):
         """`coldopen` is unarmed by construction; a scene declaring only this gate must not make
-        the harness arm `plxnative-framedrop`, which would perturb the pacing it did not ask for."""
+        the harness arm `multiplex-framedrop`, which would perturb the pacing it did not ask for."""
         self.assertIsNone(run.frame_ceiling_threshold({"coldopen_ceiling_ms": 160}))
 
     def test_cold_open_gate_is_measured_not_provisional(self):
@@ -1701,7 +1701,7 @@ class BenchManifest(unittest.TestCase):
         self.assertGreater(modal["run_secs"], 100 * 2 * 1.5 + modal.get("warmup_s", 5))
         for name in ("push-100", "modal-100"):
             self.assertEqual(scenes[name]["tier"], "ui")
-            self.assertIn("plxnative-framedrop", scenes[name]["triggers"],
+            self.assertIn("multiplex-framedrop", scenes[name]["triggers"],
                          f"{name}: bench worst_ms reads 0.0 unarmed — see bench_frame_tick's doc")
 
 
@@ -1835,7 +1835,7 @@ class DeepBenchManifest(unittest.TestCase):
         self.assertEqual(deep["tier"], "ui")
         # depth=100 -> 200 steps * 2 half-periods each; run_secs must clear that plus warmup.
         self.assertGreater(deep["run_secs"], 200 * 2 * 1.4 + deep.get("warmup_s", 5))
-        self.assertIn("plxnative-framedrop", deep["triggers"],
+        self.assertIn("multiplex-framedrop", deep["triggers"],
                      "deep-100: bench worst_ms reads 0.0 unarmed — see bench_frame_tick's doc")
         self.assertIn("bench_depth_rss_kb", deep)
         self.assertIn("bench_root_rss_kb", deep, "the unwound end state is graded absolutely")
@@ -1896,19 +1896,19 @@ class LoadManifest(unittest.TestCase):
 
     def test_collection_scenes_resolve_through_the_overlay(self):
         """manifest.json is installation-independent, so the collection scenes may not carry a
-        mock_pms ratingKey: on a real server `plxnative-collection=50001` opens a collection that
+        mock_pms ratingKey: on a real server `multiplex-collection=50001` opens a collection that
         does not exist and the page's fps_ceiling passes vacuously on its failure read-out."""
         tracked = {s["name"]: s for s in _manifest()["fps_scenes"]}
         for name in ("collection-page", "library-collections"):
             with self.subTest(scene=name):
                 self.assertEqual(tracked[name]["item"], "collection")
-        self.assertEqual(tracked["collection-page"]["triggers"]["plxnative-collection"], "$rk")
+        self.assertEqual(tracked["collection-page"]["triggers"]["multiplex-collection"], "$rk")
 
         items = self._all_keys()
         items["collection"] = 424242
         scenes = {s["name"]: s for s in self._load(_overlay(items))["fps_scenes"]}
         page = scenes["collection-page"]
-        self.assertIn(("plxnative-collection", "424242"), run.fps_trigger_files(page))
+        self.assertIn(("multiplex-collection", "424242"), run.fps_trigger_files(page))
         # library-collections declares the key as a requirement only: nothing reads its `$rk`.
         self.assertNotIn("424242", [v for _, v in run.fps_trigger_files(scenes["library-collections"])])
 
@@ -1922,8 +1922,8 @@ class LoadManifest(unittest.TestCase):
     def test_no_fps_trigger_holds_a_literal_ratingkey(self):
         """A scene that opens one item names it by `item` + `$rk`, never by a number that is true
         on one server only. These are the triggers whose value carries a ratingKey."""
-        takes_rk = ("plxnative-detail", "plxnative-collection", "plxnative-play", "plxnative-navosc",
-                    "plxnative-pushbench", "plxnative-modalbench", "plxnative-deepbench")
+        takes_rk = ("multiplex-detail", "multiplex-collection", "multiplex-play", "multiplex-navosc",
+                    "multiplex-pushbench", "multiplex-modalbench", "multiplex-deepbench")
         for scene in _manifest()["fps_scenes"]:
             for trigger, value in scene.get("triggers", {}).items():
                 if trigger in takes_rk and value is not True:
@@ -2043,7 +2043,7 @@ class PipelineTier(unittest.TestCase):
     def test_pipeline_case_arms_requested_extra_triggers_without_changing_assertions(self):
         case = {"name": "uri-routing", "fixture": "clip.mkv", "operations": [{"op": "play"}],
                 "expect": {"require_video_bound": True}}
-        cfg = {"tv": "test-tv", "extra_triggers": [("plxnative-uriprobe", "load")]}
+        cfg = {"tv": "test-tv", "extra_triggers": [("multiplex-uriprobe", "load")]}
         server = mock.Mock()
         server.stats.return_value = (1, 0, 0)
         server.segment_rungs.return_value = {}
@@ -2055,8 +2055,8 @@ class PipelineTier(unittest.TestCase):
                 mock.patch.object(run, "crash_gate", side_effect=lambda cfg, c, n, ls, ok, rs: (ok, rs)), \
                 mock.patch.object(run, "report_and_record"), mock.patch("sys.stdout", io.StringIO()):
             passed, results, _ = run.run_pipeline_case(case, cfg, server, "http://fixture.invalid", False)
-        self.assertIn(("plxnative-uriprobe", "load"), arm.call_args.args[1])
-        self.assertEqual(json.loads(dict(arm.call_args.args[1])["plxnative-playurl"])["url"],
+        self.assertIn(("multiplex-uriprobe", "load"), arm.call_args.args[1])
+        self.assertEqual(json.loads(dict(arm.call_args.args[1])["multiplex-playurl"])["url"],
                          "http://fixture.invalid/clip.mkv")
         self.assertIs(grade.call_args.args[0], case)
         self.assertFalse(passed)
@@ -2071,7 +2071,7 @@ class PipelineTier(unittest.TestCase):
                             case["fixture"])
             self.assertNotIn("auto_network", case, "the app's own ABR controller never runs in URI mode")
             files = dict(run.triggers_for_case(case, url_base="http://fixture.invalid"))
-            self.assertEqual(json.loads(files["plxnative-playurl"])["url"],
+            self.assertEqual(json.loads(files["multiplex-playurl"])["url"],
                              "http://fixture.invalid/__abr/ladder/master.m3u8" + query,
                              "a query in `fixture` must survive into the URL the TV is handed")
         self.assertEqual(serve_fixtures.abr_playlist_rungs(collapse["fixture"]),
@@ -2079,14 +2079,14 @@ class PipelineTier(unittest.TestCase):
                          "the collapse case stops at 6000, so a segment in flight is not a 20000 one")
         self.assertEqual(serve_fixtures.abr_playlist_rungs(capped["fixture"]), serve_fixtures.ABR_LADDER,
                          "the capped case keeps the whole ladder")
-        self.assertEqual(dict(run.triggers_for_case(collapse, url_base="http://fixture.invalid"))["plxnative-uriprobe"],
+        self.assertEqual(dict(run.triggers_for_case(collapse, url_base="http://fixture.invalid"))["multiplex-uriprobe"],
                          "load")
         # the link is the sibling's, so the two cases differ in the controller under test only
         self.assertEqual(collapse["network_profile"], cases["pipe_abr_down_collapse"]["network_profile"])
         self.assertNotIn("network_profile", capped, "the capped case runs on an unshaped link")
         # the cap is the second-lowest rung's BANDWIDTH, and the trigger parses as the probe's syntax
         second_lowest = int(serve_fixtures.ABR_RUNGS.split("|")[1]) * 1000
-        text = dict(run.triggers_for_case(capped, url_base="http://fixture.invalid"))["plxnative-uriprobe"]
+        text = dict(run.triggers_for_case(capped, url_base="http://fixture.invalid"))["multiplex-uriprobe"]
         self.assertEqual(text, f"load bpsmax={second_lowest}")
 
     def test_a_ladder_case_needs_every_rung_clip_and_no_file_of_its_own(self):
@@ -2157,7 +2157,7 @@ class PipelineTier(unittest.TestCase):
         """
         for c in self._pipeline_cases():
             files = run.triggers_for_case(c, url_base="http://192.0.2.10:8020")
-            self.assertEqual(files[0][0], "plxnative-playurl")
+            self.assertEqual(files[0][0], "multiplex-playurl")
             payload = files[0][1]
             self.assertNotIn("'", payload, f"{c['name']}: would break the single-quoted printf")
             spec = json.loads(payload)
@@ -2169,22 +2169,22 @@ class PipelineTier(unittest.TestCase):
         """The PMS matrix must not inherit an Auto preference from an earlier TV run."""
         files = run.triggers_for_case({"rk": "1234", "operations": [{"op": "play"}]})
         self.assertEqual(files, [
-            ("plxnative-play", "1234"),
-            ("plxnative-quality", "original"),
-            ("plxnative-stats", None),
+            ("multiplex-play", "1234"),
+            ("multiplex-quality", "original"),
+            ("multiplex-stats", None),
             # issue #266 PR4 review: EVERY case forces the persisted audio-enhancement preference
             # too, default "off" -- see test_audio_enhancement_boot_trigger_defaults_off_and_is_overridable.
-            ("plxnative-audioenh", "off"),
+            ("multiplex-audioenh", "off"),
             # track memory: EVERY case forgets what a menu pick on an episode remembered -- see
             # test_every_case_forgets_track_memory_at_the_seat.
-            ("plxnative-trackmemory", "clear"),
+            ("multiplex-trackmemory", "clear"),
         ])
 
     def test_an_integration_case_can_explicitly_grade_auto(self):
         files = run.triggers_for_case({
             "rk": "1234", "quality": "auto", "operations": [{"op": "play"}],
         })
-        self.assertEqual(dict(files)["plxnative-quality"], "auto")
+        self.assertEqual(dict(files)["multiplex-quality"], "auto")
 
     def test_a_declaration_that_was_never_read_fails_rather_than_passing(self):
         """THE false-PASS this tier is most exposed to: the engine's fallthrough arm produces
@@ -2217,7 +2217,7 @@ class PipelineTier(unittest.TestCase):
         self.assertFalse(run.a_server_wire((0, 0), 1, 0)[0])
 
     def test_the_stream_path_assertion_catches_playing_the_wrong_thing(self):
-        """A stale plxnative-play from a by-hand session plays a LIBRARY ITEM through a pipeline
+        """A stale multiplex-play from a by-hand session plays a LIBRARY ITEM through a pipeline
         case. Everything else would still pass; the opened path is what tells them apart."""
         good = ["stream: host=192.0.2.10 port=8020 path=/pipe_h264_ac3_1080p.mkv"]
         self.assertTrue(run.a_stream_path(good, "pipe_h264_ac3_1080p.mkv")[0])
@@ -2234,7 +2234,7 @@ class PipelineTier(unittest.TestCase):
         self.assertTrue(run.a_stream_path(hls, "pipe_h264_aac_mp4.mp4", hls_entry=True)[0])
         stale = ["stream: 10.0.0.2:53923 path=/library/parts/9/1/file.mkv?X-Plex-Token=x"]
         self.assertFalse(run.a_stream_path(stale, "pipe_h264_aac_mp4.mp4", hls_entry=True)[0],
-                         "a stale plxnative-play library item is what this assertion is FOR")
+                         "a stale multiplex-play library item is what this assertion is FOR")
 
     def test_the_audio_lane_assertion_reads_the_fed_index(self):
         ln = ["ff: v=#0 codec=h264 codec_id=27 1920x1080 trc=1 pri=1 spc=1 a=#2 dur_ns=60000000000"]
@@ -2312,18 +2312,18 @@ class ResolutionSpike(unittest.TestCase):
         self.assertEqual(c["expect"]["server_opens_exact"], 1)
         self.assertEqual(c["expect"]["server_range_opens_exact"], 0)
         files = dict(run.triggers_for_case(c, url_base="http://192.0.2.10:8020"))
-        self.assertEqual(files["plxnative-gstlog"], c["gst_trace"]["debug"])
-        self.assertEqual(files["plxnative-gstlog"], "lxvideosink:6")
+        self.assertEqual(files["multiplex-gstlog"], c["gst_trace"]["debug"])
+        self.assertEqual(files["multiplex-gstlog"], "lxvideosink:6")
 
     def test_apply_triggers_removes_a_stale_trace_before_arming(self):
         saved = run.RUNDIR
         run.RUNDIR = "/tmp/app.multiplex.native.debug"
         try:
             with mock.patch.object(run, "ssh") as ssh:
-                run.apply_triggers("192.0.2.20", [("plxnative-gstlog", "GST_EVENT:6")])
+                run.apply_triggers("192.0.2.20", [("multiplex-gstlog", "GST_EVENT:6")])
             command = ssh.call_args.args[1]
-            self.assertIn("rm -f /tmp/app.multiplex.native.debug/plxnative-gst.log", command)
-            self.assertIn("plxnative-gstlog", command)
+            self.assertIn("rm -f /tmp/app.multiplex.native.debug/multiplex-gst.log", command)
+            self.assertIn("multiplex-gstlog", command)
         finally:
             run.RUNDIR = saved
 
@@ -2625,15 +2625,15 @@ class CompletionCase(unittest.TestCase):
 
     def test_the_replay_trigger_carries_the_number_the_case_grades(self):
         """One statement, not two: `expect.replays` is what the harness writes into
-        `plxnative-replay` AND what `a_replayed` counts, so they cannot drift."""
+        `multiplex-replay` AND what `a_replayed` counts, so they cannot drift."""
         c = next(c for c in _manifest()["pipeline_cases"] if c["expect"].get("replays"))
         files = dict(run.triggers_for_case(c, url_base="http://192.0.2.10:8020"))
-        self.assertEqual(files.get("plxnative-replay"), str(c["expect"]["replays"]))
+        self.assertEqual(files.get("multiplex-replay"), str(c["expect"]["replays"]))
         # ...and every other case must NOT arm it, or a one-shot boot silently becomes a loop.
         for other in _manifest()["pipeline_cases"]:
             if other["expect"].get("replays"):
                 continue
-            self.assertNotIn("plxnative-replay",
+            self.assertNotIn("multiplex-replay",
                              dict(run.triggers_for_case(other, url_base="http://192.0.2.10:8020")),
                              other["name"])
 
@@ -2758,8 +2758,8 @@ class AutoNetworkProfile(unittest.TestCase):
 
     def test_trigger_carries_auto_policy_source_rate_and_same_origin_hls_root(self):
         files = dict(run.triggers_for_case(self._case(), url_base="http://192.0.2.10:8020"))
-        self.assertEqual(files["plxnative-quality"], "auto")
-        spec = json.loads(files["plxnative-playurl"])
+        self.assertEqual(files["multiplex-quality"], "auto")
+        spec = json.loads(files["multiplex-playurl"])
         self.assertEqual(spec["auto_source_kbps"], 8000)
         self.assertEqual(spec["auto_hls_base"], "http://192.0.2.10:8020/__abr")
         self.assertEqual(spec["url"], "http://192.0.2.10:8020/pipe_h264_aac_mp4.mp4")
@@ -3899,7 +3899,7 @@ class AbrTraceMetrics(unittest.TestCase):
                          "a transcode reload with no switch line is not an audio switch")
 
     def test_audio_enhancement_op_writes_a_named_target_not_a_row(self):
-        """issue #266 PR4 review: `audio_enhancement` reuses `plxnative-menupick` at tab 0, but
+        """issue #266 PR4 review: `audio_enhancement` reuses `multiplex-menupick` at tab 0, but
         writes a NAMED target (`TrackRow`/`TrackMenuState::row_for_audio_target` resolve it
         against the panel's own row map) rather than a row number derived from the item's track
         count -- the bug this review caught was exactly a hand-derived row going stale against the
@@ -3910,19 +3910,19 @@ class AbrTraceMetrics(unittest.TestCase):
             "operations": [{"op": "play"}, {"op": "audio_enhancement", "which": "normalize_loudness"}],
         }
         files = run.triggers_for_case(case)
-        self.assertIn(("plxnative-menupick", "0,loudness"), files)
+        self.assertIn(("multiplex-menupick", "0,loudness"), files)
         case["operations"][1] = {"op": "audio_enhancement", "which": "boost_dialog"}
         files = run.triggers_for_case(case)
-        self.assertIn(("plxnative-menupick", "0,boost"), files)
+        self.assertIn(("multiplex-menupick", "0,boost"), files)
 
     def test_subtitle_op_names_a_track_not_a_row(self):
         """`subtitle_text_srt` once hard-coded row 3, which became the Color row (`menupick: row 3
         already active -- no commit`). A `track` op derives the row in the app from the panel's own
         row map; `row` still passes through verbatim."""
         case = {"rk": "1", "operations": [{"op": "play"}, {"op": "subtitle", "tab": 1, "track": 0}]}
-        self.assertIn(("plxnative-menupick", "1,track:0"), run.triggers_for_case(case))
+        self.assertIn(("multiplex-menupick", "1,track:0"), run.triggers_for_case(case))
         case["operations"][1] = {"op": "subtitle", "tab": 1, "row": 3}
-        self.assertIn(("plxnative-menupick", "1,3"), run.triggers_for_case(case))
+        self.assertIn(("multiplex-menupick", "1,3"), run.triggers_for_case(case))
         with open(os.path.join(os.path.dirname(__file__), "manifest.json")) as fh:
             manifest = json.load(fh)
         rows = [op for c in manifest["cases"] for op in c.get("operations", [])
@@ -3934,11 +3934,11 @@ class AbrTraceMetrics(unittest.TestCase):
         `off`), so a case's starting preference never depends on what an earlier case's pick left
         behind; a case opts into a non-off start with `audio_enhancements_boot`."""
         files = run.triggers_for_case({"rk": "1", "operations": [{"op": "play"}]})
-        self.assertIn(("plxnative-audioenh", "off"), files)
+        self.assertIn(("multiplex-audioenh", "off"), files)
         files = run.triggers_for_case({
             "rk": "1", "audio_enhancements_boot": "loudness", "operations": [{"op": "play"}],
         })
-        self.assertIn(("plxnative-audioenh", "loudness"), files)
+        self.assertIn(("multiplex-audioenh", "loudness"), files)
 
     def test_every_case_forgets_track_memory_at_the_seat(self):
         """A `menupick` is a viewer's pick, and a pick on an episode is remembered for its show by
@@ -3948,11 +3948,11 @@ class AbrTraceMetrics(unittest.TestCase):
                      {"rk": "1", "operations": [{"op": "play"}, {"op": "subtitle", "tab": 1, "track": 0}]},
                      {"rk": "1", "operations": [{"op": "play"}, {"op": "audio_switch", "tab": 0, "row": 1}]}):
             files = run.triggers_for_case(case)
-            self.assertEqual([f for f in files if f[0] == "plxnative-trackmemory"],
-                             [("plxnative-trackmemory", "clear")], case)
+            self.assertEqual([f for f in files if f[0] == "multiplex-trackmemory"],
+                             [("multiplex-trackmemory", "clear")], case)
         pipeline = run.triggers_for_case({"fixture": "x.mkv", "operations": [{"op": "play"}]},
                                          url_base="http://192.0.2.10:8020")
-        self.assertIn(("plxnative-trackmemory", "clear"), pipeline)
+        self.assertIn(("multiplex-trackmemory", "clear"), pipeline)
 
     def test_audio_enhancement_op_grades_applied_remux_and_ac3(self):
         """A live Normalize Loudness pick that took effect: the server ran the DSP params
@@ -4548,10 +4548,10 @@ class TheQualitySwitchAssertion(unittest.TestCase):
         nothing justified — the app asks for none either."""
         one = dict(run.triggers_for_case(
             {"rk": "1", "operations": [{"op": "quality_switch", "to": "auto"}]}))
-        self.assertEqual(one["plxnative-qualityswitch"], "auto")
+        self.assertEqual(one["multiplex-qualityswitch"], "auto")
         many = dict(run.triggers_for_case({"rk": "1", "operations": [
             {"op": "quality_switch", "to": ["720p_4_mbps", "auto"], "gap_ms": 40000}]}))
-        self.assertEqual(many["plxnative-qualityswitch"], "gap=40000,720p_4_mbps,auto")
+        self.assertEqual(many["multiplex-qualityswitch"], "gap=40000,720p_4_mbps,auto")
 
     def test_the_wire_vocabulary_matches_the_app(self):
         """Both sides of a contract that never meets at runtime: the manifest names a rung and the
@@ -4823,15 +4823,15 @@ class AbrTriggers(unittest.TestCase):
         return dict(run.triggers_for_case(case, url_base="http://h:8020"))
 
     def test_a_pin_becomes_a_trigger_and_is_absent_by_default(self):
-        self.assertNotIn("plxnative-abrpin", self._names(dict(self.BASE)))
-        self.assertEqual(self._names({**self.BASE, "abr_pin": 14000})["plxnative-abrpin"], "14000")
+        self.assertNotIn("multiplex-abrpin", self._names(dict(self.BASE)))
+        self.assertEqual(self._names({**self.BASE, "abr_pin": 14000})["multiplex-abrpin"], "14000")
 
     def test_the_policy_selector_becomes_a_trigger_and_is_absent_by_default(self):
-        """It must ride the manifest: `apply_triggers` wipes every plxnative-* before each case,
+        """It must ride the manifest: `apply_triggers` wipes every multiplex-* before each case,
         so a hand-armed A/B selector cannot survive into the case it is meant to switch."""
-        self.assertNotIn("plxnative-abrpolicy", self._names(dict(self.BASE)))
+        self.assertNotIn("multiplex-abrpolicy", self._names(dict(self.BASE)))
         self.assertEqual(
-            self._names({**self.BASE, "abr_policy": "legacy"})["plxnative-abrpolicy"], "legacy")
+            self._names({**self.BASE, "abr_policy": "legacy"})["multiplex-abrpolicy"], "legacy")
 
     def test_pause_resume_is_one_authored_trigger_not_two_wall_clock_writes(self):
         case = {
@@ -4839,7 +4839,7 @@ class AbrTriggers(unittest.TestCase):
             "operations": [{"op": "pause_resume", "delay_ms": 25_000, "hold_ms": 6_000}],
         }
         self.assertEqual(
-            self._names(case)["plxnative-autopause"],
+            self._names(case)["multiplex-autopause"],
             "delay=25000,hold=6000",
         )
 
@@ -4850,13 +4850,13 @@ class AbrTriggers(unittest.TestCase):
                             "seek_s": 30, "seek_delay_ms": 14_000}],
         }
         names = self._names(case)
-        self.assertEqual(names["plxnative-autopause"], "delay=10000,hold=18000")
-        self.assertEqual(names["plxnative-autoseek"], "delay=14000,30")
+        self.assertEqual(names["multiplex-autopause"], "delay=10000,hold=18000")
+        self.assertEqual(names["multiplex-autoseek"], "delay=14000,30")
         undelayed = {**self.BASE, "operations": [{"op": "pause_resume", "hold_ms": 6_000,
                                                   "seek_s": 30}]}
-        self.assertEqual(self._names(undelayed)["plxnative-autoseek"], "30")
+        self.assertEqual(self._names(undelayed)["multiplex-autoseek"], "30")
         plain = {**self.BASE, "operations": [{"op": "pause_resume", "hold_ms": 6_000}]}
-        self.assertNotIn("plxnative-autoseek", self._names(plain),
+        self.assertNotIn("multiplex-autoseek", self._names(plain),
                          "a plain hold must not grow a seek")
 
     def test_a_seek_under_pause_is_a_depth_the_length_check_reads(self):
@@ -4879,18 +4879,18 @@ class AbrTriggers(unittest.TestCase):
                 self.assertEqual(case["fixture"], hls["fixture"])
                 self.assertNotIn("abr_shape", case["expect"])
                 names = dict(run.triggers_for_case(case, url_base="http://h:8020"))
-                for auto_only in ("plxnative-quality", "plxnative-abrpin"):
+                for auto_only in ("multiplex-quality", "multiplex-abrpin"):
                     self.assertNotIn(auto_only, names)
-                spec = json.loads(names["plxnative-playurl"])
+                spec = json.loads(names["multiplex-playurl"])
                 self.assertNotIn("auto_start_hls", spec)
                 self.assertNotIn("auto_hls_base", spec)
-                self.assertIn("plxnative-autopause", names)
+                self.assertIn("multiplex-autopause", names)
                 self.assertTrue(case["expect"]["no_playing_error"])
                 self.assertTrue(case["expect"]["require_video_bound"])
         seek = cases["pipe_original_paused_seek"]
-        self.assertIn("plxnative-autoseek",
+        self.assertIn("multiplex-autoseek",
                       dict(run.triggers_for_case(seek, url_base="http://h:8020")))
-        self.assertNotIn("plxnative-autoseek",
+        self.assertNotIn("multiplex-autoseek",
                          dict(run.triggers_for_case(cases["pipe_original_pause_resume"],
                                                     url_base="http://h:8020")))
         # a pack too short for the case skips; it must not fail as a regression
@@ -6091,10 +6091,10 @@ class AbrContinuousTimestamps(unittest.TestCase):
             self.assertEqual(case[key], capped[key], key)
         self.assertIn("pipeline limit", case["_uri_note"])
         self.assertEqual(json.loads(dict(run.triggers_for_case(case, url_base="http://fixture.invalid"))
-                                    ["plxnative-playurl"])["url"],
+                                    ["multiplex-playurl"])["url"],
                          "http://fixture.invalid/__abr/20000/master.m3u8?continuous=1")
         self.assertEqual(dict(run.triggers_for_case(case, url_base="http://fixture.invalid"))
-                         ["plxnative-uriprobe"], "load")
+                         ["multiplex-uriprobe"], "load")
 
     @unittest.skipUnless(os.path.isdir(serve_fixtures.default_root()), "no fixture pack built here")
     def test_every_clip_of_a_built_pack_can_be_shifted_and_is_about_two_seconds(self):
@@ -6822,19 +6822,19 @@ class UriProductRunner(unittest.TestCase):
         names = [n for n, _ in files]
         self.assertEqual(len(names), len(set(names)), "a trigger name written twice is read once")
         got = dict(files)
-        self.assertEqual(got["plxnative-play"], str(run.mock_fps.CARRIER_RK))
-        self.assertEqual((got["plxnative-quality"], got["plxnative-audioenh"]), ("original", "off"))
-        self.assertNotIn("plxnative-ptype", got,
+        self.assertEqual(got["multiplex-play"], str(run.mock_fps.CARRIER_RK))
+        self.assertEqual((got["multiplex-quality"], got["multiplex-audioenh"]), ("original", "off"))
+        self.assertNotIn("multiplex-ptype", got,
                          "a product run boots as production does: the URI engine has its own player type 0 handle")
-        self.assertEqual(got["plxnative-uridev"],
+        self.assertEqual(got["multiplex-uridev"],
                          f"acb part={run.mock_fps.CARRIER_PART_ID} pms={self.HOST}:{self.PORT} "
                          f"url=http://192.0.2.10:8020/pipe_hls_720p24_20m/index.m3u8")
-        for never in ("plxnative-uriprobe", "plxnative-playurl"):
+        for never in ("multiplex-uriprobe", "multiplex-playurl"):
             self.assertNotIn(never, got)
 
     def test_nothing_may_arm_the_probe_or_the_dev_route_by_hand_in_a_product_run(self):
-        for name in ("plxnative-uriprobe", "plxnative-playurl", "plxnative-uridev", "plxnative-pms-origin",
-                     "plxnative-play", "plxnative-ptype", "plxnative-quality"):
+        for name in ("multiplex-uriprobe", "multiplex-playurl", "multiplex-uridev", "multiplex-pms-origin",
+                     "multiplex-play", "multiplex-ptype", "multiplex-quality"):
             with self.subTest(extra=name), self.assertRaises(run.UriProductRefused):
                 run.uri_product_files(self.case(), "http://192.0.2.10:8020", self.PMS,
                                       extra=[(name, "x")])
@@ -6844,8 +6844,8 @@ class UriProductRunner(unittest.TestCase):
                                       "http://192.0.2.10:8020", self.PMS)
         # an unrelated extra trigger still passes through, after the case's own
         files = run.uri_product_files(self.case(), "http://192.0.2.10:8020", self.PMS,
-                                      extra=[("plxnative-framedrop", "20")])
-        self.assertEqual(files[-1], ("plxnative-framedrop", "20"))
+                                      extra=[("multiplex-framedrop", "20")])
+        self.assertEqual(files[-1], ("multiplex-framedrop", "20"))
 
     # -- the carrier and the mock --
 
@@ -6935,7 +6935,7 @@ class UriProductRunner(unittest.TestCase):
                 mock.patch.object(run, "report_and_record",
                                   side_effect=lambda *a, **k: rec["reported"].append(a[2:4])), \
                 mock.patch.object(run.mock_fps, "MockPms", FakeMock), \
-                mock.patch.object(run.mock_fps, "resolve_mock_token", return_value="plxnative-mock-guest"), \
+                mock.patch.object(run.mock_fps, "resolve_mock_token", return_value="multiplex-mock-guest"), \
                 endpoint_patch:
             srv = mock.Mock()
             reads = iter([(0, 0, 0), (36, 36, 2)] * 4)   # before the stream, then after it
@@ -6957,13 +6957,13 @@ class UriProductRunner(unittest.TestCase):
         files, extra = rec["apply"][0]
         got = dict(files)
         # the pin is the origin the mock was started on: one source, the configured address
-        self.assertIn(f" pms={rec['mock'][0][1]}:{rec['mock'][0][2]} ", got["plxnative-uridev"])
-        self.assertNotIn("server=", got["plxnative-uridev"])
-        self.assertNotIn("plxnative-uriprobe", got)
+        self.assertIn(f" pms={rec['mock'][0][1]}:{rec['mock'][0][2]} ", got["multiplex-uridev"])
+        self.assertNotIn("server=", got["multiplex-uridev"])
+        self.assertNotIn("multiplex-uriprobe", got)
         # the token rides `extra=` so it never reaches stdout, and is the fabricated guest's
-        self.assertTrue(any("plxnative-token" in cmd and "plxnative-mock-guest" in cmd for cmd in extra))
-        self.assertNotIn("plxnative-mock-guest", " ".join(f"{n}={c}" for n, c in files))
-        self.assertEqual(rec["ssh"], ["rm -f /tmp/app.multiplex.native.debug/plxnative-uridev"])
+        self.assertTrue(any("multiplex-token" in cmd and "multiplex-mock-guest" in cmd for cmd in extra))
+        self.assertNotIn("multiplex-mock-guest", " ".join(f"{n}={c}" for n, c in files))
+        self.assertEqual(rec["ssh"], ["rm -f /tmp/app.multiplex.native.debug/multiplex-uridev"])
         self.assertTrue(rec["reported"][0][0])
 
     def test_the_previous_cases_app_is_closed_before_this_cases_mock_is_up(self):
@@ -6990,7 +6990,7 @@ class UriProductRunner(unittest.TestCase):
             with self.subTest(what):
                 out, rec = self._run(**kwargs)
                 self.assertIsInstance(out, RuntimeError)
-                self.assertEqual(rec["ssh"], ["rm -f /tmp/app.multiplex.native.debug/plxnative-uridev"])
+                self.assertEqual(rec["ssh"], ["rm -f /tmp/app.multiplex.native.debug/multiplex-uridev"])
                 self.assertEqual(rec["mock"][-1], "exit", "the mock is stopped too")
 
     def test_a_log_that_does_not_prove_the_synthetic_mock_is_not_graded(self):
@@ -7010,7 +7010,7 @@ class UriProductRunner(unittest.TestCase):
         self.assertEqual(out[1][0][:2], ("uri_product", False))
         self.assertIn("PMS_HOST", out[1][0][2])
         self.assertEqual((rec["apply"], rec["make"]), ([], []), "nothing was written to or closed on the set")
-        out, rec = self._run(cfg_extra={"extra_triggers": [("plxnative-uriprobe", "load")]})
+        out, rec = self._run(cfg_extra={"extra_triggers": [("multiplex-uriprobe", "load")]})
         self.assertFalse(out[0])
         self.assertIn("uriprobe", out[1][0][2])
         self.assertEqual((rec["apply"], rec["mock"], rec["make"]), ([], [], []),
@@ -7346,9 +7346,9 @@ class UriModeGrading(unittest.TestCase):
         bound, collapse = cases["pipe_uri_hls_720p24_20m_bound"], cases["pipe_uri_hls_720p24_20m_bound_collapse"]
         for case in (bound, collapse):
             files = dict(run.triggers_for_case(case, url_base="http://fixture.invalid"))
-            self.assertEqual((files["plxnative-uriprobe"], files["plxnative-ptype"]), ("acb-control", "0"),
+            self.assertEqual((files["multiplex-uriprobe"], files["multiplex-ptype"]), ("acb-control", "0"),
                              case["name"])
-            self.assertEqual(json.loads(files["plxnative-playurl"])["url"],
+            self.assertEqual(json.loads(files["multiplex-playurl"])["url"],
                              "http://fixture.invalid/pipe_hls_720p24_20m/index.m3u8")
             self.assertTrue(case["expect"]["uri_playing"] and case["expect"]["uri_plane_bound"], case["name"])
             self.assertEqual(case["run_secs"], 75)
@@ -8156,7 +8156,7 @@ class AbrSeekSupport(unittest.TestCase):
     def _seek_trigger(self, op):
         case = {"rk": "1", "operations": [{"op": "play"}, op], "expect": {}}
         files = dict((n, v) for n, v in run.triggers_for_case(case))
-        return files["plxnative-autoseek"]
+        return files["multiplex-autoseek"]
 
     def test_a_plain_seek_still_writes_the_bare_target(self):
         """`delay_ms` is opt-in: every existing case must keep the byte-identical trigger."""
@@ -9769,7 +9769,7 @@ impl PersonOwnerGateFixture {
         an unqualified `cache!` is, not the unnamed `?`. And `cfg!(test)` still counts as a fork whatever it
         evaluates to: `if cfg!(test) {..} else {..}` compiles an arm production runs and a test does not."""
         name = "_check_deps_selftest_macro.rs"
-        body = ("#[cfg(not(test))]\nplx_base::devtrig::latched_flag!(\n    /// `/tmp/plxnative-planted`\n"
+        body = ("#[cfg(not(test))]\nplx_base::devtrig::latched_flag!(\n    /// `/tmp/multiplex-planted`\n"
                 "    fn planted_armed = \"planted\";\n);\n\n"
                 "pub fn inline_test() -> bool {\n    if cfg!(test) { true } else { false }\n}\n")
         r = self._plant(name, body, crate_dir="plex")
@@ -9870,7 +9870,7 @@ impl PersonOwnerGateFixture {
         in a file dev.rs does not own must fail `tmppath`."""
         r = self._plant(
             "_check_deps_selftest_tmppath_open.rs",
-            'pub fn open_it() {\n    let p = "/tmp/plxnative-selftest";\n'
+            'pub fn open_it() {\n    let p = "/tmp/multiplex-selftest";\n'
             "    let _ = std::fs::File::open(p);\n}\n",
         )
         out = r.stdout + r.stderr
@@ -9879,14 +9879,14 @@ impl PersonOwnerGateFixture {
         self.assertIn("_check_deps_selftest_tmppath_open.rs", out)
 
     def test_tmppath_gate_exempts_a_log_message_mention(self):
-        """D4's own exemption: a `/tmp/plxnative-` literal that is only message text passed to
+        """D4's own exemption: a `/tmp/multiplex-` literal that is only message text passed to
         `log`/`crate::eventlog::log`/`log!` must not fail the gate. GREEN: planting one, including a nested
         `format!` the way most real call sites spell it, must leave `tmppath` (and the whole
         script) green."""
         r = self._plant(
             "_check_deps_selftest_tmppath_log.rs",
             'pub fn mention_it(n: u32) {\n    crate::eventlog::log(&format!(\n'
-            '        "selftest: see /tmp/plxnative-selftest ({n})"\n    ));\n}\n',
+            '        "selftest: see /tmp/multiplex-selftest ({n})"\n    ));\n}\n',
         )
         out = r.stdout + r.stderr
         self.assertEqual(r.returncode, 0, out)
@@ -10482,12 +10482,12 @@ class PosterGateCoverage(unittest.TestCase):
         self.assertEqual(set(scenes), {'settle', 'eviction', 'dive'})
         for scene in scenes.values():
             self.assertGreaterEqual(scene['poster_gate']['moving_fps_floor'], 55)
-            self.assertIn('plxnative-postergate', scene['triggers'])
+            self.assertIn('multiplex-postergate', scene['triggers'])
             # The app no longer declines a moving card by default; these scenes grade that decline.
-            self.assertEqual(scene['triggers'].get('plxnative-cardspeed'), '120')
+            self.assertEqual(scene['triggers'].get('multiplex-cardspeed'), '120')
             # Nor is the settled window left unwarmed by default: the at-rest lookahead (3 rows)
             # would answer the settle from art no draw has asked for, which proves nothing.
-            self.assertEqual(scene['triggers'].get('plxnative-lookahead'), '0')
+            self.assertEqual(scene['triggers'].get('multiplex-lookahead'), '0')
 
     def test_poster_grade_requires_real_work_and_complete_settle(self):
         import poster_gate
@@ -10885,7 +10885,7 @@ class FpsMock(unittest.TestCase):
                 self.assertEqual(s.get("tier", "ui"), want, s["name"])
 
     def test_the_press_scenes_drive_a_real_press_and_never_a_plain_ok(self):
-        # home-hold/collection-hold/home-tap/collection-tap (`plxnative-holdbench`): counted bench
+        # home-hold/collection-hold/home-tap/collection-tap (`multiplex-holdbench`): counted bench
         # scenes graded off `bench: kind=hold` lines, mock-runnable, with the same trigger on
         # a Home card and on the Collection page (a cards::Stack page, mock rk 50002).
         for name, tap in (("home-hold", False), ("collection-hold", False),
@@ -10908,21 +10908,21 @@ class FpsMock(unittest.TestCase):
             self.assertIn("2026-10-08", s["comment"], name)
             if not tap:
                 self.assertIn("#561", s["comment"], name)
-            value = s["triggers"]["plxnative-holdbench"]
+            value = s["triggers"]["multiplex-holdbench"]
             self.assertEqual(value.endswith(",tap"), tap, name)
             # the press itself is the bench's: no separate press/itemmenu trigger may ride along
-            self.assertNotIn("plxnative-press", s["triggers"], name)
-            self.assertNotIn("plxnative-itemmenu", s["triggers"], name)
+            self.assertNotIn("multiplex-press", s["triggers"], name)
+            self.assertNotIn("multiplex-itemmenu", s["triggers"], name)
             # the bench ends on its own `done` line, with room to finish its cycles
             n, period = int(value.split(",")[0]), (350 if tap else 1500)
             self.assertGreater(s["run_secs"] - s["warmup_s"], n * 2 * period / 1000, name)
         collection = self.mf.mock_scene(self.scenes["collection-hold"])
         self.assertEqual(collection["rk"], 50002)
-        self.assertEqual(collection["triggers"]["plxnative-collection"], "$rk")
+        self.assertEqual(collection["triggers"]["multiplex-collection"], "$rk")
         self.assertEqual(self.mf.mock_server_args(self.scenes["collection-hold"]), ["--movies", "240"])
-        self.assertIn("plxnative-grid", self.scenes["home-hold"]["triggers"])
+        self.assertIn("multiplex-grid", self.scenes["home-hold"]["triggers"])
         with open(os.path.join(TESTS_DIR, "run.py")) as fh:
-            self.assertIn('"plxnative-holdbench"', fh.read(), "run.py clears the trigger between cases")
+            self.assertIn('"multiplex-holdbench"', fh.read(), "run.py clears the trigger between cases")
 
     def test_a_hold_bench_cycle_that_pressed_nothing_or_opened_no_menu_fails_the_grade(self):
         scene = {"bench": "hold", "bench_missed_max": 0}
@@ -10962,12 +10962,12 @@ class FpsMock(unittest.TestCase):
         ran = self.mf.mock_scene(page)
         self.assertEqual(ran["rk"], 50002)
         self.assertNotIn("rk", page)
-        self.assertEqual(run.fps_trigger_files(ran), [("plxnative-collection", "50002")])
+        self.assertEqual(run.fps_trigger_files(ran), [("multiplex-collection", "50002")])
         self.assertEqual(self.mf.mock_server_args(page), ["--movies", "240"])
         search = self.mf.mock_scene(self.scenes["search-type"])
-        self.assertEqual(search["triggers"]["plxnative-search"], "sb")
-        self.assertTrue(search["triggers"]["plxnative-searchosc"])  # the rest is kept
-        self.assertEqual(self.scenes["search-type"]["triggers"]["plxnative-search"], "th")
+        self.assertEqual(search["triggers"]["multiplex-search"], "sb")
+        self.assertTrue(search["triggers"]["multiplex-searchosc"])  # the rest is kept
+        self.assertEqual(self.scenes["search-type"]["triggers"]["multiplex-search"], "th")
         with self.assertRaises(ValueError):
             self.mf.mock_server_args({"name": "x", "mock": {"movies": 1001}})
 
@@ -10992,7 +10992,7 @@ class FpsMock(unittest.TestCase):
                     fn(port, scene, dict(run.fps_trigger_files(scene)))
 
         def collection(port, scene, trig):
-            rk = trig["plxnative-collection"]
+            rk = trig["multiplex-collection"]
             head = get(port, f"/library/metadata/{rk}")["Metadata"]
             self.assertEqual(head[0]["type"], "collection")
             kids = get(port, f"/library/collections/{rk}/children")["Metadata"]
@@ -11000,7 +11000,7 @@ class FpsMock(unittest.TestCase):
             self.assertTrue(all(k.get("thumb") for k in kids))
 
         def person(port, scene, trig):
-            movie = get(port, f"/library/metadata/{trig['plxnative-detail']}")["Metadata"][0]
+            movie = get(port, f"/library/metadata/{trig['multiplex-detail']}")["Metadata"][0]
             self.assertEqual(movie["type"], "movie")
             pid = movie["Role"][0]["id"]  # detailsec=1 + detailok opens cast[0]
             titles = get(port, f"/library/people/{pid}/media")["Metadata"]
@@ -11008,13 +11008,13 @@ class FpsMock(unittest.TestCase):
             self.assertGreaterEqual(len(titles), 6)
 
         def search(port, scene, trig):
-            hubs = get(port, f"/hubs/search?query={trig['plxnative-search']}&limit=8")["Hub"]
+            hubs = get(port, f"/hubs/search?query={trig['multiplex-search']}&limit=8")["Hub"]
             filled = [h for h in hubs if h["size"] > 0]
             self.assertGreaterEqual(len(filled), 4)
             self.assertGreaterEqual(sum(h["size"] for h in filled), 12)
 
         def show(port, scene, trig):
-            rk = trig["plxnative-detail"]
+            rk = trig["multiplex-detail"]
             self.assertEqual(get(port, f"/library/metadata/{rk}")["Metadata"][0]["type"], "show")
             seasons = get(port, f"/library/metadata/{rk}/children")["Metadata"]
             self.assertGreaterEqual(len(seasons), 2)
@@ -11042,7 +11042,7 @@ class FpsMock(unittest.TestCase):
         self.assertEqual(sc["expect"]["sink_echo"], "1920x1080@60")
         self.assertTrue(sc["mock"]["only"])
         ran = self.mf.mock_scene(sc)
-        self.assertEqual(dict(run.fps_trigger_files(ran))["plxnative-play"], "990001")
+        self.assertEqual(dict(run.fps_trigger_files(ran))["multiplex-play"], "990001")
         args = self.mf.mock_server_args(sc)
         self.assertEqual(args[0], "--extra-media")
         self.assertTrue(args[1].endswith("bug665/src-4k-h264-aac.mkv"))
@@ -11055,8 +11055,8 @@ class FpsMock(unittest.TestCase):
         self.assertTrue(sc["mock"]["only"])
         ran = self.mf.mock_scene(sc)
         files = dict(run.fps_trigger_files(ran))
-        self.assertEqual(files["plxnative-play"], "990001")
-        self.assertEqual(files["plxnative-audioenh"], "boost")
+        self.assertEqual(files["multiplex-play"], "990001")
+        self.assertEqual(files["multiplex-audioenh"], "boost")
         self.assertEqual(sc["expect"]["load_fps"], 24.0)
         self.assertEqual(sc["expect"]["load_max"], "3840x2160@24")
         self.assertTrue(sc["expect"]["presented_rate"])
@@ -11142,9 +11142,9 @@ class FpsMock(unittest.TestCase):
         self.assertEqual(deep["fps_floor"], grid["fps_floor"])
         self.assertTrue(deep["mock"]["only"])
         self.assertEqual(deep["mock"]["home_hubs"], 170)
-        self.assertNotIn("plxnative-homeosc", deep["triggers"])  # the walk is the stimulus
+        self.assertNotIn("multiplex-homeosc", deep["triggers"])  # the walk is the stimulus
         # the heartbeat carries frame_n/frame_gt33/... only while the frame-drop detector is armed
-        self.assertIn("plxnative-framedrop", deep["triggers"])
+        self.assertIn("multiplex-framedrop", deep["triggers"])
         self.assertLessEqual(deep["walk"]["max_rows"], deep["mock"]["home_hubs"])
 
     def test_every_walk_scene_has_run_secs_for_its_whole_walk(self):
@@ -11169,8 +11169,8 @@ class FpsMock(unittest.TestCase):
         self.assertEqual((sc["tier"], sc["route"]), ("ui", "home"))
         self.assertEqual(sc["mock"], {"cw_art_fixture": True, "only": True})
         self.assertEqual(self.mf.mock_server_args(sc), ["--cw-art-fixture"])
-        # `plxnative-grid` seats row 0, the Continue Watching row; the walk never leaves it
-        self.assertTrue(sc["triggers"]["plxnative-grid"])
+        # `multiplex-grid` seats row 0, the Continue Watching row; the walk never leaves it
+        self.assertTrue(sc["triggers"]["multiplex-grid"])
         self.assertTrue(self.mf.is_row_walk(sc["walk"]))
         plan = self.mf.row_walk_plan(sc["walk"])
         self.assertEqual(plan, ["right"] * 12 + ["left"] * 12)
@@ -11179,7 +11179,7 @@ class FpsMock(unittest.TestCase):
         # the row does not page, so the page-landing grade must not fail it; the reach grade does
         self.assertEqual(sc["walk"]["min_page_landings"], 0)
         self.assertEqual(sc["walk"]["reach"], {"route": "home", "min_global": 10})
-        self.assertIn("plxnative-focusx", sc["triggers"])
+        self.assertIn("multiplex-focusx", sc["triggers"])
         self.assertLessEqual(sc["walk"]["reach"]["min_global"], sc["walk"]["cards"])
         self.assertLessEqual(self.mf.walk_secs_needed(sc), sc["run_secs"])
         self.assertIn("./tests/run.py --fps --mock --filter home-cw-row-walk", sc["comment"])
@@ -11226,7 +11226,7 @@ class FpsMock(unittest.TestCase):
             sc = self.scenes[name]
             w = sc["walk"]
             self.assertTrue(sc["mock"]["only"] and sc["mock"]["link"], name)
-            self.assertIn("plxnative-focusx", sc["triggers"], name)
+            self.assertIn("multiplex-focusx", sc["triggers"], name)
             self.assertTrue(self.mf.is_row_walk(w), name)
             plan = self.mf.row_walk_plan(w)
             self.assertEqual(plan, ["down"] * w["row_down"] + [w["key"]] * w["cards"] + [w["back"]] * w["cards"])
@@ -11359,9 +11359,9 @@ class FpsMock(unittest.TestCase):
         # the Recommended page seats its first shelf on arrival and has no toolbar to cross
         self.assertEqual(deep["walk"]["extra_rows"], 0)
         self.assertEqual(deep["walk"]["fingerprint_region"], "shelf")
-        for t in ("plxnative-library", "plxnative-framedrop", "plxnative-focus"):
+        for t in ("multiplex-library", "multiplex-framedrop", "multiplex-focus"):
             self.assertIn(t, deep["triggers"])
-        self.assertNotIn("plxnative-libosc", deep["triggers"])  # the walk is the stimulus
+        self.assertNotIn("multiplex-libosc", deep["triggers"])  # the walk is the stimulus
         self.assertEqual(deep["walk"]["min_landed"], 150)  # the cap is gone: 12 is a failure now
         # room for every shelf at its worst: all of them, a second stop per linked one, the extras
         self.assertGreaterEqual(deep["walk"]["max_rows"], 170 + 40 + deep["walk"]["extra_rows"])
@@ -11385,7 +11385,7 @@ class FpsMock(unittest.TestCase):
     def test_a_scene_grades_a_fingerprint_region_its_page_actually_prints(self):
         """A scene's `walk.fingerprint_region` / `walk.reach.region` is a promise that the page prints
         that `focus route=... region=...` word. #843 gave `library-shelves-deep` the Recommended
-        page (`plxnative-libtype: recommended`) and left it waiting for the Library page's
+        page (`multiplex-libtype: recommended`) and left it waiting for the Library page's
         `region=grid`, which that page never printed (its probe line was empty), so the scene
         failed on every run and nothing said why. Both pages answer one fingerprint grammar, so the
         words each can print are read from the page's own `probe_viewport`."""
@@ -11404,7 +11404,7 @@ class FpsMock(unittest.TestCase):
             with self.subTest(scene=name):
                 self.assertEqual(scene["route"], "library",
                                  "teach this test which page prints the regions of the scene's route")
-                recommended_page = scene.get("triggers", {}).get("plxnative-libtype") == "recommended"
+                recommended_page = scene.get("triggers", {}).get("multiplex-libtype") == "recommended"
                 printed = recommended if recommended_page else library
                 for word in wanted:
                     self.assertIn(word, printed,
@@ -11438,9 +11438,9 @@ class FpsMock(unittest.TestCase):
         self.assertTrue(b["mock"]["only"])
         self.assertEqual(b["mock"]["movies"], 1000)
         self.assertEqual(self.mf.mock_server_args(b), ["--movies", "1000"])
-        for t in ("plxnative-library", "plxnative-framedrop", "plxnative-focus", "plxnative-phcount"):
+        for t in ("multiplex-library", "multiplex-framedrop", "multiplex-focus", "multiplex-phcount"):
             self.assertIn(t, b["triggers"])
-        self.assertNotIn("plxnative-libosc", b["triggers"])  # the walk is the stimulus
+        self.assertNotIn("multiplex-libosc", b["triggers"])  # the walk is the stimulus
         # nothing is graded on rates or frame times: it prints, it does not gate
         for k in ("loop_floor", "fps_floor", "fps_ceiling", "worst_ceiling_ms", "stall_ceiling_ms",
                   "upload_per_frame_min", "upload_late_share_max", "upload_frames_min"):
@@ -11746,11 +11746,11 @@ class FpsMock(unittest.TestCase):
     def test_library_landed_reads_the_section_the_scene_seats(self):
         lines = ["libhubs: section 1 landed 3 shelves", "libhubs: section 0 landed 12 shelves",
                  "libhubs: section 1 landed 4 shelves"]
-        movies = {"triggers": {"plxnative-library": True}, "walk": {"landed": "library"}}
-        shows = {"triggers": {"plxnative-library": "1"}, "walk": {"landed": "library"}}
+        movies = {"triggers": {"multiplex-library": True}, "walk": {"landed": "library"}}
+        shows = {"triggers": {"multiplex-library": "1"}, "walk": {"landed": "library"}}
         self.assertEqual(self.mf.library_section_index(movies), 0)
         self.assertEqual(self.mf.library_section_index(shows), 1)
-        self.assertEqual(self.mf.library_section_index({"triggers": {"plxnative-library": "0"}}), 0)
+        self.assertEqual(self.mf.library_section_index({"triggers": {"multiplex-library": "0"}}), 0)
         # not the last matching line (that is the Shows section's 4)
         self.assertEqual(self.mf.landed_library(lines, 0), 12)
         self.assertEqual(self.mf.landed_library(lines, 1), 4)
@@ -11789,7 +11789,7 @@ class FpsMock(unittest.TestCase):
         port = self._free_port()
         with self.mf.MockPms("127.0.0.1", port, ["--home-hubs", "7", "--section-hubs", "9"]):
             token = self.mf.resolve_mock_token(self._config("127.0.0.1", port))
-            self.assertEqual(token, "plxnative-mock-guest")
+            self.assertEqual(token, "multiplex-mock-guest")
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/hubs", timeout=10) as r:
                 self.assertEqual(len(json.load(r)["MediaContainer"]["Hub"]), 7)
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/hubs/sections/1", timeout=10) as r:
@@ -11864,11 +11864,11 @@ class FpsMock(unittest.TestCase):
             return run.run_fps_scene(scene, cfg, "tok", extra_triggers=extra_triggers, capture=capture)
 
     # --- --save-logs keeps the GPU counters, which the harness otherwise wipes ----------
-    # `plxnative-hwcnt.jsonl` lives in the runtime root that every scene's trigger wipe and the
+    # `multiplex-hwcnt.jsonl` lives in the runtime root that every scene's trigger wipe and the
     # harness's teardown empty, and `save_case_log` keeps only the event log: a card-attribution leg
-    # (`--extra-trigger plxnative-hwcnt=frame.ui`) used to lose the one file that holds its answer.
-    HWCNT_ARMED = (("plxnative-hwcnt", "frame.ui"),)
-    PROFILE_ARMED = (("plxnative-profile", "frame.ui"),)
+    # (`--extra-trigger multiplex-hwcnt=frame.ui`) used to lose the one file that holds its answer.
+    HWCNT_ARMED = (("multiplex-hwcnt", "frame.ui"),)
+    PROFILE_ARMED = (("multiplex-profile", "frame.ui"),)
 
     def _run_saving(self, tmp, *, armed=HWCNT_ARMED, save=True, on_tv=None, capture=None):
         """`library-switch` through the real `run_fps_scene` with a fake television: returns the
@@ -11895,33 +11895,33 @@ class FpsMock(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             # the GL-timer file is on the set too: a leg that armed hwcnt is not asked for it
             events, out, kept = self._run_saving(
-                tmp, on_tv={"plxnative-hwcnt.jsonl": '{"phase":"frame.ui"}\n', "plxnative-gputime.jsonl": "g\n"})
-            self.assertEqual(events, ["kill", "wipe", "run", "pull plxnative-hwcnt.jsonl"])
-            self.assertEqual(kept, ["fps-library-switch.plxnative-hwcnt.jsonl"])
+                tmp, on_tv={"multiplex-hwcnt.jsonl": '{"phase":"frame.ui"}\n', "multiplex-gputime.jsonl": "g\n"})
+            self.assertEqual(events, ["kill", "wipe", "run", "pull multiplex-hwcnt.jsonl"])
+            self.assertEqual(kept, ["fps-library-switch.multiplex-hwcnt.jsonl"])
             with open(os.path.join(tmp, "legs", kept[0])) as fh:
                 self.assertEqual(fh.read(), '{"phase":"frame.ui"}\n')
-            self.assertIn("kept fps-library-switch.plxnative-hwcnt.jsonl", out)
+            self.assertIn("kept fps-library-switch.multiplex-hwcnt.jsonl", out)
 
-    def test_save_logs_keeps_the_gputime_jsonl_of_a_plxnative_profile_leg(self):
-        # `plxnative-profile` (the GL timer) writes plxnative-gputime.jsonl and never the hwcnt file
+    def test_save_logs_keeps_the_gputime_jsonl_of_a_multiplex_profile_leg(self):
+        # `multiplex-profile` (the GL timer) writes multiplex-gputime.jsonl and never the hwcnt file
         with tempfile.TemporaryDirectory() as tmp:
             events, out, kept = self._run_saving(
-                tmp, armed=self.PROFILE_ARMED, on_tv={"plxnative-hwcnt.jsonl": "h\n", "plxnative-gputime.jsonl": "g\n"})
-            self.assertEqual(events, ["kill", "wipe", "run", "pull plxnative-gputime.jsonl"])
-            self.assertEqual(kept, ["fps-library-switch.plxnative-gputime.jsonl"])
+                tmp, armed=self.PROFILE_ARMED, on_tv={"multiplex-hwcnt.jsonl": "h\n", "multiplex-gputime.jsonl": "g\n"})
+            self.assertEqual(events, ["kill", "wipe", "run", "pull multiplex-gputime.jsonl"])
+            self.assertEqual(kept, ["fps-library-switch.multiplex-gputime.jsonl"])
             with open(os.path.join(tmp, "legs", kept[0])) as fh:
                 self.assertEqual(fh.read(), "g\n")
-            self.assertIn("kept fps-library-switch.plxnative-gputime.jsonl", out)
+            self.assertIn("kept fps-library-switch.multiplex-gputime.jsonl", out)
 
     def test_save_logs_says_so_when_an_armed_leg_left_no_counters(self):
-        for armed, fname in ((self.HWCNT_ARMED, "plxnative-hwcnt.jsonl"), (self.PROFILE_ARMED, "plxnative-gputime.jsonl")):
+        for armed, fname in ((self.HWCNT_ARMED, "multiplex-hwcnt.jsonl"), (self.PROFILE_ARMED, "multiplex-gputime.jsonl")):
             with tempfile.TemporaryDirectory() as tmp:
                 _, out, kept = self._run_saving(tmp, armed=armed)
                 self.assertEqual(kept, [])
                 self.assertIn(f"{armed[0][0]} was armed but the set holds no {fname}", out)
 
     def test_save_logs_leaves_the_set_alone_unless_a_profiler_is_armed_and_logs_are_wanted(self):
-        on_tv = {"plxnative-hwcnt.jsonl": "h\n", "plxnative-gputime.jsonl": "g\n"}
+        on_tv = {"multiplex-hwcnt.jsonl": "h\n", "multiplex-gputime.jsonl": "g\n"}
         for leg in ({"armed": ()}, {"save": False}):
             with tempfile.TemporaryDirectory() as tmp:
                 events, out, kept = self._run_saving(tmp, on_tv=on_tv, **leg)
@@ -11933,10 +11933,10 @@ class FpsMock(unittest.TestCase):
         for save in (True, False):
             with tempfile.TemporaryDirectory() as tmp:
                 capture = {}
-                events, _, kept = self._run_saving(tmp, save=save, capture=capture, on_tv={"plxnative-hwcnt.jsonl": "h\n"})
-                self.assertEqual(events, ["kill", "wipe", "run", "pull plxnative-hwcnt.jsonl"], f"save={save}")
-                self.assertEqual(capture["profiler"], {"plxnative-hwcnt": "h\n"})
-                self.assertEqual(kept, ["fps-library-switch.plxnative-hwcnt.jsonl"] if save else [])
+                events, _, kept = self._run_saving(tmp, save=save, capture=capture, on_tv={"multiplex-hwcnt.jsonl": "h\n"})
+                self.assertEqual(events, ["kill", "wipe", "run", "pull multiplex-hwcnt.jsonl"], f"save={save}")
+                self.assertEqual(capture["profiler"], {"multiplex-hwcnt": "h\n"})
+                self.assertEqual(kept, ["fps-library-switch.multiplex-hwcnt.jsonl"] if save else [])
 
     def test_the_graphics_profile_bundles_the_hwcnt_leg_it_was_handed_and_pulls_nothing_itself(self):
         legs = []
@@ -11944,7 +11944,7 @@ class FpsMock(unittest.TestCase):
         def fake_scene(scene, cfg, token, *, extra_triggers=(), capture=None, **kw):
             legs.append(extra_triggers)
             capture.update({"lines": ["beat"], "warmup": 5, "run_secs": 18, "route": "library", "overlay": None,
-                            "profiler": {"plxnative-hwcnt": "h\n"} if extra_triggers else {}})
+                            "profiler": {"multiplex-hwcnt": "h\n"} if extra_triggers else {}})
             return True, "ok"
 
         pacing = {"n": 0, "p50": 0.0, "p10": 0.0, "p95": 0.0, "min": 0.0, "max": 0.0, "drift": 0.0}
@@ -11957,9 +11957,9 @@ class FpsMock(unittest.TestCase):
                 mock.patch.object(run.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="", stderr="")):
             bundle = os.path.join(tmp, "bundle")
             self.assertEqual(run.run_graphics_profile({"name": "library-switch"}, {"tv": "tv.invalid"}, "tok", "frame.ui", output=bundle), 0)
-            with open(os.path.join(bundle, "plxnative-hwcnt.jsonl")) as fh:
+            with open(os.path.join(bundle, "multiplex-hwcnt.jsonl")) as fh:
                 self.assertEqual(fh.read(), "h\n")
-        self.assertEqual(legs, [(), (("plxnative-hwcnt", "frame.ui"),)])
+        self.assertEqual(legs, [(), (("multiplex-hwcnt", "frame.ui"),)])
 
     def _deep_scene(self):
         s = copy.deepcopy(self.scenes["home-grid-deep"])
@@ -12180,12 +12180,12 @@ class MockRouteSideReader(unittest.TestCase):
 
     def test_the_triggers_pin_the_carrier_the_enhancement_and_no_other_route(self):
         files = dict(run.mock_route_files(self.CASE))
-        self.assertEqual(files["plxnative-play"], str(run.mock_fps.CARRIER_RK))
-        self.assertEqual(files["plxnative-audioenh"], "loudness")
-        for name in ("plxnative-playurl", "plxnative-uridev", "plxnative-uriprobe", "plxnative-pms-origin"):
+        self.assertEqual(files["multiplex-play"], str(run.mock_fps.CARRIER_RK))
+        self.assertEqual(files["multiplex-audioenh"], "loudness")
+        for name in ("multiplex-playurl", "multiplex-uridev", "multiplex-uriprobe", "multiplex-pms-origin"):
             self.assertNotIn(name, files)
         with self.assertRaises(run.UriProductRefused):
-            run.mock_route_files(self.CASE, [("plxnative-uriprobe", "load")])
+            run.mock_route_files(self.CASE, [("multiplex-uriprobe", "load")])
         with self.assertRaises(run.UriProductRefused):
             run.mock_route_files(dict(self.CASE, triggers={"uridev": "x"}))
 

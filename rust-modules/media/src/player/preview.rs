@@ -470,7 +470,7 @@ pub fn refusal(
 }
 
 plx_base::devtrig::latched_flag!(
-    /// `/tmp/plxnative-nopreview` — disable background trailer autoplay. Latched: `enabled()`
+    /// `/tmp/multiplex-nopreview` — disable background trailer autoplay. Latched: `enabled()`
     /// runs on `preview_tick`'s every-frame path (via `blocked`) while the detail hero holds
     /// focus, and a `devtrig::flag` read is a `stat(2)` syscall per call.
     fn nopreview_armed = "nopreview";

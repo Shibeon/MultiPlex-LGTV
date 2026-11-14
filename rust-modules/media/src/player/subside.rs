@@ -6,7 +6,7 @@
 //! `request_subtitle` are the viewer's selection, `sub_bitmaps` the bitmap store), the route's
 //! request to match the running reader to the selection is a readout event the pump hands the Feed
 //! as a `FeedCommand::SyncSideReader`, and [`dev_armed_ordinal`] reads the diagnostic trigger
-//! `plxnative-subside`.
+//! `multiplex-subside`.
 //!
 //! See `plx_play_feed::side_reader` for what the reader does, when it starts and stops, and how a
 //! SIDECAR gets it clock-only (`plx_playback_contract::subtitle::SIDE_READER_CLOCK_ONLY`).
@@ -44,7 +44,7 @@ impl SideReaderJobPort for MediaSideReaderJob {
     }
 }
 
-/// The subtitle ordinal `plxnative-subside` asks to draw, or `None` when the trigger is absent or
+/// The subtitle ordinal `multiplex-subside` asks to draw, or `None` when the trigger is absent or
 /// holds no non-negative number. Read at each playback start (a live trigger: no relaunch needed).
 /// Always `None` in a build without the dev triggers.
 pub fn dev_armed_ordinal() -> Option<i32> {

@@ -12,7 +12,7 @@
 //! * `http://` is accepted only for a literal RFC 1918 IPv4 host and is then a `dev_source`, and
 //!   `dev_source` is true for nothing else.
 use libfuzzer_sys::fuzz_target;
-use plxnative_fuzz as _; // links the host libraries `build.rs` asks for; see `src/lib.rs`
+use multiplex_fuzz as _; // links the host libraries `build.rs` asks for; see `src/lib.rs`
 use plx_data::hudpacks::address::{parse, GITHUB_ASSET, ADDRESS_LEN_LIMIT};
 use std::net::Ipv4Addr;
 

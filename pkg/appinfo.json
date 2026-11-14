@@ -3,7 +3,7 @@
   "version": "0.10.0",
   "vendor": "MultiPlex",
   "type": "native",
-  "main": "plxnative",
+  "main": "multiplex",
   "title": "MultiPlex",
   "appDescription": "Unofficial native Plex client - not affiliated with Plex",
   "icon": "icon.png",

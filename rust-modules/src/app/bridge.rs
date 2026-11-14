@@ -428,7 +428,7 @@ impl ConsentMachine {
 /// (`dev::scenarios::arm_track_memory`): they run once, right after the restore of the first
 /// `Unseated` to `Seated` change, so they force the SEATED profile's record. That
 /// is a stored or picker boot's. A harness boot that injects a token (`--guest` included: both
-/// `tools/tv-session.sh` and `tests/run.py` write `plxnative-token`) is a dev-token boot, which never
+/// `tools/tv-session.sh` and `tests/run.py` write `multiplex-token`) is a dev-token boot, which never
 /// seats, so the audio-enhancement arm run at boot is the only one there and sets the live cell alone
 /// (a dev-token boot remembers no track and has nothing to clear).
 struct SeatWatch {
@@ -1323,15 +1323,6 @@ impl Bridge {
                 self.huds_notice = None;
                 self.huds_watch(page);
                 self.huds_refresh();
-                if !self.playback_live {
-                    self.huds.open_catalog(plx_telemetry::telemetry::crashreport::now_secs());
-                }
-            }
-            HudCmd::Watch(page) => self.huds_watch(page),
-            HudCmd::CancelRegistry(sha) => self.huds.cancel_registry(sha),
-            HudCmd::FetchRegistry(sha) => {
-                self.huds_notice = None;
-                self.huds.fetch_registry(sha, plx_plex::plex::identity::version(), plx_platform::i18n::current().language().tag());
             }
             HudCmd::Select(id) => self.huds.select(id),
             HudCmd::Remove(id) => {
@@ -1402,12 +1393,6 @@ impl Bridge {
         let tag = plx_platform::i18n::current().language().tag();
         let list = plx_screens::hud_settings::HudList {
             end_time,
-            catalog: self.huds.store().catalog().clone(),
-            catalog_date: self.huds.store().catalog().checked_at.and_then(|s| i64::try_from(s).ok())
-                .and_then(plx_platform::i18n::local_calendar_date)
-                .and_then(|[y,m,d]| plx_platform::i18n::current().date_medium(y, m as u8, d as u8)).unwrap_or_default(),
-            app_version: plx_plex::plex::identity::version().into(),
-            language_tag: tag.into(),
             entries: self.huds.store().entries(),
             drops: self.huds.store().drops(),
             unfit: self.huds.unfit_shas(tag),
@@ -3685,7 +3670,7 @@ pub(crate) fn content_probe(d: &Dispatcher<AppHost>, rig: &Bridge) -> String {
     out
 }
 
-/// `plxnative-focusx` for every card section (`plx_ui::card_probe`): the focused card of the frame
+/// `multiplex-focusx` for every card section (`plx_ui::card_probe`): the focused card of the frame
 /// just drawn, on whichever page drew it. `cdk` is the ratingKey inside the card's artwork path
 /// (`push_rk`'s filter, so a path or a token cannot reach the log), `cdx`/`cdy`/`cdw` its drawn
 /// screen rect, `cdi`/`cdn` its slot in the run of cards the section holds (a shelf's source, a grid's painted
@@ -3785,7 +3770,7 @@ fn page_probe(d: &Dispatcher<AppHost>, rig: &Bridge) -> String {
         let mut out = format!(" snapt={} snapp={} hf={hf} row={row} col={col}", grid as u8,
             (!<plx_screens::home::HomeScreen as Screen<AppHost>>::strip_reachable(home)) as u8);
         crate::focusprobe::push_item(&mut out, if grid { home.focused_item::<AppHost>(focus, &cx) } else { home.hero_item::<AppHost>(&cx) });
-        // `plxnative-focusx`: where the focused card is DRAWN, in whole canvas pixels. It moves
+        // `multiplex-focusx`: where the focused card is DRAWN, in whole canvas pixels. It moves
         // every frame a row scrolls, so an armed run logs a line per frame: that is the point.
         // `tests/paging_link.py` reads a row that jumps under the focus (the trailing-edge to
         // leading-edge teleport a window slide once caused) from it. Off by default, so the
@@ -3824,7 +3809,7 @@ fn page_probe(d: &Dispatcher<AppHost>, rig: &Bridge) -> String {
             let _ = write!(out, "{} rk=", item.sid.raw());
             crate::focusprobe::push_rk(&mut out, &item.rk);
         } else { out.push_str("- rk=-"); }
-        // `plxnative-focusx`: the handoff's two drawn alphas (chrome, capsule) -- off by default, so
+        // `multiplex-focusx`: the handoff's two drawn alphas (chrome, capsule) -- off by default, so
         // the fingerprint grammar the replay recordings pin does not change.
         #[cfg(feature = "devtriggers")]
         if plx_base::devtrig::flag("focusx") {
@@ -4079,7 +4064,7 @@ pub(crate) fn dismiss_player_overlays(d: &mut Dispatcher<AppHost>) {
 }
 
 /// A live panel's own state, for the dev triggers that drive one by hand
-/// (`plxnative-menupick`) and for the focus probe's `sel=`.
+/// (`multiplex-menupick`) and for the focus probe's `sel=`.
 pub(crate) fn player_overlay_mut(
     d: &mut Dispatcher<AppHost>,
 ) -> Option<&mut plx_screens::player::overlay::PlayerOverlayScreen> {
@@ -4771,7 +4756,7 @@ pub(crate) fn open_first_run_consent(d: &mut Dispatcher<AppHost>) {
     open_first_run_consent_at(d, 0);
 }
 
-/// …at `stage`, which only `/tmp/plxnative-consent=product` ever names.
+/// …at `stage`, which only `/tmp/multiplex-consent=product` ever names.
 pub(crate) fn open_first_run_consent_at(d: &mut Dispatcher<AppHost>, stage: u8) {
     if surface_up(d, is_first_run_consent) {
         return;
@@ -5041,7 +5026,7 @@ pub(crate) fn owns_input(d: &Dispatcher<AppHost>) -> bool {
 }
 
 /// The topmost surface's heartbeat word, for the dev triggers that have to wait for a particular
-/// page of the family to be up (`plxnative-legaldoc`, `plxnative-alert`).
+/// page of the family to be up (`multiplex-legaldoc`, `multiplex-alert`).
 pub(crate) fn surface_word(d: &Dispatcher<AppHost>) -> Option<&'static str> {
     d.top_surface_name()
 }

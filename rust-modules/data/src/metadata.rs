@@ -293,7 +293,7 @@ impl Spot {
 }
 
 /// Plex's resume rule, in ONE place (home Continue-Watching, the detail Play button, and the
-/// plxnative-play harness all apply it): resume only past 10s and before 95% watched, else start
+/// multiplex-play harness all apply it): resume only past 10s and before 95% watched, else start
 /// from the beginning. Both args are MILLISECONDS; the returned position is NANOSECONDS
 /// (what `player::begin_resume` takes).
 pub fn resume_ns(resume_ms: i64, dur_ms: i64) -> i64 {
@@ -733,7 +733,7 @@ impl DvPresentation {
 }
 
 plx_base::devtrig::latched_flag!(
-    /// `/tmp/plxnative-dvnonode` — after a supported route has frozen `Declare`, keep its Dolby
+    /// `/tmp/multiplex-dvnonode` — after a supported route has frozen `Declare`, keep its Dolby
     /// Vision **direct play** but send **no** `DolbyHdrInfo` node. Diagnostic only: it is the
     /// explicitly logged exception to gate/payload agreement.
     ///
@@ -753,10 +753,10 @@ plx_base::devtrig::latched_flag!(
 );
 
 plx_base::devtrig::latched_flag!(
-    /// `/tmp/plxnative-nodv` — **withhold the Dolby Vision declaration**, for a bisect. The
+    /// `/tmp/multiplex-nodv` — **withhold the Dolby Vision declaration**, for a bisect. The
     /// polarity is inverted from what it was, and the inversion is the point.
     ///
-    /// This was `/tmp/plxnative-dv`, an opt-IN, default off, with a note in this doc saying to
+    /// This was `/tmp/multiplex-dv`, an opt-IN, default off, with a note in this doc saying to
     /// flip the default "once the node has been seen to put a correct picture on a real panel".
     /// The reason for the caution was real — the payload is the `sourceInfo` envelope, which the
     /// pipeline parses before anything decodes, and a malformed one does not fail loudly, it
@@ -774,7 +774,7 @@ plx_base::devtrig::latched_flag!(
     /// default, and this knob only takes it away. Note what it does NOT do: withholding re-imposes
     /// the old refusal on Profile 5 (`base_layer_unusable`), so this bisects "declared vs
     /// transcoded", not "declared vs direct-played-undeclared". [`dv_node_suppressed`]
-    /// (`/tmp/plxnative-dvnonode`) is the finer instrument for that, and is why both exist.
+    /// (`/tmp/multiplex-dvnonode`) is the finer instrument for that, and is why both exist.
     ///
     /// Latched once per process so route decisions never observe a changing trigger. The stronger
     /// gate/payload guarantee now comes from storing [`DvDecision`] on the route: neither a later
@@ -1839,8 +1839,8 @@ impl Detail {
     /// invalidates one), and a detail fetch begun before that correction lands after it, carrying
     /// the old answer past every epoch that would otherwise have caught it.
     ///
-    /// dev: **`/tmp/plxnative-shared` WINS WHEN ARMED** — the precedence every trigger in this app
-    /// has (`crate::dev`'s module doc: `plxnative-token` beats the signed-in session), and the
+    /// dev: **`/tmp/multiplex-shared` WINS WHEN ARMED** — the precedence every trigger in this app
+    /// has (`crate::dev`'s module doc: `multiplex-token` beats the signed-in session), and the
     /// phrase to grep for. (Home's hero draws no credit since board CW-13 v2, so the Detail page's
     /// facts row is the one presentation of the phrase; the owned `screens::search::render`'s owner
     /// annotation reads the real registry unconditionally and does not consult this trigger — a gap
@@ -3897,8 +3897,8 @@ pub fn fetch_full(client: &'static plx_plex::plex::Client, sid: plx_plex::plex::
 
 // `load_detail_now` — `request_detail` but BLOCKING, `pub fn load_detail_now(sid, rk)` —
 // was deleted here (phase 12/D7). Its doc named three callers that read `current()` on the NEXT
-// statement (`open_rk_season`, `home_activate`'s play-a-show arm, the headless `plxnative-play`/
-// `plxnative-detail` triggers), and by df3520e1 every one of those had already migrated away from
+// statement (`open_rk_season`, `home_activate`'s play-a-show arm, the headless `multiplex-play`/
+// `multiplex-detail` triggers), and by df3520e1 every one of those had already migrated away from
 // it without this doc noticing: `home_activate` itself was retired with the legacy `ui::home`
 // module (`app/input.rs`'s own note on the extraction that produced `activate_card`), and neither
 // `open_rk_season` nor the headless triggers named it either — `grep -rn load_detail_now` found

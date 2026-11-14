@@ -5,7 +5,7 @@ TV lock: already held by this lane — inheriting it
 === offline_pick_cached  (rk=4, Offline: pick a household profile on the who's-watching screen with plex.tv unreachable, then play) ===
     covers: offline, profiles, stored-session, e2e
     progress reset: http://<pms-host>:32400/:/unscrobble?key=4&identifier=com.plexapp.plugins.library&X-Plex-Token=<token> -> 200
-    triggers: plxnative-play=4, plxnative-quality=original, plxnative-stats, plxnative-pickuser=1
+    triggers: multiplex-play=4, multiplex-quality=original, multiplex-stats, multiplex-pickuser=1
     session: the install's own stored sign-in (no token injected)
     run-stream (cap 70s) ...
     prime: seating roster tile 1 online once, so the cache holds it ...

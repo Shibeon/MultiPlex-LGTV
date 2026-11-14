@@ -47,7 +47,7 @@ impl DemuxTransport {
     }
 }
 
-/// Feed audio (es=2) to the pipeline. Cleared by the /tmp/plxnative-noaudio dev trigger to
+/// Feed audio (es=2) to the pipeline. Cleared by the /tmp/multiplex-noaudio dev trigger to
 /// A/B whether the audio ES (E-AC3/Atmos) is what stalls the sink on 4K HEVC.
 pub static FEED_AUDIO: AtomicBool = AtomicBool::new(true);
 /// Did this demux session hand a single video AU to a lane? Cleared by `demux` on entry.

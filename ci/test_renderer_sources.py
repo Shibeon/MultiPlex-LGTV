@@ -3,7 +3,7 @@
 
 `ci/build-libass.py` compiles `src/ass*.c` into libass-plx with FreeType's, HarfBuzz's and
 FriBidi's headers; the Makefile's application `SRCS` is every other `src/*.c`. A renderer source
-missing from that `filter-out` is compiled into `pkg/plxnative` without those headers, which on the
+missing from that `filter-out` is compiled into `pkg/multiplex` without those headers, which on the
 ARM cross-build fails (`ft2build.h: No such file`) and, were the headers ever reachable, would link a
 second copy of renderer code into the app. Reads only the two files; no compiler needed.
 """
@@ -41,7 +41,7 @@ class RendererSourcesStayOutOfTheApp(unittest.TestCase):
 
     def test_every_renderer_source_is_filtered_out_of_the_application(self):
         missing = sorted(recipe_sources() - app_excluded())
-        self.assertEqual(missing, [], "renderer sources compiled into pkg/plxnative too: add them to "
+        self.assertEqual(missing, [], "renderer sources compiled into pkg/multiplex too: add them to "
                          "the Makefile's SRCS filter-out")
 
 

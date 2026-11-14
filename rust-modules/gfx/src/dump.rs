@@ -35,7 +35,7 @@
 //!   the Hero row's framebuffer), now, instead of at the next frame boundary, so the answer is a
 //!   function of the frame being drawn: a direct band's image is final before the visible page
 //!   draws (a band under a lower glass captures inline, during the walk; the chrome band does only
-//!   under the dev `plxnative-tileglass` trigger). The refusal paths (`may_read == false`, a
+//!   under the dev `multiplex-tileglass` trigger). The refusal paths (`may_read == false`, a
 //!   blur-source pass, a frozen page) still answer with the last latched value.
 //! * **Held repeats** ([`held_repeat`]). A page image's capture step and a page dip's
 //!   floor frame advance once per virtual frame, not once per held iteration.

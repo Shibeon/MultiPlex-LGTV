@@ -127,7 +127,7 @@ struct TempCanonicalRoot {
 impl TempCanonicalRoot {
     fn new(tag: &str) -> TempCanonicalRoot {
         let dir = std::env::temp_dir().join(format!(
-            "plxnative-session-cache-canonical-{}-{tag}",
+            "multiplex-session-cache-canonical-{}-{tag}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

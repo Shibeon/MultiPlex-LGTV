@@ -1,5 +1,10 @@
 # Player-HUD plugins: format, renderer, registry, sideload, trust, PR breakdown
 
+> **This fork has no HUD registry.** The registry, its CI and the in-app gallery (D16, PR12 to PR14) are the
+> upstream project's design record and were removed here ("Registry" below): packages arrive only from the drop
+> folder or a typed address. Where this document describes registry CI, a registry job or a registry repository,
+> it describes the upstream design, not anything this repository runs.
+
 ## Problem
 
 Users want player HUDs that look different from the built-in one. The owner wants them to be able
@@ -210,7 +215,7 @@ Layers, Sans-IO, settings, replay
   `SCREEN_SHAPES` order is part of the hash (`screens/src/registry.rs:2389-2390`), pinned by
   `SCREEN_SHAPES_PIN` (`:2616`); a moved state shape refuses every anchor (`tests/fixtures/replay/README.md:115-127`).
 - F34. `dev/scenarios.rs:1120` pins the HUD up for a headless capture; `.github/workflows/simulators.yml:99-108`
-  runs the Linux `plxnative-sim` under `xvfb-run` and `tools/sim-smoke.py` captures a 1080p PNG.
+  runs the Linux `multiplex-sim` under `xvfb-run` and `tools/sim-smoke.py` captures a 1080p PNG.
 
 Other subsystems the plan touches
 - F35. Lower layers mirror HUD geometry (`text_style.rs:53-64`), and classic constants are read outside the
@@ -249,7 +254,7 @@ Other subsystems the plan touches
   `Cargo.toml` printed nothing; PR14 added `ed25519-compact` to `plx_data`); `plx_base` has `sha256`, `b64`, `spki`; a duplicate-key-preserving JSON
   reader exists, private (`ui/src/rec/strict_json.rs`, `mod strict_json;` at `ui/src/rec.rs:40`); no JSON
   Schema crate (`grep -c 'name = "schemars"\|name = "jsonschema"' Cargo.lock` prints 0); `plx_ui` already
-  depends on `serde_json` (`ui/Cargo.toml:50`). The lint host is the existing `plxnative-sim` bin
+  depends on `serde_json` (`ui/Cargo.toml:50`). The lint host is the existing `multiplex-sim` bin
   (`Cargo.toml:64-67`, `required-features = ["hostsim"]`); dev triggers are the default `devtriggers`
   feature, absent from the shipping `--no-default-features` set (`Cargo.toml:73`, `:88`).
 
@@ -825,7 +830,7 @@ language is unloadable in that language only (Text fit).
 MultiPlex fork, 2026-11-14: the owner chose parity with the MultiPlex web player for the default HUD
 (`rust-modules/ui/src/CLAUDE.md`, product idiom 3). It is the embedded package `builtin:multiplex`
 (`appkit/src/hud_format/fixtures/multiplex/`, packed to `fixtures/multiplex.plxhud`; a test pins the two equal and
-`plxnative-sim --hud-export builtin:multiplex` prints the bytes). It is the selection of a profile that chose
+`multiplex-sim --hud-export builtin:multiplex` prints the bytes). It is the selection of a profile that chose
 nothing and the fallback for a package that cannot draw; `builtin:classic` stays compiled at boot beside it and
 selectable in Settings > Player HUD, where the two rows read "MultiPlex" and "Classic" and neither has a removal row.
 
@@ -879,8 +884,9 @@ in, a `vstack` of fixed `w`, a strip card for `item.title`'s fallback `widgets_c
 what it sees, a file and the simulator it pins; it cannot see a sideload, a TV's language or a later app release. The
 app sees all three at the moment it would draw, so the app is the enforcement point and the same compiler runs in
 three places:
-1. `plxnative-sim --hud-lint --lang all`, locally or in a model's lint loop (LLM authoring);
-2. registry CI, through the simulator pinned to an app release, as a required check that refuses the merge;
+1. `multiplex-sim --hud-lint --lang all`, locally or in a model's lint loop (LLM authoring);
+2. registry CI, through the simulator pinned to an app release, as a required check that refuses the merge (upstream
+   only: this fork has no registry);
 3. the TV, which compiles when a package becomes the resolved selection, never at install (an install only runs
    `admit`), with its OWN `Measure` for its language. The language is fixed for a process (`run.rs`), so a changed
    language takes effect at the next launch, whose process compiles for it. It keeps one entry, keyed by (package
@@ -906,8 +912,9 @@ Refresh, an install) tries them again, with no second line. The selection is kep
 restores it, at the next launch.
 
 The gap: an app release can lengthen a translation or add a language, so a package that passed can fail later.
-- (a) Re-lint on every app release: YES. A job in `plxnative-huds`, triggered by a `repository_dispatch` from this
-  repo's release workflow and also weekly as a backstop (a missed dispatch must not leave the index stale), re-lints
+- (a) Re-lint on every app release: NOT IN THIS FORK, which has no registry to re-lint and dispatches nothing. The
+  upstream design: a job in the upstream's registry repository, triggered by a `repository_dispatch` from the
+  upstream's release workflow and also weekly as a backstop (a missed dispatch must not leave the index stale), re-lints
   the latest version of every entry with the new release's simulator in all eleven languages. Per entry it records the
   result in the index as `unfit: [{"from": "<app release>", "langs": [...]}]`; when every language fails, or a
   non-text invariant does, it writes `app.max` = the last release that passed, the field Versioning already defines.
@@ -940,7 +947,7 @@ pins FreeType 2.15.0 only in the `libass` group (`:38-44`; static inside libass,
 entry (`grep -n -i '"id": "sdl' ci/dependencies.json` finds nothing). So widths may differ by hinting and advance
 rounding. PR12 measured 12,276 app-text samples across all eleven languages, nine rungs and both
 weights. The ceiling of the worst positive difference is 4–9 px per rung; the source-bound reports,
-font identities and exact table live in the registry's `calibration/`. New translation corpora carry
+font identities and exact table lived in the upstream registry's `calibration/`. New translation corpora carry
 that empirical margin only with matching font, renderer-library and type-scale identities; their
 profile retains the original measurement provenance. The TV's compile remains the authority.
 
@@ -1126,7 +1133,7 @@ image's proportions rounded to tokens and are approximate.
   "id": "com.plxnative.examples.reference",
   "version": "1.0.0",
   "name": "Reference",
-  "author": "PlxNative",
+  "author": "MultiPlex",
   "license": "CC0-1.0",
   "hud": {
     "format": "1.0",
@@ -1533,7 +1540,7 @@ determined. It is not specific to a HUD state.
 every language, and a state whose cost (a Skip state at the larger of its two pill layouts) is above its class's ceiling in
 any term is one error at `/layout`: the class, each term over as `value > ceiling`, and the three ops that weigh most, each
 by the pointer of the node that drew it (`CompiledState::top_contributors`, `CompiledState::origin`). It runs in the lint
-(`plxnative-sim --hud-lint`, both passes) and on the television, in PR10's driver: the television loads
+(`multiplex-sim --hud-lint`, both passes) and on the television, in PR10's driver: the television loads
 `builtin:classic` through `load_classic`, which never lints, and a selected package is linted by the driver, which
 calls both passes (`lint_fit` with the live measure, `lint_price` with `WholePixelMeasure`), one tick each, before the load.
 So the verdict never rejects a package in a frame, and the builtin classic is safe because it is never linted, as well as
@@ -1542,7 +1549,7 @@ raised and no state is exempt; because they carry no headroom, a package that ad
 heaviest state of its class is over until it is run on the television and its figures set the ceiling. The builtin classic
 and the reference pass every state in every language.
 
-**The simulator prices with the same model.** `plxnative-sim` measures text fit with the host's SDL_ttf, which sums
+**The simulator prices with the same model.** `multiplex-sim` measures text fit with the host's SDL_ttf, which sums
 fractional advances, where the television's sums whole-pixel ones. Priced by the simulator's own measure the classic's
 Up Next and Info states and every two-section state would read over a ceiling the television accepts, in 4 of the 12 terms
 (`blended_px` by 320 to 6605 px in three classes, `texture_bytes` by 2876 in the compact class; `draw_ops` and
@@ -1550,7 +1557,7 @@ Up Next and Info states and every two-section state would read over a ceiling th
 `WholePixelMeasure`, built by `plx_gfx::text::read_price_model` from the bytes of the two files
 `plx_gfx::text::app_font_path` returns, `appfont.ttf` and `appfont-bold.ttf` (`plx_base::fontcov::advances::Face`), and
 `HUD-E1401` and the cost lines are that compile's: every side prints one number. Text fit (`HUD-E0601` and the geometry) keeps SDL_ttf's measure, and a width there can still be a few pixels off
-the television's. `plxnative-sim --hud-lint` prints every state's cost beside its class's ceiling, as information lines
+the television's. `multiplex-sim --hud-lint` prints every state's cost beside its class's ceiling, as information lines
 (text) and a `costs` array (JSON), and exits 1 on `HUD-E1401` like any other error.
 
 ## Storage per install mode
@@ -1626,96 +1633,35 @@ and owned by the app's uid, so whether a Dev Mode `prisoner` can then write its 
 - (d) LAN page served by the app: rejected; a listening socket plus a worker (ledger growth, F31), and
   inbound reachability through the TV's firewall is UNVERIFIED.
 - (e) Phone pairing through a relay: rejected; a backend storing user uploads (abuse, moderation, cost).
-  `lab.plxnative.com` is diagnostics infrastructure (`src/lab/control.rs:5`) and is not proposed.
+  The lab diagnostics host (`src/lab/control.rs`) is diagnostics infrastructure and is not proposed.
 - (f) USB stick: not until the jail mount is verified on both profiles (F39).
 
 Every sideload passes the same invariants with no review; Settings labels it "Unreviewed", and installing
 it takes an explicit confirmation on the TV.
 
-## Registry, and the Homebrew question
+## Registry
 
-"A GitHub repo like Homebrew" is right for SUBMISSION and wrong for DELIVERY; Homebrew itself moved its
-clients from cloning `homebrew-core` to a JSON API generated from the repo (Homebrew 4.0, 2023; UNVERIFIED in
-this session, no network).
-- Source of truth: a separate public repo, `plxnative-huds`, one directory per HUD (`huds/<id>/manifest.json` plus its HUD and resource files
-  plus a README); a PR is the submission and the author's GitHub identity is the identity. Separate from the
-  app repo so contributor PRs never touch app `main` (squash-only, AGENTS.md).
-- CI on each PR: (1) `plxnative-sim --hud-lint`, the app's own validator in the simulator artifact pinned to
-  an app release, so CI and the TV run the same compiler and rules (text WIDTHS can still differ, and the TV's compile
-  decides, Text fit); (2) previews from the Linux simulator under xvfb (F34)
-  over a fixed matrix: playing, paused, seeking, an episode with Previous/Next, Up Next, Skip Intro, every
-  section state the package allows, both menus open from every opener, a failure read-out, long titles in
-  each shipped language, captions at the largest size and highest position with the HUD up, bright and dark
-  mock frames; posted on the PR; (3) a diff against the previous version's previews.
-- Re-lint on every app release, with `unfit`, `app.max` and an issue for the author (Text fit, (a)).
-- Publish on merge: a static `index.json` (`id`, `version`, `package_format`, `hud_format`, `app` range, `sha256`, `bytes`, preview
-  URLs, author, license, `unfit` per Text fit), packages at `p/<sha256>.plxhud`, a `revoked` list of hashes with reasons, a
-  `serial`, and `index.signed`, the same index signed (PR14, "Trust and safety"). Hosted on that repo's Pages, on the
-  custom domain `huds.plxnative.com` (the app's `catalog::ORIGIN`; the registry's `--base-url` is the same value).
-  On 2026-11-05 the TV's own libcurl and trust store fetched `index.signed` and a package from it with
-  `ssl_verify_result=0`. The chain is Let's Encrypt YR2, then Root YR cross-signed by ISRG Root X1.
-- TV side: one conditional GET of `index.signed` (ETag) that does NOT follow redirects, because a
-  redirect-following request may carry no headers (F40); the URL is pinned to the host that serves it, and a
-  3xx is an error. It refreshes only when HUD settings open, at most once per 24 h, never at boot or during
-  playback, with backoff. The 24 h rule lives in the HudStore machine, which reads no clock (F31): the runner
-  hands `now` in on `catalog::Event::Open` when HUD settings open. Boot-time `Load` reads cached revocations without requesting the network. A package is fetched by hash and checked with `plx_base::sha256` before
-  it is written. Offline, installed HUDs keep working; the gallery shows the cached index with its date.
-- Why: TVs reading GitHub directly hit API rate limits (UNVERIFIED figure: 60 unauthenticated requests per
-  hour per IP) and need tree walks; a bespoke backend means hosting and moderation for no gain over static
-  files; content addressing makes caching, revocation and "the preview is this exact file" checkable.
-- Gallery previews may include several native PNGs for the same state and language. The display-only
-  Settings preview and full-size preview cycle those equivalent frames with a quiet hold and an overlapping
-  dissolve; the selected scene, metadata and controls stay fixed. Frames from another state or language
-  never enter that cycle, and a single-frame entry remains static. These are registry preview assets,
-  independent of the package/HUD DSL and its initial 1.0 formats.
-- Registry approval tier (human review plus CI): no red or alarm treatment, legible over the brightest and
-  darkest frames CI renders, no Plex or LG marks or impersonation (`docs/distribution.md` section 5.5), a
-  redistributable license, previews that match the hash.
+This fork has no online registry. The upstream project's registry gallery (PR12 to PR14 below: a Settings gallery
+fed by a signed index from a host that project runs) was removed, so the app makes no request to discover or
+download HUDs on its own. Packages arrive only from the drop folder (Sideload) or from an address the viewer types
+(*Install from address*), each through the same confirmation. An `installed.json` record an earlier build wrote with
+`"source": "registry"` still reads, and its package stays listed and usable; nothing new is installed from that
+source.
 
 ## Trust and safety
 
-- Tiers: Built-in, Registry (CI plus review), Unreviewed (sideload, `gh:`, URL). Every tier passes the format
-  invariants; only the registry tier is reviewed.
-- Integrity: every package is identified by its sha256, and the index names hashes, so a mirror cannot
-  substitute content. Authenticity: HTTPS first, and since PR14 the gallery accepts only a signed index, in every
-  flavour (PR13 kept it off in stable until then).
-- The signed index. The registry publishes `index.signed` in one file, so the signature and the bytes it covers cannot
-  come from different deploys or CDN generations (Pages serves `max-age=600`): line 1 is a compact JSON header,
-  `{"format":1,"key":"<16 lower-case hex>","sig":"<128 lower-case hex>"}`, then a single `\n`; the rest is the exact
-  bytes of that deploy's `index.json`, and `sig` is pure Ed25519 (RFC 8032: no prehash, no context) over them. `key` is the first 16 hex digits
-  of SHA-256 over the signer's raw 32-byte public key. `index.json` stays for PR13-era builds and gains a `serial`, the
-  UTC epoch seconds at which the publish run built it. The app compiles in two public keys
-  (`catalog::ACCEPTED_KEYS`): the primary, whose private half is the registry repository's `HUD_INDEX_ED25519_KEY`
-  Actions secret, and a standby, whose private half the maintainer holds offline. The primitive is
-  `ed25519-compact` 2.6.0, pinned exactly like `zip`: pure Rust, verify only in this build, `default-features = false`, so it has no
-  dependency of its own (no `getrandom`), no C and no asm; it is strict, refusing a non-canonical `S` and a
-  small-order public key or `R`. It is a Cargo change, so the PR carries a `make build-bench` table; it adds no FFI.
-- Acceptance is all or nothing, in this order: the header parses (the line at most 256 bytes, the index at most
-  `catalog::INDEX_BYTE_LIMIT`, exactly the keys `format` = 1, `key` and `sig`) -> `key` names an accepted key -> the signature
-  verifies over the index bytes -> `catalog::parse` accepts them -> they carry a `serial` -> that `serial` is not lower than
-  the cached index's (equal is accepted). A refusal shows nothing, caches nothing, keeps the cached index, counts as a failed
-  refresh under the daily backoff and logs one line, `hud: index refused cause=` `malformed`, `unknown-key`, `bad-signature`,
-  `index`, `no-serial` or `rollback`. A 304 keeps the cached state. The cache file holds the whole `index.signed` and its ETag and
-  is verified again, by the same function, on every load: a cache that does not verify, which is every PR13-era cache
-  (a bare index), is dropped with its ETag (`hud: index cache refused cause=`), so the next request is unconditional.
-  The signature check and the parse run on the network lane (reply) and the storage worker (cache), never on the frame
-  thread. The rollback floor is the cached serial, so a device with no cache has none.
-- Rotation (no code beyond accepting two keys): to rotate, or on a suspected compromise of the primary, put the standby's
-  private key into `HUD_INDEX_ED25519_KEY` and publish (the index is now signed by the standby, which every shipped
-  app already accepts), generate a new standby, ship an app release whose two accepted keys are {old standby, new
-  standby}, and drop the old primary. A key is never removed from the app before a release that accepts its successor
-  has shipped.
-- Revocation: a revoked hash disables the matching package from every source, sideloads of the same bytes
-  included; the fallback is the default built-in and Settings says why. It does not stop an author who changes a
-  byte; the invariants are the protection there.
+- Tiers: Built-in and Unreviewed (sideload, `gh:`, URL). A package an earlier build installed from the removed
+  registry keeps the Registry tier it was recorded with. Every tier passes the format invariants.
+- Integrity: every package is identified by its sha256, and the store checks the bytes it holds against the hash
+  the viewer was shown before anything is written. Authenticity: HTTPS for every address that is not a
+  development source on the home network.
 - What a package can do is bounded by the command vocabulary: no account write, no setting change, no network,
   no delete, no macro (Commands). Attack surface: the strict JSON parser and the SVG subset check (Rust) before
   nanosvg (C), and the compiler (Rust, bounded by the cost model). The format PR ships in-crate seeded mutation
   tests over `parse + compile` and the SVG checker; PR16's `cargo fuzz` package (`fuzz/`, `make fuzz-hud`) puts a
-  libFuzzer target on each of them and on the 1.0 bundle reader, the address parser, the registry index parser and
-  the signed-index verifier (which must refuse every input under the shipped keys).
-- Privacy: a registry fetch reveals the TV's IP to the host, like any web fetch; no account or identifier is
-  sent.
+  libFuzzer target on each of them and on the 1.0 bundle reader and the address parser.
+- Privacy: an address fetch reveals the TV's IP to the host the viewer typed, like any web fetch; no account or
+  identifier is sent.
 
 ## LLM authoring
 
@@ -1726,13 +1672,14 @@ spelling per concept and no expressions. Goal: a model given the guide, the sche
 authoring exercise; the other external comparisons below remain design notes.
 
 1. Schema.
-- Where: `https://plxnative.com/hud/schema/{manifest,hud}/1.N.json`, served from this repo's `site/` (static Pages, F40), so the
-  URL is app-owned and stable; the registry mirrors it under `schema/`. A package's schema-URL key names it; the
+- Where: `https://plxnative.com/hud/schema/{manifest,hud}/1.N.json`, the address the upstream served from this repo's `site/`
+  (static Pages, F40). This fork publishes no site, but the URL stays the schema's identifier: a package's `$schema`
+  must equal it exactly (`E0401`), so changing it would refuse every package already written. A package's schema-URL key names it; the
   strict parser checks its document kind and version. The manifest URL follows `package_format` and the HUD URL follows `hud.format`.
 - One schema per document kind and MAJOR.MINOR. Each declared version keeps its published contract when later minors extend it.
 - One source: `hud_format::schema` holds a descriptor table (per key: type, closed values, numeric range,
   required, state-keyable; per command: its typed parameters). The strict parser walks it and
-  `plxnative-sim --hud-schema manifest|hud --version 1.0` serializes it; nothing is hand-written. The emitted file is a committed golden
+  `multiplex-sim --hud-schema manifest|hud --version 1.0` serializes it; nothing is hand-written. The emitted file is a committed golden
   that a test regenerates and diffs. The commands are a `oneOf` keyed by `const` on `command`, each branch
   listing its parameters with `additionalProperties: false`, so a validator reports a wrong parameter at the
   item.
@@ -1749,7 +1696,7 @@ at the ITEM, through the `oneOf`, where the parser names the key). The schema is
   dependency.
 
 2. Lint.
-- `plxnative-sim --hud-lint <file> [--format text|json] [--lang all|<tag>]`; exit 0 clean, 1 findings, 2 usage.
+- `multiplex-sim --hud-lint <file> [--format text|json] [--lang all|<tag>]`; exit 0 clean, 1 findings, 2 usage.
   It runs to the end and reports EVERY finding (parse, then compile per state, slot and language), sorted by
   member and pointer, so one round fixes many.
 - A finding: `code` (stable, never reused, listed in the guide), `severity` (`error` or `warning`; a missing
@@ -1785,7 +1732,7 @@ at the ITEM, through the `oneOf`, where the parser names the key). The schema is
   a DTCG-shaped palette entry -> the flat hex form.
 
 3. Examples and a guide.
-- Published beside the schema (`site/hud/examples/`, mirrored in the registry's `examples/`):
+- Published beside the schema (`site/hud/examples/`):
   `reference.plxhud` (above); `classic.plxhud`, exported with `--hud-export builtin:classic --out classic.plxhud` from the
   embedded canonical archive and checked against the authored source directory; small variants `minimal` (the smallest valid package: a playbar and a `more`
   disc), `hero-center` (a `toggle_play` hero), `tabs` (openers as pills), `palette`. Each invalid fixture of the
@@ -1794,7 +1741,7 @@ at the ITEM, through the `oneOf`, where the parser names the key). The schema is
 - `AUTHORING.md` (one page, for humans and models): the mental model (bands, cells, segments, controls with an
   id and a command, sections, states), each closed vocabulary in one line, every invariant with its lint code,
   a writing order (skeleton, rows, sections, palette last), and the lint loop.
-- Registry entry points: `AGENTS.md` (run lint, read `AUTHORING.md`, never hand-edit `index.json`) and
+- Registry entry points (upstream only): `AGENTS.md` (run lint, read `AUTHORING.md`, never hand-edit `index.json`) and
   `llms.txt` (a markdown index of schema URL, guide, examples and lint command; a 2024 proposal of uncertain
   adoption, UNVERIFIED, costing one static file). Registry authors never need the app repo.
 - Acceptance measure, manual and not CI: before submissions open the owner can give a model the guide, the
@@ -1899,7 +1846,7 @@ PR5. `appkit::hud_format`.
   T=hud_format` with a nonzero count, seeded mutation tests, `make check`. Risk: schema churn before PR7 proves
   classic; mitigated by reviewing PR5 with PR7 and by `builtin_classic_passes_every_invariant` here.
 
-PR6. Schema, examples, site: `plxnative-sim --hud-schema manifest|hud --version 1.0`, `--hud-export builtin:classic`,
+PR6. Schema, examples, site: `multiplex-sim --hud-schema manifest|hud --version 1.0`, `--hud-export builtin:classic`,
 `site/hud/schema/{manifest,hud}/1.0.json` committed as goldens with drift tests, `site/hud/examples/` linted in CI. The bundle reader and canonical writer use the pinned minimal-feature ZIP crate.
 
 PR7. One renderer for the compact HUD.
@@ -1908,7 +1855,7 @@ PR7. One renderer for the compact HUD.
   `Playbar` (fill, track, thickness, knob, clocks, mark, grab), `up_next::layout_of` (its `Align`), the band `chrome`
   split, `w: fill` as `title_right`'s rule, `hairline` (axis), `HUD_TITLE`. Menus anchor from
   `HudGeometry` through PR1's placer. `ClockWarm` prewarms the clock sizes the package uses (`player_hud.rs:109`,
-  `:126`, test `:2400`), so the cold-clock drop does not return. A dev trigger `plxnative-hud=<path>` under
+  `:126`, test `:2400`), so the cold-clock drop does not return. A dev trigger `multiplex-hud=<path>` under
   `devtriggers` (F41) boots the sim with a package.
 - Verify: pixel-identical compact, Up Next and Skip states; the reference compact state renders in the sim; the
   TV check with `ARM_PROFILE=release` and the `profile-tv` tools, which measures the compact states (PR7 stored no
@@ -1966,42 +1913,13 @@ in `hudpacks/address.rs`, the store's Fetch / Fetched / InstallOffer / DeclineOf
 row and the offer prompt. Verified on the host (parser, store, runner and page tests; the bounded door against a local
 server). STILL OWED on the set: a real GitHub release fetch and the CA question.
 
-PR12. Registry repository (shipped): [plxnative-huds](https://github.com/GLinnik21/plxnative-huds) with CI
-(lint, xvfb previews, diff), the publisher (index, original-byte packs, revoked list),
-[Pages](https://huds.plxnative.com/), and the authoring kit (`AGENTS.md`, `llms.txt`, `AUTHORING.md`,
-examples, schema mirror and schema/parser agreement test); this repo publishes the `plxnative-sim` artifact.
-[Seeded PR #1](https://github.com/GLinnik21/plxnative-huds/pull/1) passed 70 Reference and 32 Minimal native Linux
-states, all eleven languages, and the two-iteration authoring exercise. Public readback matched all 87 catalog files.
-Immutable per-release pins select the oldest compatible app. App-release dispatch and the weekly re-lint backstop
-record `unfit` and `app.max` and deduplicate author issues; incompatible executable protocol fixtures exercise failure
-and recovery. A live app probe triggered the registry receiver and its green, landed compatibility PR. The first
-actual stable app release carrying the SDK remains a future observation; the current bootstrap is a source-bound
-development utility. The real TV/Linux corpus measures 12,276 widths and sets per-rung registry-only skew margins
-of 4–9 px, leaving TV admission unchanged. The registry's
-[acceptance record](https://github.com/GLinnik21/plxnative-huds/blob/main/IMPLEMENTATION.md) links the exact runs,
-source pins and verification evidence.
-
-PR13. Gallery (shipped, behind a flavour gate until PR14): a Settings FormTable page with preview art through the image cache, the refresh policy, updates by
-`version`, revocation, `unfit` entries hidden or offered as their update (Text fit). Verify with mock index tests
-(304, offline, revoked, format too new, unfit in the current language), sim captures, a TV pass.
-
-PR14. Signed index (shipped; the registry half, which publishes `index.signed`, is plxnative-huds#7, merged):
-ed25519 over `index.json` as one `index.signed` file, two accepted public keys compiled in, the primary's private key in
-the registry's Actions secrets, the rotation plan, and both flavour gates removed (the page's `gallery_enabled` field and
-the Bridge's `ENV_STEERABLE || flavour()` test on `HudCmd::Open`) so stable shows the gallery and fetches the index
-("Trust and safety"). The primitive is the verify-only pure-Rust `ed25519-compact`, so the evidence is the `make build-bench` table and
-no `fw-compat-reviewer` (no FFI, no new library). Verified on the host: the verifier against both keys, every header
-fault, a flipped index or signature byte, a signature over another body, a missing or lower serial, the cache
-re-verified on load (tampered, PR13-era), every refusal keeping the cached index under the backoff, all with
-TEST ONLY keys, and the Settings page's `Open` reaching the catalog in a build with no flavour.
-Verified against the live registry and on the TV: `index.signed` carries the primary's key id and a serial, its body equals `index.json`, and the stock `openssl`
-recipe accepts it; a release build on the TV dropped the PR13-era cache (`cause=malformed`), fetched and accepted the live index (Minimal and Reference, no refusal
-logged), and after a relaunch verified the cache it had written, with no `hud:` line and no new fetch. Not verified on the TV: a tampered or rolled-back index
-(the host tests cover every refusal cause).
+PR12 to PR14. Registry repository, gallery and signed index: shipped upstream, then removed from this fork
+(Registry above). Nothing of them remains in the app but the `registry` source value an earlier `installed.json` may
+carry.
 
 PR15. Authoring tools (shipped): `tools/hud-dev` (Python standard library, runs on macOS's `/usr/bin/python3`) bundles a
 package source with `tools/hud_package.py` (the simulator's `--hud-pack`, never a second packer), lints it with
-`plxnative-sim --hud-lint` on every change (it polls mtimes), serves the last CLEAN bundle over plain http on the
+`multiplex-sim --hud-lint` on every change (it polls mtimes), serves the last CLEAN bundle over plain http on the
 Mac's RFC 1918 address, and prints the address to type under Settings > Player HUD > "Install from address". A source
 with findings is printed and not served; the previous clean bundle stays up. Every clean change is served under a
 strictly higher version: `Semver` is numeric `MAJOR.MINOR.PATCH` only (no pre-release, so `1.2.0-dev.7` cannot be
@@ -2013,7 +1931,7 @@ dialog follows, and OK installs. The confirmation is kept. The dev patch outrank
 patch (a dev `1.0.26000000` makes the published `1.0.4` NotNewer), so the comparator is left alone and the author is told, by
 the recipe and the tool's own output, to remove the dev install (the page's Remove row) before installing the published one.
 The local state-matrix preview is
-`tools/hud_preview.py --hud <file>` (already on main), the PR15 "`plxnative-sim --hud <file>`" of this plan; a static web
+`tools/hud_preview.py --hud <file>` (already on main), the PR15 "`multiplex-sim --hud <file>`" of this plan; a static web
 editor stays later. Verified on the host (the store, the page, the tool against a stub simulator and a local HTTP
 client).
 On a debug build on the television, with a dev-source install seeded by hand, Play on its row fetched the next
@@ -2022,10 +1940,9 @@ the store kept the address, and the Remove row took it out. Not verified on the 
 from address", because the remote harness cannot type into that field (its text token reaches only Search).
 
 PR16. `fuzz/`, a `cargo fuzz` package outside the `rust-modules` workspace: one libFuzzer target per untrusted-input
-parser (`admit`, `bundle::read`, `bundle::archive::read`, `svg_subset::check_asset`, `address::parse`,
-`catalog::parse`, the signed-index verifier `catalog::verify` / `Reply::http` and the registry cache record), each
-asserting what its code promises (the verifier: never accepts a byte string under the shipped keys), seeded from the
-repository's own fixtures. `make fuzz-hud [T=<target>] [SECS=60]` runs it; `.github/workflows/fuzz.yml` builds every target on a
+parser (`admit`, `bundle::read`, `bundle::archive::read`, `svg_subset::check_asset`, `address::parse`; the registry
+index, signed-index and cache targets went with the registry, Registry above), each asserting what its code
+promises, seeded from the repository's own fixtures. `make fuzz-hud [T=<target>] [SECS=60]` runs it; `.github/workflows/fuzz.yml` builds every target on a
 pinned nightly for a PR that touches them and runs them weekly. Its `make build-bench` table is in the PR.
 
 PR17. Owner-gated: captions rise clear of an open section (section "Captions", "Captions clear of an open section"):

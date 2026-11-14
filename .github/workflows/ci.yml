@@ -290,10 +290,10 @@ jobs:
         # than a feeling. It is the SAME unit `make check-cargo-unit-default` runs next (same
         # package, profile, features and rustflags; `--timings` is a cargo flag and is not part of
         # the fingerprint, verified 2026-10-02 by building with and without it and getting `Fresh`
-        # for plxnative-modules both ways), so the `cargo test --lib` below finds everything built
+        # for multiplex-modules both ways), so the `cargo test --lib` below finds everything built
         # and this step is where the compile happens, not an extra one. The upload below carries it.
         shell: bash
-        run: cd rust-modules && cargo "+$RUST_TOOLCHAIN" test --lib -p plxnative-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens --no-run --timings
+        run: cd rust-modules && cargo "+$RUST_TOOLCHAIN" test --lib -p multiplex-modules -p plx_base -p plx_machine -p plx_platform -p plx_gfx -p plx_net -p plx_ui -p plx_plex -p plx_telemetry -p plx_data -p plx_session -p plx_media -p plx_playback_contract -p plx_play_uri -p plx_play_feed -p plx_media_codecs -p plx_appkit -p plx_screens --no-run --timings
 
       - name: make check-cargo-unit-default
         # Teed to a file so the size step below can read the `test result:` lines this run already
@@ -543,7 +543,7 @@ jobs:
       - name: Cache the bundled FFmpeg
         # The cache that works is the SCRIPT's own: `ci/build-ffmpeg.sh` keeps its build tree (the
         # extracted source plus every object) under `$PLX_BUILD_CACHE/ffmpeg/<arch>-<version>-<key>`,
-        # default `~/.cache/plxnative`, and a hit there skips configure and compile and only
+        # default `~/.cache/multiplex`, and a hit there skips configure and compile and only
         # re-installs the prefix. The step used to cache `vendor/ffmpeg-prefix` instead, which hit
         # and did nothing: the restored files are OLDER than the fresh checkout's
         # `ci/build-ffmpeg.sh`/`ci/arm-cc.py`, so make re-ran the script, the script found no tree
@@ -557,7 +557,7 @@ jobs:
         # install, and the NDK pin (read from the NDK action, which owns the literal).
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/plxnative/ffmpeg
+          path: ~/.cache/multiplex/ffmpeg
           key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ci/build-ffmpeg.sh', 'ci/deps.py', 'ci/dependencies.json', 'ci/arm-cc.py', 'ci/check-link-evidence.py', 'ci/stage-link-evidence.py', '.github/actions/webos-ndk/action.yml') }}
 
       - name: Build
@@ -575,11 +575,11 @@ jobs:
 
       - name: Binary size budget
         # The STRIPPED binary `make ipk` just staged (the one inside the .ipk), not the unstripped
-        # pkg/plxnative that deploys. `ls` of a glob rather than a literal appid so the flavour
+        # pkg/multiplex that deploys. `ls` of a glob rather than a literal appid so the flavour
         # can change without this step quietly measuring nothing: it fails on zero or several matches.
         run: |
           set -euo pipefail
-          staged=$(ls ipkroot/data/usr/palm/applications/*/plxnative)
+          staged=$(ls ipkroot/data/usr/palm/applications/*/multiplex)
           [ "$(printf '%s\n' "$staged" | wc -l)" -eq 1 ]
           python3 ci/check-build-budgets.py --binary "$staged"
 
@@ -644,7 +644,7 @@ jobs:
         # It grades whether the app STARTS. It says nothing about playback, which above 4.10.0 has
         # never been observed on hardware — see docs/webos5-port.md §4.
         #
-        # pkg/plxnative-storage ships alongside the main binary as of 0.7.0 (the LS2 storage
+        # pkg/multiplex-storage ships alongside the main binary as of 0.7.0 (the LS2 storage
         # helper) and gets graded the same way — a helper that fails to exec is as invisible to
         # every other check as the main binary would be.
         run: |
@@ -654,9 +654,9 @@ jobs:
             echo '_Does the process start and do all symbols resolve? Says nothing about playback._'
             echo '```'
             ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data \
-              --min-release 4.4.2 pkg/plxnative
+              --min-release 4.4.2 pkg/multiplex
             ./tools/fwcompat.py --db /usr/share/webosbrew/compat-checker/data \
-              --min-release 4.4.2 pkg/plxnative-storage
+              --min-release 4.4.2 pkg/multiplex-storage
             # The dlopen'd bundled FFmpeg: nothing above resolves its own DT_NEEDED (#235's
             # libz.so.1). Its sibling libraries ship in pkg/, so --shipped takes them off the list.
             for lib in pkg/lib*-plx.so.*; do
@@ -669,7 +669,7 @@ jobs:
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: plxnative-${{ github.sha }}
+          name: multiplex-${{ github.sha }}
           # NB no `pkg/ipk.sha256` here: `make ipk` writes that file only for the stable flavour,
           # because it is a published RELEASE ASSET NAME quoted verbatim in every release note's
           # verification command. This job packages the developer id, so listing it would be a dead

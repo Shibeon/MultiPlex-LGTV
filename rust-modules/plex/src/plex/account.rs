@@ -35,7 +35,7 @@ pub use preferences::{MarkerAccess, PreferenceError, PreferenceRequest, Preferen
 const PLEX_TV: &str = "https://plex.tv";
 
 /// plex.tv's base URL: [`PLEX_TV`], or — in a dev build only — a LOOPBACK stand-in named by
-/// `/tmp/plxnative-plextv=http://127.0.0.1:<port>`. The screenshot pipeline's mock
+/// `/tmp/multiplex-plextv=http://127.0.0.1:<port>`. The screenshot pipeline's mock
 /// (`tests/mock_pms.py --catalog`) answers the sign-in pin and serves its QR there, so no
 /// documentation figure ever shows a live code minted by the real service. Anything that is not
 /// plain `http://` to `127.0.0.1`/`localhost` is refused and logged: this trigger must never be
@@ -46,7 +46,7 @@ pub fn plex_tv() -> &'static str {
     BASE.get_or_init(|| match plx_base::devtrig::read("plextv") {
         Some(v) if loopback_http(&v) => {
             #[cfg(feature = "devtriggers")]
-            plx_base::eventlog::log("account: plex.tv replaced by a loopback stand-in (/tmp/plxnative-plextv)");
+            plx_base::eventlog::log("account: plex.tv replaced by a loopback stand-in (/tmp/multiplex-plextv)");
             v.trim_end_matches('/').to_string()
         }
         Some(_) => {
@@ -107,9 +107,9 @@ pub fn metadata_provider() -> String {
 enum DiscoverSource {
     /// Nothing is armed (or every armed trigger was refused): the real service.
     Real,
-    /// `/tmp/plxnative-discover` named a loopback stand-in.
+    /// `/tmp/multiplex-discover` named a loopback stand-in.
     Trigger,
-    /// No usable `discover` trigger, but `plxnative-plextv` redirects plex.tv to a loopback:
+    /// No usable `discover` trigger, but `multiplex-plextv` redirects plex.tv to a loopback:
     /// `tests/mock_pms.py` answers plex.tv and Discover on ONE listener, so a redirected plex.tv
     /// carries its Discover with it and never falls through to the real host.
     FollowsPlexTv,
@@ -120,7 +120,7 @@ enum DiscoverSource {
 struct DiscoverBase {
     base: String,
     source: DiscoverSource,
-    /// A dev-token boot (`plxnative-token` non-empty): the identity is an injected SERVER token
+    /// A dev-token boot (`multiplex-token` non-empty): the identity is an injected SERVER token
     /// and no plex.tv account is seated (`ActivateDevBootstrap` never seats), so a read of the
     /// real provider could never speak for anyone. See [`permit_read`].
     token_boot: bool,
@@ -152,7 +152,7 @@ fn read_discover() -> DiscoverBase {
 
 /// Read once and logged once: what the process resolved, for the first request and for the boot
 /// announcement ([`announce_discover`]). Every statement naming a trigger carries its own gate so
-/// a release binary holds no `plxnative-` literal (`ci/check-package.py`).
+/// a release binary holds no `multiplex-` literal (`ci/check-package.py`).
 #[cfg(not(any(test, feature = "test-support")))]
 fn discover_resolved() -> DiscoverBase {
     static BASE: std::sync::OnceLock<DiscoverBase> = std::sync::OnceLock::new();
@@ -164,8 +164,8 @@ fn discover_resolved() -> DiscoverBase {
                 plx_base::eventlog::log("BADTRIGGER discover: only http://127.0.0.1:<port> or http://localhost:<port> is accepted");
             }
             match resolved.source {
-                DiscoverSource::Trigger => plx_base::eventlog::log("discover: replaced by a loopback stand-in (/tmp/plxnative-discover)"),
-                DiscoverSource::FollowsPlexTv => plx_base::eventlog::log("discover: follows the plex.tv loopback stand-in (/tmp/plxnative-plextv)"),
+                DiscoverSource::Trigger => plx_base::eventlog::log("discover: replaced by a loopback stand-in (/tmp/multiplex-discover)"),
+                DiscoverSource::FollowsPlexTv => plx_base::eventlog::log("discover: follows the plex.tv loopback stand-in (/tmp/multiplex-plextv)"),
                 DiscoverSource::Real => {}
             }
         }
@@ -183,7 +183,7 @@ fn discover_resolved() -> DiscoverBase {
 }
 
 /// The Discover provider's base URL: [`DISCOVER`], or, in a dev build only, a loopback stand-in —
-/// the `/tmp/plxnative-discover` trigger, else the one `plxnative-plextv` already redirects plex.tv
+/// the `/tmp/multiplex-discover` trigger, else the one `multiplex-plextv` already redirects plex.tv
 /// to ([`DiscoverSource::FollowsPlexTv`]). **The one copy**: the person profile and credits
 /// (`discover.rs`) and the Watchlist (`watchlist.rs`) both build their URLs on it, so a stand-in
 /// armed for one serves the other and neither can reach the real host behind the other's back.
@@ -198,7 +198,7 @@ pub(super) fn stand_in_armed() -> bool {
 
 /// The dev-build failsafe for READS, [`watchlist`](super::watchlist)'s `permit_write` for the other
 /// verb: a `devtriggers` build driven by a dev-token boot must not dial the real provider unless a
-/// stand-in is armed. Release builds and interactive boots (a stored session, no `plxnative-token`)
+/// stand-in is armed. Release builds and interactive boots (a stored session, no `multiplex-token`)
 /// always read.
 ///
 /// **The decision, and its cost.** This fails CLOSED, by decision, and it is not to be narrowed or
@@ -209,7 +209,7 @@ pub(super) fn stand_in_armed() -> bool {
 /// stand-in armed (`tools/tv-session.sh up --guest`, `--guest --mock`, `tests/run.py --mock`, and
 /// the real-PMS `--guest` scenes) shows no person biography and no filmography credits; the person
 /// page settles as for a person the provider has never heard of. To see them, arm the stand-in
-/// (`plxnative-discover`, or a loopback `plxnative-plextv`): `tests/mock_pms.py` answers with
+/// (`multiplex-discover`, or a loopback `multiplex-plextv`): `tests/mock_pms.py` answers with
 /// synthetic data.
 ///
 /// **A refusal is terminal.** It cannot change during the process (the trigger files and the

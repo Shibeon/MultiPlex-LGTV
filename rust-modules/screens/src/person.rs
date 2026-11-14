@@ -845,7 +845,7 @@ impl Page {
     /// person, and the same predicate the `MORE` mark is drawn from — so the mark and the sheet
     /// cannot disagree about whether there is more to read.
     ///
-    /// `pub` for one caller, `dev::scenarios`' `/tmp/plxnative-bio`: a headless boot presents
+    /// `pub` for one caller, `dev::scenarios`' `/tmp/multiplex-bio`: a headless boot presents
     /// the sheet through the same door the OK press uses, and asking the page first is what stops
     /// the trigger opening a panel an interactive press would have refused. `DetailScreen::
     /// tracks_available` is the precedent and the reason.

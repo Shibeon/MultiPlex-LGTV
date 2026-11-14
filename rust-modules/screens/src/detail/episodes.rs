@@ -520,7 +520,7 @@ fn draw_cell(
             theme::EP_CARD_FOCUS_SCALE,
         );
     }
-    // `plxnative-focusx`: the strip is not a `cards::Shelf`, so it reports its focused still itself.
+    // `multiplex-focusx`: the strip is not a `cards::Shelf`, so it reports its focused still itself.
     #[cfg(feature = "devtriggers")]
     if still_focused && !p.is_recording() {
         let at = p.to_screen(drawn).0;

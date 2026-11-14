@@ -1,4 +1,4 @@
-//! The URI dev route (`plxnative-uridev`): the PRODUCTION URI backend, ACB-bound, on a webOS 4.x
+//! The URI dev route (`multiplex-uridev`): the PRODUCTION URI backend, ACB-bound, on a webOS 4.x
 //! set, playing a URL a developer names. Debug builds only: this file is compiled with
 //! `devtriggers` and `play-uri` (see `dev.rs`), so a release binary carries none of it.
 //!

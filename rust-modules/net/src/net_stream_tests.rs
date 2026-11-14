@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 fn pem_file(cert: &TestCert, tag: &str) -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!("plxnative-stream-ca-{tag}-{}.pem", std::process::id()));
+    let path = std::env::temp_dir().join(format!("multiplex-stream-ca-{tag}-{}.pem", std::process::id()));
     std::fs::write(&path, &cert.pem).expect("write scratch CA bundle");
     path
 }

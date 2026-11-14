@@ -157,7 +157,7 @@ const THREAD_NAME_MAX: usize = 15;
 /// The OS thread name for the worker labelled `what`: `what` cut to [`THREAD_NAME_MAX`] bytes at a
 /// char boundary, with NULs dropped (`Builder::spawn` panics on an interior NUL, and a label must
 /// never be able to make a spawn fail). It shows in `/proc/<pid>/task/*/comm`, kernel scheduler
-/// traces and `tools/plxnative-sample`, so a label meant for those is kept to 15 bytes and
+/// traces and `tools/multiplex-sample`, so a label meant for those is kept to 15 bytes and
 /// distinct from its neighbours in its first 15 bytes; a longer one is cut, not rejected.
 fn thread_name(what: &str) -> String {
     let mut name = String::with_capacity(THREAD_NAME_MAX);
@@ -514,7 +514,7 @@ const STALL_MS: u64 = 250;
 /// Join a worker and report what THIS thread paid for it.
 ///
 /// The counterpart to [`spawn`], and the reason it exists rather than a bare `let _ = h.join();`:
-/// the frame loop has an FPS heartbeat, `/tmp/plxnative-framedrop` catches the frames that blow the
+/// the frame loop has an FPS heartbeat, `/tmp/multiplex-framedrop` catches the frames that blow the
 /// budget, and `ui::profile` splits a frame by draw phase — but none of them can see a worker, and
 /// every teardown stall this engine has had was the main thread parked in one of these joins with
 /// no number left behind. Unconditional: an `Instant` pair around a call whose whole purpose is to
@@ -581,7 +581,7 @@ mod tests {
     }
 
     /// Workers carry their label as the thread name (what a scheduler trace and
-    /// `plxnative-sample` print), cut to 15 bytes at a char boundary; a label too long, or with a
+    /// `multiplex-sample` print), cut to 15 bytes at a char boundary; a label too long, or with a
     /// NUL in it, still spawns.
     #[test]
     fn workers_carry_their_names_and_an_over_long_label_still_spawns() {

@@ -1,6 +1,6 @@
-# UX Scenario — PlxNative
+# UX Scenario — MultiPlex
 
-**App:** PlxNative · **id** `app.multiplex.native` · **version** 0.4.1 · `"type": "native"`
+**App:** MultiPlex · **id** `app.multiplex.native` · **version** 0.4.1 · `"type": "native"`
 **Platform:** LG webOS TV, 1920×1080 UI, Magic Remote and standard IR remote
 **Document status:** written 2026-08-23 against the tree at that date. Every behaviour below is
 read out of the source, not remembered; where a claim could not be verified this document says so
@@ -359,7 +359,7 @@ past sign-in has still received a copy of this software, so privacy and legal in
 conditional on an account. Settings opens a full-screen
 modal: signed-in users also get **Favorite libraries** (under a **Libraries** section — which
 libraries this television shows, on Home, in the top strip and in the Library's own picker), while
-everyone gets **Privacy & data**, **Legal notices** and **About PlxNative**.
+everyone gets **Privacy & data**, **Legal notices** and **About MultiPlex**.
 
 - **Privacy & data** holds the two saved reporting choices, one scrollable what-is-actually-sent document PER CHANNEL (Crashes / Errors, Analytics / Usage),
   the privacy policy, and Delete all local data. Changed switches commit through Done; BACK
@@ -368,7 +368,7 @@ everyone gets **Privacy & data**, **Legal notices** and **About PlxNative**.
   data: no switch, no example report and no identifier document, and the root's sentence for the row
   drops the reports. Playback diagnostics remain a playback action rather than a global setting.
 - **Legal notices** contains six readable documents: **Privacy policy**, **Open-source licences**,
-  **FFmpeg & source offer**, **PlxNative source code**, **Trademarks & non-affiliation**, and
+  **FFmpeg & source offer**, **MultiPlex source code**, **Trademarks & non-affiliation**, and
   **Security contact**. UP/DOWN scrolls a notice; BACK leaves it.
 
 ### 5.8 Detail

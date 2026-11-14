@@ -95,14 +95,8 @@ pub enum HudCmd {
     /// The page opened: read every candidate directory again, and publish the list (now and whenever it
     /// changes) down this channel until the page drops its end.
     Open(std::sync::mpsc::Sender<HudList>),
-    /// A child gallery view subscribes without cancelling an installation or rescanning files.
-    Watch(std::sync::mpsc::Sender<HudList>),
     /// Pick a package id (or `builtin:classic`) for the seated profile.
     Select(String),
-    /// Download the exact package from the checked registry index, pending confirmation.
-    FetchRegistry(plx_data::hudpacks::Sha),
-    /// The initiating detail view went away before confirming its offer.
-    CancelRegistry(plx_data::hudpacks::Sha),
     /// Delete an installed package.
     Remove(String),
     /// Install the drop file listed under this hash; the viewer has confirmed it.
@@ -346,7 +340,7 @@ pub enum HomeCmd {
     Flip(i32),
     SelectHero(i32),
     /// [`SelectHero`](Self::SelectHero), then HOLD that slot: the auto-advance stops for the
-    /// life of the page. The screenshot pipeline's pin (`/tmp/plxnative-heropin=<n>`), so a
+    /// life of the page. The screenshot pipeline's pin (`/tmp/multiplex-heropin=<n>`), so a
     /// capture taken whenever the page settles shows the billboard the scene manifest named.
     PinHero(i32),
     ItemMenu,
@@ -597,19 +591,19 @@ impl plx_machine::machine::LogicalState for ItemMenuArg {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LibraryCmd {
     Enter(plx_data::stores::browse::SecKind),
-    /// Seat focus on one grid card (tests, and the screenshot pipeline's `plxnative-libgrid`).
+    /// Seat focus on one grid card (tests, and the screenshot pipeline's `multiplex-libgrid`).
     FocusGrid { row: usize, col: usize },
     /// Seat focus on one card of a hub shelf of the Recommended page, `shelf` counted from the top
-    /// (the screenshot pipeline's `plxnative-libshelf`).
+    /// (the screenshot pipeline's `multiplex-libshelf`).
     FocusShelf { shelf: usize, col: usize },
     /// Open the Sort or Filter menu exactly as OK on its toolbar chip does (the screenshot
-    /// pipeline's `plxnative-libmenu`).
+    /// pipeline's `multiplex-libmenu`).
     OpenMenu(LibraryMenuKind),
     /// Choose a TYPE menu value exactly as its row does (the screenshot pipeline's and the fps
-    /// suite's `plxnative-libtype`).
+    /// suite's `multiplex-libtype`).
     SetType(plx_data::browse::LibraryType),
     /// Open the Collections or Recommended page exactly as OK on its header control does (the
-    /// screenshot pipeline's `plxnative-libtype=collections|recommended`, i.e. the
+    /// screenshot pipeline's `multiplex-libtype=collections|recommended`, i.e. the
     /// `library-collections` and `library-recommended` scenarios).
     OpenListing(crate::library::Listing),
     Page(i32),
@@ -1231,7 +1225,7 @@ pub enum ContentPanel {
     /// opened it, as [`Self::AltSources`] is to its pill.
     Versions { anchor: [u32; 4] },
     /// *Track information* (`screens::tracks_panel`), opened at 1-based `page`. Every interactive
-    /// opening passes 1; `/tmp/plxnative-tracks=<n>` is the only caller that does not, and it is
+    /// opening passes 1; `/tmp/multiplex-tracks=<n>` is the only caller that does not, and it is
     /// what makes a headless capture of page 2 possible at all.
     Tracks { page: i32 },
     /// *About* (`screens::about_panel`), the footer card's synopsis read in full. It carries
@@ -1657,10 +1651,6 @@ pub mod word {
     pub const UNDER_POSTERS: &str = "under-posters";
     pub const UNDER_POSTERS_MOVIE: &str = "under-posters-movie";
     pub const UNDER_POSTERS_SHOW: &str = "under-posters-show";
-    pub const HUD_GALLERY: &str = "hud-gallery";
-    pub const HUD_DETAIL: &str = "hud-detail";
-    pub const HUD_ABOUT: &str = "hud-about";
-    pub const HUD_PREVIEW: &str = "hud-preview";
     pub const CONSENT: &str = "consent";
     pub const ONBOARD: &str = "onboard";
     /// The QR sign-in (`screens::login::LoginScreen`). Same spelling as `app::words::route_word`'s
@@ -1957,7 +1947,7 @@ pub mod page_id {
 /// wrapped were folded in here in phase 12 (§15.2: the enum is gone) — see the note above.
 ///
 /// **Both owned variants carry the page their inner stack is ROOTED at**, which is there for the
-/// dev boot targets and for nothing else. `/tmp/plxnative-settings=privacy` has to put a headless
+/// dev boot targets and for nothing else. `/tmp/multiplex-settings=privacy` has to put a headless
 /// run on a page that is normally two presses inside the surface, and the loop cannot press them:
 /// the Settings root's row indices are `RootPage`'s private business (the Favourites row is absent
 /// signed out), so a loop that reached the child by delivering `Activate(<row>)` would be encoding
@@ -2057,7 +2047,7 @@ pub enum AppArg {
     /// Library's Favorite libraries row, `LoopReq::OpenSettings(SettingsPage::LibraryFavourites)`).
     Settings(SettingsPage),
     /// The first-run consent question, rooted at this stage byte (0 for every real opening;
-    /// `screens::consent`'s `STAGE_PRODUCT` for `/tmp/plxnative-consent=product`).
+    /// `screens::consent`'s `STAGE_PRODUCT` for `/tmp/multiplex-consent=product`).
     FirstRunConsent(u8),
 }
 
@@ -2244,7 +2234,7 @@ impl plx_ui::screen::ScreenArg for AppArg {
 /// **What a detail page that is about to mount should be RESTORED to** — the one payload the
 /// container's own `ReturnState` cannot supply, because the page has never been on this stack.
 ///
-/// Its two users are the `/tmp/plxnative-detail` boot trigger (a hard cut onto a page nobody
+/// Its two users are the `/tmp/multiplex-detail` boot trigger (a hard cut onto a page nobody
 /// navigated from) and a show opened ON A PARTICULAR SEASON, which is the mount a page argument
 /// cannot express: an argument names a PAGE, and a season is a tab inside one. It was a
 /// `ui::trail::Node` until phase 12, i.e. a whole history entry used as a carrier for its `Spot`.
@@ -2645,7 +2635,7 @@ pub const SCREEN_SHAPES: &[&str] = &[
 /// The pin over [`SCREEN_SHAPES`] — bump it in the same edit that adds an entry, and say why.
 ///
 /// A committed replay fixture recorded against a different value cannot be LOADED at all, which is
-/// the cost this exists to make visible rather than silent; `tools/plxnative-rec rerecord` is the
+/// the cost this exists to make visible rather than silent; `tools/multiplex-rec rerecord` is the
 /// verb (`tests/fixtures/replay/README.md`). The APP-side half is pinned separately in
 /// `app/recorder.rs`, over the shapes that are the loop's, so neither pin moves for the other's
 /// reason.
@@ -2694,7 +2684,7 @@ pub const SCREEN_SHAPES: &[&str] = &[
 ///
 /// **Extras shelf** (0xeb69_f6bf_105f_697f → 0xb462_145d_9477_05de): detail `Spot.saved_col` grows a seventh
 /// identity-keyed slot for the extras section, and `DetailIdentity` grows `Extra`. The shape
-/// string moved, so recorded fixtures need `tools/plxnative-rec rerecord` before a scenario
+/// string moved, so recorded fixtures need `tools/multiplex-rec rerecord` before a scenario
 /// replay is trusted. Host unit tests do not replay them.
 ///
 /// **0.7 forward-port merge** (0xb462_145d_9477_05de → 0x0e66_311c_e4f1_0769): this bump is not one
@@ -2711,7 +2701,7 @@ pub const SCREEN_SHAPES: &[&str] = &[
 /// **Home hub identity keyed by listing key** (0x285a_3a99_d1e2_f068 → this): `HomeHubIdentity::Identifier`
 /// gains the provider-published listing key, keeping mixed-section hubs stable when their leading
 /// item changes libraries while still distinguishing section-specific rows. Recorded fixtures need
-/// `tools/plxnative-rec rerecord` like any other shape-pin bump before replay is trusted.
+/// `tools/multiplex-rec rerecord` like any other shape-pin bump before replay is trusted.
 ///
 /// **Collection page** (`0x54b1_7d5f_d41a_2606` → this): `ARG_SHAPE` gains the Collection
 /// identity and the `CollectionAbout` summary sheet (the About panel over the collection store),
@@ -2755,7 +2745,7 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // 0x7435_d234_b769_60c2.
 // Scrub click-to-confirm: a key scrub never commits by itself, so the player's tap-commit debounce
 // is gone and `PlayerScreen`'s shape loses `scrub.commit_at:u32`; the previous pin was
-// 0x6a55_c53a_d931_3acf. Replay fixtures need `tools/plxnative-rec rerecord`.
+// 0x6a55_c53a_d931_3acf. Replay fixtures need `tools/multiplex-rec rerecord`.
 // The Watchlist page and its Sort & Filter surface (W45D): `SCREEN_SHAPES` gains
 // `WatchlistScreen::SHAPE` and `watchlist::menu::SHAPE` (appended after the preferences picker).
 // The argument alphabet they join (`AppArg::Watchlist`, `AppArg::WatchlistMenu`, the Catalog
@@ -2824,16 +2814,16 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // re-recorded against it; the previous pin was 0x209b_8063_1907_d7c8.
 // Immediate jump state adds SeekBurst target/time and the pending FF/REW tap flag.
 // The independent settings also update the Preferences and Picker state versions.
-// Previous pin: 0x3cf2_5b06_5ed9_8faa. Re-record the incompatible anchors through plxnative-rec.
+// Previous pin: 0x3cf2_5b06_5ed9_8faa. Re-record the incompatible anchors through multiplex-rec.
 // HUD commands (PR3): `PlayerOverlay::More` names the page it opens on, `More(page:u8)` (0 the
 // root, 1 Quality, 2 Speed) where it carried `More(quality:bool)`, so the Speed page can be
 // addressed. One bump; the three replay fixtures were re-recorded against it; the previous pin was
 // 0x9425_f33f_3f53_6aa5.
 // Opt-in playback diagnostics adds Root status and addressed command replies.
-// Replay anchors are re-recorded through tools/plxnative-rec rerecord.
+// Replay anchors are re-recorded through tools/multiplex-rec rerecord.
 // Contextual Library favorites editor adds a distinct SettingsPage address.
 // Automatic marker skipping adds per-kind preferences, addressed grant scope and timer/offer state.
-// Incompatible replay anchors are re-recorded through tools/plxnative-rec rerecord.
+// Incompatible replay anchors are re-recorded through tools/multiplex-rec rerecord.
 // The restored Up Next pair retains a scoped declined segment across timer/grant changes.
 // Previous screen pin: 0x1802_f17e_e583_f977; re-record incompatible replay anchors.
 // The player's Back motion gate keeps its last position and fixed anchor in the canon.

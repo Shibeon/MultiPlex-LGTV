@@ -1,4 +1,4 @@
-//! `/tmp/plxnative-clockfact=nokey|keychanged|engaged:<year>` — plant a wrong-clock fact at boot,
+//! `/tmp/multiplex-clockfact=nokey|keychanged|engaged:<year>` — plant a wrong-clock fact at boot,
 //! so the read-outs and the toast that read `net::keypin`'s facts can be looked at in the simulator
 //! with no television, no certificate and no clock to change (issue #378).
 //!

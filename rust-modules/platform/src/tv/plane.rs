@@ -64,7 +64,7 @@ pub const RELEASE_FENCE_MS: u64 = 2_000;
 pub const MAX_EARLY_COMPLETIONS: usize = 8;
 /// `setState`'s answer when the handle holds no registration: nothing was sent, no callback comes.
 pub const UNLOAD_NOT_REGISTERED: i32 = -2;
-/// The `PLAYER_TYPE_MSE` the boot passes to `AcbAPI_initialize` unless `/tmp/plxnative-ptype` says otherwise.
+/// The `PLAYER_TYPE_MSE` the boot passes to `AcbAPI_initialize` unless `/tmp/multiplex-ptype` says otherwise.
 pub const DEFAULT_PLAYER_TYPE: i32 = 10;
 /// The player type the URI engine's handle is initialized with: the one its product binding is gated
 /// on (`play-uri`'s `acb_bind::gate`), the sequence the device measurements ran.
@@ -73,7 +73,7 @@ pub const URI_PLAYER_TYPE: i32 = 0;
 /// Which of the boot's ACB handles a binding runs over.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PlaneHandle {
-    /// Buffer-feed's handle: [`DEFAULT_PLAYER_TYPE`] unless `/tmp/plxnative-ptype` says otherwise.
+    /// Buffer-feed's handle: [`DEFAULT_PLAYER_TYPE`] unless `/tmp/multiplex-ptype` says otherwise.
     Feed,
     /// The URI engine's handle: [`URI_PLAYER_TYPE`].
     Uri,

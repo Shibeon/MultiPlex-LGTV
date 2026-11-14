@@ -110,7 +110,7 @@ where without it the same file showed HDR10. It is unmeasured on any other firmw
 
 ## 2. The Load payload: two nodes, both recovered from the set's own binaries
 
-Both live in `option.externalStreamingInfo.contents`, spliced at the `"provider":"plxnative"`
+Both live in `option.externalStreamingInfo.contents`, spliced at the `"provider":"multiplex"`
 anchor — the last key of `contents`, asserted present exactly once by a test so a `replace` cannot
 double-splice.
 
@@ -254,7 +254,7 @@ distinction cost most of a day on its own; see §5.
 ### The fix
 
 Feed the pipeline a PTS one nanosecond **lower** (`pts_nudge_ns`, default `-1`, overridable with
-`/tmp/plxnative-ptsnudge=<ns>`; `0` disables). Alternating unseeked legs, same title, same binary,
+`/tmp/multiplex-ptsnudge=<ns>`; `0` disables). Alternating unseeked legs, same title, same binary,
 scene controlled by alternation:
 
 ```
@@ -308,21 +308,21 @@ descends from an instrument that could not see its own subject.
 3. **`GST_DEBUG=dualsequencer:6` does NOT perturb.** The reputation is real but belongs to level
    **9**. Calibrated by measuring the same scene both ways: **123 LUT misses uninstrumented, 122
    traced**. It is the only per-frame cadence instrument this project has, and it was avoided for
-   months. Armed via `/tmp/plxnative-gstlog`, written to `plxnative-gst.log` in the runtime dir.
+   months. Armed via `/tmp/multiplex-gstlog`, written to `multiplex-gst.log` in the runtime dir.
 
-Also useful: `/tmp/plxnative-dvnonode` drops the payload node while keeping direct play (the fine
-bisect — the picture is then deliberately WRONG, for judging cadence not colour); `/tmp/plxnative-nodv`
+Also useful: `/tmp/multiplex-dvnonode` drops the payload node while keeping direct play (the fine
+bisect — the picture is then deliberately WRONG, for judging cadence not colour); `/tmp/multiplex-nodv`
 withholds the declaration entirely, which re-imposes the old refusal and therefore bisects "declared
-vs transcoded"; `/tmp/plxnative-nofps` withholds the esInfo fps rational (withholding it is
+vs transcoded"; `/tmp/multiplex-nofps` withholds the esInfo fps rational (withholding it is
 **worse** — 163/160 misses against 82/3 — which is how we learned the pipeline's lattice depends on
 what we send, shortly before learning it does not depend on it in the way we hoped).
 
-`/tmp/plxnative-dvfirstpicture` (a file holding `idr` or `any`, `devtriggers` builds, read at boot) forces
+`/tmp/multiplex-dvfirstpicture` (a file holding `idr` or `any`, `devtriggers` builds, read at boot) forces
 the splitter rule for this run: `idr` makes every non-IDR landing withdraw, `any` turns a listed
 build's row off so the 4 s watch is what fires (#1166).
 
 Capability experiments use two presence-only, boot-latched triggers:
-`/tmp/plxnative-dvcaps0` forces Unsupported and `/tmp/plxnative-dvcaps1` forces Supported. If both
+`/tmp/multiplex-dvcaps0` forces Unsupported and `/tmp/multiplex-dvcaps1` forces Supported. If both
 exist, `dvcaps0` wins and the conflict is logged. Restart the app between cases; changing a file
 cannot alter either the completed capability result or an installed playback decision. These
 overrides change capability only — they do not bypass `nodv`, the enhancement-layer refusal, the
@@ -462,7 +462,7 @@ ssh root@$(cat .tv-host) 'script -qc "luna-send -n 1 -f \
 Note the errorKey/`returnValue:false` on a set with no Dolby picture modes is not a failure of the read —
 `dimension` is still populated.
 
-Measured on the dev set (49SM9000PLA, webOS 4.10.2), one launch per row, `plxnative-play=<rk>`:
+Measured on the dev set (49SM9000PLA, webOS 4.10.2), one launch per row, `multiplex-play=<rk>`:
 
 | content | what the app declared | pipeline `hdrType` | `dynamicRange` | `pictureMode` |
 | --- | --- | --- | --- | --- |

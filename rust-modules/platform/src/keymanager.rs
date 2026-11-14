@@ -18,6 +18,8 @@ use crate::tv::secure::{Backend, Sealed};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicU8, Ordering};
 
+/// The keymanager key existing sessions are sealed under: it keeps its pre-rename name, or a
+/// stored session could no longer be unsealed.
 const KEY_NAME: &str = "plxnative.session.v1";
 const UNKNOWN: u8 = 0;
 const MODERN: u8 = 1;

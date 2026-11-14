@@ -440,7 +440,7 @@ class Snapshot(unittest.TestCase):
         self.assertEqual(self.snap['version'], 0)
         self.assertEqual(self.snap['sha'], 'f' * 40)
         self.assertEqual(self.snap['ref'], 'refs/heads/main')
-        self.assertEqual(self.snap['job'], {'correlator': 'plxnative-deps-manifest', 'id': '42'})
+        self.assertEqual(self.snap['job'], {'correlator': 'multiplex-deps-manifest', 'id': '42'})
         self.assertTrue(all(self.snap['detector'].get(k) for k in ('name', 'version', 'url')))
         self.assertRegex(self.snap['scanned'], r'^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$')
 

@@ -473,7 +473,7 @@ mod tests {
     /// the exact bytes, since a wrong frame is a silent 200 — and an event still goes as `event`.
     #[test]
     fn a_session_record_is_framed_as_a_session_item_and_an_event_is_not() {
-        let payload = br#"{"attrs":{"release":"plxnative@1"},"did":"d","init":true,"sid":"s","started":"2027-01-15T08:00:00Z","status":"exited"}"#;
+        let payload = br#"{"attrs":{"release":"multiplex@1"},"did":"d","init":true,"sid":"s","started":"2027-01-15T08:00:00Z","status":"exited"}"#;
         let mut r = rec(Category::Errors, Dest::Sentry);
         r.body = payload.to_vec();
         let frame = |header: &str| {

@@ -1,5 +1,5 @@
 {
- "comment": "Every source asset the demo library derives from: pinned URL, sha256, byte size, kind (poster, backdrop, still, headshot or media: what the file IS, which decides the roles it may fill), pixel width and height, licence, author and attribution. A headshot also records `tags`, the Commons file page's tags at pinning time. tools/demo_library.py fetches them into ~/.cache/plxnative-demo and refuses a file whose hash or size differs.",
+ "comment": "Every source asset the demo library derives from: pinned URL, sha256, byte size, kind (poster, backdrop, still, headshot or media: what the file IS, which decides the roles it may fill), pixel width and height, licence, author and attribution. A headshot also records `tags`, the Commons file page's tags at pinning time. tools/demo_library.py fetches them into ~/.cache/multiplex-demo and refuses a file whose hash or size differs.",
  "assets": {
   "a-trip-to-the-moon-1902-poster": {
    "url": "https://upload.wikimedia.org/wikipedia/commons/8/83/Voyage_dans_la_Lune_affiche.jpg",

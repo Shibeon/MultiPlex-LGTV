@@ -103,7 +103,7 @@ import urllib.parse
 import urllib.request
 
 DEFAULT_BASE = "http://127.0.0.1:32400"
-DEFAULT_TOKEN_FILE = "~/.config/plxnative/guest-token"
+DEFAULT_TOKEN_FILE = "~/.config/multiplex/guest-token"
 OWNER_TOKEN_NAMES = {"pms-token"}
 
 # The only paths `Pms.get` will request. Anything else is a programming error, not a request.

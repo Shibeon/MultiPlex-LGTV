@@ -1,4 +1,4 @@
-//! The `plxnative-playurl` trigger's value: a stream to play and the Load payload declaration to
+//! The `multiplex-playurl` trigger's value: a stream to play and the Load payload declaration to
 //! play it with. Plain data, so the player (which reads it at a start) and the Feed's parser of the
 //! trigger file (`plx_play_feed::playurl`) share one type without either naming the other; the
 //! application composes the reader ([`PlayUrlSource`]) into the adapter.
@@ -8,9 +8,9 @@
 //! name `plx_data`.
 
 /// A stream to play and **the Load payload declaration to play it with**, with no library item
-/// behind it — `/tmp/plxnative-playurl`, the player-PIPELINE test tier's one entry point.
+/// behind it — `/tmp/multiplex-playurl`, the player-PIPELINE test tier's one entry point.
 ///
-/// This is the trigger that makes the pipeline testable without Plex. `plxnative-url` already
+/// This is the trigger that makes the pipeline testable without Plex. `multiplex-url` already
 /// hands the engine a URL, and everything downstream of it — `stream.rs`, `ff.rs`, `aq.rs`, the
 /// pump's `Feed()`, the ACB bind — is byte-identical to a real playback. What it CANNOT do is say
 /// what the stream *is*: the Starfish `Load` payload takes its codecs from `route::stream_vcodec`

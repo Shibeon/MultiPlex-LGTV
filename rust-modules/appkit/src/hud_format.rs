@@ -66,7 +66,7 @@ pub const CLASSIC_HUD: &str = include_str!("hud_format/fixtures/classic/hud.json
 /// **`builtin:multiplex`, as the bytes the app ships** (format 1.2, the default HUD): the MultiPlex web player's
 /// layout, the title, stream pills and clock at the top and the skip-back / play-pause / skip-forward row with a
 /// More pill at the bottom. The file `fixtures/multiplex.plxhud`, packed from `fixtures/multiplex/` by
-/// `plxnative-sim --hud-pack` (a test pins the two equal).
+/// `multiplex-sim --hud-pack` (a test pins the two equal).
 pub const MULTIPLEX_PACKAGE: &[u8] = include_bytes!("hud_format/fixtures/multiplex.plxhud");
 
 #[cfg(any(test, feature = "test-support"))]
@@ -224,7 +224,7 @@ pub const REASON_NEWER: &str = "Made for a newer MultiPlex";
 pub const REASON_OLDER: &str = "Uses an older HUD format";
 
 /// The embedded classic package (`builtin:classic`), byte for byte the file `fixtures/classic.plxhud`:
-/// what `plxnative-sim --hud-export builtin:classic` prints and the package the lint's goldens run.
+/// what `multiplex-sim --hud-export builtin:classic` prints and the package the lint's goldens run.
 pub const BUILTIN_CLASSIC: &[u8] = CLASSIC_PACKAGE;
 
 /// `base` followed by one more reference token, RFC 6901-escaped (`~` is `~0`, `/` is `~1`). `base` is

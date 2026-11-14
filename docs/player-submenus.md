@@ -181,7 +181,7 @@ On the root the change refreshes in place. On a sub-page the page is refreshed i
    on `ui::page_stack::PageStack` (extracted from the track menu); live refresh keeps focus by id and
    pops to the root when Quality becomes unavailable; the failure screen's quality entry opens on the
    page, and BACK pops to the root before it dismisses; the `more-quality-osc` scene
-   (`plxnative-more=1`, `plxnative-moreosc=<period_ms>`, `dev::scenarios::moreosc_arm`).
+   (`multiplex-more=1`, `multiplex-moreosc=<period_ms>`, `dev::scenarios::moreosc_arm`).
 
 ## Decisions
 
@@ -196,7 +196,7 @@ On the root the change refreshes in place. On a sub-page the page is refreshed i
 
 ## Device frame-time check
 
-`track-menu-submenu-osc` (`tests/manifest.json`; trigger `plxnative-submenuosc=<period_ms>`,
+`track-menu-submenu-osc` (`tests/manifest.json`; trigger `multiplex-submenuosc=<period_ms>`,
 `dev::scenarios::submenuosc_arm`) loops real keys through the Subtitles menu: Style, the Size
 picker, back, back, Other languages and back (when the item has more than one subtitle language),
 the Audio tab and back. It needs no Plex account. Its `worst_ceiling_ms` of 25 is a budget, and
@@ -213,7 +213,7 @@ not been measured on the TV. The menu-closed control on the same clip graded 25.
   mock, every frame logged with `--arm framedrop=0.01 --arm framecb`): the compositor's own
   `wl_surface.frame` stamps show its repaint arriving 20–36 ms after the previous one while our
   commit before it was on time, and it does so on Settings and Home with no video at all
-  (`plxnative-noidle`), so it is not the player route and not the app's GPU load (a menu-closed
+  (`multiplex-noidle`), so it is not the player route and not the app's GPU load (a menu-closed
   player frame is a bare clear). 5–36 late repaints per ~95 s leg, varying leg to leg.
 - **A late commit.** The rest of the frames over 20 ms follow an on-time repaint: the work after
   the clear (page, surfaces, swap) took 3–8 ms longer than usual, the commit moved by that much,
@@ -243,7 +243,7 @@ tools below are the how-to; the findings follow.
    (the ring only exists while `framedrop` is armed). During the leg run
    `tools/tv-sched-trace.sh --secs 6 --app --out sched.gz` (`--app [FLAVOR]` finds the running
    app's pid on the set by the SUFFIX of `/proc/<pid>/exe`, because a jailed app's exe reads
-   `/var/palm/jail/<app id>/<appdir>/plxnative`, and refuses in one line, before touching tracefs,
+   `/var/palm/jail/<app id>/<appdir>/multiplex`, and refuses in one line, before touching tracefs,
    when no pid or more than one matches; `--tid N` names a thread instead, never both): it mounts
    tracefs if needed,
    records `sched_switch`, `sched_wakeup`, `irq_handler_entry/exit` (arch timer filtered out), any
@@ -270,14 +270,14 @@ tools below are the how-to; the findings follow.
 
    **Which side made a frame miss its refresh: `--latch`.** It scores the frame pairs (k, k+1)
    whose two FRAMEDROP lines both carry `wait_at=`. Run the fps leg with `tests/run.py --fps --mock
-   --filter <scene> --extra-trigger plxnative-framecb --extra-trigger plxnative-framering=17
+   --filter <scene> --extra-trigger multiplex-framecb --extra-trigger multiplex-framering=17
    --save-logs DIR`: `framecb` only adds `wait_at=` to the lines the detector writes, and the ring
    writes each frame of 17 ms or more with the 4 frames before and the 3 after it (not
    `framedrop=0.01`, which logs every frame at about 60 open/append/close round trips a second on the
-   frame thread, in the phase measured). The ring only works while `plxnative-framedrop` is armed:
+   frame thread, in the phase measured). The ring only works while `multiplex-framedrop` is armed:
    the harness arms it for a scene with a frame ceiling (`frame_ceiling_threshold`) or one whose
    manifest triggers name it (grid-pong does); for any other scene add `--extra-trigger
-   plxnative-framedrop=17`. While the bench runs, take one or more windows with
+   multiplex-framedrop=17`. While the bench runs, take one or more windows with
    `tools/tv-sched-trace.sh --app --secs 6 --out w1.gz` (from the leg's own checkout, which holds the
    lease; a subagent keeps its `PLX_TV_LOCK_LANE=<worktree>` prefix: `tv-lock` skill, "A lane is a
    checkout"). Then
@@ -307,7 +307,7 @@ tools below are the how-to; the findings follow.
    as woken by `<idle>-0` (the IPI path): the report labels it, it is not the waker, and the trace
    does not say who was.
 2. **Mali HWCNT.** Boot with `--arm hwcnt=frame.ui` and nothing else profiling; the `glFinish`
-   brackets serialize the pipeline, so no `fps=` from this leg. Pull `plxnative-hwcnt.jsonl` from
+   brackets serialize the pipeline, so no `fps=` from this leg. Pull `multiplex-hwcnt.jsonl` from
    the app's runtime directory, then `tools/analyze-hwcnt.py FILE --phase frame.ui --discard 60`
    and `tools/analyze-hwcnt-wait.py FILE`. The latter buckets the phase's serialized wall time and
    prints the GPU's active cycles per bucket: cycles that grow with wall time mean GPU-bound,
@@ -315,7 +315,7 @@ tools below are the how-to; the findings follow.
 3. **Wayland protocol log.** Boot with `--arm wldebug`: it sets `WAYLAND_DEBUG=client` and the
    event log gets a `wldebug:` line carrying `offset_us` (realtime minus monotonic). Intended:
    libwayland-client prints every request and event with a `CLOCK_REALTIME` microsecond stamp to
-   `plxnative-stderr.log`. There is no analyzer for it.
+   `multiplex-stderr.log`. There is no analyzer for it.
 
 Findings:
 
@@ -368,7 +368,7 @@ Findings:
    with the field already held. The menu-open frame measured 17.8 ms in one leg and 21.7 ms in the
    other (the difference is the prewarm drain above).
 7. **Leg 3 produced nothing.** `--arm wldebug` set `WAYLAND_DEBUG=client` (the `wldebug:` line is in
-   the event log) but libwayland-client printed no protocol lines to `plxnative-stderr.log` on this
+   the event log) but libwayland-client printed no protocol lines to `multiplex-stderr.log` on this
    firmware (webOS 4.10.2). The trigger is unverified as an instrument on this set.
 
 **Worked example, 2026-10-24: grid-pong with `--latch`** (mock, panel off, ARM release, 3 x 6 s
@@ -398,7 +398,7 @@ Fixed on the way here:
   `PREWARM_BUDGET_US`, a time bound: the count it replaced, eight strings, was `warmdrain:22.7` on
   one frame).
 
-`more-quality-osc` (trigger `plxnative-more=1` to open More, `plxnative-moreosc=<period_ms>`,
+`more-quality-osc` (trigger `multiplex-more=1` to open More, `multiplex-moreosc=<period_ms>`,
 `dev::scenarios::moreosc_arm`) is the same check for More: RIGHT on the Quality row pushes the rung
 page and LEFT pops it, every 900 ms. Same sequence with `--arm more=1 --arm moreosc=900`, reading
 `route=player overlay=more`; `moreosc:` lines log each key. The Quality row is absent only under

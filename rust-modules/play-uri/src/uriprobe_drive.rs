@@ -493,7 +493,7 @@ mod tests {
             *transport.refuse_open.lock().unwrap() = refuse_open.map(str::to_owned);
             let session = UriSession::open(DriverConfig {
                 attempt, variant, bps, kind: Kind::Direct, url: URL.to_owned(),
-                app_id: "com.example.plxnative".to_owned(), firmware: Firmware::default(), transport, sink: &NO_SINK,
+                app_id: "com.example.multiplex".to_owned(), firmware: Firmware::default(), transport, sink: &NO_SINK,
                 log: plx_base::eventlog::log, plane: no_acb(), release_allowance_ms: 10_000,
             }, &mt);
             Rig { mt, transport, attempt, status: Status::Pending, session: Some(session), now: 0 }
@@ -617,7 +617,7 @@ mod tests {
             let payload: serde_json::Value = serde_json::from_str(&rig.transport.payload_of("load")).expect("JSON");
             assert_eq!(payload["uri"], URL);
             assert_eq!(payload["type"], "media");
-            assert_eq!(payload["payload"]["option"]["appId"], "com.example.plxnative");
+            assert_eq!(payload["payload"]["option"]["appId"], "com.example.multiplex");
             assert!(payload["payload"]["option"].get("windowId").is_none(), "no exported window on this sink: {payload}");
             rig.back();
         });

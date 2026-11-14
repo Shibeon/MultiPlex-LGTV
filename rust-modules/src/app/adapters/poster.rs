@@ -28,18 +28,15 @@
 //! two or three `task::spawn` workers, [`workers_for`]). The decoded-pixel pointer is stored as an address (usize) so the
 //! shared `Store` stays `Send`.
 //!
-//! ## Plex artwork names its server; public immutable content names its verified digest
+//! ## Every entry point names a SERVER, and none of them assumes one
 //!
-//! Plex artwork is per-server in the strongest sense: `/photo/:/transcode?url=…` is a path on ONE
+//! Artwork is per-server in the strongest sense: `/photo/:/transcode?url=…` is a path on ONE
 //! PMS, its `url=` is that server's own thumb key, and the token baked into it is that server's
 //! grant. With a friend's shared server merged into one Home, "the current server" is the wrong
 //! host for half the tiles on screen — so a [`ServerId`] rides every call, sits in the slot as
 //! the other half of its identity, and is what the worker dials. Nothing in this file reads
 //! `plex::client()`; a caller that genuinely means "the server I am browsing" says so by passing
 //! `plex::current_server()`, at the call site, where it is visible.
-//!
-//! The explicit `ServerId::UNSET` namespace is credential-free public content, not a Plex slot. Its HTTPS PNG filename
-//! names its SHA-256, checked on every disk hit and network response; it uses the same workers and cache without PMS IO.
 //!
 //! The server is a FIELD on the slot, not a prefix on the key, deliberately: keys already run
 //! ~140 bytes (an ordinary relative thumb) to ~177 (an absolute headshot — see [`built_key`])
@@ -638,11 +635,6 @@ fn built_key(srv: ServerId, path: &str, w: c_int, h: c_int, png: bool) -> Option
     if path.is_empty() {
         return None;
     }
-    if srv == ServerId::UNSET {
-        let key = KEY_MEMO.with(|memo| memo.borrow_mut().get_or_build(srv.raw(), path, w, h, png, 0,
-            || content_png(path).map_or_else(String::new, |_| path.to_owned())));
-        return is_fetchable(&key).then_some(key);
-    }
     let c = plx_plex::plex::client_for(srv)?;
     // The memo's `RefCell` is borrowed only for the lookup. `build` runs under that borrow, and
     // what it calls (`fan::fan_key`, `transcode_request`) is string building on the client: neither
@@ -686,14 +678,6 @@ fn baked_prefix(key: &str) -> bool {
     key.starts_with(plx_plex::plex::artwork::COVER_PREFIX) || key.starts_with(plx_plex::plex::artwork::CARD_PREFIX)
 }
 
-/// A public immutable PNG is named by its SHA-256 filename. Its key carries no account or server.
-/// This shared image-source extension is used by catalog previews through the ordinary `Art::Thumb`.
-fn content_png(url: &str) -> Option<plx_data::hudpacks::Sha> {
-    let address = plx_data::hudpacks::address::parse(url).ok()?;
-    if address.dev_source() || !url.starts_with("https://") || url.contains(['?', '#']) { return None }
-    plx_data::hudpacks::Sha::parse(url.rsplit('/').next()?.strip_suffix(".png")?)
-}
-
 /// The transcoder request for `path` drawn in a `w`×`h` logical box — the one builder behind
 /// every store key and the fan baker's member fetches, so both name the same bytes on disk.
 /// Supersampled simulator renders (`surface::render_scale`, 1 on a television) ask the server
@@ -706,7 +690,7 @@ fn transcode_request(c: &plx_plex::plex::Client, path: &str, w: c_int, h: c_int,
 /// A refused key logs ONCE per process, with both ceilings and the length that missed them.
 ///
 /// The latch is the whole design. This is a per-tile, per-frame path and the memo means a refusal
-/// REPEATS every frame, so an unlatched log would bury `/tmp/plxnative-events.log` — but silence
+/// REPEATS every frame, so an unlatched log would bury `/tmp/multiplex-events.log` — but silence
 /// is the failure `paths.rs` was fixed for (a font fell through to DroidSans while `init_text`
 /// still logged `ok=1`), and a silent refusal here is a tile that is a skeleton forever with
 /// nothing in the one file an issue report is asked for. Once is enough to name the cause.
@@ -769,7 +753,7 @@ fn interval_due(last: Option<std::time::Instant>, now: std::time::Instant) -> bo
 ///
 /// Throttled for the reason [`warn_key_refused`] gives for its own latch: `unresident` and the
 /// re-arm branch are both per-tile, per-frame paths, and a fast scroll evicts dozens of keys a
-/// second, so a line per transition would bury `/tmp/plxnative-events.log`. Unlike that latch this
+/// second, so a line per transition would bury `/tmp/multiplex-events.log`. Unlike that latch this
 /// does not go silent after one line — a long session should keep producing fresh readings — so it
 /// is a minimum-interval throttle (about one second, monotonic so a skewed wall clock never lies
 /// about it) rather than a one-shot. The first call in a process is let through unthrottled, so a
@@ -1119,7 +1103,7 @@ type Hit = Option<PosterKey>;
 /// every hit, and whether a P_EVICTED slot is eligible to recover at all), the speculation bound
 /// [`warm_admissible`] for a Warm, and the drawn card's placement scope
 /// ([`plx_ui::card_motion::declines_request`]) for a Draw. An unknown card placement declines new
-/// work (a moving one too, but only under the dev trigger `plxnative-cardspeed`); featured images
+/// work (a moving one too, but only under the dev trigger `multiplex-cardspeed`); featured images
 /// outside that scope remain eligible.
 /// A refusal claims no source slot; a follow-up present samples placement again.
 fn lookup(srv: ServerId, key_s: &str, touch: Touch) -> (Hit, Warm) {
@@ -1130,7 +1114,7 @@ fn lookup(srv: ServerId, key_s: &str, touch: Touch) -> (Hit, Warm) {
         return (None, Warm::Known);
     }
     // A scoped card DRAW may not START work with unknown placement (or, under the dev trigger
-    // `plxnative-cardspeed`, fast placement), at EVERY point work begins — the fresh miss far
+    // `multiplex-cardspeed`, fast placement), at EVERY point work begins — the fresh miss far
     // below, but equally the two re-arm transitions inside the matching-slot loop. Those matter
     // more than the miss rather than less: a scroll is what evicts textures, so scrolling back
     // across the same rows finds P_EVICTED slots, and re-arming each one is a full fetch, decode
@@ -1290,7 +1274,7 @@ fn lookup(srv: ServerId, key_s: &str, touch: Touch) -> (Hit, Warm) {
     if touch != Touch::Draw && !warm_admissible(&g.slots) {
         return (None, Warm::Full);
     }
-    // A card MISS with unknown placement (or, under the dev trigger `plxnative-cardspeed`, fast
+    // A card MISS with unknown placement (or, under the dev trigger `multiplex-cardspeed`, fast
     // on-screen motion) claims no slot and starts no acquisition. That tile draws its placeholder
     // and asks again next frame. Other cards, featured images, and previously admitted work remain
     // eligible; this gate defers only the drawn card's new demand until its placement is known
@@ -1320,8 +1304,8 @@ fn lookup(srv: ServerId, key_s: &str, touch: Touch) -> (Hit, Warm) {
     // can still be declined for free.
     //
     // **Why the default no longer declines.** Remeasured on the television with the lookahead in
-    // place (1000-movie mock, panel off, two runs each; the old default is `plxnative-lookahead=0
-    // plxnative-cardspeed=120`): placeholder tile-frames seen — `library-burst` 28,969 / 28,080
+    // place (1000-movie mock, panel off, two runs each; the old default is `multiplex-lookahead=0
+    // multiplex-cardspeed=120`): placeholder tile-frames seen — `library-burst` 28,969 / 28,080
     // old default, 1,759 / 1,761 new; `library-hold` 35,850 / 35,592 old, 4,280 / 3,902 new —
     // against frames over 33 ms of 7 / 16 old and 30 / 10 new in `library-burst`, and of 3 / 8 old
     // and 18 / 19 new in `library-hold`. `library-scroll` holds a 60 fps median on both, with a
@@ -1737,7 +1721,7 @@ enum ArtFail {
 
 impl ArtFail {
     /// The half of the log line that names the cause. Prose rather than a code, because the reader
-    /// is whoever opened `/tmp/plxnative-events.log` after being told artwork does not load.
+    /// is whoever opened `/tmp/multiplex-events.log` after being told artwork does not load.
     fn why(self) -> &'static str {
         match self {
             ArtFail::NoServer => {
@@ -2077,40 +2061,6 @@ fn bake_fan(
 
 /// BACKGROUND worker: claim a request, read disk or fetch and decode off-lock, publish pixels.
 /// RAM/GPU residency stays bounded independently of the number of persistent images.
-/// Public content shares the durable image cache and the existing decode workers. Every disk hit
-/// is checked too; a corrupt cache file cannot bypass the catalog's preview hash.
-fn load_content_png<T>(url: &str, sha: plx_data::hudpacks::Sha, cache_gen: u64,
-    mut decode: impl FnMut(&[u8]) -> Option<T>) -> Loaded<T> {
-    let mut out = Loaded { art: None, from_disk: false, stale: None, transient: false };
-    let disk = plx_platform::imgcache::classify_content(&sha.hex());
-    if let Some(key) = &disk {
-        if let Some(hit) = plx_platform::imgcache::read_at(cache_gen, key) {
-            if plx_data::hudpacks::Sha::of(&hit.bytes) == sha {
-                if let Some(art) = decode(&hit.bytes) {
-                    out.art = Some(art); out.from_disk = true; return out;
-                }
-            }
-            plx_platform::imgcache::remove_at(cache_gen, key);
-        }
-    }
-    if cache_gen != plx_platform::imgcache::generation() { return out }
-    FETCHES.fetch_add(1, Ordering::Relaxed);
-    let reply = plx_net::net::request_result_evidence(url, &[], "GET", None, plx_net::net::API, false,
-        Some(plx_platform::imgcache::MAX_FILE), None, false);
-    match reply {
-        Ok(reply) if reply.status == 200 && plx_data::hudpacks::Sha::of(&reply.body) == sha => {
-            out.art = decode(&reply.body);
-            if out.art.is_some() {
-                if let Some(key) = &disk { plx_platform::imgcache::write_at(cache_gen, key, &reply.body); }
-            }
-        }
-        Ok(reply) if matches!(reply.status, 408 | 429 | 500..=599) => out.transient = true,
-        Err(_) => out.transient = true,
-        _ => (),
-    }
-    out
-}
-
 fn poster_worker() {
     loop {
         let (idx, key_s, srv, gen, cache_gen, token_gen, grant_epoch) = {
@@ -2136,15 +2086,7 @@ fn poster_worker() {
         let mut baked_final = false;
         // Revoked servers cannot use disk as a route around sign-out. Keep this client snapshot
         // for both identity and transport; a later registry repoint must not mix the two.
-        if let Some(sha) = (srv == ServerId::UNSET).then(|| content_png(&key_s)).flatten() {
-            let loaded = load_content_png(&key_s, sha, cache_gen, |b| {
-                let (mut dw, mut dh) = (0, 0);
-                let p = img::img_decode_rgba(b.as_ptr(), b.len() as c_int, &mut dw, &mut dh);
-                (!p.is_null()).then_some((p, dw, dh))
-            });
-            if let Some((p, dw, dh)) = loaded.art { (px, w, h) = (p, dw, dh); }
-            transient = loaded.transient;
-        } else if let Some(client) = plx_plex::plex::client_for(srv)
+        if let Some(client) = plx_plex::plex::client_for(srv)
             .filter(|c| cache_gen == plx_platform::imgcache::generation() && c.token_gen() == token_gen)
         {
             let hex = plx_plex::plex::artwork::cover_parts(&key_s);
@@ -3094,7 +3036,7 @@ mod tests {
         store().slots = [Pslot::ZERO; PT_CAP];
     }
 
-    /// Under `plxnative-cardspeed` (the guard), a DRAW in a fast-moving card scope claims no slot
+    /// Under `multiplex-cardspeed` (the guard), a DRAW in a fast-moving card scope claims no slot
     /// for a miss. The same draw claims one when that scope permits admission. Demand is
     /// deferred, never dropped: the next frame asks again without leaving a queued request behind.
     #[test]
@@ -3150,7 +3092,7 @@ mod tests {
 
     /// The wiring `declines_in` is a pure function of: in a frame dump the SAME fast-moving draw
     /// claims a slot, because a dump never declines for motion (`card_motion::declines_request`),
-    /// even with `plxnative-cardspeed` armed.
+    /// even with `multiplex-cardspeed` armed.
     #[test]
     fn an_armed_dump_claims_a_slot_for_the_miss_a_fast_scroll_would_decline() {
         let (_fresh, sid, _) = one_server();
@@ -3179,7 +3121,7 @@ mod tests {
         card_renderer_frames(false);
     }
 
-    /// The same three frames under `plxnative-cardspeed`: the card that jumped 80 px between two
+    /// The same three frames under `multiplex-cardspeed`: the card that jumped 80 px between two
     /// frames is `Moving` and still claims nothing until it settles.
     #[test]
     fn under_cardspeed_a_moving_card_claims_no_slot_until_it_settles() {

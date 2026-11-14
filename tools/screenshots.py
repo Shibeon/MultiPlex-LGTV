@@ -9,7 +9,7 @@ driver:
   2. makes a fresh instance root and arms the scene's triggers in it, plus four the driver owns:
      `token` (a placeholder the mock accepts), `plextv` (plex.tv replaced by the mock, so nothing
      leaves the machine), `discover` (the Watchlist's discover host, the same mock) and `stillclock` (free-running animation held still);
-  3. runs the simulator with `PLXNATIVE_SHOT_SETTLE`: the app itself writes one PNG once its
+  3. runs the simulator with `MULTIPLEX_SHOT_SETTLE`: the app itself writes one PNG once its
      screen has been at rest for the scene's settle time, and exits. The driver waits on that
      process — an artifact, never a sleep — under a ceiling timeout;
   4. checks the capture is the state the manifest names: every `expect` line is in the event log,
@@ -24,7 +24,7 @@ the settled-shot environment. The complete frame stream must finish with zero de
 and no unconverted landings before one selected RGB frame is encoded. `prepare` supplies synthetic
 fixture changes inside the same mock/runtime lifecycle; `assets` selects a relocated bundle.
 
-A scene may render SUPERSAMPLED: `render_scale` (1..4, default 1) sets `PLXNATIVE_RENDER_SCALE`,
+A scene may render SUPERSAMPLED: `render_scale` (1..4, default 1) sets `MULTIPLEX_RENDER_SCALE`,
 so the simulator draws the 1920x1080 canvas at that multiple (glyphs, icons and artwork rasterised
 to match) and the capture comes out that many times larger. An output may take a `crop`
 ([x, y, w, h] in CANVAS coordinates, so a crop means the same UI whatever the scale) and a JPEG
@@ -149,32 +149,32 @@ def resolve_output(scene, out, canvas):
 
 
 def clean_env(rt, shot, scene, defaults, assets=None):
-    """The simulator's environment: this machine's, minus every PLXNATIVE_* variable (a developer's
+    """The simulator's environment: this machine's, minus every MULTIPLEX_* variable (a developer's
     own session settings must not leak into a published figure), plus the scene's."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PLXNATIVE_")}
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MULTIPLEX_")}
     env.update({
-        "PLXNATIVE_RUNTIME_DIR": str(rt),
-        "PLXNATIVE_APP_DIR": str(assets or ROOT / "pkg"),
-        "PLXNATIVE_WIN": defaults["canvas"],
-        "PLXNATIVE_SHOT": str(shot),
-        "PLXNATIVE_SHOT_EXIT": "1",
-        "PLXNATIVE_SHOT_SETTLE": str(scene.get("settle_ms", defaults["settle_ms"])),
-        "PLXNATIVE_SHOT_AFTER": str(scene.get("after_ms", defaults["after_ms"])),
+        "MULTIPLEX_RUNTIME_DIR": str(rt),
+        "MULTIPLEX_APP_DIR": str(assets or ROOT / "pkg"),
+        "MULTIPLEX_WIN": defaults["canvas"],
+        "MULTIPLEX_SHOT": str(shot),
+        "MULTIPLEX_SHOT_EXIT": "1",
+        "MULTIPLEX_SHOT_SETTLE": str(scene.get("settle_ms", defaults["settle_ms"])),
+        "MULTIPLEX_SHOT_AFTER": str(scene.get("after_ms", defaults["after_ms"])),
     })
     if "lang" in scene:
-        env["PLXNATIVE_LOCALE"] = scene["lang"]
+        env["MULTIPLEX_LOCALE"] = scene["lang"]
     if "virtual" in scene:
         cfg = virtual_spec(scene)
-        env = {k: v for k, v in env.items() if not k.startswith("PLXNATIVE_SHOT")}
-        env.update({"PLXNATIVE_DUMP": str(rt), "PLXNATIVE_DUMP_OUT": str(rt / "frames.rgb"),
-                    "PLXNATIVE_DUMP_FRAMES": str(cfg["frames"]),
-                    "PLXNATIVE_DUMP_PREROLL": str(cfg["preroll"]),
-                    "PLXNATIVE_DUMP_KEYS": cfg.get("keys", ""),
-                    "PLXNATIVE_DUMP_CLICKS": cfg.get("clicks", "")})
+        env = {k: v for k, v in env.items() if not k.startswith("MULTIPLEX_SHOT")}
+        env.update({"MULTIPLEX_DUMP": str(rt), "MULTIPLEX_DUMP_OUT": str(rt / "frames.rgb"),
+                    "MULTIPLEX_DUMP_FRAMES": str(cfg["frames"]),
+                    "MULTIPLEX_DUMP_PREROLL": str(cfg["preroll"]),
+                    "MULTIPLEX_DUMP_KEYS": cfg.get("keys", ""),
+                    "MULTIPLEX_DUMP_CLICKS": cfg.get("clicks", "")})
         if cfg.get("overlay"):
-            env["PLXNATIVE_DUMP_ALLOW_OVERLAY"] = "1"
+            env["MULTIPLEX_DUMP_ALLOW_OVERLAY"] = "1"
     if render_scale(scene) > 1:
-        env["PLXNATIVE_RENDER_SCALE"] = str(render_scale(scene))
+        env["MULTIPLEX_RENDER_SCALE"] = str(render_scale(scene))
     return env
 
 
@@ -244,7 +244,7 @@ def capture(binary, scene, defaults, hero, keep, *, prepare=None, assets=None):
     """Boot one scene and return (png bytes, log text). Raises RuntimeError on any failure."""
     srv, pms = mock_pms.serve(0, catalog=CATALOG, hero=hero)
     port = srv.server_address[1]
-    rt = pathlib.Path(tempfile.mkdtemp(prefix=f"plxnative-shot-{scene['name']}-"))
+    rt = pathlib.Path(tempfile.mkdtemp(prefix=f"multiplex-shot-{scene['name']}-"))
     try:
         if prepare is not None:
             prepare(pms, rt)
@@ -253,7 +253,7 @@ def capture(binary, scene, defaults, hero, keep, *, prepare=None, assets=None):
             triggers["token"] = PLACEHOLDER_TOKEN
         triggers.update(scene.get("triggers", {}))
         for name, value in triggers.items():
-            (rt / f"plxnative-{name}").write_text(value)
+            (rt / f"multiplex-{name}").write_text(value)
         shot = rt / "shot.png"
         if "virtual" in scene:
             (rt / "frames.rgb").touch()
@@ -268,7 +268,7 @@ def capture(binary, scene, defaults, hero, keep, *, prepare=None, assets=None):
         finally:
             out.close()
         secs = time.monotonic() - t0
-        log_path = rt / "plxnative-events.log"
+        log_path = rt / "multiplex-events.log"
         log = log_path.read_text(errors="replace") if log_path.exists() else ""
         problems = []
         if rc is None:
@@ -414,7 +414,7 @@ def render_set(jobs, render, dests, keep=False):
     non-zero, the mock not starting); the other scenes still run, so one run reports every
     failure. Returns the failed scene names; when there are any, no destination has been touched,
     so a failed run never leaves a half-regenerated set."""
-    stage = pathlib.Path(tempfile.mkdtemp(prefix="plxnative-shots-"))
+    stage = pathlib.Path(tempfile.mkdtemp(prefix="multiplex-shots-"))
     for dest in dests:
         (stage / dest).mkdir()
     failed = []

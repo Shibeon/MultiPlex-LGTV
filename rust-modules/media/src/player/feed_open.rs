@@ -183,7 +183,7 @@ pub(super) fn payload_options(facts: &plx_playback_contract::feed::PayloadFacts)
     let with_fps = !plx_base::devtrig::flag("nofps");
     if !with_fps {
         #[cfg(feature = "devtriggers")]
-        log("esInfo: videoFps WITHHELD by /tmp/plxnative-nofps");
+        log("esInfo: videoFps WITHHELD by /tmp/multiplex-nofps");
     }
     plx_playback_contract::feed::PayloadOptions {
         with_fps,
@@ -290,16 +290,16 @@ pub(super) fn resolve_source(
     pa: &super::adapter::PlayerAdapter,
 ) -> Result<ResolvedSource, route::RouteStartResult> {
     // resolve the URL, in precedence order: route (a selected movie) wins, then
-    // /tmp/plxnative-playurl (a URL + its declaration), then /tmp/plxnative-url (a URL
+    // /tmp/multiplex-playurl (a URL + its declaration), then /tmp/multiplex-url (a URL
     // alone), then a local sample.
     let mut url = crate::route::url(ps);
     // A route that holds a source (a plan's, or the one a reload re-reads) has qualified it
     // already. Only a source named below, over an empty route, is a new explicit one.
     let explicit = url.is_empty();
     if url.is_empty() {
-        // dev: /tmp/plxnative-playurl — a URL *and the Load declaration to play it with*, with no
+        // dev: /tmp/multiplex-playurl — a URL *and the Load declaration to play it with*, with no
         // library item behind it. This is the player-PIPELINE test tier's entry (tests/README.md):
-        // `plxnative-url` below hands over a URL only, which leaves the payload describing
+        // `multiplex-url` below hands over a URL only, which leaves the payload describing
         // whatever the route happened to hold — an empty string, i.e. H264 + "AC3" — so a 4K HEVC
         // or a Dolby file could never be declared honestly without Plex. Read HERE rather than at
         // the app.rs entry point because the declaration has to be in `route` before the payload
@@ -372,10 +372,10 @@ pub(super) fn resolve_source(
             is_h265 = true;
             sample = Some(Box::new(SampleBuf::new(data, au)));
         } else {
-            // nothing to play: no selected item, no /tmp/plxnative-url, no local sample. (The old
+            // nothing to play: no selected item, no /tmp/multiplex-url, no local sample. (The old
             // baked-in demo-movie fallback is gone — the binary carries no URLs/credentials.)
             #[cfg(feature = "devtriggers")]
-            log("start_bufferfeed: no URL — select an item (or set /tmp/plxnative-url)");
+            log("start_bufferfeed: no URL — select an item (or set /tmp/multiplex-url)");
             return Err(crate::route::RouteStartResult::NoRoute);
         }
     }
@@ -386,7 +386,7 @@ pub(super) fn resolve_source(
     Ok(ResolvedSource { url, sample, is_h265 })
 }
 
-/// The `plxnative-playurl` trigger's DV declaration as the data layer's record. `present` is
+/// The `multiplex-playurl` trigger's DV declaration as the data layer's record. `present` is
 /// DERIVED from a non-zero profile rather than carried separately: two fields that can disagree is a
 /// way to declare "Dolby Vision, profile 0", which is not a thing, and the harness would have to
 /// keep them in step by hand in every case.

@@ -20,13 +20,13 @@ The app, its packaging, and the host-side tools in `tools/` and `ci/`. Concretel
 looking at:
 
 - **The `/tmp` trigger surface.** `/tmp` is mode 1777 in webOS's production jail, so any co-resident
-  process can create files there. Roughly forty `plxnative-*` files change behaviour, and three are
-  outright takeovers — `plxnative-token` beats the signed-in session, `plxnative-servers` injects a
-  server and its token, `plxnative-url` replaces the stream. **All of it is compiled out of a
+  process can create files there. Roughly forty `multiplex-*` files change behaviour, and three are
+  outright takeovers — `multiplex-token` beats the signed-in session, `multiplex-servers` injects a
+  server and its token, `multiplex-url` replaces the stream. **All of it is compiled out of a
   release build** by dropping the `devtriggers` cargo feature, and `ci/check-elf.sh` measures that
   on the shipped bytes rather than asserting it. A release binary that still carries any of it is a
   valid report, and a serious one.
-- **The event log.** `plxnative-events.log` — like `plxnative-crash.log` and `plxnative-stderr.log`
+- **The event log.** `multiplex-events.log` — like `multiplex-crash.log` and `multiplex-stderr.log`
   beside it — is created 0640 (owner read/write, the app's own group read, never world-readable),
   so that a Developer Mode user can fetch it with webOS Dev Manager on a television that is not
   rooted. Every event-log line goes through `eventlog::scrub::scrub_local` before the write. A line

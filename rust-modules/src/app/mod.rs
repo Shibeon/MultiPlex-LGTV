@@ -250,9 +250,9 @@ pub(crate) struct App {
     /// replay or record run, which measures nothing outside a frame and compiles on its first player frame
     /// (`run::refresh_hud`, inside the frame iteration). It is replaced by the package the seated profile chose when
     /// that one fits the language and the cost ceilings (`Bridge::huds_tick`, in the frame's prepare window, never in the draw), and a
-    /// `plxnative-hud=<path>` package replaces whatever is chosen.
+    /// `multiplex-hud=<path>` package replaces whatever is chosen.
     hud: Option<plx_appkit::player_hud::loaded::LoadedHud>,
-    /// the `plxnative-hud=<path>` package, read once on the first player frame (`run::refresh_hud`)
+    /// the `multiplex-hud=<path>` package, read once on the first player frame (`run::refresh_hud`)
     dev_hud: plx_appkit::player_hud::loaded::DevHud,
     running: bool,
     window_activity: window_activity::WindowActivity,
@@ -348,7 +348,7 @@ pub(crate) struct App {
     /// write, so it stays here rather than on `dev::scenarios::Scenarios`.
     pub(crate) t0: u32,
     /// The frame's instruments: the eight phase stamps, FRAMEDROP, the per-second peaks
-    /// (`diag::heartbeat`), armed by `plxnative-framedrop`.
+    /// (`diag::heartbeat`), armed by `multiplex-framedrop`.
     instr: plx_base::diag::heartbeat::Instruments,
     /// Every dev-trigger arm's own state — oscillator phases, retry latches, boot-time flags
     /// (formerly `DevFlags`) — gathered on ONE struct (spec: `dev/scenarios.rs`'s module doc).
@@ -357,7 +357,7 @@ pub(crate) struct App {
     pub(crate) input: plx_ui::input::Input,
     /// `text::take_measure_fault` has been reported once (the report is once per process).
     measure_fault_logged: bool,
-    /// The recorder / replay driver (`plxnative-rec` / `plxnative-recplay`, spec §5.3/§5.5).
+    /// The recorder / replay driver (`multiplex-rec` / `multiplex-recplay`, spec §5.3/§5.5).
     pub(crate) rec: recorder::Recplay,
     pub(crate) boot_initial: Option<bootstrap::Initial>,
     pub(crate) telemetry_guard: Option<plx_telemetry::telemetry::native::Guard>,
@@ -442,8 +442,8 @@ fn pre_boot_diagnostics() -> plx_telemetry::telemetry::native::Guard {
     //
     // Two builds can sit on one television — the app users get, and a developer one beside it
     // (`paths::app_id`) — and until this line nothing in the system said which of them produced a
-    // given log. The obvious witnesses do not work: both binaries are named `plxnative`, so
-    // `pidof` cannot tell them apart on this busybox set; `pkg/plxnative` is a path EVERY
+    // given log. The obvious witnesses do not work: both binaries are named `multiplex`, so
+    // `pidof` cannot tell them apart on this busybox set; `pkg/multiplex` is a path EVERY
     // configuration writes, so an md5 against the local build proves only that some flavour of
     // some configuration matches. That ambiguity is the "plausible wrong data" failure this
     // project's testing section is built around: a harness that graded the other install's log
@@ -467,7 +467,7 @@ fn pre_boot_diagnostics() -> plx_telemetry::telemetry::native::Guard {
         std::env::var("APPID").unwrap_or_else(|_| "unset".into()),
     ));
     // ...and the app directory on the NEXT line, with its provenance (`from current_exe` /
-    // `PLXNATIVE_APP_DIR` / `macOS bundle`) — strictly more than repeating the path here would
+    // `MULTIPLEX_APP_DIR` / `macOS bundle`) — strictly more than repeating the path here would
     // say. Logged here rather than by whoever resolves `app_dir()` first, so the two lines are
     // adjacent and the pair is what a triage reader sees at the top. (`paths` itself cannot log:
     // the event log resolves its own path through it.)
@@ -491,7 +491,7 @@ fn pre_boot_diagnostics() -> plx_telemetry::telemetry::native::Guard {
     // a snapshot this publishes, and with none installed it refuses everything. So the ordering is
     // the fail-closed guarantee, not a convenience.
     let telemetry_guard = plx_telemetry::telemetry::boot();
-    // …and then, if asked, DIE. `plxnative-crashtest` is the instrument for the instrument: both
+    // …and then, if asked, DIE. `multiplex-crashtest` is the instrument for the instrument: both
     // the C fallback and (when consented/configured) the out-of-process native recorder are now
     // armed, so this trigger grades the reporter users actually run. It remains before SDL so a
     // playback/UI regression cannot make the instrument unreachable. Compiled out with
@@ -564,7 +564,7 @@ pub fn synthetic_home_initial(seed: u32, port: u16, settings: Option<String>)
         initial.content = Some(bootstrap::ContentInitial { detail:"1001".into(), detailsec:1,
             detailok:true, filmography:true, personcredits:9, nowan:true });
         for name in ["detail", "detailsec", "detailok", "filmography", "personcredits", "nowan"] {
-            initial.triggers.push(format!("plxnative-{name}"));
+            initial.triggers.push(format!("multiplex-{name}"));
         }
         initial.validate()?;
     }
@@ -578,7 +578,7 @@ fn enter_application(pms_host: *const c_char, pms_port: c_int) -> Result<App,c_i
     // The release every telemetry report carries, composed here because the packaged binary is
     // graded for this exact contiguous string (`ci/check-package.py`); second, before anything can
     // build an envelope or an SDK option.
-    plx_telemetry::telemetry::set_release(concat!("plxnative@", env!("PLX_VERSION")));
+    plx_telemetry::telemetry::set_release(concat!("multiplex@", env!("PLX_VERSION")));
     // The commit About and Source print: `PLX_BUILD_SHA` reaches this crate only, so the screens
     // crate is handed it (it panics in a shipping build if asked first); third, before any screen
     // can draw.

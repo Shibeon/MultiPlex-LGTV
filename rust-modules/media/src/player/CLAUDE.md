@@ -78,7 +78,7 @@ picture. `acb_finish` / `PlaneFinish` are the only change to the C seam's shape;
 the same two calls and does not use the ids.
 
 The separate developer probe is invoked by the
-`plxnative-uriprobe` trigger. Media owns its route half and its port (`player/uriprobe_drive.rs`:
+`multiplex-uriprobe` trigger. Media owns its route half and its port (`player/uriprobe_drive.rs`:
 the claimed start attempt, the settle, the adapter's one slot); the probe itself, the play-uri
 crate's driver over the URI transport, is the application's (`dev/uriprobe.rs`), installed at boot
 behind `UriProbeSession`, so media names no play-uri item. It plays one stream through `com.webos.media` with no Engine and
@@ -108,7 +108,7 @@ is not one any `shutdown(2)` of ours can reach. Exactly one of the two ever has 
 and pinned to majors 63/63/61, and is built `--disable-network` with `file` as its only protocol —
 so the AVIO is not merely how bytes reach it today, it is the only way they *can*. See the root
 `docs/agent-reference.md` linking section for why. It
-emits Annex-B video AUs (param sets prepended at each keyframe; a stream with no avcC/hvcC record, which is what an MPEG-TS or raw elementary stream under a `.mp4` name looks like since the route trusts the part's file NAME, arrives with start codes already: `ff::NalInput` decides it once per stream from the extradata, H.264 is framed in place and held back until its first keyframe, and HEVC is refused like a codec with no framing; its clock is also moved to 0 at the demuxer (`ff::stream_origin_ns`: packets rebased after the read, the origin added back on a seek) because the engine takes a fresh play's first keyframe to be near 0 and a capture's clock starts wherever the transmitter's did; Matroska and MP4 keep theirs; #1084) and, for AV1, Section-5 temporal units (TD OBU first, the av1C sequence header and metadata OBUs in-band on keyframes; `/tmp/plxnative-av1obu` = notd,noseq,raw tokens varies it on a debug build), for VP9 the demuxed packet unchanged (a frame carries its own headers and libpf's `video/x-vp9` caps have no `codec_data`), and AC3/EAC3, ADTS-framed AAC, or DTS core audio frames,
+emits Annex-B video AUs (param sets prepended at each keyframe; a stream with no avcC/hvcC record, which is what an MPEG-TS or raw elementary stream under a `.mp4` name looks like since the route trusts the part's file NAME, arrives with start codes already: `ff::NalInput` decides it once per stream from the extradata, H.264 is framed in place and held back until its first keyframe, and HEVC is refused like a codec with no framing; its clock is also moved to 0 at the demuxer (`ff::stream_origin_ns`: packets rebased after the read, the origin added back on a seek) because the engine takes a fresh play's first keyframe to be near 0 and a capture's clock starts wherever the transmitter's did; Matroska and MP4 keep theirs; #1084) and, for AV1, Section-5 temporal units (TD OBU first, the av1C sequence header and metadata OBUs in-band on keyframes; `/tmp/multiplex-av1obu` = notd,noseq,raw tokens varies it on a debug build), for VP9 the demuxed packet unchanged (a frame carries its own headers and libpf's `video/x-vp9` caps have no `codec_data`), and AC3/EAC3, ADTS-framed AAC, or DTS core audio frames,
 and seeks by time via `av_seek_frame` (libavformat's own Cues index).
 
 ## Threading model (this is the whole ballgame)
@@ -284,7 +284,7 @@ something.
   `PlaybackSession::src_fps`) exactly as direct play does — until 2026-10-18 it carried 0, declared 60 and
   presented ~16 fps on a 4K H.264 24p file; a real video re-encode (an HLS rung, `no_video_copy`, a forced
   burn) still has no known rate and keeps 60. AV1 (only on a set whose codec table lists an AV1 decoder) keeps HEVC's 4K60 rule,
-  clamped by `Caps::av1_row`; the clamp is unmeasured (one owner reports AV1 playing on a webOS 10.3.1 set, with no log). `/tmp/plxnative-sinkmax=WxH@F`
+  clamped by `Caps::av1_row`; the clamp is unmeasured (one owner reports AV1 playing on a webOS 10.3.1 set, with no log). `/tmp/multiplex-sinkmax=WxH@F`
   overrides the envelope for the legs still unrun on 10.3.1.
 - **There IS a presented-frame instrument now, and it is not a GStreamer trace.** The payload's
   `streamQualityInfo` / `streamQualityInfoNonFlushable` keys make libpf read the video sink's
@@ -443,7 +443,7 @@ something.
   `setState(LOADED)` → *wait for decoded frames* → `setMediaVideoData(<sourceInfo envelope
   as captured; a PQ VP9 gets its HDR keys written in first, see below>)` → `setDisplayWindow` → `setState(PLAYING)`. In normal buffer-feed playback, the payload passed to
   `setMediaVideoData` is the **whole `sourceInfo` envelope** captured verbatim from the pipeline's
-  callback (`sourceInfoRaw`), not a reconstructed one — with ONE exception: a VP9 stream whose container says PQ gets `hdrType` / `mediaVui` / `mediaSei` written in first (`play-feed/src/vp9_hdr.rs`), because a VP9 bitstream cannot carry the transfer function, so the pipeline's own envelope says `"hdrType":"none"` and the panel stays SDR (device-measured on the dev set, whose ACB path is the only one that sends the envelope: the TV's `picture.dynamicRange` flips to HDR with the rewrite and stays SDR with `/tmp/plxnative-novp9hdr`; webOS 5+ has no ACB, so nothing is sent there and its VP9 HDR behaviour is unknown). The envelope is otherwise untouched, and an envelope that already names an HDR type is never overridden. Audio is owned by the pipeline — **never feed
+  callback (`sourceInfoRaw`), not a reconstructed one — with ONE exception: a VP9 stream whose container says PQ gets `hdrType` / `mediaVui` / `mediaSei` written in first (`play-feed/src/vp9_hdr.rs`), because a VP9 bitstream cannot carry the transfer function, so the pipeline's own envelope says `"hdrType":"none"` and the panel stays SDR (device-measured on the dev set, whose ACB path is the only one that sends the envelope: the TV's `picture.dynamicRange` flips to HDR with the rewrite and stays SDR with `/tmp/multiplex-novp9hdr`; webOS 5+ has no ACB, so nothing is sent there and its VP9 HDR behaviour is unknown). The envelope is otherwise untouched, and an envelope that already names an HDR type is never overridden. Audio is owned by the pipeline — **never feed
   ACB an audio SINK or elementary stream**. That half is real and unchanged. Its long-stated
   consequence is not: `SOUND_ERROR_019` is a literal that exists in **no library on this
   television** (swept across ~70 harvested libraries including 92 MB of Chromium), and the clause
@@ -486,7 +486,7 @@ something.
   DTS, MP3, Vorbis and TrueHD are the lossy entries of `devcaps::APP_DECODED`, enabled **per row**: `Caps::app_lossy` (`AppLossy`) is `Off` in the assumed
   fallback, `Measured` in a table that was read (the rows whose `AppDecoded::measured` carries TV evidence: DTS only, the
   U5 core decode at 13.1% of one of four cores with 60 fps held; MP3, Vorbis and TrueHD are unmeasured, so not offered) and
-  `All` under the DEBUG trigger `/tmp/plxnative-appdecodelossy` (read once at boot by `devcaps::probe`), which is also how an
+  `All` under the DEBUG trigger `/tmp/multiplex-appdecodelossy` (read once at boot by `devcaps::probe`), which is also how an
   unmeasured row is measured. A row is DECODED IN THE APP only where it is in force
   (`Caps::app_decodes_lossy_track`, the one answer): the trigger puts every lossy row in force (even where the set has the
   decoder); otherwise Force Direct Play has no native path for the track on a set without a DTS row (webOS 10+, or a refusal
@@ -687,11 +687,11 @@ something.
   (`Session::with_native_audio_refusal`). The static rows are keyed on the codename and are not
   forgotten.
   Debug switches (debug builds, files under `/tmp/<app id>/`, read at app start):
-  `plxnative-nativeaudiowide` ignores the last two layers; with `plxnative-nativeaudiolearn` beside it
+  `multiplex-nativeaudiowide` ignores the last two layers; with `multiplex-nativeaudiolearn` beside it
   the exclusions stay ignored but refusals are learned and applied (the demo: a stall, a learned row,
-  an automatic server-converted replay); `plxnative-nativeaudioforget` applies no stored row this run
+  an automatic server-converted replay); `multiplex-nativeaudioforget` applies no stored row this run
   (a row recorded during the run is stored but does not apply either, until the next launch; the
-  request in flight still converts). `plxnative-refuse601` publishes the
+  request in flight still converts). `multiplex-refuse601` publishes the
   firmware's `type=18 num=601` through `sf_on_event` once per play request, after the Load returned and
   before a picture (`pump.rs`'s `inject_refuse601`; the file is read only inside that open window, once
   the request is not yet refused), so a DTS item on the mock server reproduces #695 on the TV: the
@@ -812,7 +812,7 @@ something.
 
   The label `adecsink` exists so a tester's log names the stack and `pcmavoffset` can measure it.
   `Unknown` is before `probe` (hosts, hostsim, tests). The `tools/fwcompat.py` inventories
-  (`~/.cache/plxnative/fwsym/data`) are per-library symbol tables: they carry `liblxa.so.2.0.0` on 7.4, 8.3
+  (`~/.cache/multiplex/fwsym/data`) are per-library symbol tables: they carry `liblxa.so.2.0.0` on 7.4, 8.3
   and 9.2 and hold no GStreamer plugin (`/usr/lib/gstreamer-1.0/*.so`), which is why the stack is
   fingerprinted from the plugin files and the firmware images are the evidence. One webOS version spans several stacks (the 2022/23 OLEDs are `liblxa` up to webOS 9
   and `lgaudiosink` on 11), so the firmware version cannot decide it.
@@ -923,7 +923,7 @@ something.
   differs from the filmed one; another sample rate, chip or firmware. Also unfilmed: a seek, and the speed
   path (it takes the same lead from the same code).
 - **Seeks are in-place**, in one of three per-session modes (`plx_playback_contract::feed::SeekMode`, chosen by
-  `plx_play_feed::seek::select_seek_mode_for_load` at every Load, the `/tmp/plxnative-seekmode` dev trigger
+  `plx_play_feed::seek::select_seek_mode_for_load` at every Load, the `/tmp/multiplex-seekmode` dev trigger
   `native|segment|reload` wins): the demuxer is `av_seek_frame`d to the target, then on the first
   post-seek keyframe `feed_stream` re-anchors the pipeline — no reload/decoder re-init.
   `Segment` (webOS 4.x) is Kodi-style: pump `flush()`, then `setTimeToDecode` + `sendSegmentEvent`
@@ -1058,6 +1058,6 @@ attempt ownership, control correlation, source handoff and release ordering. The
 a frame through the television's Starfish/ACB pipeline or prove URI picture presentation and
 reusable release on firmware. The host is Darwin while the TV is Linux, which is why
 `tools/sockprobe.c` exists. For device playback behavior, deploy and read
-`/tmp/plxnative-events.log` (feed stats, bind steps, seek/rebase, `RECEIVE_GOOD_VIDEO`). The
+`/tmp/multiplex-events.log` (feed stats, bind steps, seek/rebase, `RECEIVE_GOOD_VIDEO`). The
 `tests/` harness drives real playback per case — see the root `docs/agent-reference.md` testing
 section (run as GUEST by default; never run two harness jobs at once).

@@ -279,7 +279,7 @@ fn with_immersive(p: &str, audio: &str, atmos: bool) -> String {
 ///   the same public configd key independently and route policy requires an exact `true` before
 ///   this function can receive `Declare`.
 ///
-/// The anchor is `"provider":"plxnative"` — the last key of `contents` and, by the test below,
+/// The anchor is `"provider":"multiplex"` — the last key of `contents` and, by the test below,
 /// present exactly once in `PAYLOAD_AV`. A `replace` that finds nothing is a silent no-node, which
 /// is why the miss is logged rather than assumed away.
 #[cfg(test)]
@@ -974,10 +974,10 @@ mod payload_tests {
     /// `replace` would splice two nodes into one payload.
     #[test]
     fn the_av_payload_carries_exactly_one_dolby_hdr_info_anchor() {
-        assert_eq!(PAYLOAD_AV.matches(r#""provider":"plxnative""#).count(), 1);
+        assert_eq!(PAYLOAD_AV.matches(r#""provider":"multiplex""#).count(), 1);
         // and it really is the last key of `contents` — the next character after it closes the
         // object, so appending a key there stays INSIDE `contents`
-        assert!(PAYLOAD_AV.contains(r#""provider":"plxnative"},"streamQualityInfo""#));
+        assert!(PAYLOAD_AV.contains(r#""provider":"multiplex"},"streamQualityInfo""#));
     }
 
     /// **What we actually send for a Profile 5 direct play.** The three fields at the path the
@@ -990,7 +990,7 @@ mod payload_tests {
         let base = PAYLOAD_AV.replace(r#""video":"H264""#, r#""video":"H265""#);
         let out = with_dolby_hdr_info(&base, "H265", p5().presentation(true, plx_platform::devcaps::dv::DvCapability::Supported, true));
         assert!(
-            out.contains(r#""provider":"plxnative","DolbyHdrInfo":{"trackType":"single","encryptionType":"clear","profileId":5}}"#),
+            out.contains(r#""provider":"multiplex","DolbyHdrInfo":{"trackType":"single","encryptionType":"clear","profileId":5}}"#),
             "{out}"
         );
         // the trailing `}` above is `contents` closing: the node is the last key INSIDE it, not a
@@ -1015,7 +1015,7 @@ mod payload_tests {
     /// a file with no Dolby Vision, a Dolby Vision file we refuse (a dual layer without a
     /// cross-compatible base layer — declaring a layer we cannot feed is worse than refusing it),
     /// and the disarmed trigger, which is what a `RELEASE=1` build compiles in and what every boot
-    /// without `/tmp/plxnative-dv` does today.
+    /// without `/tmp/multiplex-dv` does today.
     #[test]
     fn nothing_is_spliced_unless_the_stream_is_declared() {
         let unconvertible_p7 = Dovi {
@@ -1064,7 +1064,7 @@ mod payload_tests {
     fn an_atmos_track_splices_immersive_into_contents() {
         let out = with_immersive(PAYLOAD_AV, "AC3 PLUS", true);
         assert!(
-            out.contains(r#""provider":"plxnative","immersive":"ATMOS"}"#),
+            out.contains(r#""provider":"multiplex","immersive":"ATMOS"}"#),
             "{out}"
         );
         // the trailing `}` is `contents` closing — the node is INSIDE it, not a sibling of
@@ -1114,7 +1114,7 @@ mod payload_tests {
         );
         assert!(
             out.contains(
-                r#""provider":"plxnative","immersive":"ATMOS","DolbyHdrInfo":{"trackType":"single","encryptionType":"clear","profileId":5}}"#
+                r#""provider":"multiplex","immersive":"ATMOS","DolbyHdrInfo":{"trackType":"single","encryptionType":"clear","profileId":5}}"#
             ),
             "{out}"
         );
@@ -1335,7 +1335,7 @@ mod prime_livelock_tests {
     fn a_segment_that_lands_whole_still_starts_the_picture() {
         let _serial = plx_base::testlock::serial();
         // Arm the host clock sink so `sf_feed` accepts AUs. See `ffi_host::FORCE_ENABLED` for why
-        // this is an explicit override and not the `plxnative-clocksink` trigger file. RESTORED on
+        // this is an explicit override and not the `multiplex-clocksink` trigger file. RESTORED on
         // the way out, panic or not: it is a process-global, and leaving it armed would silently
         // change what every later test's `sf_feed` returns.
         struct DisarmSink;
@@ -2080,7 +2080,7 @@ mod lifecycle_clock_tests {
     }
 }
 
-/// **LG App Self Checklist #46 — replay after completion.** A `plxnative-playurl` stream that
+/// **LG App Self Checklist #46 — replay after completion.** A `multiplex-playurl` stream that
 /// reaches EOS is started AGAIN, and that second start does not travel the UI's asynchronous
 /// request path: `app.rs` re-arms `auto_tried`, the fixture entry calls `start_playback`, and
 /// `start_bufferfeed_tracked` asks the reducer for a start owner directly. So the phase a
@@ -3946,7 +3946,7 @@ mod pcm_info_tests {
     use super::*;
     use crate::route::PcmFormat;
 
-    const BASE: &str = r#"{"contents":{"codec":{"audio":"PCM"},"provider":"plxnative"}}"#;
+    const BASE: &str = r#"{"contents":{"codec":{"audio":"PCM"},"provider":"multiplex"}}"#;
 
     #[test]
     fn a_pcm_load_states_the_shape_the_decoder_produces() {
@@ -5826,7 +5826,7 @@ mod pcm_sink_lead_tests {
     }
 }
 
-/// A start whose source no route plan resolved: the dev triggers (`plxnative-playurl`, `-url`, the
+/// A start whose source no route plan resolved: the dev triggers (`multiplex-playurl`, `-url`, the
 /// local samples) name the stream themselves inside `feed_open::resolve_source`, so no `apply_plan`
 /// ever qualified a Feed recipe for it, while `start_bufferfeed_inner` refuses a Start without one
 /// ("no qualified feed offer for this resolved route"). These tests drive the production start the

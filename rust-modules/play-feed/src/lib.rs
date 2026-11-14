@@ -120,13 +120,13 @@ pub use send_ptr::SendPtr;
 // anchor and the payload to drift apart. For the shipped app the composed bytes and the key order
 // are identical to what every release so far sent — asserted in the tests below, because the
 // webOS 5+ splice path is one this project's 4.5 dev set cannot exercise.
-pub const PAYLOAD_V: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","option":{"appId":"@APPID@","externalStreamingInfo":{"contents":{"codec":{"video":"H264"},"esInfo":{"pauseAtDecodeTime":false,"ptsToDecode":0,"seperatedPTS":true},"format":"RAW","provider":"plxnative"},"streamQualityInfo":true,"streamQualityInfoNonFlushable":true,"audioSync":true,"restartStreaming":false,"bufferingCtrInfo":{"bufferMaxLevel":0,"bufferMinLevel":0,"preBufferByte":0,"qBufferLevelAudio":0,"qBufferLevelVideo":0,"srcBufferLevelAudio":{"minimum":1,"maximum":32768},"srcBufferLevelVideo":{"minimum":1,"maximum":8388608}}},"needAudio":false,"queryPosition":false,"lowDelayMode":true,"transmission":{"contentsType":"LIVE"},"adaptiveStreaming":{"audioOnly":false,"maxWidth":1920,"maxHeight":1080,"maxFrameRate":30}}}]}"#;
+pub const PAYLOAD_V: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","option":{"appId":"@APPID@","externalStreamingInfo":{"contents":{"codec":{"video":"H264"},"esInfo":{"pauseAtDecodeTime":false,"ptsToDecode":0,"seperatedPTS":true},"format":"RAW","provider":"multiplex"},"streamQualityInfo":true,"streamQualityInfoNonFlushable":true,"audioSync":true,"restartStreaming":false,"bufferingCtrInfo":{"bufferMaxLevel":0,"bufferMinLevel":0,"preBufferByte":0,"qBufferLevelAudio":0,"qBufferLevelVideo":0,"srcBufferLevelAudio":{"minimum":1,"maximum":32768},"srcBufferLevelVideo":{"minimum":1,"maximum":8388608}}},"needAudio":false,"queryPosition":false,"lowDelayMode":true,"transmission":{"contentsType":"LIVE"},"adaptiveStreaming":{"audioOnly":false,"maxWidth":1920,"maxHeight":1080,"maxFrameRate":30}}}]}"#;
 // NB: pauseAtDecodeTime stays FALSE here. Kodi uses true, but only alongside its decode-time
 // trigger machinery (setTimeToDecode); with true and no trigger the decoder never starts
 // (verified on-device: Load+Play OK but zero frames decoded). The feed-ahead throttle
 // (MAX_FEED_AHEAD_NS in feed_stream) is the anti-stall mechanism; the other Kodi payload
 // flags are being re-introduced one at a time.
-pub const PAYLOAD_AV: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","option":{"appId":"@APPID@","externalStreamingInfo":{"contents":{"codec":{"video":"H264","audio":"AC3"},"esInfo":{"pauseAtDecodeTime":false,"ptsToDecode":0,"seperatedPTS":true},"format":"RAW","provider":"plxnative"},"streamQualityInfo":true,"streamQualityInfoNonFlushable":true,"audioSync":true,"restartStreaming":false,"bufferingCtrInfo":{"bufferMaxLevel":0,"bufferMinLevel":0,"preBufferByte":0,"qBufferLevelAudio":0,"qBufferLevelVideo":0,"srcBufferLevelAudio":{"minimum":1,"maximum":1048576},"srcBufferLevelVideo":{"minimum":1,"maximum":8388608}}},"needAudio":true,"queryPosition":false,"lowDelayMode":false,"transmission":{"contentsType":"LIVE"},"adaptiveStreaming":{"audioOnly":false,"maxWidth":1920,"maxHeight":1080,"maxFrameRate":30}}}]}"#;
+pub const PAYLOAD_AV: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","option":{"appId":"@APPID@","externalStreamingInfo":{"contents":{"codec":{"video":"H264","audio":"AC3"},"esInfo":{"pauseAtDecodeTime":false,"ptsToDecode":0,"seperatedPTS":true},"format":"RAW","provider":"multiplex"},"streamQualityInfo":true,"streamQualityInfoNonFlushable":true,"audioSync":true,"restartStreaming":false,"bufferingCtrInfo":{"bufferMaxLevel":0,"bufferMinLevel":0,"preBufferByte":0,"qBufferLevelAudio":0,"qBufferLevelVideo":0,"srcBufferLevelAudio":{"minimum":1,"maximum":1048576},"srcBufferLevelVideo":{"minimum":1,"maximum":8388608}}},"needAudio":true,"queryPosition":false,"lowDelayMode":false,"transmission":{"contentsType":"LIVE"},"adaptiveStreaming":{"audioOnly":false,"maxWidth":1920,"maxHeight":1080,"maxFrameRate":30}}}]}"#;
 // Phase 0 HEVC probe payload — identical to PAYLOAD_V but codec video "H265", to isolate
 // the single variable: does StarfishMediaAPIs BUFFERSTREAM decode HEVC on this panel?
 /// **`streamQualityInfoNonFlushable: true` is the presented-frame counter, and it is the only
@@ -139,7 +139,7 @@ pub const PAYLOAD_AV: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","o
 /// millisecond stamps ARE the presented cadence — the number the 5 Hz `vtick` and our GL `fps=`
 /// could never give. Whether this firmware's sink exposes the property is answered by the first
 /// run: libpf logs a pmlog error naming the property if it does not.
-pub const PAYLOAD_H265: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","option":{"appId":"@APPID@","externalStreamingInfo":{"contents":{"codec":{"video":"H265"},"esInfo":{"pauseAtDecodeTime":false,"ptsToDecode":0,"seperatedPTS":true},"format":"RAW","provider":"plxnative"},"streamQualityInfo":true,"streamQualityInfoNonFlushable":true,"audioSync":true,"restartStreaming":false,"bufferingCtrInfo":{"bufferMaxLevel":0,"bufferMinLevel":0,"preBufferByte":0,"qBufferLevelAudio":0,"qBufferLevelVideo":0,"srcBufferLevelAudio":{"minimum":1,"maximum":32768},"srcBufferLevelVideo":{"minimum":1,"maximum":8388608}}},"needAudio":false,"queryPosition":false,"lowDelayMode":true,"transmission":{"contentsType":"LIVE"},"adaptiveStreaming":{"audioOnly":false,"maxWidth":3840,"maxHeight":2160,"maxFrameRate":60}}}]}"#;
+pub const PAYLOAD_H265: &str = r#"{"args":[{"mediaTransportType":"BUFFERSTREAM","option":{"appId":"@APPID@","externalStreamingInfo":{"contents":{"codec":{"video":"H265"},"esInfo":{"pauseAtDecodeTime":false,"ptsToDecode":0,"seperatedPTS":true},"format":"RAW","provider":"multiplex"},"streamQualityInfo":true,"streamQualityInfoNonFlushable":true,"audioSync":true,"restartStreaming":false,"bufferingCtrInfo":{"bufferMaxLevel":0,"bufferMinLevel":0,"preBufferByte":0,"qBufferLevelAudio":0,"qBufferLevelVideo":0,"srcBufferLevelAudio":{"minimum":1,"maximum":32768},"srcBufferLevelVideo":{"minimum":1,"maximum":8388608}}},"needAudio":false,"queryPosition":false,"lowDelayMode":true,"transmission":{"contentsType":"LIVE"},"adaptiveStreaming":{"audioOnly":false,"maxWidth":3840,"maxHeight":2160,"maxFrameRate":60}}}]}"#;
 
 /// Build the streamed BUFFERSTREAM Load payload from PAYLOAD_AV, substituting the item's real
 /// video/audio codecs + a sink envelope. video = "H264"|"H265", audio = "AC3"|"AC3 PLUS"|"AAC"|"DTS"|"OPUS"|"PCM".
@@ -202,7 +202,7 @@ pub fn load_video_refused(lv: LoadVideo, caps: &plx_platform::devcaps::Caps) -> 
 /// `maxFrameRate`: **H.264 declares the stream's own rate class** (24/25/30/50/60, never below
 /// the stream beyond one 1 ms container-timebase tick per frame, so 30.303 declares 30, issue
 /// #665; 60 when the rate is unknown) — see the measurement inside; HEVC stays at 60, the
-/// value every Dolby Vision verification was taken under. `/tmp/plxnative-sinkmax=WxH@F`
+/// value every Dolby Vision verification was taken under. `/tmp/multiplex-sinkmax=WxH@F`
 /// overrides the whole result so the remaining legs are an A/B with no rebuild. Pure; the
 /// wrappers feed it the route.
 ///
@@ -226,7 +226,7 @@ pub fn sink_envelope(
     // On the dev set (webOS 4.10) a 4K H.264 24p direct play declared at 60 makes the pipeline
     // announce `frameRate:24` and then, about a second later, `frameRate:30` for the same stream
     // — a 24p picture on a 30 fps lattice, i.e. pulldown judder the viewer can see. Declared at
-    // 24 or at 30 it announces 24 once and holds it (2026-09-03, `plxnative-sinkmax` A/B, three
+    // 24 or at 30 it announces 24 once and holds it (2026-09-03, `multiplex-sinkmax` A/B, three
     // legs; 4K HEVC under 60 announces 24 and holds it, and 1080p H.264 under 60 does too, so
     // the rate is left at 60 for HEVC and for an unknown stream rate). **And the sink's own
     // displayed-frame counter (callback type 47, see the payload note above) put a number on
@@ -237,7 +237,7 @@ pub fn sink_envelope(
     // about 1% BELOW the fed rate. Suspected, NOT yet device-verified: the k6lp SoC's H.264
     // decoder is 4K@30-limited, so declaring 50 on a 30p 4K stream is refused with num=601;
     // `pipe_h264_uhd_30p_ms_timebase` and an owner retest on the 60UN7310 are the proof, with a
-    // second `/tmp/plxnative-nofps` leg to tell a rate-pair refusal from the 4K@30 limit.
+    // second `/tmp/multiplex-nofps` leg to tell a rate-pair refusal from the 4K@30 limit.
     if video == LoadVideo::H264 && stream_fps > 0.0 && stream_fps.is_finite() {
         env.fps = fps_class(stream_fps);
     }
@@ -385,7 +385,7 @@ pub fn opus_head(channels: i64) -> Option<Vec<u8>> {
 /// refuses the Load rather than declaring a layout the stream does not have.
 pub fn with_opus_info(p: &str, channels: i64) -> Option<String> {
     let head = opus_head(channels)?;
-    let anchor = r#""provider":"plxnative""#;
+    let anchor = r#""provider":"multiplex""#;
     p.contains(anchor).then(|| {
         p.replace(
             anchor,
@@ -415,7 +415,7 @@ pub fn with_pcm_info(p: &str, audio: &str, pcm: Option<PcmFormat>) -> String {
     let (Some(f), "PCM") = (pcm, audio) else {
         return p.to_string();
     };
-    let anchor = r#""provider":"plxnative""#;
+    let anchor = r#""provider":"multiplex""#;
     let format = if f.bits == 16 { "S16LE" } else { "S32LE" };
     let mode = if f.channels == 1 { "mono" } else { "stereo" };
     p.replace(
@@ -508,7 +508,7 @@ pub fn build_av_payload(
     // Real source frame rate (direct-play only; 0 on transcode → skip): give the pipeline the true
     // fps for A/V timing instead of the sink-envelope default, + adaptiveResolution so it adapts if
     // the coded dims change. libpf parses videoFpsValue/videoFpsScale/adaptiveResolution (verified).
-    // `/tmp/plxnative-nofps` withholds the pair, for one experiment: the Dolby Vision display
+    // `/tmp/multiplex-nofps` withholds the pair, for one experiment: the Dolby Vision display
     // -management lookup misses because the LUT ring is keyed ONE 90 kHz tick above what the
     // display firmware asks for (measured 2026-08-21 — 38 of 40 misses, written key == requested
     // + 1, with LG's own level-2 KADP logging armed mid-playback). Neither derivation is ours: the
@@ -553,7 +553,7 @@ pub fn with_immersive(p: &str, audio: &str, atmos: bool) -> (String, Option<Stri
             "atmos: immersive NOT sent — payload audio codec is {audio}, not AC3 PLUS"
         )));
     }
-    let anchor = r#""provider":"plxnative""#;
+    let anchor = r#""provider":"multiplex""#;
     if !p.contains(anchor) {
         return (p.to_string(), Some("atmos: payload has no provider anchor — immersive NOT spliced".into()));
     }
@@ -580,7 +580,7 @@ pub fn with_dolby_hdr_info(
             n.profile_id
         )));
     }
-    let anchor = r#""provider":"plxnative""#;
+    let anchor = r#""provider":"multiplex""#;
     if !p.contains(anchor) {
         return (p.to_string(), Some("dv: payload has no provider anchor — DolbyHdrInfo NOT spliced".into()));
     }

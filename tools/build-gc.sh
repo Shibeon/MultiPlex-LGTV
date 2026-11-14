@@ -185,16 +185,16 @@ usage: tools/build-gc.sh [MODE] [-n]
 
   (no mode)       report every checkout's derived trees, the shared cache and free space, then
                   the disk budget (tools/disk-budget.py report): each tree's PRIVATE bytes, the
-                  PlxNative cargo trees under /tmp, and what a reclaim WOULD take, in order.
+                  MultiPlex cargo trees under /tmp, and what a reclaim WOULD take, in order.
                   Read-only: it deletes nothing. `--evict` is the mode that acts on a plan
   --evict PLAN    delete what a PLAN names, and nothing else: PLAN is the file
                   `tools/disk-budget.py reclaim --to GIB --emit` prints (what to evict, in what
                   order, down to what free space). The one narrow deleting mode, and the one
                   `--auto` drives. Every line of the plan is
-                  UNTRUSTED: the path must still BE a derived PlxNative build tree (a checkout's
+                  UNTRUSTED: the path must still BE a derived MultiPlex build tree (a checkout's
                   `rust-modules/target*` or an `incremental` dir in one, a `target*` under
                   $PLX_FLEET_DIR, an interrupted delete's leftover under the build cache, or a
-                  PlxNative cargo tree under /tmp or $TMPDIR, found by the planner's own
+                  MultiPlex cargo tree under /tmp or $TMPDIR, found by the planner's own
                   discovery, never a registered worktree's); a tracked file, `pkg/`, `vendor/`,
                   another project's tree, a symlink, the cargo seed, a live FFmpeg cache entry,
                   the main checkout's whole `target` and any rung the ladder does not make from
@@ -320,12 +320,12 @@ usage: tools/build-gc.sh [MODE] [-n]
                   so the next tick does not reclaim again. A planner that fails or is missing
                   deletes nothing. What the five fixed stages it replaces did differently: the
                   main checkout's incremental cache and a lane's vendor build trees are no longer
-                  cleared by default, the cargo seed is never evicted, and PlxNative trees left
+                  cleared by default, the cargo seed is never evicted, and MultiPlex trees left
                   under /tmp are now in scope. Never the cargo seed, never a tracked file. Single-instance:
                   a mkdir lock (stale-safe, $PLX_GC_LOCK_DIR) means a second --auto exits 0 quietly
                   rather than racing the first. Logs one line per stage to $PLX_GC_LOG (default
-                  ~/Library/Logs/plxnative-build-gc.log on macOS,
-                  ${XDG_STATE_HOME:-~/.cache}/plxnative/build-gc.log elsewhere), truncated to its
+                  ~/Library/Logs/multiplex-build-gc.log on macOS,
+                  ${XDG_STATE_HOME:-~/.cache}/multiplex/build-gc.log elsewhere), truncated to its
                   last ~200 lines past ~1 MB. `--auto -n` previews every stage the current free
                   space would trigger and deletes nothing; it takes no lock. With the OPT-IN
                   cold store configured (tools/cold-store.py, docs/disk-budget.md "The cold store")
@@ -393,10 +393,10 @@ free_kib() {
 gc_log_path() {
   if [ -n "${PLX_GC_LOG-}" ]; then printf '%s' "$PLX_GC_LOG"; return 0; fi
   case "$(uname -s 2>/dev/null)" in
-    Darwin) printf '%s' "$HOME/Library/Logs/plxnative-build-gc.log" ;;
+    Darwin) printf '%s' "$HOME/Library/Logs/multiplex-build-gc.log" ;;
     *)
-      if [ -n "${XDG_STATE_HOME-}" ]; then printf '%s' "$XDG_STATE_HOME/plxnative/build-gc.log"
-      else printf '%s' "$HOME/.cache/plxnative/build-gc.log"; fi ;;
+      if [ -n "${XDG_STATE_HOME-}" ]; then printf '%s' "$XDG_STATE_HOME/multiplex/build-gc.log"
+      else printf '%s' "$HOME/.cache/multiplex/build-gc.log"; fi ;;
   esac
 }
 # One line per stage. Bounded rather than rotated: this is a diagnostic trail for a human to skim
@@ -624,7 +624,7 @@ run_park_mode() {
 # trees are no longer cleared by default (the former is the tree a human iterates in and waits for
 # the last rung; the latter are not derived from cargo and are `--lanes`/`--all` only), the cargo seed
 # is never evicted (its blocks are shared with the lanes cloned from it, so it frees almost nothing;
-# `--seed` remains for hand use), PlxNative trees left under /tmp are now in scope, and the stop
+# `--seed` remains for hand use), MultiPlex trees left under /tmp are now in scope, and the stop
 # line is the threshold plus the hysteresis rather than the threshold itself.
 run_auto_mode() {
   if [ -z "$DRY" ]; then
@@ -811,7 +811,7 @@ external_incremental_trees() {
 # hash, a source edit only touches the files under the CURRENT hash, and a hash nothing builds
 # anymore — yesterday's feature set, a reverted flag — keeps its binary and every `*.rcgu.o`
 # codegen-unit object beside it forever. Measured 2026-09-28 in the main checkout:
-# `rust-modules/target/debug/deps` held 6416 `plxnative_modules-*` files across 6 live-SIZED
+# `rust-modules/target/debug/deps` held 6416 `multiplex_modules-*` files across 6 live-SIZED
 # hashes (~100 MB binary + objects each), all last written 2026-09-17 — 5.5 GB nothing had built
 # from in eleven days.
 #
@@ -971,7 +971,7 @@ run_stale_sweep_dir() {
 # test would classify it from a coincidence. Deleting a tree BECAUSE the environment names it would
 # be exactly the "preserve unrelated generated artifacts" rule this repository states outright. The
 # destructive scope is therefore $FLEET_DIR, whose layout this script defines, plus (for `--evict`
-# only) the planner's own /tmp discovery: a cargo tree under /tmp or $TMPDIR that carries a PlxNative
+# only) the planner's own /tmp discovery: a cargo tree under /tmp or $TMPDIR that carries a MultiPlex
 # marker and has sat idle past the plan's window. An exported tree that happens to be one of those is
 # found by that rule, never by the export; anything else is shown so you can decide for yourself.
 env_trees_report_only() {
@@ -1052,7 +1052,7 @@ owner_is_alive() {   # $1 = lock directory
 # FFmpeg lock is about the SHARED cache, which belongs to no checkout at all — there is no finer
 # answer to give, so this half stays all-or-nothing exactly as it was.
 ffmpeg_lock_held() {
-  c=${PLX_BUILD_CACHE-$HOME/.cache/plxnative}
+  c=${PLX_BUILD_CACHE-$HOME/.cache/multiplex}
   if [ -n "$c" ]; then
     for l in "$c"/ffmpeg/*.lock; do
       case "$l" in *'*'*) continue ;; esac
@@ -1353,11 +1353,12 @@ derived_output() {
   case "$1" in
     rust-modules/target*) ;;                                    # every feature set's cargo target dir
     vendor/ffmpeg-*|vendor/sentry-native-*|vendor/libass-*|vendor/downloads|vendor/nanosvg|vendor/vendor) ;;
-    pkg/plxnative|pkg/plxnative-storage|pkg/plxnative-stackwalk|pkg/plxnative.debug|pkg/threadprobe) ;;
+    pkg/multiplex|pkg/multiplex-storage|pkg/multiplex-stackwalk|pkg/multiplex.debug|pkg/threadprobe) ;;
     pkg/mali-irq-sample|pkg/sockprobe|pkg/logmprobe) ;;
     pkg/*.ipk|pkg/ipk.sha256|pkg/lib*-plx.so.*|pkg/libass-plx-host.so.0*|pkg/libass-plx.0.dylib.*.new) ;;
     pkg/*.dylib|pkg/symbols|pkg/.ffabi-ok|pkg/.ffabi-host-ok|pkg/.build-config|pkg/.config-local-stamp) ;;
-    pkg/.flavor|pkg/PlxNative.app|pkg/PlxNative-*|pkg/*.link.*|pkg/link-evidence) ;;
+    pkg/.flavor|pkg/MultiPlex.app|pkg/MultiPlex-*|pkg/*.link.*|pkg/link-evidence) ;;
+    pkg/plxnative|pkg/plxnative-storage|pkg/plxnative-stackwalk|pkg/plxnative.debug|pkg/PlxNative.app|pkg/PlxNative-*) ;;  # the same, built before the plxnative -> multiplex rename
     ipkroot/*.tar.gz|ipkroot/debian-binary|ipkroot/data/usr|stub/*.so|*.o) ;;
     tools/node_modules|__pycache__|*/__pycache__|*.pyc|.DS_Store|*/.DS_Store) ;;
     fuzz/Cargo.lock|fuzz/.lock-base|fuzz/seeds|fuzz/corpus|fuzz/coverage) ;;   # `make fuzz-hud`: a copied lock, generated seeds, a corpus that regrows. NOT fuzz/artifacts: a crash input is a finding
@@ -1409,9 +1410,9 @@ BASE_REF=$(resolve_base_ref)
 #
 #   1. WHAT IT IS. The path is resolved physically and must BE one of: a registered checkout's
 #      `rust-modules/target*` (or an `incremental` dir inside one), a `target*` under $PLX_FLEET_DIR,
-#      an interrupted delete's leftover under the build cache, or a PlxNative cargo tree found by the
+#      an interrupted delete's leftover under the build cache, or a MultiPlex cargo tree found by the
 #      planner's own `/tmp` discovery (`disk-budget.py tmp-trees`: one scanner, not two). Anything
-#      else (a tracked file, `pkg/`, `vendor/`, a non-PlxNative tree, a symlink, a path nowhere near
+#      else (a tracked file, `pkg/`, `vendor/`, a non-MultiPlex tree, a symlink, a path nowhere near
 #      a checkout, a live FFmpeg cache entry, the cargo seed) is REFUSED, loudly, and the run exits 1.
 #      `target_roots`, not `lane_trees`: the latter includes the vendor build trees.
 #   2. WHAT RUNG IT MAY BE. (class, rung, scope) must be an eviction the ladder can make: the main
@@ -1517,7 +1518,7 @@ ev_classify() {
       done
     fi
   fi
-  _cache=${PLX_BUILD_CACHE-$HOME/.cache/plxnative}
+  _cache=${PLX_BUILD_CACHE-$HOME/.cache/multiplex}
   if [ -n "$_cache" ] && [ -d "$_cache" ]; then
     _cp=$(ev_phys "$_cache") || _cp=
     case "$_real" in
@@ -1614,7 +1615,7 @@ ev_line() {
   if [ ! -d "$_path" ]; then ev_refuse "$_path" "not a directory"; return 0; fi
   _real=$(ev_phys "$_path") || { ev_refuse "$_path" "cannot be resolved"; return 0; }
   if ! ev_classify "$_real"; then
-    ev_refuse "$_path" "not a derived PlxNative build tree: not under a checkout's rust-modules/target*, the fleet dir, the cache's leftovers or a /tmp cargo tree of ours"
+    ev_refuse "$_path" "not a derived MultiPlex build tree: not under a checkout's rust-modules/target*, the fleet dir, the cache's leftovers or a /tmp cargo tree of ours"
     return 0
   fi
   case "$_scope" in
@@ -1852,13 +1853,13 @@ report)
   envx=$(env_trees_report_only | sort -u)
   if [ -n "$envx" ]; then
     echo
-    echo "exported CARGO_TARGET_DIR / SIM_TDIR (listed, not targeted: only a PlxNative cargo tree under /tmp or \$TMPDIR that --evict finds idle is ever deleted):"
+    echo "exported CARGO_TARGET_DIR / SIM_TDIR (listed, not targeted: only a MultiPlex cargo tree under /tmp or \$TMPDIR that --evict finds idle is ever deleted):"
     printf '%s\n' "$envx" | while IFS= read -r d; do
       printf '  %8s  %s\n' "$(fmt_kb "$(du -sk "$d" 2>/dev/null | awk '{print $1}')")" "$d"
     done
   fi
 
-  cache=${PLX_BUILD_CACHE-$HOME/.cache/plxnative}
+  cache=${PLX_BUILD_CACHE-$HOME/.cache/multiplex}
   echo
   if [ -n "$cache" ] && [ -d "$cache" ]; then
     printf 'shared build cache  %8s  %s (FFmpeg: one copy per configuration, for every checkout)\n' \
@@ -1875,14 +1876,14 @@ report)
   # Is the hourly agent (`make disk-watch`, tools/install-disk-watch.sh) loaded? Not loaded, nothing reclaims
   # space between builds, and nothing says so: one such Mac sat 19 GiB short for ~19 hours. macOS only.
   if [ "$(uname -s 2>/dev/null)" = Darwin ] && command -v launchctl >/dev/null 2>&1; then
-    if launchctl list com.plxnative.build-gc >/dev/null 2>&1; then
-      echo "hourly agent        com.plxnative.build-gc is loaded (runs tools/build-gc.sh --auto hourly)"
+    if launchctl list com.multiplex.build-gc >/dev/null 2>&1; then
+      echo "hourly agent        com.multiplex.build-gc is loaded (runs tools/build-gc.sh --auto hourly)"
     else
-      echo "hourly agent        com.plxnative.build-gc is NOT loaded: nothing reclaims disk between builds; 'make disk-watch' loads it"
+      echo "hourly agent        com.multiplex.build-gc is NOT loaded: nothing reclaims disk between builds; 'make disk-watch' loads it"
     fi
   fi
   # The disk budget's verdicts (tools/disk-budget.py, docs/disk-budget.md): the private bytes each
-  # tree would really free (`du` above counts APFS clones in full), the PlxNative cargo trees under
+  # tree would really free (`du` above counts APFS clones in full), the MultiPlex cargo trees under
   # /tmp that nothing above can see, and the order a reclaim WOULD take them in. Read-only. It is
   # run, not sourced, and a failure of it must not end the report: this script is `set -eu`, and
   # the table above is complete without it. The existence test is for the synthetic repositories
@@ -1965,7 +1966,7 @@ prune_lock() {
   return 1
 }
 stale_cache_trees() {
-  c=${PLX_BUILD_CACHE-$HOME/.cache/plxnative}
+  c=${PLX_BUILD_CACHE-$HOME/.cache/multiplex}
   [ -n "$c" ] && [ -d "$c/ffmpeg" ] || return 0
   # A threshold that is not a number selects nothing, as `find -mtime +abc` (an error, silenced below) did;
   # `$((abc * 1440))` would read it as 0 and select every key.

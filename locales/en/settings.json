@@ -1326,10 +1326,6 @@
     "value": "This file was copied to the TV and has not been reviewed. It changes how the playback controls look.",
     "description": "Settings > Playback > Player HUD: the body of the install question."
   },
-  "settings.hud.remove": {
-    "value": "Remove",
-    "description": "Settings > Playback > Player HUD: the action word on an installed package's removal row."
-  },
   "settings.hud.address": {
     "value": "Install from address",
     "description": "Settings > Playback > Player HUD: Row that asks for an address to install a HUD package from. A row title."
@@ -1437,105 +1433,6 @@
     "value": "Saving",
     "description": "Local playback diagnostics save in progress."
   },
-  "settings.hud.browse": {
-    "value": "Browse HUDs",
-    "description": "Player HUD gallery: browse"
-  },
-  "settings.hud.gallery": {
-    "value": "HUD gallery",
-    "description": "Player HUD gallery: gallery"
-  },
-  "settings.hud.gallery_copy": {
-    "value": "Find a look for your playback controls.",
-    "description": "Player HUD gallery: gallery copy"
-  },
-  "settings.hud.preview": {
-    "value": "Preview",
-    "description": "Player HUD gallery: preview"
-  },
-  "settings.hud.use": {
-    "value": "Use HUD",
-    "description": "Player HUD gallery: use"
-  },
-  "settings.hud.about": {
-    "value": "About this HUD",
-    "description": "Player HUD gallery: about"
-  },
-  "settings.hud.loading": {
-    "value": "Loading HUDs…",
-    "description": "Player HUD gallery: loading"
-  },
-  "settings.hud.empty": {
-    "value": "No HUDs are available for this app and language.",
-    "description": "Player HUD gallery: empty"
-  },
-  "settings.hud.gallery_install_question": {
-    "value": "Install this HUD?",
-    "description": "Player HUD gallery: gallery install question"
-  },
-  "settings.hud.gallery_install_body": {
-    "value": "Your current HUD will stay selected.",
-    "description": "Player HUD gallery: gallery install body"
-  },
-  "settings.hud.revoked": {
-    "value": "This HUD was withdrawn.",
-    "description": "Player HUD gallery: revoked"
-  },
-  "settings.hud.update": {
-    "value": "Update",
-    "description": "Player HUD gallery: update"
-  },
-  "settings.hud.cached": {
-    "value": "Catalog checked: {date}",
-    "description": "Player HUD gallery: cached",
-    "args": {
-      "date": "str"
-    }
-  },
-  "settings.hud.author": {
-    "value": "Creator",
-    "description": "Player HUD gallery: author"
-  },
-  "settings.hud.version": {
-    "value": "Version",
-    "description": "Player HUD gallery: version"
-  },
-  "settings.hud.license": {
-    "value": "License",
-    "description": "Player HUD gallery: license"
-  },
-  "settings.hud.download": {
-    "value": "Download size",
-    "description": "Player HUD gallery: download"
-  },
-  "settings.hud.compact": {
-    "value": "Compact",
-    "description": "Player HUD gallery: compact"
-  },
-  "settings.hud.expanded": {
-    "value": "Chapters & info",
-    "description": "Player HUD gallery: expanded"
-  },
-  "settings.hud.up_next": {
-    "value": "Up Next",
-    "description": "Player HUD gallery: up next"
-  },
-  "settings.hud.unavailable": {
-    "value": "This HUD is no longer available in the catalog.",
-    "description": "A catalog refresh removed the package a detail view was showing. Its preview remains viewable; installation is disabled."
-  },
-  "settings.hud.unavailable_value": {
-    "value": "Unavailable",
-    "description": "Player HUD gallery: the value of a disabled Install row when the catalog no longer lists the package (its sentence is settings.hud.unavailable)."
-  },
-  "settings.hud.catalog_cached": {
-    "value": "Couldn't refresh HUDs. Showing the saved catalog.",
-    "description": "Gallery index-refresh failure; does not claim the device is disconnected and does not disable explicit package downloads."
-  },
-  "settings.hud.catalog_unavailable": {
-    "value": "Couldn't load HUDs. Try again later.",
-    "description": "Gallery index-refresh failure; does not claim the device is disconnected and does not disable explicit package downloads."
-  },
   "settings.hud.remove_named": {
     "value": "Remove {name}",
     "description": "Settings > Playback > Player HUD: the label of an installed package's removal row; {name} is the package's own name (draft copy).",
@@ -1544,10 +1441,6 @@
   "settings.hud.remove_detail": {
     "value": "Deletes this HUD from the television. If it was in use, the built-in HUD is used instead.",
     "description": "Settings > Playback > Player HUD: the sentence beside a removal row while it has focus (draft copy)."
-  },
-  "settings.hud.withdrawn_detail": {
-    "value": "The author withdrew this HUD, so it can't be used. Choose another HUD, or remove this one.",
-    "description": "Settings > Playback > Player HUD: beside a withdrawn HUD's row while it has focus: why it cannot be used and what to do."
   },
   "settings.hud.unfit_detail": {
     "value": "This HUD doesn't fit in {language}, so the built-in HUD is shown instead. Choose another HUD, or switch to a language it fits.",
@@ -1569,26 +1462,6 @@
   "settings.hud.file_detail": {
     "value": "This file can't be installed. Replace it in the HUD folder with a valid HUD package, or delete it.",
     "description": "Settings > Playback > Player HUD: beside a file in the HUD folder that cannot be installed while its row has focus."
-  },
-  "settings.hud.preview_detail": {
-    "value": "See how this HUD looks while you watch.",
-    "description": "Player HUD gallery: the sentence beside the Preview row while it has focus."
-  },
-  "settings.hud.use_detail": {
-    "value": "Use this HUD for the playback controls.",
-    "description": "Player HUD gallery: the sentence beside the Use HUD row while it has focus."
-  },
-  "settings.hud.install_detail": {
-    "value": "Download this HUD to the television. Your current HUD stays selected.",
-    "description": "Player HUD gallery: the sentence beside the Install row while it has focus."
-  },
-  "settings.hud.update_detail": {
-    "value": "Download the newer version of this HUD. It replaces the one installed.",
-    "description": "Player HUD gallery: the sentence beside the Update row while it has focus."
-  },
-  "settings.hud.about_detail": {
-    "value": "Who made this HUD, its version, license and download size.",
-    "description": "Player HUD gallery: the sentence beside the About this HUD row while it has focus."
   },
   "settings.playback.intro_skip": {
     "value": "Skip intros",

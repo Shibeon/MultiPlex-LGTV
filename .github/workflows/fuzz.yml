@@ -63,7 +63,7 @@ on:
         type: string
         default: '300'
       target:
-        description: 'One target (admit, bundle_read, archive_read, svg_check, address_parse, catalog_parse, catalog_verify, catalog_cache, ws_frame); empty runs all'
+        description: 'One target (admit, bundle_read, archive_read, svg_check, address_parse, ws_frame); empty runs all'
         type: string
         default: ''
 

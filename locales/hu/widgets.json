@@ -112,7 +112,7 @@
     "one": "{heading} · {count} SÁV",
     "other": "{heading} · {count} SÁV"
   },
-  "widgets.reason.jail_help": "A javításhoz rootolt TV és Homebrew Channel-hozzáférés kell. Súgó: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem",
+  "widgets.reason.jail_help": "A javításhoz rootolt TV és Homebrew Channel-hozzáférés kell.",
   "widgets.tracks.empty": "Nincsenek sávok",
   "widgets.tracks.bytes": {
     "one": "{count} bájt",

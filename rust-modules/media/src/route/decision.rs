@@ -1412,7 +1412,7 @@ impl PlaybackSession {
     }
 
     /// A source the app was handed directly, with no Plex item and no plan behind it: the
-    /// `plxnative-playurl` and `-url` dev triggers and the local samples, which the player resolves
+    /// `multiplex-playurl` and `-url` dev triggers and the local samples, which the player resolves
     /// itself when the route holds no source. No `apply_plan` ever qualified a recipe for it, and
     /// the start door refuses a Start without one.
     ///
@@ -3875,7 +3875,7 @@ pub(super) fn end_flight(serial: u64) {
 /// began cannot publish into the route it is destroying — so leaving it latched afterwards
 /// describes a teardown which never finishes.
 ///
-/// It cost LG App Self Checklist #46: a replayed `plxnative-playurl` stream asks
+/// It cost LG App Self Checklist #46: a replayed `multiplex-playurl` stream asks
 /// [`begin_route_start`] for an owner directly (no [`begin_playback_request`] resolve in front of
 /// it, because there is no library item behind the fixture), and a latched `Stopping` refused it —
 /// `start_bufferfeed: route reducer refused a start owner`, one Load where the case needs two.
@@ -7839,7 +7839,7 @@ pub fn sink_max_raster(ps: &PlaybackSession) -> (u16, u16) {
 }
 
 /// The SOURCE raster for a stream the app did not select — the pipeline tier's
-/// `plxnative-playurl` carries it as `source_raster`, the same field its Auto fixtures already
+/// `multiplex-playurl` carries it as `source_raster`, the same field its Auto fixtures already
 /// used to size the actuator catalog. One fact, one field: [`sink_max_raster`] reads it from the
 /// same place a PMS-chosen item's dimensions land, so the synthetic tier declares exactly what the
 /// production route would for a file of that size.
@@ -7851,7 +7851,7 @@ pub fn set_stream_source_raster(ps: &mut PlaybackSession, w: u16, h: u16) {
 }
 
 /// The whole Load-payload DECLARATION for a stream the app did not SELECT — the pipeline test
-/// tier's `/tmp/plxnative-playurl` (`plx_playback_contract::playurl::PlayUrl`), whose entire point is that no PMS
+/// tier's `/tmp/multiplex-playurl` (`plx_playback_contract::playurl::PlayUrl`), whose entire point is that no PMS
 /// chose anything and so `apply_plan` never runs.
 ///
 /// ONE write for the same reason [`set_server_output_declaration`] is one write and [`apply_plan`]
@@ -12189,7 +12189,7 @@ pub(super) fn commit_retranscode(
         .unwrap_or_default();
     // NEVER log the URL. `transcode_start_url` ends in `X-Plex-Token=…`, and this line is reached
     // by an ordinary audio-track switch — so the app's own support channel ("send us
-    // /tmp/plxnative-events.log") was asking users to paste a live PMS credential into a public
+    // /tmp/multiplex-events.log") was asking users to paste a live PMS credential into a public
     // issue thread. The rk, the track ids and the offset are the whole diagnostic value here; the
     // URL added nothing that is not derivable from them.
     crate::player::log(&format!(
@@ -12250,7 +12250,7 @@ fn prepare_retranscode_inputs(
     }
     let logical = sess(ps);
     let namespace = if logical.is_empty() {
-        format!("plxnative-{rk}")
+        format!("multiplex-{rk}")
     } else {
         logical
     };
@@ -12548,7 +12548,7 @@ pub fn subtitles_burned(ps: &PlaybackSession) -> bool {
     let side_reader_override = ps.cur_sub_sid == 0 && crate::player::route_fx::side_reader_active(ps);
     is_transcoding(ps)
         && subtitle_presenter(ps) != SubtitlePresenter::ClientOverRemux
-        // Dev trigger `plxnative-subside` only: the reader draws an embedded track over a plain
+        // Dev trigger `multiplex-subside` only: the reader draws an embedded track over a plain
         // remux while the route has NO subtitle selected (so the presenter says `None`, not
         // `ClientOverRemux`). A selected subtitle is the presenter's alone to answer, so a refused
         // or failed reader (`ServerBurn`) is never silenced by a reader that is still shutting down.

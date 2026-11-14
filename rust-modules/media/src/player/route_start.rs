@@ -71,7 +71,7 @@ pub fn start_bufferfeed_tracked(ps: &mut crate::route::PlaybackSession, pa: &mut
     if !pa.is_live() {
         pa.feed_command(plx_playback_contract::feed::FeedCommand::BeginPlayback);
     }
-    // A URI-mode probe session (dev trigger `plxnative-uriprobe`) holds the route-start attempt and
+    // A URI-mode probe session (dev trigger `multiplex-uriprobe`) holds the route-start attempt and
     // the exported window without an Engine in the slot. Active double-start stays a no-op;
     // closing or quarantined ownership refuses a new start until actual release.
     #[cfg(feature = "devtriggers")]
@@ -413,7 +413,7 @@ fn start_bufferfeed_prepared(
     let sample = resolved.sample;
     let is_h265 = resolved.is_h265;
     let stream = sample.is_none();
-    // dev: /tmp/plxnative-uriprobe — play this URL through `com.webos.media` (URI mode) instead of
+    // dev: /tmp/multiplex-uriprobe — play this URL through `com.webos.media` (URI mode) instead of
     // building an Engine, to learn what webOS 5+ does with it (issue #1064). Taken AFTER the route
     // is prepared and BEFORE anything native is touched (the clock and session guards, the exported
     // window, the payload), and never for a preview or a local sample: the probe needs a real stream
@@ -1375,7 +1375,7 @@ pub(super) fn teardown(ps: &mut crate::route::PlaybackSession, pa: &mut PlayerAd
 
 /// Settle queued and engine-less playback ownership before a physical stop.
 pub(super) fn begin_teardown(ps: &mut crate::route::PlaybackSession, pa: &mut PlayerAdapter, for_reload: bool) -> bool {
-    // A URI-mode probe session (dev trigger `plxnative-uriprobe`) ends with the playback it stands
+    // A URI-mode probe session (dev trigger `multiplex-uriprobe`) ends with the playback it stands
     // in for, whatever ended it (Back, an app switch, the next Play): its machine settles a start
     // still pending and requests unload/close; the adapter retains its window until release. It owns no Engine, so the
     // Engine-less ritual below then finishes the stop (the transcode session, the route) as it does

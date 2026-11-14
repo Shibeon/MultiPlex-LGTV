@@ -134,12 +134,12 @@ pub(crate) unsafe fn run(app: &mut App) {
         // The frame index the LANDING SCHEDULE stamps against (§3.3 step 3, `plx_machine::landgate`),
         // published at the TOP because a landing site is reachable from the dev scenarios below
         // as well as from `land_results` and the dispatcher's own frame. One relaxed atomic load
-        // unless `plxnative-rec` or `plxnative-recplay` is armed.
+        // unless `multiplex-rec` or `multiplex-recplay` is armed.
         app.rec.begin_frame(app.bridge.landgate());
         // No modal dim has been drawn yet this frame, on any route (the player and a bound preview never
         // reach `popover::host::begin_frame`, which used to be the only place this was cleared).
         plx_ui::popover::host::clear_dims();
-        // REPLAY (`plxnative-recplay`): this frame runs on the recorded tick — set BEFORE
+        // REPLAY (`multiplex-recplay`): this frame runs on the recorded tick — set BEFORE
         // ingest, whose key arms stamp `last_input` from the clock — and the frame's recorded
         // inputs are re-injected through the same synthesis the remote FIFO uses, so the poll
         // below consumes them exactly as it consumed the originals.
@@ -173,7 +173,7 @@ pub(crate) unsafe fn run(app: &mut App) {
         // it, so that stamp cannot disagree with the frame it belongs to. It used to come from
         // `player::vclock_ms()`, read at whatever depth of the call stack happened to need it.
         app.player.set_now(fr.now);
-        // dev: /tmp/plxnative-autoplay auto-presses OK once
+        // dev: /tmp/multiplex-autoplay auto-presses OK once
         //
         // **Never from the sign-in or the picker.** The auth flow hands its credentials to
         // the main thread through `take_ready`, which is polled only on those two routes; a
@@ -393,7 +393,7 @@ fn clock_and_press(app: &mut App, fr: &mut Frame) {
 /// **Make sure the player has a compiled HUD**, on each player frame in `prepare_window` (inside the frame
 /// iteration, before the draw): the app's layer is where the current locale is read
 /// (`plx_platform::i18n::current()`), and the compile gets it as an argument. The classic HUD compiles once, at
-/// boot ([`boot_hud`]). A dev package (`plxnative-hud=<path>`, read and compiled on that frame, so THAT frame pays the
+/// boot ([`boot_hud`]). A dev package (`multiplex-hud=<path>`, read and compiled on that frame, so THAT frame pays the
 /// compile) and a controlled run compile on their first player frame. A chosen package compiles in
 /// `Bridge::huds_tick`, in each frame's prepare window, when the resolved selection names a package not yet compiled
 /// for this language: the fit, the price and the load are one tick each (so one frame never carries two compiles), and
@@ -404,7 +404,7 @@ fn clock_and_press(app: &mut App, fr: &mut Frame) {
 fn refresh_hud(app: &mut App) {
     use plx_appkit::player_hud::loaded::{DevHud, DevStep};
     let cx = plx_platform::i18n::current();
-    // `plxnative-hud=<path>`: a package from a file replaces classic while it loads. Read once; a file that
+    // `multiplex-hud=<path>`: a package from a file replaces classic while it loads. Read once; a file that
     // does not load reports one line and leaves classic to draw.
     if matches!(app.dev_hud, DevHud::Unread) {
         app.dev_hud = crate::dev::scenarios::hud_trigger();
@@ -413,11 +413,11 @@ fn refresh_hud(app: &mut App) {
         match dev.refresh(plx_plex::plex::identity::version(), cx, app.bridge.measure()) {
             DevStep::Report(_line) => {
                 #[cfg(feature = "devtriggers")]
-                plx_base::eventlog::log(&format!("plxnative-hud: {_line}"));
+                plx_base::eventlog::log(&format!("multiplex-hud: {_line}"));
             }
             DevStep::Compiled => {
                 #[cfg(feature = "devtriggers")]
-                plx_base::eventlog::log(&format!("plxnative-hud: compiled for {}", cx.language().tag()));
+                plx_base::eventlog::log(&format!("multiplex-hud: compiled for {}", cx.language().tag()));
             }
             DevStep::Ready | DevStep::Quiet => {}
         }
@@ -574,7 +574,7 @@ unsafe fn prepare_window(app: &mut App, fr: &mut Frame) {
     // A third term goes FIRST and short-circuits the other two: a page capture still in flight on
     // the GPU (`gfx::SNAPSHOT_THIS_FRAME`'s doc). Presenting now would only wait a whole vsync for
     // a buffer; not asking `should_present` leaves its damage and motion for the frame that does.
-    // The simulator's settled capture (`PLXNATIVE_SHOT_SETTLE`): once nothing has changed for the
+    // The simulator's settled capture (`MULTIPLEX_SHOT_SETTLE`): once nothing has changed for the
     // asked-for quiet, invalidate so the NEXT present is the settled frame and `maybe_capture`
     // takes it. Before the decision below, so that invalidate selects this very frame.
     #[cfg(feature = "hostsim")]
@@ -622,7 +622,7 @@ unsafe fn prepare_window(app: &mut App, fr: &mut Frame) {
             plx_base::diag::heartbeat::now_us,
         );
     }
-    // EXPERIMENT (`/tmp/plxnative-opaque`): one `static` read and a return when the trigger
+    // EXPERIMENT (`/tmp/multiplex-opaque`): one `static` read and a return when the trigger
     // is absent. Edge-triggered — see `system.rs`.
     //
     // Called on EVERY frame, from the BIT rather than from the route. The false edge after an
@@ -773,7 +773,7 @@ pub(crate) fn rig_clear_opaque_region() {
 }
 
 /// **Simulator only: the television's compositor, over the frame the straighten pass just made.** The
-/// decoded picture under the UI when `plxnative-simvideo` holds one, black otherwise
+/// decoded picture under the UI when `multiplex-simvideo` holds one, black otherwise
 /// ([`plx_gfx::gfx::draw_under`]'s straight-alpha mix either way). The pass has no simulator switch, so
 /// this is not optional on a bound frame: a shot of the straight buffer would be the pass's own
 /// intermediate picture.
@@ -835,7 +835,7 @@ unsafe fn present_and_swap(
         // the swap and everything that follows it; nothing the loop does after it samples
         // framebuffer 0 on the television (`video_plane_refuses` shuts every door past it).
         plx_gfx::gfx::straighten::straighten_surface(app.player.video_plane_bound);
-        // `plxnative-simvideo`, and the simulator's stand-in for the compositor the pass feeds: a
+        // `multiplex-simvideo`, and the simulator's stand-in for the compositor the pass feeds: a
         // bound frame goes through the television's straight-alpha mix over the decoded picture, or
         // over black with none, so a shot is the panel and not the straight buffer. Before the
         // screenshot seam below, so shots include it.
@@ -873,13 +873,13 @@ unsafe fn present_and_swap(
                 plx_gfx::gfx::clip_clear();
                 plx_base::surface::present_supersampled();
             }
-            // dev (`/tmp/plxnative-framecb`): this frame's compositor callback, requested before
+            // dev (`/tmp/multiplex-framecb`): this frame's compositor callback, requested before
             // the swap that commits it. One latched bool unarmed.
             plx_platform::tv::window::frame_probe_request();
             SDL_GL_SwapWindow(app.win);
         }
         app.window_activity.presented(fr.player);
-        // dev diagnostic, OFF unless `/tmp/plxnative-eglage` was present at boot: re-ask EGL for
+        // dev diagnostic, OFF unless `/tmp/multiplex-eglage` was present at boot: re-ask EGL for
         // the back buffer's AGE after real presents have happened (the boot reading is 0 by
         // construction). One null-handle branch per present when unarmed; armed, its one query
         // blocks that present's swap 13-16 ms on the T820 (2026-10-24). See `egl.rs`.
@@ -2123,7 +2123,7 @@ pub(crate) unsafe fn playback_tick(app: &mut App, fr: &mut Frame) {
                 fr.now,
             );
         }
-        // dev: the URI-mode probe (`plxnative-uriprobe`, issue #1064) has no Engine to pump. Its
+        // dev: the URI-mode probe (`multiplex-uriprobe`, issue #1064) has no Engine to pump. Its
         // driver steps the machine once a frame, here, so the plane question just below reads this
         // frame's answer. Outside `is_started` too: a probe never sets it, and a session which ended
         // by itself must still be released.
@@ -2542,7 +2542,7 @@ pub(crate) unsafe fn land_results(app: &mut App, fr: &mut Frame) {
 
         // The ONE consumer of a cast-row person request, drained every frame whatever the
         // route. `detail::on_ok`'s cast arm raises it, and it is reached from three places
-        // (the immediate OK, the press-commit above, and the `plxnative-detailok`/-detailplay
+        // (the immediate OK, the press-commit above, and the `multiplex-detailok`/-detailplay
         // dev triggers) — polling next to each of those left the flag SET on any path that
         // didn't poll, and a set flag then fired on an unrelated OK several screens later.
         // One drain cannot latch. The push is what STACKS the new page: the detail page being
@@ -2579,15 +2579,15 @@ pub(crate) unsafe fn land_results(app: &mut App, fr: &mut Frame) {
                 super::bridge::dismiss_surfaces(&mut app.pages);
             }
         }
-        // dev: /tmp/plxnative-navosc — `crate::dev::scenarios::nav_osc_tick`.
+        // dev: /tmp/multiplex-navosc — `crate::dev::scenarios::nav_osc_tick`.
         crate::dev::scenarios::nav_osc_tick(app, fr.now);
-        // dev: /tmp/plxnative-pushbench — `crate::dev::scenarios::push_bench_tick`.
+        // dev: /tmp/multiplex-pushbench — `crate::dev::scenarios::push_bench_tick`.
         crate::dev::scenarios::push_bench_tick(app, fr.now);
-        // dev: /tmp/plxnative-deepbench — `crate::dev::scenarios::deep_bench_tick`.
+        // dev: /tmp/multiplex-deepbench — `crate::dev::scenarios::deep_bench_tick`.
         crate::dev::scenarios::deep_bench_tick(app, fr.now);
-        // dev: /tmp/plxnative-herobench — `crate::dev::scenarios::hero_bench_tick`.
+        // dev: /tmp/multiplex-herobench — `crate::dev::scenarios::hero_bench_tick`.
         crate::dev::scenarios::hero_bench_tick(app, fr.now);
-        // dev: /tmp/plxnative-holdbench — `crate::dev::scenarios::hold_bench_tick`.
+        // dev: /tmp/multiplex-holdbench — `crate::dev::scenarios::hold_bench_tick`.
         crate::dev::scenarios::hold_bench_tick(app, fr.now);
 
         // ---- the page cross-fade's commit frame ------------------------------------------
@@ -2810,7 +2810,7 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         // and whatever per-frame animation the legacy `ui::login`/`ui::profiles` scenes used to
         // step belongs to their `Screen::step`/`prepare` on a `Tick` the dispatcher already
         // delivers every frame through `bridge::frame` — not a second call from this function.
-        // dev: /tmp/plxnative-pickuser=<index> — `crate::dev::scenarios::pickuser_tick`.
+        // dev: /tmp/multiplex-pickuser=<index> — `crate::dev::scenarios::pickuser_tick`.
         crate::dev::scenarios::pickuser_tick(app);
         // **The bare route, for every screen below** — `page_of` stood on each of these three
         // guards while a popover was a ROUTE that had to be resolved onto the page beneath it.
@@ -2850,7 +2850,7 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
             });
             fr.underlay_moving |= moving;
         }
-        // dev: /tmp/plxnative-searchosc — `crate::dev::scenarios::search_osc_tick`.
+        // dev: /tmp/multiplex-searchosc — `crate::dev::scenarios::search_osc_tick`.
         crate::dev::scenarios::search_osc_tick(app, fr.now);
         // (The television's keyboard used to be dismissed HERE, by an `else` that called
         // `textinput::stop()` on every frame of every other route — because `search::leave`
@@ -2859,7 +2859,7 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         // ends in a `WillLeave`/`Unmount`/`Cover` on `SearchScreen`, which drops the keyboard on
         // each. That is also the half the per-frame poll never did — it cleared `textinput`'s own
         // flag and left the screen's editing state set.)
-        // dev: /tmp/plxnative-acctosc — `crate::dev::scenarios::account_osc_tick`.
+        // dev: /tmp/multiplex-acctosc — `crate::dev::scenarios::account_osc_tick`.
         crate::dev::scenarios::account_osc_tick(app, fr.now);
         // ---- the Settings family's dev oscillators, on the tree -------------------------
         //
@@ -2870,7 +2870,7 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         // for the modal ramp, 520 ms for the three focus sweeps. Bodies live in
         // `crate::dev::scenarios` now; this frame still runs them at the same phase boundary.
         crate::dev::scenarios::modal_osc_tick(app, fr.now);
-        // dev: /tmp/plxnative-modalbench — `crate::dev::scenarios::modal_bench_tick`.
+        // dev: /tmp/multiplex-modalbench — `crate::dev::scenarios::modal_bench_tick`.
         crate::dev::scenarios::modal_bench_tick(app, fr.now);
         crate::dev::scenarios::legal_doc_tick(app, fr.now, fr.dt);
         crate::dev::scenarios::alert_tick(app, fr.now, fr.dt);
@@ -3166,12 +3166,12 @@ fn finish_landed_play(app: &mut App, resume_prepared: bool) {
 pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32) {
     #[cfg(feature = "threadcheck")]
     let _draw_scope = plx_base::task::watchdog::draw_scope();
-            // EXPERIMENT (`/tmp/plxnative-egldamage`), no-op without the trigger. FIRST, before
+            // EXPERIMENT (`/tmp/multiplex-egldamage`), no-op without the trigger. FIRST, before
             // any GL command of this frame: `EGL_KHR_partial_update` only permits a damage
             // region to be declared before rendering begins. See `egl.rs`.
             plx_gfx::egl::frame_damage();
             // dev: the backdrop-glass LOAD DIAL and the blurred-transition prototype
-            // (`/tmp/plxnative-glassload`, `/tmp/plxnative-navblur`). Both are no-ops when
+            // (`/tmp/multiplex-glassload`, `/tmp/multiplex-navblur`). Both are no-ops when
             // their trigger is absent. HERE and not below the gate, because the dial's cadence
             // is counted in PRESENTS — a loop iteration the gate skipped drew no glass — and
             // because a step rollover invalidates the snapshot, which must precede every glass
@@ -3212,7 +3212,7 @@ pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32)
                         plx_gfx::gfx::set_clear_color(0.0, 0.0, 0.0, 0.0);
                         // The frame's first framebuffer-0 command, where this driver parks the
                         // wait for a free back buffer: spanned like every other route's `clear`.
-                        // dev (`/tmp/plxnative-framecb`): the frame thread's cost over the wait
+                        // dev (`/tmp/multiplex-framecb`): the frame thread's cost over the wait
                         // and, from the acquired buffer to the swap, over the commit phase.
                         plx_platform::tv::window::frame_probe_waiting();
                         plx_base::diag::spans::span("clear", || glClear(GL_COLOR_BUFFER_BIT));
@@ -3262,7 +3262,7 @@ pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32)
                             app.diagnostics.draw();
                         }
                     } else {
-                        // dev (`/tmp/plxnative-framecb`): the page's first clear is this route's
+                        // dev (`/tmp/multiplex-framecb`): the page's first clear is this route's
                         // first framebuffer command, so `gfx` brackets the back-buffer wait there.
                         plx_gfx::gfx::arm_clear_probe();
                         // Open the shared popover frame FIRST: it takes this frame's page damage
@@ -3299,7 +3299,7 @@ pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32)
                             plx_ui::frame::backdrop::discover_with(sources.clone(), || page(Z::ALL));
                         });
                         sources.borrow_mut().resolve();
-                        // `plxnative-framedrop` armed: which recorded draw invalidated a source.
+                        // `multiplex-framedrop` armed: which recorded draw invalidated a source.
                         // Empty (no allocation, no work) unarmed.
                         for line in sources.borrow_mut().take_diffs() {
                             log(&line);
@@ -3448,7 +3448,7 @@ pub(crate) unsafe fn report(app: &mut App, fr: &mut Frame) {
         // tester was on would be worse than one that omitted the field. Compiles away in every
         // build that is not a lab build.
         crate::lab::note_route(fr.rn);
-        // dev: the FOCUS FINGERPRINT (`/tmp/plxnative-focus`, see `crate::focusprobe`). One
+        // dev: the FOCUS FINGERPRINT (`/tmp/multiplex-focus`, see `crate::focusprobe`). One
         // ordered line naming everything the key ladder above can move, logged only when it
         // changes, so a (route x key) characterization run can read what a press did out of the
         // diff instead of out of `route=` alone.
@@ -3584,7 +3584,7 @@ pub(crate) unsafe fn report(app: &mut App, fr: &mut Frame) {
                 app.running = false;
             }
         }
-        // `plxnative-focusx`: the card read-out belongs to the frame just sampled.
+        // `multiplex-focusx`: the card read-out belongs to the frame just sampled.
         #[cfg(feature = "devtriggers")]
         plx_ui::card_probe::clear();
         // `coldopen screen=<name> ms=<n> prepared=<bool>` — one line per screen MOUNT, on every
@@ -3597,7 +3597,7 @@ pub(crate) unsafe fn report(app: &mut App, fr: &mut Frame) {
         }
         // frame-drop detector: attribute slow frames to pump(uploads)/draw/swap(GPU).
         // ONE tail for every route — this used to live only on the non-player path, which left
-        // /tmp/plxnative-framedrop dead during playback (the timings were collected, then a
+        // /tmp/multiplex-framedrop dead during playback (the timings were collected, then a
         // `continue` threw them away).
         // `present` gates this too: a frame the idle gate skipped drew nothing, so grading it
         // would drag `worstframe` toward zero and read as a perf WIN. A skipped frame is not a
@@ -9381,7 +9381,7 @@ mod lifecycle_regression_tests {
         }
     }
 
-    /// **`/tmp/plxnative-libosc` on the Collections page** (`fps:library-collections`): the sweep is
+    /// **`/tmp/multiplex-libosc` on the Collections page** (`fps:library-collections`): the sweep is
     /// the library family's, so it moves the Collections page's scroll, and the focus fingerprint
     /// (`--arm focus`) reports that scroll as `viewport_y`. Both were gated on `AppArg::Library`
     /// alone: the TV run saw 3 focus lines in 80 s and a median of 1 fps against a floor of 30.

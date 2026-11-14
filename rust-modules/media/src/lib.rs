@@ -1,4 +1,4 @@
-//! plx_media: the media layer of the PlxNative application core.
+//! plx_media: the media layer of the MultiPlex application core.
 //!
 //! The media credential facade (`curlio` over
 //! `plx_net::range_io`), the adaptive-bitrate controller (`abr`), the buffer-feed engine (`player`)

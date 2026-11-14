@@ -112,7 +112,7 @@
     "one": "{heading} · {count} SPOOR",
     "other": "{heading} · {count} SPOREN"
   },
-  "widgets.reason.jail_help": "Repareren vereist een geroote tv met Homebrew Channel. Hulp: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem",
+  "widgets.reason.jail_help": "Repareren vereist een geroote tv met Homebrew Channel.",
   "widgets.tracks.empty": "Geen sporen",
   "widgets.tracks.bytes": {
     "one": "{count} byte",

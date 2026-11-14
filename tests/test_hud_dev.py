@@ -111,7 +111,7 @@ class Workdir(unittest.TestCase):
         self.dir = Path(self.tmp.name)
         script = self.dir / "stub.py"
         script.write_text(STUB)
-        self.sim = self.dir / "plxnative-sim"
+        self.sim = self.dir / "multiplex-sim"
         self.sim.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n')
         self.sim.chmod(self.sim.stat().st_mode | stat.S_IXUSR)
         self.calls = self.dir / "calls.log"

@@ -1,4 +1,4 @@
-//! The URI-mode probe's driver (issue #1064, dev trigger `plxnative-uriprobe`): the application's
+//! The URI-mode probe's driver (issue #1064, dev trigger `multiplex-uriprobe`): the application's
 //! side of media's probe port (`plx_media::player::uriprobe_drive`).
 //!
 //! Media keeps the route half: the claimed start attempt, the settle into the route reducer, the
@@ -24,7 +24,7 @@ pub(crate) fn install(adapter: &mut PlayerAdapter) {
     adapter.install_uri_probe(Box::new(Probe));
 }
 
-/// The variant and native ABR rates a `plxnative-uriprobe` trigger text names; the text which names
+/// The variant and native ABR rates a `multiplex-uriprobe` trigger text names; the text which names
 /// no variant leaves the probe unarmed and the play normal.
 struct Probe;
 

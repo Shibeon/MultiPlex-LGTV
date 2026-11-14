@@ -169,13 +169,12 @@ fn the_page_opens_its_channel_once_and_lists_what_it_is_sent() {
         [
             HudId::Pack(BUILTIN_CLASSIC.into()),
             HudId::Pack("com.example.a".into()),
-            HudId::Browse,
             HudId::Remove("com.example.a".into()),
             HudId::Address,
             HudId::Drop(Sha::of(&[9]))
         ]
     );
-    assert_eq!(page.state.rows, 6);
+    assert_eq!(page.state.rows, 5);
 }
 
 #[test]
@@ -294,7 +293,7 @@ fn the_builtin_rows_are_named_and_say_no_trust_fact_under_them() {
         }
         let mut registry = pack("com.example.r", "Registry", 5, false);
         registry.trust = Trust::Registry;
-        assert!(facts_of(&registry, &list()).is_empty(), "{tag}: a registry package shows no tier");
+        assert!(facts_of(&registry, &list()).is_empty(), "{tag}: a package an earlier build installed from the former registry shows no tier");
     }
 }
 
@@ -353,12 +352,12 @@ fn the_notice_replaces_the_line_under_the_title_only_while_there_is_one() {
 
 /// Every refusal the store can give a file, for the tests that must cover each: the match has no wildcard, so a
 /// refusal added to the store does not compile here until it is listed (and so is measured).
-fn every_refusal() -> [Refusal; 10] {
+fn every_refusal() -> [Refusal; 9] {
     fn listed(refusal: Refusal) -> bool {
         match refusal {
             Refusal::BuiltinId
             | Refusal::Invalid
-            | Refusal::Unloadable(Unloadable::NewerFormat | Unloadable::OlderFormat | Unloadable::AppRange | Unloadable::Revoked)
+            | Refusal::Unloadable(Unloadable::NewerFormat | Unloadable::OlderFormat | Unloadable::AppRange)
             | Refusal::AlreadyInstalled
             | Refusal::NotNewer
             | Refusal::TooLarge
@@ -367,7 +366,6 @@ fn every_refusal() -> [Refusal; 10] {
     }
     let all = [
         Refusal::BuiltinId,
-        Refusal::Unloadable(Unloadable::Revoked),
         Refusal::Invalid,
         Refusal::Unloadable(Unloadable::NewerFormat),
         Refusal::Unloadable(Unloadable::OlderFormat),
@@ -397,7 +395,7 @@ fn every_row_fits_its_column_in_every_language() {
         unfit.until_restart = true;
         every.entries.extend([volatile, unfit]);
         // a package for each reason the app will not run it, whose reason is the row's value
-        for (i, why) in [Unloadable::NewerFormat, Unloadable::OlderFormat, Unloadable::Revoked, Unloadable::AppRange].into_iter().enumerate() {
+        for (i, why) in [Unloadable::NewerFormat, Unloadable::OlderFormat, Unloadable::AppRange].into_iter().enumerate() {
             let mut gone = pack(&format!("com.example.u{i}"), "Delta", 60 + i as u8, false);
             gone.loadable = Err(why);
             gone.until_restart = true;
@@ -435,7 +433,6 @@ fn every_row_fits_its_column_in_every_language() {
 /// never taller than the room between the title and the action band, and short enough to read as a note.
 #[test]
 fn the_line_under_the_title_fits_the_column_in_every_language() {
-    use plx_platform::i18n::msg;
     const MAX_COPY_LINES: usize = 5;
     let layout = RouteLayout::settings_page();
     let mut out = Vec::new();
@@ -474,14 +471,6 @@ fn the_line_under_the_title_fits_the_column_in_every_language() {
         for (name, notice, refused) in notices.flat_map(|(n, notice)| refused.map(move |r| (format!("{n} / {r:?}"), notice.clone(), r))) {
             l.notice = notice;
             check(&name, &copy_of(&l, refused), &mut out);
-        }
-        // the package page's own state sentences (a delisted package, a withdrawal, a catalog that could not refresh)
-        for (name, copy) in [
-            ("delisted", msg::settings_hud_unavailable().to_owned()),
-            ("withdrawn", format!("{} {}", msg::settings_hud_revoked(), "Withdrawn for a reason of the catalog's own, one short sentence long.")),
-            ("catalog cached", msg::settings_hud_catalog_cached().to_owned()),
-        ] {
-            check(name, &copy, &mut out);
         }
     }
     assert!(out.is_empty(), "{}", out.join("\n"));
@@ -774,179 +763,6 @@ fn play_waits_for_a_free_page() {
     }
 }
 
-fn gallery_list() -> HudList {
-    let index=plx_data::hudpacks::catalog::parse(include_bytes!("../../../tests/fixtures/hud-gallery/index.json")).unwrap();
-    HudList {catalog:plx_data::hudpacks::catalog::Snapshot {index:Some(std::sync::Arc::new(index)),checked_at:Some(10),..Default::default()},
-        app_version:"0.10.0".into(),language_tag:"en".into(),entries:vec![builtin(true)],..HudList::default()}
-}
-
-fn gallery_page(page: SettingsPage) -> HudPage {
-    let mut out=HudPage::at(EntryId(0),page);out.list=gallery_list();out.rebuild(None);out
-}
-
-#[test]
-fn gallery_is_shared_navigation_and_hides_incompatible_or_unfit_packages() {
-    let mut root=gallery_page(SettingsPage::PlayerHud);
-    let browse=root.form.key_at(root.form.index_of(&HudId::Browse).unwrap()).unwrap().0;
-    let fx=drive(&mut root,ScreenEvent::Activate(browse),browse);
-    assert!(fx.iter().any(|e| matches!(e.fx,Fx::Nav(NavOp::Push(SettingsPage::HudGallery)))));
-    let mut page=gallery_page(SettingsPage::HudGallery);
-    assert_eq!(page.form.table.n_rows(),2);
-    let mut index=page.list.catalog.index.as_deref().unwrap().clone();
-    index.entries[0].package_format="2.0".into();
-    index.entries[1].unfit=vec![plx_data::hudpacks::catalog::FitChange {from:"0.9.0".into(),langs:vec!["en".into()]}];
-    page.list.catalog.index=Some(std::sync::Arc::new(index));page.rebuild(None);
-    assert_eq!(page.form.table.n_rows(),0);
-    assert_eq!(page.copy,plx_platform::i18n::msg::settings_hud_empty());
-}
-
-#[test]
-fn gallery_install_and_use_are_separate_and_about_owns_package_metadata() {
-    let list=gallery_list();let package=&list.catalog.index.as_ref().unwrap().entries[0];let sha=package.sha();
-    let mut page=gallery_page(SettingsPage::HudDetail(sha));
-    drive(&mut page,ScreenEvent::Enter(Enter::Fresh {focus:FocusTarget::FirstInGroup(GroupId(0))}),0);
-    let fx=drive(&mut page,ScreenEvent::Activate(1),1);
-    assert!(matches!(huds(&fx).as_slice(),[HudCmd::FetchRegistry(s)] if *s == sha));
-    assert!(page.form.index_of(&HudId::Use).is_none());
-    let mut entry=pack(&package.id,&package.name,1,false);entry.sha=Some(sha);
-    page.list.entries.push(entry);page.list.notice=Some(Notice::Installed {id:package.id.clone(),version:package.version.clone(),sha,until_restart:false});
-    page.rebuild(Some(HudId::Use));
-    assert_eq!(page.copy, plx_platform::i18n::msg::settings_hud_copy(), "Use changes the choice; only installation preserves it");
-    let fx=drive(&mut page,ScreenEvent::Activate(1),1);
-    assert!(matches!(huds(&fx).as_slice(),[HudCmd::Select(id)] if *id == package.id));
-    assert!(fx.iter().any(|e|matches!(e.fx,Fx::Nav(NavOp::PopToArg(SettingsPage::PlayerHud)))));
-    let about=gallery_page(SettingsPage::HudAbout(sha));
-    assert!(about.form.index_of(&HudId::Fact(0)).is_some());
-    assert!(page.form.index_of(&HudId::Fact(0)).is_none(),"metadata is secondary");
-}
-
-#[test]
-fn preview_focus_and_back_never_choose_a_different_scene() {
-    let list=gallery_list();let package=list.catalog.index.as_ref().unwrap().entries.iter().find(|p|p.name=="Reference").unwrap();
-    let mut page=gallery_page(SettingsPage::HudPreview(package.sha()));
-    drive(&mut page,tick(),1);assert_eq!(page.scenes().len(),3);
-    drive(&mut page,ScreenEvent::Activate(2),2);assert_eq!(page.state.scene,1);
-    let controls=page.controls.as_ref().unwrap();
-    assert!(matches!(controls.neighbour(FocusKey{entry:EntryId(0),elem:0},Dir::Left),Step::Edge));
-    assert!(matches!(controls.neighbour(FocusKey{entry:EntryId(0),elem:0},Dir::Right),Step::Move(FocusKey{elem:1,..})));
-    assert_eq!(page.state.scene,1,"moving focus from Back does not select Compact");
-    let fx=drive(&mut page,ScreenEvent::Activate(0),0);
-    assert!(fx.iter().any(|e|matches!(e.fx,Fx::Nav(NavOp::Pop))));
-    assert_eq!(page.state.scene,1);
-}
-
-#[test]
-fn preview_press_commits_choose_scenes_and_activate_back() {
-    let list = gallery_list();
-    let package = list.catalog.index.as_ref().unwrap().entries.iter()
-        .find(|package| package.name == "Reference").unwrap();
-    let mut page = gallery_page(SettingsPage::HudPreview(package.sha()));
-    drive(&mut page, tick(), 0);
-
-    // Control groups and pointer stops use the shared press protocol: OK-up and
-    // pointer release deliver PressCommit rather than the direct Activate shortcut.
-    drive(&mut page, ScreenEvent::PressCommit(PressId(1)), 2);
-    assert_eq!(page.state.scene, 1, "committing Chapters & info selects its preview");
-    drive(&mut page, ScreenEvent::PressCommit(PressId(2)), 3);
-    assert_eq!(page.state.scene, 2, "committing Up Next selects its preview");
-    for current in [None, Some(FocusKey { entry: EntryId(44), elem: 2 })] {
-        let mut cx = context(2);
-        cx.focus.current = current;
-        let mut effects = Vec::new();
-        let mut present = Present::new();
-        let handled = page.step(&ScreenEvent::PressCommit(PressId(9)), &cx,
-            &mut Effects::new(&mut effects, MachineId::Instance(InstanceId(0)), &mut present));
-        assert!(matches!(handled, Handled::No));
-        assert!(effects.is_empty(), "a commit without this page's focus cannot act");
-        assert_eq!(page.state.scene, 2);
-    }
-    let effects = drive(&mut page, ScreenEvent::PressCommit(PressId(3)), 0);
-    assert!(effects.iter().any(|effect| matches!(effect.fx, Fx::Nav(NavOp::Pop))));
-    assert_eq!(page.state.scene, 2, "Back does not change the chosen scene");
-}
-
-#[test]
-fn gallery_forms_and_preview_controls_fit_every_shipped_language() {
-    let mut failures=Vec::new();
-    for language in SHIPPED {
-        let _guard=language_on_this_thread_for_test(language);
-        let list=gallery_list();let sha=list.catalog.index.as_ref().unwrap().entries[1].sha();
-        for dest in [SettingsPage::PlayerHud,SettingsPage::HudGallery,SettingsPage::HudDetail(sha),SettingsPage::HudAbout(sha)] {
-            let page=gallery_page(dest);
-            failures.extend(page.form.table.app_fit_failures(RouteLayout::settings_page().sectioned_table().w,language.tag()));
-        }
-        // a delisted package and one already installed: their disabled Install rows' values fit the column
-        let mut delisted=gallery_page(SettingsPage::HudDetail(sha));
-        delisted.list.catalog.previous=delisted.list.catalog.index.clone();
-        delisted.list.catalog.index=None;delisted.rebuild(None);
-        let mut same=gallery_page(SettingsPage::HudDetail(sha));
-        let package=same.list.catalog.package(sha).unwrap().clone();
-        let mut installed=pack(&package.id,&package.name,9,false);
-        installed.meta.as_mut().unwrap().version=package.version.clone();
-        same.list.entries.push(installed);same.rebuild(None);
-        for page in [&delisted,&same] {
-            failures.extend(page.form.table.app_fit_failures(RouteLayout::settings_page().sectioned_table().w,language.tag()));
-        }
-        let page=gallery_page(SettingsPage::HudPreview(sha));
-        let controls=plx_ui::preview_controls::PreviewControls::new(page.scenes().iter().map(|(label,_)|(*label).into()),&ShippedMeasure);
-        for elem in 0..controls.len() as u32 {
-            let r=controls.place(elem).unwrap().rect;
-            assert!(plx_ui::consts::inside_safe(r),"{} preview control {elem}: {r:?}",language.tag());
-        }
-    }
-    plx_ui::table::assert_no_fit_failures(&failures);
-}
-
-/// **The Player HUD root previews the HUD its focus is on**, as the gallery does: an installed package that
-/// the registry lists draws the registry's art for it in the left column (and cycles its frames), and the
-/// built-in, which the registry has no art for, draws none. It used to preview only on the gallery and a
-/// package's own pages, so the root's picture slot stayed empty on every row.
-#[test]
-fn the_player_hud_root_previews_the_focused_installed_hud_and_none_for_the_built_in() {
-    let mut page = gallery_page(SettingsPage::PlayerHud);
-    let listed = page.list.catalog.index.as_ref().unwrap().entries[0].clone();
-    page.list.entries.push(Entry { sha: Some(listed.sha()), ..pack("com.example.listed", "Listed", 1, false) });
-    page.list.entries.push(pack("com.example.unlisted", "Unlisted", 2, false));
-    page.rebuild(None);
-    let focus = |page: &mut HudPage, id: &HudId| {
-        let key = key_of(page, id);
-        drive(page, ScreenEvent::FocusMoved { from: None, to: FocusKey { entry: EntryId(0), elem: key }, by: plx_machine::machine::By::Dir }, key);
-    };
-    focus(&mut page, &HudId::Pack("com.example.listed".into()));
-    let art = page.picture().and_then(|picture| picture.art).expect("the listed package's registry art is the root's picture");
-    assert!(matches!(art, plx_ui::widgets::Art::Thumb { .. }), "the public image source, as in the gallery");
-    assert!(!page.preview_frames().is_empty(), "the root cycles the same frames the gallery does");
-    for id in [HudId::Pack(BUILTIN_CLASSIC.into()), HudId::Pack("com.example.unlisted".into())] {
-        focus(&mut page, &id);
-        assert!(page.picture().is_none(), "{id:?}: the registry has no art for it");
-    }
-}
-
-#[test]
-fn gallery_preview_never_uses_a_plex_server_slot() {
-    let page=gallery_page(SettingsPage::HudGallery);
-    match page.picture().and_then(|picture| picture.art).expect("the first catalog appearance has a preview") {
-        plx_ui::widgets::Art::Thumb {sid,..} => assert_eq!(sid,plx_plex::plex::ServerId::UNSET.raw()),
-        _ => panic!("the native preview must use the public image source"),
-    }
-}
-
-#[test]
-fn a_failed_index_refresh_does_not_disable_an_explicit_cached_package_download() {
-    let list=gallery_list();let sha=list.catalog.index.as_ref().unwrap().entries[0].sha();
-    let mut page=gallery_page(SettingsPage::HudDetail(sha));
-    page.list.catalog.refresh_failed=true;page.rebuild(None);
-    let fx=drive(&mut page,ScreenEvent::Activate(1),1);
-    assert!(matches!(huds(&fx).as_slice(),[HudCmd::FetchRegistry(s)] if *s==sha));
-    for notice in [Notice::Refused {sha,reason:Refusal::Changed},Notice::NotWritten {sha:Some(sha)}] {
-        page.list.notice=Some(notice);page.rebuild(None);
-        assert_eq!(page.copy,copy_of(&page.list,None),"the initiating detail page must explain the failure");
-    }
-    let mut fresh=gallery_page(SettingsPage::HudDetail(sha));
-    fresh.list.notice=page.list.notice.clone();fresh.rebuild(None);
-    assert_ne!(fresh.copy,page.copy,"another view does not inherit an unrelated install failure");
-}
-
 #[test]
 fn the_first_hud_listing_seats_the_current_choice_until_the_reader_moves() {
     let (page,_)=page_with(list());
@@ -959,108 +775,31 @@ fn the_first_hud_listing_seats_the_current_choice_until_the_reader_moves() {
     assert_eq!(page.form.selected_id(),Some(&HudId::Address),"an intentional cursor is preserved across the listing");
 }
 
-#[test]
-fn gallery_keeps_packages_visible_on_development_app_releases() {
-    let mut page = gallery_page(SettingsPage::HudGallery);
-    page.list.app_version = "0.10.0-dev".into();
-    page.rebuild(None);
-    assert_eq!(page.form.table.n_rows(), 2);
-}
-
-#[test]
-fn about_cannot_remove_an_installed_hud_while_its_update_is_pending() {
-    let list = gallery_list();
-    let package = list.catalog.index.as_ref().unwrap().entries[0].clone();
-    let mut page = gallery_page(SettingsPage::HudAbout(package.sha()));
-    page.list.entries.push(pack(&package.id, &package.name, 1, false));
-    for fetching in [true, false] {
-        // Fetching and held-offer/confirmed-write phases share the complete operation flag.
-        page.list.fetching = fetching;
-        page.list.package_busy = true;
-        page.rebuild(None);
-        let key = key_of(&page, &HudId::Remove(package.id.clone()));
-        let emitted = drive(&mut page, ScreenEvent::Activate(key), key);
-        assert!(huds(&emitted).is_empty(), "a busy store cannot accept a removal");
-        assert!(!emitted.iter().any(|e| matches!(e.fx, Fx::Nav(_))));
-    }
-}
-
-
-#[test]
-fn preview_backgrounds_stay_in_the_selected_scene_and_resolved_language() {
-    let mut list = gallery_list();
-    let mut index = list.catalog.index.as_deref().unwrap().clone();
-    let package = index.entries.iter_mut().find(|p| p.name == "Reference").unwrap();
-    let sha = package.sha();
-    let primary = package.previews.iter().find(|p| p.state == "sections-3-movie-paused" && p.lang == "en").unwrap().clone();
-    let mut alternate = primary.clone();
-    alternate.url = "https://example.invalid/second.png".into();
-    package.previews.push(alternate);
-    let mut foreign = primary.clone();
-    foreign.lang = "de".into();
-    foreign.url = "https://example.invalid/german.png".into();
-    package.previews.push(foreign);
-    list.catalog.index = Some(std::sync::Arc::new(index));
-    list.language_tag = "fr".into(); // Missing translation resolves once to English.
-    let (mut page, _tx) = page_with(list);
-    page.page = SettingsPage::HudPreview(sha);
-    page.rebuild(None);
-    page.state.scene = 1;
-    assert_eq!(page.preview_frames(), vec![primary.url.as_str(), "https://example.invalid/second.png"]);
-    for _ in 0..600 { drive(&mut page, tick(), 2); }
-    assert_eq!(page.state.scene, 1, "the timer must never change the selected tab");
-    assert_eq!(page.preview_frames().len(), 2);
-    page.state.scene = 0;
-    assert!(!page.preview_frames().contains(&"https://example.invalid/second.png"));
-}
-
-
-#[test]
-fn preview_backgrounds_resume_only_for_the_visible_settings_page() {
-    let (mut page, _tx) = page_with(gallery_list());
-    assert!(page.preview_active());
-    drive(&mut page, ScreenEvent::Suspend, 0);
-    assert!(!page.preview_active());
-    drive(&mut page, ScreenEvent::Resume, 0);
-    assert!(page.preview_active(), "returning to the app resumes the same visible preview");
-    drive(&mut page, ScreenEvent::Cover, 0);
-    assert!(!page.preview_active());
-    drive(&mut page, ScreenEvent::Suspend, 0);
-    drive(&mut page, ScreenEvent::Resume, 0);
-    assert!(!page.preview_active(), "resuming every inner body must not wake a covered page");
-    drive(&mut page, ScreenEvent::Enter(Enter::Restored), 0);
-    assert!(page.preview_active());
-}
-
-// ---- Settings v2: the sentence that follows focus, the ghost state, the picture slot ----
-
-/// Move focus to the row `id` the way the engine reports it.
 fn focus_on(page: &mut HudPage, id: &HudId) {
     let key = key_of(page, id);
     drive(page, ScreenEvent::FocusMoved { from: None, to: FocusKey { entry: EntryId(0), elem: key }, by: plx_machine::machine::By::Dir }, key);
 }
 
-fn withdrawn_list() -> HudList {
+fn unloadable_list() -> HudList {
     let mut l = list();
-    l.entries[1].loadable = Err(Unloadable::Revoked);
+    l.entries[1].loadable = Err(Unloadable::NewerFormat);
     l
 }
 
 /// **The sentence follows the focused row**, a pure function of the row and the listing: the page's own while a row has
-/// none (the built-in, Browse, Install from address), the row's when it has (why a HUD cannot be used and what to do;
+/// none (the built-in, Install from address), the row's when it has (why a HUD cannot be used and what to do;
 /// what Remove does), and the fade is heading for whatever it says.
 #[test]
 fn the_sentence_follows_the_focused_row_and_a_row_with_none_shows_the_pages() {
     use plx_platform::i18n::msg;
-    let (mut page, _tx) = page_with(withdrawn_list());
+    let (mut page, _tx) = page_with(unloadable_list());
     let alpha = HudId::Pack("com.example.a".into());
     let page_copy = msg::settings_hud_copy();
     for (id, says) in [
         (HudId::Pack(BUILTIN_CLASSIC.into()), page_copy),
-        (alpha.clone(), msg::settings_hud_withdrawn_detail()),
+        (alpha.clone(), msg::settings_hud_newer_detail()),
         (HudId::Remove("com.example.a".into()), msg::settings_hud_remove_detail()),
         (HudId::Address, page_copy),
-        (HudId::Browse, page_copy),
     ] {
         focus_on(&mut page, &id);
         assert_eq!(page.sentence(), says, "{id:?}");
@@ -1072,7 +811,7 @@ fn the_sentence_follows_the_focused_row_and_a_row_with_none_shows_the_pages() {
 #[test]
 fn a_notice_in_force_outranks_every_rows_sentence() {
     use plx_platform::i18n::msg;
-    let mut l = withdrawn_list();
+    let mut l = unloadable_list();
     l.notice = Some(Notice::FetchFailed { reason: FetchError::Unreachable });
     let (mut page, _tx) = page_with(l);
     focus_on(&mut page, &HudId::Pack("com.example.a".into()));
@@ -1080,19 +819,19 @@ fn a_notice_in_force_outranks_every_rows_sentence() {
     page.list.notice = None;
     page.rebuild(None);
     focus_on(&mut page, &HudId::Pack("com.example.a".into()));
-    assert_eq!(page.sentence(), msg::settings_hud_withdrawn_detail());
+    assert_eq!(page.sentence(), msg::settings_hud_newer_detail());
 }
 
-/// **A withdrawn HUD is listed as a ghost row** (board 4.4): the reason is its value (the old sub-line), the row cannot
+/// **A HUD the app cannot run is listed as a ghost row** (board 4.4): the reason is its value (the old sub-line), the row cannot
 /// be picked, the removal row names it ("Remove Alpha") with no sub-line, and Install from address keeps its field hint.
 #[test]
-fn a_withdrawn_hud_is_a_ghost_row_with_its_reason_as_the_value() {
+fn an_unloadable_hud_is_a_ghost_row_with_its_reason_as_the_value() {
     use plx_platform::i18n::msg;
-    let (mut page, _tx) = page_with(withdrawn_list());
+    let (mut page, _tx) = page_with(unloadable_list());
     let alpha = HudId::Pack("com.example.a".into());
     let row = row_of(&page, &alpha);
     assert!(row.disabled && row.detail == msg::settings_hud_unreviewed(), "a ghost row keeps its status sub-line");
-    assert_eq!(row.value.as_deref(), Some(msg::settings_hud_revoked()), "This HUD was withdrawn. is the value");
+    assert_eq!(row.value.as_deref(), Some(msg::settings_hud_newer_format()), "the format the app cannot read is the value");
     let key = key_of(&page, &alpha);
     assert!(huds(&drive(&mut page, ScreenEvent::Activate(key), key)).is_empty(), "and OK does nothing");
     let remove = row_of(&page, &HudId::Remove("com.example.a".into()));
@@ -1145,173 +884,6 @@ fn a_refused_file_is_a_ghost_row_and_an_installable_one_keeps_its_sub_line() {
     assert_eq!(page.sentence(), msg::settings_hud_newer_detail(), "a format the app cannot read says the format's sentence");
 }
 
-fn with_index(page: &mut HudPage, edit: impl FnOnce(&mut plx_data::hudpacks::catalog::Index)) {
-    let mut index = page.list.catalog.index.as_deref().unwrap().clone();
-    edit(&mut index);
-    page.list.catalog.index = Some(std::sync::Arc::new(index));
-    page.rebuild(None);
-}
-
-/// **Package page, update waiting** (board 4.2): focus on Update, the sentence describes Update; move focus and it changes.
-#[test]
-fn the_package_pages_sentence_follows_update_and_the_rows() {
-    use plx_platform::i18n::msg;
-    let list = gallery_list();
-    let package = list.catalog.index.as_ref().unwrap().entries.iter().find(|p| p.name == "Reference").unwrap().clone();
-    let sha = package.sha();
-    let mut page = gallery_page(SettingsPage::HudDetail(sha));
-    let mut installed = pack(&package.id, &package.name, 7, false);
-    installed.meta.as_mut().unwrap().version = "0.5.0".into();
-    page.list.entries.push(installed);
-    page.rebuild(None);
-    let update = HudId::InstallRegistry(sha);
-    assert_eq!(row_of(&page, &update).label, msg::settings_hud_update());
-    focus_on(&mut page, &update);
-    assert_eq!(page.sentence(), msg::settings_hud_update_detail());
-    focus_on(&mut page, &HudId::About);
-    assert_eq!(page.sentence(), msg::settings_hud_about_detail());
-    focus_on(&mut page, &HudId::Preview);
-    assert_eq!(page.sentence(), msg::settings_hud_preview_detail());
-    assert!(page.picture().is_some(), "the package's preview is in the picture slot");
-    // not installed at all: Install, with its own sentence
-    let mut fresh = gallery_page(SettingsPage::HudDetail(sha));
-    focus_on(&mut fresh, &update);
-    assert_eq!(row_of(&fresh, &update).label, msg::settings_hud_install());
-    assert_eq!(fresh.sentence(), msg::settings_hud_install_detail());
-}
-
-/// A withdrawn package in the catalog, or one that does not fit the language, cannot be installed: Install is a ghost
-/// row with the reason as its value; a withdrawal's sentence is the page's own state (the withdrawal and the catalog's reason), a
-/// language's says what to do.
-#[test]
-fn an_uninstallable_package_page_row_is_a_ghost_with_its_reason() {
-    use plx_platform::i18n::msg;
-    let list = gallery_list();
-    let sha = list.catalog.index.as_ref().unwrap().entries[0].sha();
-    let mut page = gallery_page(SettingsPage::HudDetail(sha));
-    with_index(&mut page, |index| index.revoked.push(plx_data::hudpacks::catalog::Revocation { sha256: sha.hex(), reason: "Unsafe.".into() }));
-    let install = HudId::InstallRegistry(sha);
-    assert!(row_of(&page, &install).disabled);
-    assert_eq!(row_of(&page, &install).value.as_deref(), Some(msg::settings_hud_revoked()));
-    focus_on(&mut page, &install);
-    assert_eq!(page.sentence(), format!("{} Unsafe.", msg::settings_hud_revoked()), "the page's state (the withdrawal and the catalog's reason) outranks the row's sentence");
-    let mut page = gallery_page(SettingsPage::HudDetail(sha));
-    page.list.unfit = vec![sha];
-    page.list.language = "Deutsch".into();
-    page.rebuild(None);
-    assert_eq!(row_of(&page, &install).value.as_deref(), Some(msg::settings_hud_unfit_language("Deutsch").as_str()));
-    focus_on(&mut page, &install);
-    assert_eq!(page.sentence(), msg::settings_hud_unfit_detail("Deutsch"));
-}
-
-/// **A package page opens on its state, and a disabled Install always says why.** The page's state (a delisted package,
-/// a withdrawal with the catalog's reason) is the sentence whichever row has focus, as a notice is on the Player HUD page;
-/// a package an equal or newer version of which is installed (the same version under another hash) says so as the value.
-#[test]
-fn a_package_pages_state_outranks_its_rows_and_a_disabled_install_says_why() {
-    use plx_platform::i18n::msg;
-    let list = gallery_list();
-    let package = list.catalog.index.as_ref().unwrap().entries.iter().find(|p| p.name == "Reference").unwrap().clone();
-    let sha = package.sha();
-    let install = HudId::InstallRegistry(sha);
-    let every_row = [HudId::Preview, install.clone(), HudId::About];
-
-    // withdrawn: opens on the withdrawal and the catalog's reason, on every row
-    let mut withdrawn = gallery_page(SettingsPage::HudDetail(sha));
-    with_index(&mut withdrawn, |index| index.revoked.push(plx_data::hudpacks::catalog::Revocation { sha256: sha.hex(), reason: "Unsafe.".into() }));
-    assert_eq!(withdrawn.sentence(), format!("{} Unsafe.", msg::settings_hud_revoked()), "the page opens on the reason");
-    for id in &every_row {
-        focus_on(&mut withdrawn, id);
-        assert_eq!(withdrawn.sentence(), format!("{} Unsafe.", msg::settings_hud_revoked()), "{id:?}");
-    }
-    assert!(row_of(&withdrawn, &install).disabled);
-    assert_eq!(row_of(&withdrawn, &install).value.as_deref(), Some(msg::settings_hud_revoked()));
-
-    // delisted (a refresh removed it; the previous index still describes it): the unavailable sentence, and the value
-    let mut delisted = gallery_page(SettingsPage::HudDetail(sha));
-    let old = delisted.list.catalog.index.clone();
-    with_index(&mut delisted, |index| index.entries.retain(|p| p.sha() != sha));
-    delisted.list.catalog.previous = old;
-    delisted.rebuild(None);
-    assert!(delisted.package().is_some(), "the premise: the page still describes it from the previous index");
-    assert!(row_of(&delisted, &install).disabled);
-    assert_eq!(row_of(&delisted, &install).value.as_deref(), Some(msg::settings_hud_unavailable_value()));
-    for id in &every_row {
-        focus_on(&mut delisted, id);
-        assert_eq!(delisted.sentence(), msg::settings_hud_unavailable(), "{id:?}");
-    }
-
-    // the same version installed under another hash: not newer, so Install is disabled and says "Already installed"
-    let mut same = gallery_page(SettingsPage::HudDetail(sha));
-    let mut installed = pack(&package.id, &package.name, 9, false);
-    installed.meta.as_mut().unwrap().version = package.version.clone();
-    assert_ne!(installed.sha, Some(sha), "the premise: another hash");
-    same.list.entries.push(installed);
-    same.rebuild(None);
-    assert!(row_of(&same, &install).disabled);
-    assert_eq!(row_of(&same, &install).value.as_deref(), Some(msg::settings_hud_already()));
-    focus_on(&mut same, &install);
-    assert_eq!(same.sentence(), msg::settings_hud_copy(), "no page state: the page's own sentence, the value says why");
-    // and a plain installable package keeps its Install sentence with no reason
-    let mut fresh = gallery_page(SettingsPage::HudDetail(sha));
-    focus_on(&mut fresh, &install);
-    assert!(!row_of(&fresh, &install).disabled && row_of(&fresh, &install).value.is_none());
-    assert_eq!(fresh.sentence(), msg::settings_hud_install_detail());
-}
-
-/// **The picture follows the focused HUD** (board 4.1): the gallery's picture slot holds the preview of the HUD under
-/// focus, frames and all, and nothing else; About has none.
-#[test]
-fn the_gallery_picture_follows_the_focused_hud() {
-    let mut page = gallery_page(SettingsPage::HudGallery);
-    let list = gallery_list();
-    let index = list.catalog.index.as_ref().unwrap();
-    let first = HudId::Catalog(index.entries[0].sha());
-    let second = HudId::Catalog(index.entries[1].sha());
-    focus_on(&mut page, &first);
-    drive(&mut page, tick(), 0);
-    let a: Vec<String> = page.preview_frames().into_iter().map(str::to_owned).collect();
-    assert!(!a.is_empty() && page.picture().is_some());
-    focus_on(&mut page, &second);
-    drive(&mut page, tick(), 0);
-    let b: Vec<String> = page.preview_frames().into_iter().map(str::to_owned).collect();
-    assert!(!b.is_empty());
-    assert_ne!(a, b, "another HUD, another picture");
-    assert!(b.iter().all(|url| index.entries[1].previews.iter().any(|p| p.url == *url)), "the second HUD's own frames");
-    assert_eq!(page.sentence(), plx_platform::i18n::msg::settings_hud_gallery_copy(), "and the sentence is the page's own");
-    let about = gallery_page(SettingsPage::HudAbout(index.entries[0].sha()));
-    assert!(about.picture().is_none());
-}
-
-/// **Empty gallery** (board 4.3): no rows and no picture; the description carries the whole message.
-#[test]
-fn an_empty_gallery_has_no_rows_no_picture_and_its_message_as_the_sentence() {
-    use plx_platform::i18n::msg;
-    let mut page = gallery_page(SettingsPage::HudGallery);
-    with_index(&mut page, |index| index.entries.clear());
-    assert_eq!(page.form.table.n_rows(), 0);
-    assert!(page.picture().is_none());
-    assert_eq!(page.sentence(), msg::settings_hud_empty());
-}
-
-/// **Offline gallery** (board 4.1's variant): the description is "Couldn't refresh HUDs. Showing the saved catalog." with
-/// the catalog date, and the picture stays.
-#[test]
-fn an_offline_gallery_says_the_saved_catalog_with_its_date_and_keeps_the_picture() {
-    use plx_platform::i18n::msg;
-    let mut page = gallery_page(SettingsPage::HudGallery);
-    page.list.catalog.refresh_failed = true;
-    page.list.catalog_date = "3 Nov".into();
-    page.rebuild(None);
-    let want = format!("{}\n\n{}", msg::settings_hud_catalog_cached(), msg::settings_hud_cached("3 Nov"));
-    assert_eq!(page.sentence(), want);
-    let first = page.list.catalog.index.as_ref().unwrap().entries[0].sha();
-    focus_on(&mut page, &HudId::Catalog(first));
-    drive(&mut page, tick(), 0);
-    assert!(page.picture().is_some());
-    assert_eq!(page.sentence(), want, "a row with no sentence of its own keeps it");
-}
-
 /// **Every sentence fits the left column in every language**: at most five lines at the reading size (the followed
 /// sentence's cap), whatever page and state says it - a row's reason and what to do, a row's action, the page's own
 /// (empty, loading, offline with the date), the notices. The language name is the longest native one.
@@ -1329,38 +901,13 @@ fn every_sentence_beside_the_table_fits_five_lines_in_every_language() {
         let mut unfit = pack("com.example.c", "Gamma", 3, false);
         unfit.until_restart = true;
         every.entries.push(unfit);
-        for (i, why) in [Unloadable::NewerFormat, Unloadable::OlderFormat, Unloadable::Revoked, Unloadable::AppRange].into_iter().enumerate() {
+        for (i, why) in [Unloadable::NewerFormat, Unloadable::OlderFormat, Unloadable::AppRange].into_iter().enumerate() {
             let mut gone = pack(&format!("com.example.u{i}"), "Delta", 60 + i as u8, false);
             gone.loadable = Err(why);
             every.entries.push(gone);
         }
         every.drops = every_refusal().iter().enumerate().map(|(i, r)| drop_file(&format!("f{i}.plxhud"), 20 + i as u8, Err(*r))).collect();
-        let mut sentences: Vec<(String, String)> = hud_form(&every, None, false).1.into_iter().map(|(id, says)| (format!("{id:?}"), says)).collect();
-        // the package and gallery pages: each state of Install, the offline and the empty gallery
-        let gallery = gallery_list();
-        let sha = gallery.catalog.index.as_ref().unwrap().entries[0].sha();
-        for (state, edit) in [("fresh", 0u8), ("withdrawn", 1), ("unfit", 2), ("update", 3), ("offline", 4), ("loading", 5)] {
-            let mut page = gallery_page(SettingsPage::HudDetail(sha));
-            page.list.language = every.language.clone();
-            match edit {
-                1 => with_index(&mut page, |i| i.revoked.push(plx_data::hudpacks::catalog::Revocation { sha256: sha.hex(), reason: "A long reason the catalog gave for the withdrawal of this HUD.".into() })),
-                2 => { page.list.unfit = vec![sha]; page.rebuild(None); }
-                3 => { let mut e = pack("com.plxnative.examples.minimal", "Minimal", 9, false); e.meta.as_mut().unwrap().version = "0.1.0".into(); page.list.entries.push(e); page.rebuild(None); }
-                4 => { page.list.catalog.refresh_failed = true; page.list.catalog_date = "30 September 2026".into(); page.rebuild(None); }
-                _ => {}
-            }
-            sentences.extend(page.says.iter().map(|(id, says)| (format!("{state} {id:?}"), says.clone())));
-            sentences.push((format!("{state} page"), page.copy.clone()));
-            let mut gal = gallery_page(SettingsPage::HudGallery);
-            gal.list.catalog.refresh_failed = edit == 4;
-            gal.list.catalog_date = "30 September 2026".into();
-            gal.list.catalog.fetching = edit == 5;
-            gal.rebuild(None);
-            sentences.push((format!("{state} gallery"), gal.copy.clone()));
-        }
-        let mut empty = gallery_page(SettingsPage::HudGallery);
-        with_index(&mut empty, |i| i.entries.clear());
-        sentences.push(("empty gallery".into(), empty.copy.clone()));
+        let sentences: Vec<(String, String)> = hud_form(&every, None, false).1.into_iter().map(|(id, says)| (format!("{id:?}"), says)).collect();
         for (name, text) in sentences {
             let size = theme::size::LABEL;
             let view = plx_ui::text_view::TextView::new(&text, size, theme::TEXT_READING)
@@ -1375,11 +922,11 @@ fn every_sentence_beside_the_table_fits_five_lines_in_every_language() {
     assert!(out.is_empty(), "{}", out.join("\n"));
 }
 
-/// The ghost state reaches the pixels: the withdrawn HUD's row, with focus, is under the ghost pill and the solid one
+/// The ghost state reaches the pixels: the unloadable HUD's row, with focus, is under the ghost pill and the solid one
 /// stays under the usable row (the shared table's own test judges the inks; this judges the page wired them).
 #[test]
-fn the_pill_under_a_withdrawn_hud_is_the_ghost_and_under_the_built_in_the_solid() {
-    let (mut page, _tx) = page_with(withdrawn_list());
+fn the_pill_under_an_unloadable_hud_is_the_ghost_and_under_the_built_in_the_solid() {
+    let (mut page, _tx) = page_with(unloadable_list());
     let solid_on = |page: &HudPage| page.form.table.ghost_cover_for_test();
     focus_on(&mut page, &HudId::Pack(BUILTIN_CLASSIC.into()));
     for _ in 0..240 { page.form.table.update(1.0 / 60.0, 600.0); }

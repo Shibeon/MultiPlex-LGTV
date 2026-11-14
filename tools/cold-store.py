@@ -12,9 +12,9 @@ back when its owner builds again, so a full internal SSD is relieved without a r
 OFF UNLESS CONFIGURED, and an unconfigured machine is untouched: every entry point returns before it creates
 a file or directory anywhere (ci/test_cold_store.py walks the temp tree to prove it). The per-user file
 `cold-store` lives in the directory tools/tv-config.sh resolves (PLX_TV_CONFIG_DIR, else
-XDG_CONFIG_HOME/plxnative, else ~/.config/plxnative); `key=value` lines, `#` comments, nothing secret in it:
+XDG_CONFIG_HOME/multiplex, else ~/.config/multiplex); `key=value` lines, `#` comments, nothing secret in it:
 
-    root=/Volumes/DAS/plxnative-cold   required: the directory the copies live under
+    root=/Volumes/DAS/multiplex-cold   required: the directory the copies live under
     max_days=14                        a parked copy older than this is pruned
     min_free_gib=200                   the cold volume must keep this much free; under it nothing is parked and
                                        prune drops the oldest copies until it is back over
@@ -28,7 +28,7 @@ XDG_CONFIG_HOME/plxnative, else ~/.config/plxnative); `key=value` lines, `#` com
 
 Environment: PLX_COLD_STORE=off disables it for one command, PLX_COLD_STORE=<path> sets the root for one
 command, PLX_COLD_STORE_CONFIG=<file> names the config file (the test seam), PLX_BUILD_CACHE (default
-~/.cache/plxnative) holds the SSD side. PLX_COLD_STORE_TEST_FREE_KIB / PLX_COLD_STORE_TEST_NOW pretend the cold
+~/.cache/multiplex) holds the SSD side. PLX_COLD_STORE_TEST_FREE_KIB / PLX_COLD_STORE_TEST_NOW pretend the cold
 volume's free space / the time and are REFUSED unless PLX_BUILD_CACHE and PLX_COLD_STORE_CONFIG (or a
 PLX_COLD_STORE root) are named too: a pretend emergency over the real store would park real trees.
 
@@ -113,17 +113,17 @@ def human(n: float) -> str:
 
 
 def config_dir(env) -> str:
-    """tools/tv-config.sh:18-25 in Python: PLX_TV_CONFIG_DIR, else XDG_CONFIG_HOME/plxnative, else ~/.config/plxnative
+    """tools/tv-config.sh:18-25 in Python: PLX_TV_CONFIG_DIR, else XDG_CONFIG_HOME/multiplex, else ~/.config/multiplex
     (an empty value counts as unset, like the shell's `:-`)."""
     explicit = env.get("PLX_TV_CONFIG_DIR")
     if explicit:
         return explicit
     xdg = env.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(xdg, "plxnative")
+    return os.path.join(xdg, "multiplex")
 
 
 def build_cache(env) -> str:
-    return os.path.realpath(env.get("PLX_BUILD_CACHE") or os.path.expanduser("~/.cache/plxnative"))
+    return os.path.realpath(env.get("PLX_BUILD_CACHE") or os.path.expanduser("~/.cache/multiplex"))
 
 
 def escape(path: str) -> str:

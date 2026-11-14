@@ -36,5 +36,5 @@ fuzz_target!(|data: &[u8]| {
 });
 
 fuzz_mutator!(|data: &mut [u8], size: usize, max_size: usize, seed: u32| {
-    plxnative_fuzz::mutate_bundle(data, size, max_size, seed)
+    multiplex_fuzz::mutate_bundle(data, size, max_size, seed)
 });

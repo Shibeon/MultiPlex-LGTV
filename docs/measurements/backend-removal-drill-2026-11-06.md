@@ -82,7 +82,7 @@ Re-verified with `git grep` at `e391d89bf`, which descends from the drill base.
 | simulator targets | built without simulated playback (registration edit); five type-checks pass | five type-checks pass, feature sets unchanged |
 | `make RELEASE=1 PLAYBACK_BACKENDS=<s> ipk` | exit 0, `all packaging assertions passed`, `PASS actual IPK: 7 ELF files, all link inputs and transformed SHA-256 verified`; 20,174,614 bytes | exit 0, same two lines; 20,541,048 bytes |
 | package inspection, `make -s print-playback-config` | passes (see below) | passes (unchanged Feed configuration) |
-| `make RELEASE=1 PLAYBACK_BACKENDS=none pkg/plxnative` refuses | `A television package requires a URI or feed playback backend.`, make exit 2 | same |
+| `make RELEASE=1 PLAYBACK_BACKENDS=none pkg/multiplex` refuses | `A television package requires a URI or feed playback backend.`, make exit 2 | same |
 | non-test code naming the deleted backend, over the shared crates and the survivor | 0 hits in 568 `.rs` files | 0 hits in 592 `.rs` files |
 | `python3 ci/check-module-layers.py` | `green - 17 layers, 1716 modules` | `green - 17 layers, 1767 modules` |
 | `bash ci/check-deps.sh` | `check-deps: all gates green` | `check-deps: all gates green` (after the `MACHINES` fix below) |
@@ -103,7 +103,7 @@ URI only (`make -s RELEASE=1 PLAYBACK_BACKENDS=uri print-playback-config`):
 `native=src/crashtrace.c src/main.c src/sentry_context.c src/svg.c src/video_plane.c src/compat/getauxval.c`
 (no `src/starfish.c`), `libraries=-lSDL2 -lSDL2_ttf -lGLESv2 -lluna-service2 -lglib-2.0 -lwayland-client`
 (no `-lplayerAPIs -lpf-1.0`), `interposer=` empty. `PLAYBACK_BACKENDS=uri bash ci/check-elf.sh
-pkg/plxnative` exits 0 (`no Feed hook or relocation; Load-with-context has no loader dependency`,
+pkg/multiplex` exits 0 (`no Feed hook or relocation; Load-with-context has no loader dependency`,
 `13 entries for uri, unchanged`); `DT_NEEDED` has neither `libplayerAPIs` nor `libpf`, and
 `strings` finds no `StarfishMediaAPIs` or `callbackFunctionHook`. The package's data tar still holds
 `libavutil-plx.so.61`, `libavcodec-plx.so.63`, `libavformat-plx.so.63` and `libass-plx.so.0`.
@@ -121,10 +121,10 @@ make recipes' own command lines were the edited ones.
 | Target | `nofeed` | `nouri` |
 | --- | --- | --- |
 | CI step, `--lib --no-default-features` | `--features hostsim` (25.28s) | `--features hostsim,play-feed` (18.05s) |
-| `screenshots-sim` | `hostsim,devtriggers --bin plxnative-sim` | `hostsim,play-feed,devtriggers --bin plxnative-sim` |
+| `screenshots-sim` | `hostsim,devtriggers --bin multiplex-sim` | `hostsim,play-feed,devtriggers --bin multiplex-sim` |
 | `site-video-sim` | `--release ... hostsim,devtriggers,placeholder-sentinel` | `--release ... hostsim,play-feed,devtriggers,placeholder-sentinel` |
-| `sim-macos` | `--features hostsim --bin plxnative-sim` (default features, no edit) | same |
-| `macapp` | `--release --no-default-features --features hostsim --bin plxnative-sim` | `... hostsim,play-feed --bin plxnative-sim` |
+| `sim-macos` | `--features hostsim --bin multiplex-sim` (default features, no edit) | same |
+| `macapp` | `--release --no-default-features --features hostsim --bin multiplex-sim` | `... hostsim,play-feed --bin multiplex-sim` |
 
 Without Feed the simulator installs `NoSink`, so Play reaches the failure read-out
 (`ci/test_sim_backend.py` states this).
@@ -248,8 +248,8 @@ unchanged.
    `ci/build-budgets.json`. Finding them is the documentation audit's work.
 5. `plx_platform`'s `feed-sink` (`nofeed`) and `uri-transport` (`nouri`) features stay declared
    and no application feature enables them any more.
-6. `make RELEASE=1 PLAYBACK_BACKENDS=none pkg/plxnative` changes the `RUST_CFG` stamp, so it
-   deleted that tree's `pkg/plxnative` build output. The ipk and its checks had already run.
+6. `make RELEASE=1 PLAYBACK_BACKENDS=none pkg/multiplex` changes the `RUST_CFG` stamp, so it
+   deleted that tree's `pkg/multiplex` build output. The ipk and its checks had already run.
 7. **Not run:** the `media` and `screens` Feed integration tests in `nofeed` (the allowance), `make
    check` in either tree, the full simulator links, and anything on the television. The Python
    pins were not run against the base inside the drill; they pass at `869ff76e2` as verified
@@ -268,8 +268,8 @@ cd ..
 make "PLAYBACK_BACKENDS=$SURVIVOR" check-nodef
 make -s RELEASE=1 "PLAYBACK_BACKENDS=$SURVIVOR" print-playback-config
 make RELEASE=1 "PLAYBACK_BACKENDS=$SURVIVOR" ipk
-PLAYBACK_BACKENDS=$SURVIVOR bash ci/check-elf.sh pkg/plxnative
-make RELEASE=1 PLAYBACK_BACKENDS=none pkg/plxnative        # must refuse
+PLAYBACK_BACKENDS=$SURVIVOR bash ci/check-elf.sh pkg/multiplex
+make RELEASE=1 PLAYBACK_BACKENDS=none pkg/multiplex        # must refuse
 python3 ci/check-module-layers.py && bash ci/check-deps.sh
 ```
 

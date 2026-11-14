@@ -1041,7 +1041,7 @@ mod tests {
     }
 
     /// Host timing of the restyle on the TV's repro file (4 MiB TIS-620, 35,735 cues). Run by hand:
-    /// `cargo test -p plxnative-media --lib restyle_timing -- --ignored --nocapture`.
+    /// `cargo test -p multiplex-media --lib restyle_timing -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn restyle_timing() {

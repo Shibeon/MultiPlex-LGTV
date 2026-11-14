@@ -50,7 +50,7 @@ fn home_opener_anchors_at_the_drawn_rect_of_a_grid_card_and_at_nothing_for_the_h
     assert!(live_differs_from_rest, "the fixture must catch the drawn rect off its settled one, or a rect/rest_rect swap is invisible");
 }
 
-/// **The `plxnative-itemmenu` boot trigger's question is answered on the Continue Watching row**,
+/// **The `multiplex-itemmenu` boot trigger's question is answered on the Continue Watching row**,
 /// the card the documentation scene (`item-menu`) and the `fps:item-menu` scene open the menu on.
 /// The row stands in view on the hero's page, so focus lands on it with the page still at rest on
 /// the hero; the trigger's pre-check (`request_home_menu`) asked whether the page was OFF the hero

@@ -5,11 +5,11 @@ The ONE capture recipe (the scenario's `comment` repeats it):
 
   1. start tests/mock_pms.py in this process (loopback, `authorize_after=2`) and reset its Discover
      list to the capture's `mock` mode with `POST /_mock/discover {"list": <mode>}`;
-  2. a fresh instance root with `plxnative-plextv` and `plxnative-discover` aimed at the mock;
-     a prep boot with `plxnative-login` signs in through the app's own QR flow (the stored mock
+  2. a fresh instance root with `multiplex-plextv` and `multiplex-discover` aimed at the mock;
+     a prep boot with `multiplex-login` signs in through the app's own QR flow (the stored mock
      session is the account; no `token` trigger is armed);
   3. arm the capture's `triggers`, boot, wait `boot_wait_s`, send each key through
-     `plxnative-remote` (`hold` is okdown, 1.2 s, okup), then `shot`;
+     `multiplex-remote` (`hold` is okdown, 1.2 s, okup), then `shot`;
      A key `mock:<json>` POSTs <json> to /_mock/discover mid-walk (`{"pms":"fail"}` makes the PMS side
      answer 503: once a library read fails and the list is read again, a title matched there reads
      ServerOffline); `lib:<json>` POSTs <json> to /_mock/library (a TEST-ONLY library add/remove plus the
@@ -25,7 +25,7 @@ The ONE capture recipe (the scenario's `comment` repeats it):
 Nothing leaves the machine: no plex.tv, no real server, no television. The PNGs are scratch
 output and are never committed.
 
-  python3 tools/watchlist_captures.py --sim <path to plxnative-sim> [--out DIR] [--only FILE ...]
+  python3 tools/watchlist_captures.py --sim <path to multiplex-sim> [--out DIR] [--only FILE ...]
 """
 import argparse
 import json
@@ -48,10 +48,10 @@ class Failure(Exception):
 
 
 def sim_env(runtime):
-    """This machine's environment minus every PLXNATIVE_* variable, plus the instance root."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PLXNATIVE_")}
-    env.update({"PLXNATIVE_RUNTIME_DIR": str(runtime), "PLXNATIVE_APP_DIR": str(ROOT / "pkg"),
-                "PLXNATIVE_WIN": "1920x1080"})
+    """This machine's environment minus every MULTIPLEX_* variable, plus the instance root."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("MULTIPLEX_")}
+    env.update({"MULTIPLEX_RUNTIME_DIR": str(runtime), "MULTIPLEX_APP_DIR": str(ROOT / "pkg"),
+                "MULTIPLEX_WIN": "1920x1080"})
     return env
 
 
@@ -71,11 +71,11 @@ def require_stand_in(events):
 
 
 def sign_in(sim, runtime, port, timeout=90):
-    (runtime / "plxnative-login").write_text("")
+    (runtime / "multiplex-login").write_text("")
     log = open(runtime / "prep.out", "w")
     proc = subprocess.Popen([str(sim), "127.0.0.1", str(port)], stdout=log, stderr=subprocess.STDOUT,
                             env=sim_env(runtime))
-    events = runtime / "plxnative-events.log"
+    events = runtime / "multiplex-events.log"
     try:
         t0 = time.monotonic()
         while True:
@@ -94,7 +94,7 @@ def sign_in(sim, runtime, port, timeout=90):
         log.close()
     if not (runtime / "state" / "session.json").is_file():
         raise Failure("the mock sign-in left no state/session.json")
-    for name in ("plxnative-login", "plxnative-events.log", "plxnative-diag.log", "plxnative-remote"):
+    for name in ("multiplex-login", "multiplex-events.log", "multiplex-diag.log", "multiplex-remote"):
         (runtime / name).unlink(missing_ok=True)
 
 
@@ -104,31 +104,31 @@ def capture(sim, spec, scenario, out_dir):
 
     srv, pms = mock_pms.serve(0, authorize_after=2)
     port = srv.server_address[1]
-    runtime = pathlib.Path(tempfile.mkdtemp(prefix="plxnative-wl-"))
+    runtime = pathlib.Path(tempfile.mkdtemp(prefix="multiplex-wl-"))
     proc = None
     try:
         post(port, "/_mock/discover", dict({"list": spec["mock"]}, **spec.get("mock_extra", {})))
         for name in ("plextv", "discover"):
-            (runtime / f"plxnative-{name}").write_text(f"http://127.0.0.1:{port}")
+            (runtime / f"multiplex-{name}").write_text(f"http://127.0.0.1:{port}")
         sign_in(sim, runtime, port)
         pms.writes.clear()
         if spec.get("unreachable"):
             for name in ("plextv", "discover"):
-                (runtime / f"plxnative-{name}").write_text("http://127.0.0.1:1")
+                (runtime / f"multiplex-{name}").write_text("http://127.0.0.1:1")
         for name, value in spec["triggers"].items():
-            (runtime / f"plxnative-{name}").write_text(value)
+            (runtime / f"multiplex-{name}").write_text(value)
         log = open(runtime / "sim.out", "w")
         proc = subprocess.Popen([str(sim), "127.0.0.1", str(port)], stdout=log, stderr=subprocess.STDOUT,
                                 env=sim_env(runtime))
         time.sleep(scenario["boot_wait_s"])
-        require_stand_in(runtime / "plxnative-events.log")  # before a single key is sent
-        fifo = runtime / "plxnative-remote"
+        require_stand_in(runtime / "multiplex-events.log")  # before a single key is sent
+        fifo = runtime / "multiplex-remote"
         for _ in range(50):
             if fifo.exists():
                 break
             time.sleep(0.2)
         else:
-            raise Failure("the simulator never opened plxnative-remote")
+            raise Failure("the simulator never opened multiplex-remote")
         fd = os.open(fifo, os.O_RDWR)  # read-write: a write-only open blocks if the app is gone
         try:
             def send(tok):
@@ -178,7 +178,7 @@ def capture(sim, spec, scenario, out_dir):
         (out_dir / spec["file"]).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(shot, out_dir / spec["file"])
         want_log = spec.get("expect_log")
-        if want_log and want_log not in (runtime / "plxnative-events.log").read_text(errors="replace"):
+        if want_log and want_log not in (runtime / "multiplex-events.log").read_text(errors="replace"):
             raise Failure(f"{spec['file']}: the event log has no `{want_log}`")
         want = spec.get("expect_write")
         if want:
@@ -192,7 +192,7 @@ def capture(sim, spec, scenario, out_dir):
             # The run's event log (a panic, a frame guard's catch) and console are kept beside the
             # capture as <file stem>.log / .out.
             stem = spec["file"][:-len(".png")]
-            for name, ext in (("plxnative-events.log", ".log"), ("sim.out", ".out")):
+            for name, ext in (("multiplex-events.log", ".log"), ("sim.out", ".out")):
                 if (runtime / name).is_file():
                     shutil.copy(runtime / name, out_dir / (stem + ext))
         srv.shutdown()
@@ -201,7 +201,7 @@ def capture(sim, spec, scenario, out_dir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sim", required=True, help="the built plxnative-sim (hostsim)")
+    ap.add_argument("--sim", required=True, help="the built multiplex-sim (hostsim)")
     ap.add_argument("--out", help="output directory (default: the scenario's output_dir)")
     ap.add_argument("--scenario", default=str(SCENARIO), help="a scenario file (default: the committed one)")
     ap.add_argument("--only", nargs="*", default=[], help="capture file names to take (default: all)")

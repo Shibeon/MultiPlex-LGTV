@@ -102,17 +102,17 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           xvfb-run -a -s '-screen 0 1920x1080x24' python3 tools/sim-smoke.py \
-            --binary "$GITHUB_WORKSPACE/rust-modules/target-sim-ci/release/plxnative-sim" \
-            --runtime "$RUNNER_TEMP/plxnative-sim-runtime" \
+            --binary "$GITHUB_WORKSPACE/rust-modules/target-sim-ci/release/multiplex-sim" \
+            --runtime "$RUNNER_TEMP/multiplex-sim-runtime" \
             --assets "$GITHUB_WORKSPACE/pkg" \
-            --output "$RUNNER_TEMP/plxnative-linux.png" \
+            --output "$RUNNER_TEMP/multiplex-linux.png" \
             --core-dir "$RUNNER_TEMP/cores"
       - name: Preserve Linux capture
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: simulator-linux-${{ github.sha }}
-          path: ${{ runner.temp }}/plxnative-linux.png
+          path: ${{ runner.temp }}/multiplex-linux.png
           if-no-files-found: ignore
           retention-days: 7
       - name: Preserve Linux event log and core on failure
@@ -121,9 +121,9 @@ jobs:
         with:
           name: simulator-linux-crash-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/plxnative-sim-runtime/plxnative-events.log
+            ${{ runner.temp }}/multiplex-sim-runtime/multiplex-events.log
             ${{ runner.temp }}/cores
-            rust-modules/target-sim-ci/release/plxnative-sim
+            rust-modules/target-sim-ci/release/multiplex-sim
           if-no-files-found: ignore
           retention-days: 7
 
@@ -149,7 +149,7 @@ jobs:
         # `vendor/ffmpeg-build`, which hit and did nothing: the restored header is older than the
         # fresh checkout's `ci/build-ffmpeg.sh`, so make re-ran the script, and the script keeps
         # its extracted source and every object under `$PLX_BUILD_CACHE/ffmpeg/<arch>-<version>-<key>`
-        # (default `~/.cache/plxnative`), which nothing saved; it configured and compiled FFmpeg
+        # (default `~/.cache/multiplex`), which nothing saved; it configured and compiled FFmpeg
         # (52-79 s) every run. So this caches that tree, plus the pinned tarball beside it, and
         # leaves the prefix to be re-installed from it (about a second). No mtime decides anything:
         # the script re-derives its own content key on every run (version, SHA-256 pin, compiler,
@@ -166,7 +166,7 @@ jobs:
         # The entry is ~34 MB compressed.
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/plxnative/ffmpeg
+          path: ~/.cache/multiplex/ffmpeg
           key: host-ffmpeg-work-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('ci/build-ffmpeg.sh', 'ci/deps.py', 'ci/dependencies.json', 'ci/arm-cc.py', 'ci/check-link-evidence.py') }}
       - name: Cache the host libass stack
         # `ci/build-libass.py` stamps `vendor/libass-prefix-host/.dependencies-key` with a content
@@ -203,31 +203,31 @@ jobs:
         run: |
           python3 tests/replay_fixtures.py \
             --window 960x540 \
-            --sim "$GITHUB_WORKSPACE/rust-modules/target-sim-ci/debug/plxnative-sim" \
-            --output "$RUNNER_TEMP/plxnative-replay"
+            --sim "$GITHUB_WORKSPACE/rust-modules/target-sim-ci/debug/multiplex-sim" \
+            --output "$RUNNER_TEMP/multiplex-replay"
       - name: Preserve replay evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: simulator-replay-${{ github.sha }}
           path: |
-            ${{ runner.temp }}/plxnative-replay/**/plxnative-events.log
-            ${{ runner.temp }}/plxnative-replay/**/sim.out
+            ${{ runner.temp }}/multiplex-replay/**/multiplex-events.log
+            ${{ runner.temp }}/multiplex-replay/**/sim.out
           if-no-files-found: ignore
           retention-days: 7
       - name: Launch and capture 1080p frame
         run: |
           python3 tools/sim-smoke.py \
-            --binary "$GITHUB_WORKSPACE/rust-modules/target-sim-ci/debug/plxnative-sim" \
-            --runtime "$RUNNER_TEMP/plxnative-sim-runtime" \
+            --binary "$GITHUB_WORKSPACE/rust-modules/target-sim-ci/debug/multiplex-sim" \
+            --runtime "$RUNNER_TEMP/multiplex-sim-runtime" \
             --assets "$GITHUB_WORKSPACE/pkg" \
-            --output "$RUNNER_TEMP/plxnative-macos.png"
+            --output "$RUNNER_TEMP/multiplex-macos.png"
       - name: Preserve macOS capture
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: simulator-macos-${{ github.sha }}
-          path: ${{ runner.temp }}/plxnative-macos.png
+          path: ${{ runner.temp }}/multiplex-macos.png
           if-no-files-found: ignore
           retention-days: 7
 
@@ -262,7 +262,7 @@ jobs:
         # the later save is refused as already existing; that happens only when an input changes.
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.cache/plxnative/ffmpeg
+          path: ~/.cache/multiplex/ffmpeg
           key: host-ffmpeg-work-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('ci/build-ffmpeg.sh', 'ci/deps.py', 'ci/dependencies.json', 'ci/arm-cc.py', 'ci/check-link-evidence.py') }}
       - name: Cache the host libass stack
         # The same entry as the `macos` job's (same key), which explains it. Likewise the bundled

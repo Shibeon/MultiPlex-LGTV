@@ -52,7 +52,7 @@ pub enum SettingsPage {
     Privacy,
     /// The Legal index.
     Legal,
-    /// About PlxNative, a document pushed straight from the root.
+    /// About MultiPlex, a document pushed straight from the root.
     About,
     /// One Legal document, by index into `screens::legal`'s page list.
     Document(u8),
@@ -67,10 +67,6 @@ pub enum SettingsPage {
     Diagnostics,
     /// The Player HUD page: the installed packages, the drop folder and the chosen HUD (`hud_settings`).
     PlayerHud,
-    HudGallery,
-    HudDetail(plx_data::hudpacks::Sha),
-    HudAbout(plx_data::hudpacks::Sha),
-    HudPreview(plx_data::hudpacks::Sha),
 }
 
 /// Which preference a [`SettingsPage::Picker`] edits. The parent page (`Playback` for the local ones,
@@ -117,9 +113,7 @@ impl SettingsPage {
     /// (`Header`/`BandPart`) or the list (`TablePart`, `DocumentPart`) of a `TableScreen` /
     /// `DocumentScreen`, or is painted through `DrawFrame::narrative_painter` / `list_painter`
     /// itself, because a page that paints anything else with `f.painter` would not travel with the
-    /// push. Every Settings page does except two: the Player HUD's full-screen preview
-    /// ([`SettingsPage::HudPreview`]) is no two-column page (its scene fills the screen and its own
-    /// controls are drawn over it), and the first-run consent stage is not a Settings page at all
+    /// push. Every Settings page does except one: the first-run consent stage is not a Settings page at all
     /// (its own family never pushes a [`PushFrame`](plx_ui::route_screen::PushFrame)).
     pub fn holds_narrative(self) -> bool {
         // exhaustive on purpose: a new page must choose
@@ -140,15 +134,12 @@ impl SettingsPage {
             | SettingsPage::Preview(_)
             | SettingsPage::Picker(_)
             | SettingsPage::Diagnostics
-            | SettingsPage::PlayerHud
-            | SettingsPage::HudGallery
-            | SettingsPage::HudDetail(_)
-            | SettingsPage::HudAbout(_) => true,
-            SettingsPage::HudPreview(_) | SettingsPage::ConsentStage(_) => false,
+            | SettingsPage::PlayerHud => true,
+            SettingsPage::ConsentStage(_) => false,
         }
     }
 
-    /// The pages a boot target asks the surface to stand on, root first: `plxnative-settings=picker-…` and
+    /// The pages a boot target asks the surface to stand on, root first: `multiplex-settings=picker-…` and
     /// `player-hud` name root → Playback → the page (root → the picker for a root row's; root → Under posters → a
     /// `under-posters-movie` / `-show` details picker), the stack an interactive visit
     /// builds. `RouteSurface::new` issues one request per page and the inner stack keeps only the newest request, so
@@ -199,10 +190,6 @@ impl ScreenArg for SettingsPage {
             SettingsPage::ConsentStage(_) => 107,
             SettingsPage::Picker(_) => 112,
             SettingsPage::PlayerHud => 115,
-            SettingsPage::HudGallery => 117,
-            SettingsPage::HudDetail(..) => 118,
-            SettingsPage::HudAbout(..) => 119,
-            SettingsPage::HudPreview(..) => 120,
             SettingsPage::Diagnostics => 121,
         })
     }
@@ -224,17 +211,11 @@ impl ScreenArg for SettingsPage {
 /// recorder exists to catch.
 ///
 /// The kind is [`ScreenArg::id`]'s number, the container's own page kind. Document and picker pages
-/// append their index; HUD detail pages append their archive digest; payload-less pages append zero.
+/// append their index; payload-less pages append zero.
 /// A page's destination payload always participates in its identity.
 impl LogicalState for SettingsPage {
     fn write(&self, w: &mut Canon) {
         w.discriminant(ScreenArg::id(self).0);
-        match self {
-            SettingsPage::HudDetail(sha) | SettingsPage::HudAbout(sha) | SettingsPage::HudPreview(sha) => {
-                w.str(&sha.hex()); return;
-            }
-            _ => (),
-        }
         w.u8(match self {
             SettingsPage::Root
             | SettingsPage::Language
@@ -247,13 +228,11 @@ impl LogicalState for SettingsPage {
             | SettingsPage::Privacy
             | SettingsPage::Legal
             | SettingsPage::PlayerHud
-            | SettingsPage::HudGallery
             | SettingsPage::Diagnostics
             | SettingsPage::About => 0,
             SettingsPage::Document(i) | SettingsPage::Preview(i) | SettingsPage::ConsentStage(i) => *i,
             SettingsPage::Picker(kind) => *kind as u8,
             SettingsPage::UnderPostersDetails(kind) => *kind as u8,
-            SettingsPage::HudDetail(..) | SettingsPage::HudAbout(..) | SettingsPage::HudPreview(..) => unreachable!("written above"),
         });
     }
     fn probe(&self, out: &mut String) {
@@ -275,10 +254,6 @@ impl LogicalState for SettingsPage {
             SettingsPage::ConsentStage(_) => "stage",
             SettingsPage::Picker(_) => "picker",
             SettingsPage::PlayerHud => "player-hud",
-            SettingsPage::HudGallery => "hud-gallery",
-            SettingsPage::HudDetail(..) => "hud-detail",
-            SettingsPage::HudAbout(..) => "hud-about",
-            SettingsPage::HudPreview(..) => "hud-preview",
             SettingsPage::Diagnostics => "diagnostics",
         });
         if let SettingsPage::Document(i) | SettingsPage::Preview(i) | SettingsPage::ConsentStage(i) = self {
@@ -462,10 +437,6 @@ mod tests {
             SettingsPage::Picker(PickerKind::Quality),
             SettingsPage::PlayerHud,
             SettingsPage::Diagnostics,
-            SettingsPage::HudGallery,
-            SettingsPage::HudDetail(plx_data::hudpacks::Sha::of(b"test")),
-            SettingsPage::HudAbout(plx_data::hudpacks::Sha::of(b"test")),
-            SettingsPage::HudPreview(plx_data::hudpacks::Sha::of(b"test")),
         ];
         let mut ids: Vec<u32> = pages.iter().map(|p| plx_ui::screen::ScreenArg::id(p).0).collect();
         ids.sort_unstable();

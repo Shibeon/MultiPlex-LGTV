@@ -367,7 +367,7 @@ impl PlayerOverlayScreen {
         }
     }
 
-    /// Resolve `/tmp/plxnative-menupick`'s second field to an absolute row: a plain row number
+    /// Resolve `/tmp/multiplex-menupick`'s second field to an absolute row: a plain row number
     /// parses as itself (the original contract); the Audio tab's `"boost"`/`"loudness"` are tried
     /// as NAMED targets through [`plx_appkit::track_menu::TrackMenuState::row_for_audio_target`].
     /// `None` when neither applies — an unparseable number, a name on the wrong tab, or an
@@ -383,7 +383,7 @@ impl PlayerOverlayScreen {
         }
     }
 
-    /// Resolve a `"track:N"` target of `/tmp/plxnative-menupick` to the subtitle's index in the
+    /// Resolve a `"track:N"` target of `/tmp/multiplex-menupick` to the subtitle's index in the
     /// item's list ([`plx_appkit::track_menu::TrackMenuState::sub_track_for_target`]) — root tracks
     /// first, then the ones behind Other languages. `None` for any other target.
     pub fn resolve_menupick_track(&self, target: &str) -> Option<usize> {
@@ -448,7 +448,7 @@ impl PlayerOverlayScreen {
         }
     }
 
-    /// **The headless track pick** (`/tmp/plxnative-menupick=<tab>,<row>`): seat the cursor on
+    /// **The headless track pick** (`/tmp/multiplex-menupick=<tab>,<row>`): seat the cursor on
     /// `row` and confirm it, exactly as a viewer's DOWN…DOWN…OK would. It is a method rather than
     /// two calls at the trigger's site because the panel's state is an INSTANCE now — the trigger
     /// presents the surface and the body is mounted at nav commit, a frame later — so the loop

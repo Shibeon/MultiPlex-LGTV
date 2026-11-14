@@ -16,7 +16,9 @@ blocking, then polls every POLL_INTERVAL s) and holds it for CMD's lifetime. Slo
 lock file itself (`${PLX_CHECK_LOCK:-~/.cache/plxnative/check.lock}`) and slot i is
 `<lock>.i`; keeping slot 0 at the historical path means an older single-lock wrapper still
 running in some other worktree holds a slot of this scheme instead of being invisible to
-it. The directory is deliberately OUTSIDE any git worktree so every checkout on the machine
+it. For the same reason the path kept its pre-rename `plxnative` directory when everything else
+moved to `~/.cache/multiplex`: a checkout of a commit before the rename queues on these very
+files, so a renamed path would let the two run side by side. The directory is deliberately OUTSIDE any git worktree so every checkout on the machine
 contends for the same files. `PLX_CHECK_LOCK=off` bypasses locking entirely.
 
 HOW MANY. `PLX_CHECK_SLOTS=N` (or the default below). N=1 is the old one-at-a-time lock
@@ -91,6 +93,7 @@ import subprocess
 import sys
 import time
 
+# The pre-rename path on purpose: see SLOTS in the docstring.
 DEFAULT_LOCK = os.path.expanduser("~/.cache/plxnative/check.lock")
 POLL_INTERVAL = 2
 REPORT_INTERVAL = 60

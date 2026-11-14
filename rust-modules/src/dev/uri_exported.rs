@@ -1,4 +1,4 @@
-//! The exported-window override (`plxnative-uriexported`): the PRODUCTION URI backend, bound to the
+//! The exported-window override (`multiplex-uriexported`): the PRODUCTION URI backend, bound to the
 //! exported window (`Binding::Exported`) on a webOS 5+ set whose firmware major the evidence
 //! table has not admitted. Debug builds only: this file is compiled with `devtriggers` and
 //! `play-uri` (see `dev.rs`), so a release binary carries none of it, and the read below is
@@ -22,7 +22,7 @@
 //!
 //! **Why a trigger and not a setting.** The override exists so a tester can run the product
 //! backend on a release the evidence does not admit, and a release build must not be able to do
-//! that. `plxnative-uriexported` is in `dev::DIAG`: it changes how one play is carried and nothing
+//! that. `multiplex-uriexported` is in `dev::DIAG`: it changes how one play is carried and nothing
 //! about the boot, so a stale file must not move a later boot off the who's-watching picker.
 
 use plx_play_uri::backend::{Binding, EXPORTED_CANVAS};
@@ -84,7 +84,7 @@ mod tests {
         assert!(line.is_empty(), "{line}");
     }
 
-    /// The trigger is the file `plxnative-uriexported` in the runtime root, and present means armed:
+    /// The trigger is the file `multiplex-uriexported` in the runtime root, and present means armed:
     /// the content is not read.
     #[test]
     fn the_trigger_is_armed_by_the_file_being_present() {

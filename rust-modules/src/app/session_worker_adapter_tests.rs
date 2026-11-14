@@ -47,7 +47,7 @@ fn signing_out_leaves_no_consent_and_no_identifier_for_the_next_account() {
     }
     let _g = plx_base::testlock::serial();
     let dir =
-        std::env::temp_dir().join(format!("plxnative-signout-consent-{}", std::process::id()));
+        std::env::temp_dir().join(format!("multiplex-signout-consent-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a writable temp dir");
     let _redirects = Redirects {

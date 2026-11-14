@@ -19,7 +19,7 @@ FB bits: alpha=8 red=8 depth=0 stencil=0 (config alpha=8 depth=0 stencil=0)
 wm sdl=2.0.5 subsys=6 wl_surface=0x6fcd68 wl_display=0x6f7f60 alpha=8
 init_text ok=1
 net: bound libcurl -> libcurl.so.5 (libcurl/7.53.1 OpenSSL/1.0.2p zlib/1.2.11 c-ares/1.12.0 nghttp2/1.26.0; AsynchDNS=yes); threaded-tls=true legacy-locks=Installed
-token: using /tmp/plxnative-token (test identity)
+token: using /tmp/multiplex-token (test identity)
 boot: dev token — link=Local (classified from the configured address)
 plex: server slot 0 registered at <pms-host>:32499
 pms: server 0 version=1.43.3.10896-cb3ebc72d plexPass=true
@@ -40,7 +40,7 @@ font chain: Base /media/developer/apps/usr/palm/applications/app.multiplex.nativ
 LIFECYCLE: foreground (wasPlaying=0)
 LIFECYCLE: foreground (wasPlaying=0)
 detail: rk=1945 'Toy Story 4' show=false genres=6 cast=42 crew=5 seasons=0 eps=0 related=5 audio=3 subs=3 ms=36
-plxnative-play: rk=1945 start
+multiplex-play: rk=1945 start
 playqueue: id=3036 item=20982 remaining=0 rows=1 next=-
 route: Auto adaptive — source 16357kbps 3840x1608; starting 720kbps HLS (Some(OriginalInfeasible))
 select streams: part=3294 audio=0 sub=0 -> HTTP 200

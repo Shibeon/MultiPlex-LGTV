@@ -22,15 +22,15 @@ DEFAULTS = {"canvas": "1920x1080", "settle_ms": 200, "after_ms": 100}
 class Capture(unittest.TestCase):
     def test_virtual_input_replaces_wall_clock_shot_and_keeps_isolation(self):
         scene = {"name": "seek", "lang": "de", "virtual": {"frames": 12, "select": 3, "keys": "900:right"}}
-        with patch.dict("os.environ", {"PLXNATIVE_TOKEN": "must-not-leak", "PLXNATIVE_DUMP_NO_HOLD": "1"}):
+        with patch.dict("os.environ", {"MULTIPLEX_TOKEN": "must-not-leak", "MULTIPLEX_DUMP_NO_HOLD": "1"}):
             env = shots.clean_env(pathlib.Path("/rt"), pathlib.Path("/rt/a.png"), scene, DEFAULTS, pathlib.Path("/assets"))
-        self.assertNotIn("PLXNATIVE_TOKEN", env)
-        self.assertNotIn("PLXNATIVE_DUMP_NO_HOLD", env)
-        self.assertFalse(any(k.startswith("PLXNATIVE_SHOT") for k in env))
-        self.assertEqual(env["PLXNATIVE_DUMP_FRAMES"], "12")
-        self.assertEqual(env["PLXNATIVE_DUMP_KEYS"], "900:right")
-        self.assertEqual(env["PLXNATIVE_APP_DIR"], "/assets")
-        self.assertEqual(env["PLXNATIVE_LOCALE"], "de")
+        self.assertNotIn("MULTIPLEX_TOKEN", env)
+        self.assertNotIn("MULTIPLEX_DUMP_NO_HOLD", env)
+        self.assertFalse(any(k.startswith("MULTIPLEX_SHOT") for k in env))
+        self.assertEqual(env["MULTIPLEX_DUMP_FRAMES"], "12")
+        self.assertEqual(env["MULTIPLEX_DUMP_KEYS"], "900:right")
+        self.assertEqual(env["MULTIPLEX_APP_DIR"], "/assets")
+        self.assertEqual(env["MULTIPLEX_LOCALE"], "de")
 
     def test_invalid_virtual_frame_bounds_fail_before_launch(self):
         for config in ({"frames": 0}, {"select": -1}, {"select": 1}, {"frames": True}, {"preroll": 9999}, {"no_hold": True}):
@@ -77,8 +77,8 @@ class _Pms:
 
 
 class InstanceRoot(unittest.TestCase):
-    """`capture` boots the simulator in a fresh `plxnative-shot-<scene>-*` instance root (a virtual
-    capture's frame stream makes it up to 0.7 GiB) and `render_set` stages into `plxnative-shots-*`.
+    """`capture` boots the simulator in a fresh `multiplex-shot-<scene>-*` instance root (a virtual
+    capture's frame stream makes it up to 0.7 GiB) and `render_set` stages into `multiplex-shots-*`.
     Both are gone when the run ends, whichever way it ends -- SIGTERM included. Unhandled, SIGTERM
     ends Python at once, with no `finally` and the simulator still running, and the root stays in
     `$TMPDIR`."""
@@ -128,7 +128,7 @@ with patch.object(shots.mock_pms, "serve", return_value=(Server(), Pms())), \
             return shots.capture(sim, scene or {"name": "probe"}, self.DEFAULTS, "sintel", False, **kwargs)
 
     def test_capture_removes_its_instance_root_whether_it_returns_or_raises(self):
-        settles = 'cp "{png}" "$PLXNATIVE_SHOT"\n'
+        settles = 'cp "{png}" "$MULTIPLEX_SHOT"\n'
         for name, script, scene, kwargs, error in (
                 ("settled", settles, {}, {}, None),
                 ("refused", "exit 3\n", {}, {}, RuntimeError),

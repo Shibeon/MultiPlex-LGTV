@@ -13,12 +13,12 @@ description: >
 > **This is also what you do while the television is locked.** One set, one lane at a time
 > (`tools/tv-lock.sh`, the **`tv-lock`** skill): when a device command is refused because another
 > lane holds it, the simulator is usually the answer rather than the queue — N instances run at
-> once, each with its own `PLXNATIVE_RUNTIME_DIR`. Come back to the TV only for what the simulator
+> once, each with its own `MULTIPLEX_RUNTIME_DIR`. Come back to the TV only for what the simulator
 > provably cannot answer (frame rate, text rasterization, LG's decoder, the video plane) — a
 > shorter list on macOS since the streaming pipeline moved onto that simulator on 2026-08-28.
 > Windows/WSLg's UI-only path stops at the existing host no-video seam.
 
-`plxnative-sim` is the same application core the television runs, linked against desktop SDL2 and
+`multiplex-sim` is the same application core the television runs, linked against desktop SDL2 and
 desktop GL. It draws the real interface against your real Plex Media Server on macOS or through
 WSLg on Windows.
 
@@ -56,7 +56,7 @@ powershell -ExecutionPolicy Bypass -File tools/sim.ps1 send right ok shot
 `setup` installs stable Rust, SDL2/SDL2_ttf, Mesa OpenGL and diagnostics in WSL and refuses a
 software renderer. `run` and `shot` default to a 1920×1080 drawable, request vsync, and apply a
 60 Hz host frame cap because WSLg's X11/GLX swap does not block on that request. They use
-`~/.cache/plxnative-sim/target`, `~/.local/state/plxnative-sim`, and an isolated asset directory;
+`~/.cache/multiplex-sim/target`, `~/.local/state/multiplex-sim`, and an isolated asset directory;
 override those with `-TargetDir`, `-RuntimeDir`, and `-AssetDir`; quoted paths containing spaces are
 supported. These three overrides are absolute Linux paths inside WSL, keeping Cargo and runtime
 files off the Windows-mounted checkout. `-StageToken` copies the token from gitignored
@@ -105,7 +105,7 @@ make sim-macos-shot SIM_DIR=/tmp/sim-b SIM_SHOT=/tmp/sim-b/home.png # safe, simu
 
 Inside a root live that instance's dev triggers, its remote FIFO and its event log — the same
 names and the same contents as on the TV, so **every `tv-session` recipe transfers verbatim**.
-With no `SIM_DIR` the root is `/tmp/plxnative-sim` (the Makefile's default); `/tmp` is the *device's* root, not this one's.
+With no `SIM_DIR` the root is `/tmp/multiplex-sim` (the Makefile's default); `/tmp` is the *device's* root, not this one's.
 
 **The flavour axis does not reach here.** The TV now carries three installs with three runtime
 roots, so `tv-session` recipes name theirs via `make -s print-rundir FLAVOR=…`; an explicit
@@ -124,7 +124,7 @@ compilation, but the cause is the filesystem. Point the build somewhere local an
 checkout where it is:
 
 ```sh
-export SIM_TDIR=$HOME/plxnative-sim-target      # print-simbin follows it
+export SIM_TDIR=$HOME/multiplex-sim-target      # print-simbin follows it
 ```
 
 Only the simulator is rescuable this way. `make` and `make check` build under
@@ -148,7 +148,7 @@ Three things, and notably no webOS NDK and no nightly:
    No nightly: the ARM cross-build runs on the same stable release (prebuilt armv7 std, no
    `-Z build-std`), and `rust-modules/.cargo/config.toml` no longer has an `[unstable]` table.
 3. `src/config.local.h` for the PMS host and token. Gitignored, so a fresh clone has none: pass
-   `SIM_PMS=<ip>` and write the token into `$SIM_DIR/plxnative-token` by hand.
+   `SIM_PMS=<ip>` and write the token into `$SIM_DIR/multiplex-token` by hand.
 
 ## Boot into a specific screen
 
@@ -159,8 +159,8 @@ under-reports the four triggers named nowhere but their `devtrig::flag`/`devtrig
 owns the screen-to-trigger recipes.
 
 ```sh
-touch $SIM_DIR/plxnative-library            # boot into the browse grid
-echo 3 > $SIM_DIR/plxnative-library         # ...on section 3
+touch $SIM_DIR/multiplex-library            # boot into the browse grid
+echo 3 > $SIM_DIR/multiplex-library         # ...on section 3
 make sim-macos-shot SIM_DIR=$SIM_DIR
 ```
 
@@ -174,16 +174,16 @@ PMS. The mock serves those two reads (`GET /library/people/{tagKey}` and `.../cr
 listener as everything else, but the app only asks it when told where Discover lives:
 
 ```sh
-echo "http://127.0.0.1:$MOCK_PORT" > $SIM_DIR/plxnative-discover     # the mock's own port
+echo "http://127.0.0.1:$MOCK_PORT" > $SIM_DIR/multiplex-discover     # the mock's own port
 ```
 
-(`plxnative-plextv=http://127.0.0.1:$MOCK_PORT`, which the QR sign-in flow needs anyway, is followed by
-Discover too.) A `plxnative-token` boot has no account token, so with the stand-in armed the biography
+(`multiplex-plextv=http://127.0.0.1:$MOCK_PORT`, which the QR sign-in flow needs anyway, is followed by
+Discover too.) A `multiplex-token` boot has no account token, so with the stand-in armed the biography
 arrives (synthetic prose, or just the name for a demo-library actor) while the credits answer `401`
-exactly as the real provider does, and the Filmography stays empty unless `plxnative-personcredits`
+exactly as the real provider does, and the Filmography stays empty unless `multiplex-personcredits`
 seeds it.
 
-**Decision: a `plxnative-token` boot with neither stand-in armed does NOT fall through to
+**Decision: a `multiplex-token` boot with neither stand-in armed does NOT fall through to
 `discover.provider.plex.tv`; the app refuses both person reads locally and does not ask again.** The
 cost is accepted: such a boot (`--guest`, `--guest --mock`, `tests/run.py --mock`, a real-PMS
 `--guest` scene) shows no biography and no filmography credits, and the page settles as it does for a
@@ -200,11 +200,11 @@ fail the run unless the boot logged `discover: base=stand-in` (`mock_pms.discove
 Run it in the background, write tokens to the FIFO, ask for a shot:
 
 ```sh
-PLXNATIVE_RUNTIME_DIR=$D PLXNATIVE_APP_DIR=$PWD/pkg \
-  rust-modules/target-sim/debug/plxnative-sim "$PMS_IP" 32400 >/dev/null 2>&1 &   # numeric IP
+MULTIPLEX_RUNTIME_DIR=$D MULTIPLEX_APP_DIR=$PWD/pkg \
+  rust-modules/target-sim/debug/multiplex-sim "$PMS_IP" 32400 >/dev/null 2>&1 &   # numeric IP
 sleep 7                                     # let Home land and posters arrive
 
-exec 3<> $D/plxnative-remote                # SEE THE WARNING BELOW — `<>`, never `>`
+exec 3<> $D/multiplex-remote                # SEE THE WARNING BELOW — `<>`, never `>`
 printf 'shot ' >&3;  sleep 2                # -> shot-1.png
 for t in down down right ok; do printf '%s ' "$t" >&3; sleep 0.9; done
 sleep 3; printf 'shot ' >&3; sleep 2        # -> shot-2.png
@@ -212,7 +212,7 @@ exec 3>&-
 ```
 
 Shots land in the instance root as **numbered** files (`shot-1.png`, `shot-2.png`, …) so a
-sequence never overwrites one file or races whoever is reading it. `PLXNATIVE_SHOT` only overrides
+sequence never overwrites one file or races whoever is reading it. `MULTIPLEX_SHOT` only overrides
 the location — the `shot` token works in any session without it, including `make sim-macos-run`.
 Then look at them — that is the whole point; a shot
 nobody opens has verified nothing.
@@ -235,7 +235,7 @@ sign-in may legitimately have advanced by the time the app is foregrounded again
 
 ### Three traps, each of which has already cost an hour
 
-1. **Open the FIFO read-write.** `printf x > $D/plxnative-remote` blocks forever in `open(2)` if
+1. **Open the FIFO read-write.** `printf x > $D/multiplex-remote` blocks forever in `open(2)` if
    the app is not running — there is no reader, and the shell hangs with no output. Always
    `exec 3<> fifo` and write to `&3`.
 2. **A settled screen stops presenting.** `plx_machine::idle` skips the whole swap once nothing moves, so
@@ -280,9 +280,9 @@ make screenshots SHOT_HERO_VARIANTS=1 # also home-hero-<film>.jpg for each hero 
   take it down). The settled capture waits for every armed seat, menu, clock stop and
   `autopause` pause to land, so a scene that seeks does not rest before it (a busy host can leave a
   loading player still for longer than the capture's quiet). `stillclock` also holds the Up Next countdown.
-- **The capture is the app's, once the screen is at rest.** `PLXNATIVE_SHOT_SETTLE=<ms>` makes the
+- **The capture is the app's, once the screen is at rest.** `MULTIPLEX_SHOT_SETTLE=<ms>` makes the
   simulator write one PNG after the screen has not changed for that long (and not before
-  `PLXNATIVE_SHOT_AFTER`), then exit with `PLXNATIVE_SHOT_EXIT=1`. The driver waits on that
+  `MULTIPLEX_SHOT_AFTER`), then exit with `MULTIPLEX_SHOT_EXIT=1`. The driver waits on that
   process, under a ceiling timeout; there is no sleep anywhere. A screen that never comes to rest
   is a failure, not a capture. A popover freezes the page under it, so a menu scene opens its menu
   only after the page has rested (`acct=<ms>`, `libmenu=<kind>,<ms>`).
@@ -312,7 +312,7 @@ make screenshots SHOT_HERO_VARIANTS=1 # also home-hero-<film>.jpg for each hero 
   adds the completeness gate (every title and episode carries its credits, art and licence; what
   is still missing is listed in `tests/demo_library/pending.json`, which may only shrink). Every
   asset records its `kind` and pixel `width`/`height`, which `fetch` verifies. The cache lives outside
-  the repository (`$PLXNATIVE_DEMO_CACHE`, default `~/.cache/plxnative-demo`).
+  the repository (`$MULTIPLEX_DEMO_CACHE`, default `~/.cache/multiplex-demo`).
 - **Review before committing.** Open every image. A regenerated set is committed on its own,
   never in the same commit as a change to the pipeline.
 
@@ -354,7 +354,7 @@ Report these ONLY from the device, via the **`tv-session`** skill (and `wake-tv`
   lands on the app's real failure read-out — correct behaviour, not a bug, and a convenient way to
   look at that screen.
 - ~~**Anything about video.**~~ **Narrowed twice, and the second time is recent.** Arm
-  **`plxnative-clocksink`** in the instance root and the seam becomes a plant: access units are
+  **`multiplex-clocksink`** in the instance root and the seam becomes a plant: access units are
   accepted and discarded and a presentation clock advances at real time, clamped to the last fed
   PTS, reporting position at the television's own measured 5 Hz. And since **2026-08-28** the
   source of those AUs can be a real network stream: `make sim-macos` builds a HOST copy of the
@@ -403,10 +403,10 @@ device-verified" is a useful, honest status. "Verified" without a TV is not.
   and `SIM_W=1920 SIM_H=1080` asks for it anywhere. A fitted window on a 1x screen is a whole fraction
   of the canvas (960x540, `scale` 0.5) and `surface::probe` letterboxes 1920×1080 into it, so shots
   come out at the viewport size — fine for layout, wrong for pixel work. Read the `surface:` line.
-- Without `plxnative-clocksink` there is no `player` route to screenshot beyond the failure
+- Without `multiplex-clocksink` there is no `player` route to screenshot beyond the failure
   read-out and the HUD's busy states. With it there is a real one, driven by a real stream — but
   the video PLANE is empty, because the app decodes nothing and the wayland overlay is webOS-only:
-  the HUD sits over black. Arm `plxnative-simvideo` as well and a system `ffmpeg` child decodes
+  the HUD sits over black. Arm `multiplex-simvideo` as well and a system `ffmpeg` child decodes
   the stream the clock sink accepts and composites it UNDER the UI (`src/app/adapters/hostsim/sim_video.rs`). That
   is a screenshot facility for the documentation's player figure; it says nothing about LG's
   decoder, the video plane or picture timing on the television.
@@ -417,7 +417,7 @@ device-verified" is a useful, honest status. "Verified" without a TV is not.
 hostsim,play-feed,devtriggers,placeholder-sentinel`, release, its own target dir, libass only; the
 target keeps the name of the upstream's site demo video, its first user, which this fork removed with
 the landing page). The simulator side is `rust-modules/src/dev/framedump.rs`, armed by
-`PLXNATIVE_DUMP=<dir>` (its module doc lists the variables). It drives the app from VIRTUAL time
+`MULTIPLEX_DUMP=<dir>` (its module doc lists the variables). It drives the app from VIRTUAL time
 (`clock::set_replay`, 60 fps), forces a present every iteration at swap interval 0, and WRITES a frame
 only when nothing is still arriving (no placeholder drawn, no queued upload, an idle poster source, no
 open landing claim); virtual time is never skipped, so a push to a page is recorded as the product

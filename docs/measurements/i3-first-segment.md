@@ -26,7 +26,7 @@ actuator.
 
 Two earlier launches in the same lease still printed `prime_down`. They are excluded:
 the first used the ARM binary from before `36b96679`; the second rebuilt
-`pkg/plxnative` but did not deploy it. `tests/run.py` launches the installed debug app
+`pkg/multiplex` but did not deploy it. `tests/run.py` launches the installed debug app
 and does not replace its binary. The accepted run followed an explicit `make deploy`;
 only that run exercised the commit named above.
 

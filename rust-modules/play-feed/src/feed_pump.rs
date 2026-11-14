@@ -471,7 +471,7 @@ pub fn publish_diag(
     }
 }
 
-/// **`plxnative-refuse601` (dev builds): the pipeline's `type=18 num=601` after the Load returned,
+/// **`multiplex-refuse601` (dev builds): the pipeline's `type=18 num=601` after the Load returned,
 /// once per request.** The refusal webOS 10.3.1 gives a stream it cannot allocate a decoder for
 /// (#695, DTS), reproduced on a set that would take the stream: once the Load has returned and
 /// before any picture, it publishes through [`crate::sf_event::sf_on_event`], the entry the firmware calls, so
@@ -1141,10 +1141,10 @@ pub fn tick_presentation(feed: &mut FeedResources, mt: &MainThread,
             // the addresses). The rule's stated consequence, `SOUND_ERROR_019`, is a literal that
             // exists in NO library on this device.
             //
-            // Ran behind `/tmp/plxnative-atmosacb` first, then measured, then made the default:
+            // Ran behind `/tmp/multiplex-atmosacb` first, then measured, then made the default:
             // `rv=1` accepted, 1600 audio AUs fed with `reply=O` and no error of any kind, and the
             // television's own read-out — "Dolby Vision / Dolby Atmos", both lines — photographed
-            // in a DISPLAY capture at 11 s. `/tmp/plxnative-noatmosacb` is the way back out.
+            // in a DISPLAY capture at 11 s. `/tmp/multiplex-noatmosacb` is the way back out.
             if immersive && !plx_base::devtrig::flag("noatmosacb") {
                 let rv = unsafe { (hooks.feed.sink)().plane_send_atmos(mt, id.as_ptr()) };
                 log(&format!("atmos: acb setMediaAudioData rv={rv}"));
@@ -1170,7 +1170,7 @@ pub fn tick_presentation(feed: &mut FeedResources, mt: &MainThread,
         if let Some(mut bytes) = bytes {
             // A VP9 stream's PQ lives in the container, which the pipeline never sees, so its own
             // envelope says "hdrType":"none". Say HDR10 here when the demuxer found PQ (see
-            // `vp9_hdr`). `/tmp/plxnative-novp9hdr` sends the envelope as the pipeline made it.
+            // `vp9_hdr`). `/tmp/multiplex-novp9hdr` sends the envelope as the pipeline made it.
             let container_hdr = *FEED_SHARED.container_hdr.lock().unwrap();
             if let Some(h) = container_hdr {
                 if !plx_base::devtrig::flag("novp9hdr") {

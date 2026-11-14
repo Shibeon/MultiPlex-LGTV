@@ -1484,7 +1484,7 @@ pub(crate) fn enter_profiles_from_onboard(pages: &mut plx_ui::dispatch::Dispatch
 /// routing call sites go on simply asking.
 pub(crate) fn maybe_ask_consent(pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>) {
     let c = plx_telemetry::telemetry::consent::current().unwrap_or_default();
-    // dev: /tmp/plxnative-consent[=<crash|product>] forces either first-run purpose even on an
+    // dev: /tmp/multiplex-consent[=<crash|product>] forces either first-run purpose even on an
     // automated boot. This screen is suppressed BY the presence of any trigger, so without an
     // override it cannot be reached headlessly at all. Selecting Product changes display state
     // only; no answer is stored by a harness boot — the stage byte is where the surface STARTS,
@@ -1611,6 +1611,9 @@ fn sweep_local_files(persistent: impl IntoIterator<Item = std::path::PathBuf>,
         }
     }
     failures.extend(erase_runtime_logs(runtime_root));
+    // Logs and recordings a pre-rename build wrote under `plxnative-*`: boot removes them too, but
+    // a sweep must not rely on the boot having run since an older build last wrote one.
+    failures.extend(plx_base::paths::remove_legacy_runtime_files(runtime_root));
     failures
 }
 
@@ -1698,13 +1701,32 @@ mod delete_all_tests {
             std::fs::write(path, b"x").unwrap();
         }
         let log = tv.runtime().join(plx_base::paths::runtime_file::EVENTS);
-        let rec = tv.runtime().join("plxnative-rec");
+        let rec = tv.runtime().join("multiplex-rec");
         std::fs::write(&log, b"x").unwrap();
         std::fs::write(&rec, b"x").unwrap();
         let _erofs = plx_platform::storage::UnlinkFaultForTest::install(&tv.0, libc::EROFS);
         let leftovers = sweep_local_files(persistent.clone(), &tv.runtime());
         assert_eq!(leftovers.len(), persistent.len() + 2, "{leftovers:?}");
         assert!(persistent.iter().chain([&log, &rec]).all(|p| p.exists()));
+    }
+
+    #[test]
+    fn delete_all_local_data_sweeps_the_pre_rename_logs_and_recordings() {
+        let root = std::env::temp_dir().join(format!(".plx-delete-legacy-runtime-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir(&root).unwrap();
+        for name in plx_base::paths::legacy_runtime_file::LOGS {
+            std::fs::write(root.join(name), name.as_bytes()).unwrap();
+        }
+        let recordings = root.join(plx_base::paths::legacy_runtime_file::RECORDINGS);
+        std::fs::create_dir(&recordings).unwrap();
+        std::fs::write(recordings.join("segment-0"), b"frames").unwrap();
+
+        let leftovers = sweep_local_files(Vec::new(), &root);
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        assert!(plx_base::paths::legacy_runtime_file::LOGS.iter().all(|name| !root.join(name).exists()));
+        assert!(!recordings.exists());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -1859,7 +1881,7 @@ pub(crate) fn key_back(
 /// **It does not end the process, and nothing about a BACK press does any more.** The remote's own
 /// EXIT key still terminates (LG checklist item 38), and a script that wants the app closed uses
 /// SAM's `closeByAppId` exactly as `make kill`, `tests/run.py` and `tools/tv-session.sh` already do.
-/// That is why the old `/tmp/plxnative-noexitconfirm` bypass went with the alert: it existed to let
+/// That is why the old `/tmp/multiplex-noexitconfirm` bypass went with the alert: it existed to let
 /// a headless caller quit by pressing BACK, and BACK is no longer a quit for anybody.
 pub(crate) fn back_at_root() {
     if plx_platform::tv::home::take_root_press() {

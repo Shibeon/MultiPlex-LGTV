@@ -89,7 +89,7 @@ pub fn report(key: &str, value: u64) {
 /// process of this same test binary, `--ignored` included so an ignored test can use it, and
 /// return the numbers it [`report`]ed. Panics, with the child's output, when the child fails.
 /// The child inherits this process's environment (the libraries a host test finds by
-/// `PLXNATIVE_APP_DIR` or `PLX_FFMPEG_DIR`), plus `PLX_TESTHEAP_CHILD`.
+/// `MULTIPLEX_APP_DIR` or `PLX_FFMPEG_DIR`), plus `PLX_TESTHEAP_CHILD`.
 pub fn in_fresh_process(test: &str) -> HashMap<String, u64> {
     in_fresh_process_with_env(test, &[])
 }

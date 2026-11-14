@@ -115,7 +115,7 @@
     "many": "{heading} · {count} TRACCE",
     "other": "{heading} · {count} TRACCE"
   },
-  "widgets.reason.jail_help": "Servono root e Homebrew Channel. Aiuto: plxnative.com/troubleshooting/#playback-reports-jail_missing_rtkmem.",
+  "widgets.reason.jail_help": "Servono root e Homebrew Channel.",
   "widgets.tracks.empty": "Nessuna traccia",
   "widgets.tracks.bytes": {
     "one": "{count} byte",

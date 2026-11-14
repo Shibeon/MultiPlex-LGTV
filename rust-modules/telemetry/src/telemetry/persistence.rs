@@ -994,7 +994,7 @@ mod tests {
     impl Fixture {
         fn new(name: &str) -> Self {
             let dir = std::env::temp_dir().join(format!(
-                "plxnative-consent-persistence-{name}-{}",
+                "multiplex-consent-persistence-{name}-{}",
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&dir);

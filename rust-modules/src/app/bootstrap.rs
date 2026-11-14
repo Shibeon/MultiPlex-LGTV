@@ -164,10 +164,10 @@ impl Initial {
         let initial = Self { version:1, session:plx_session::auth::SessionInit::captured_boot(saved,Some(primary),Vec::new()),
             consent:Default::default(),home:plx_data::pms::initial::Initial::fresh(),clock_start:0,
             entropy:Entropy::Seeded(seed),primary_client:1,automated:true,settings:settings.clone(),
-            content:None, triggers:vec!["plxnative-app-init".into(),"plxnative-rec".into(),
-                "plxnative-focus".into(),"plxnative-noidle".into()] };
+            content:None, triggers:vec!["multiplex-app-init".into(),"multiplex-rec".into(),
+                "multiplex-focus".into(),"multiplex-noidle".into()] };
         let mut initial = initial;
-        if settings.is_some() { initial.triggers.push("plxnative-settings".into()); }
+        if settings.is_some() { initial.triggers.push("multiplex-settings".into()); }
         initial.validate()?;
         Ok(initial)
     }

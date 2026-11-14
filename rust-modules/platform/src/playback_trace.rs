@@ -197,7 +197,7 @@ pub fn execute(command: Command) -> Status {
     if capture
         .push(
             Duration::ZERO,
-            b"PlxNative playback trace: limit=8MiB duration=60s; local diagnostic recording\n",
+            b"MultiPlex playback trace: limit=8MiB duration=60s; local diagnostic recording\n",
         )
         .is_err()
     {
@@ -416,7 +416,7 @@ fn export_if_current(
     }
     Some(match save() {
         Ok(()) => {
-            plx_base::eventlog::log("playback diagnostics: saved plxnative-playback.log");
+            plx_base::eventlog::log("playback diagnostics: saved multiplex-playback.log");
             Status::Exported
         }
         Err(failure) => {

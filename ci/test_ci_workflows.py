@@ -115,7 +115,7 @@ class BundledLibrarySymbols(unittest.TestCase):
 
     def test_every_symbol_file_is_checked_for_features_before_the_token_guarded_upload(self):
         step = self.step()
-        self.assertIn("python3 ci/check-debug-files.py pkg/plxnative.debug pkg/symbols/*.debug", step)
+        self.assertIn("python3 ci/check-debug-files.py pkg/multiplex.debug pkg/symbols/*.debug", step)
         self.assertLess(step.index("ci/check-debug-files.py"), step.index('"$UPLOAD" != true'))
         self.assertLess(step.index('"$UPLOAD" != true'), step.index("debug-files upload pkg/symbols"))
 
@@ -268,12 +268,12 @@ class HostLibraryCaches(unittest.TestCase):
     The first version cached `vendor/ffmpeg-prefix-host` and `vendor/ffmpeg-build`, logged "Cache
     hit", and rebuilt FFmpeg anyway on every run (libass, which had no cache at all, likewise): the
     restored header is older than the fresh checkout's `ci/build-ffmpeg.sh`, so make re-ran the
-    script, and the script keeps its objects under `~/.cache/plxnative/ffmpeg`, which nothing saved.
+    script, and the script keeps its objects under `~/.cache/multiplex/ffmpeg`, which nothing saved.
     """
 
     MACOS_JOBS = ("macos", "macos-host-tests")
     LIBASS_JOBS = ("linux", "macos", "macos-host-tests")
-    FFMPEG_WORK = "~/.cache/plxnative/ffmpeg"
+    FFMPEG_WORK = "~/.cache/multiplex/ffmpeg"
     LIBASS_PREFIX = "vendor/libass-prefix-host"
     DOWNLOADS = "vendor/downloads"
 
@@ -290,7 +290,7 @@ class HostLibraryCaches(unittest.TestCase):
 
     def test_the_cache_paths_are_where_the_scripts_write(self):
         sh = (ROOT / "ci/build-ffmpeg.sh").read_text()
-        self.assertIn("CACHE_ROOT=${PLX_BUILD_CACHE-$HOME/.cache/plxnative}", sh)
+        self.assertIn("CACHE_ROOT=${PLX_BUILD_CACHE-$HOME/.cache/multiplex}", sh)
         self.assertIn('WORK="$CACHE_ROOT/ffmpeg/$ARCHTAG-$VERSION-$KEY"', sh)
         # The pinned tarball lives in the same directory, so a hit needs no download either.
         self.assertIn('CACHED_TAR="$CACHE_ROOT/ffmpeg/ffmpeg-$VERSION-', sh)
@@ -807,10 +807,17 @@ class HudSimulatorRelease(unittest.TestCase):
         self.assertIn("github.event_name != 'pull_request'",attach)
         self.assertIn("inputs.publish_development",attach)
         self.assertIn("--development",attach)
-        self.assertIn("if: inputs.release_tag != ''",attach)
         self.assertNotIn("continue-on-error",attach)
         self.assertRegex(code("hud-simulator.yml"),r"publish_development:[\s\S]*?default: false")
         self.assertNotIn("contents: write",job_body("hud-simulator.yml","build"))
+
+    def test_no_registry_is_notified_after_a_release(self):
+        # The fork has no HUD registry: nothing dispatches to one, and no secret is needed for it.
+        workflow = code("hud-simulator.yml")
+        self.assertNotIn("repository_dispatch", workflow)
+        self.assertNotIn("dispatch_probe", workflow)
+        self.assertNotIn("HUD_REGISTRY_DISPATCH_TOKEN", workflow)
+        self.assertFalse((ROOT / "tools/hud_registry_dispatch.py").exists())
 
 
 class ReleaseMainPushKey(unittest.TestCase):
@@ -934,27 +941,6 @@ class FuzzWorkflow(unittest.TestCase):
         body = code(self.NAME)
         self.assertRegex(body, r"(?m)^          workspaces: fuzz -> \.\./rust-modules/target-fuzz$")
         self.assertLess(body.index("tools/fuzz-hud.py lock"), body.index("Swatinem/rust-cache@"))
-
-    def test_the_signed_index_seeds_come_from_a_signer_that_matches_rfc_8032(self):
-        # The standard library has no Ed25519, so the tool carries the RFC's reference signer to sign the
-        # registry-index seeds with the TEST ONLY keys; two of the RFC's own vectors pin it.
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("fuzz_hud", ROOT / "tools/fuzz-hud.py")
-        tool = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(tool)
-        for seed, message, public, signature in (
-            ("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", b"",
-             "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
-             "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"),
-            ("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb", b"\x72",
-             "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
-             "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00"),
-        ):
-            got = tool.ed25519_sign(bytes.fromhex(seed), message)
-            self.assertEqual((got[0].hex(), got[1].hex()), (public, signature))
-        # and what it reads from the data layer is the contract's: two shipped keys, three TEST ONLY seeds
-        self.assertEqual(len(tool.real_key_ids()), 2)
-        self.assertEqual(tool.test_only_seeds(), {"PRIMARY": 7, "STANDBY": 8, "STRANGER": 9})
 
     def test_a_pull_request_never_reads_or_writes_the_corpus_cache(self):
         steps = re.split(r"(?m)^      - ", code(self.NAME))

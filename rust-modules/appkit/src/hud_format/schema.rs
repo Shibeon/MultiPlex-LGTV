@@ -2,7 +2,7 @@
 //! widget, rest and focus style, command (with its typed parameters), condition and theme token: its
 //! type, allowed values, default and the format minor it arrived in. The strict parser
 //! ([`super::parse`]) is a generic walker over this table and the schema emitter
-//! ([`super::schema_emit`], which `plxnative-sim --hud-schema` will print) serializes it, so nothing is listed twice and the two cannot drift
+//! ([`super::schema_emit`], which `multiplex-sim --hud-schema` will print) serializes it, so nothing is listed twice and the two cannot drift
 //! (a test walks the table, proves every entry is accepted, and proves an unlisted name is refused).
 //!
 //! The table is `'static` data: plain `&'static` slices and `Copy` types, no `Vec`, no `Box`, no
@@ -121,7 +121,7 @@ use crate::player_hud::classic::{HUD_TITLE_SZ, SCRIM_H};
 pub type Since = (u8, u8);
 
 /// The format this build writes and the newest minor it reads of that major.
-pub const CURRENT: Since = plx_data::hudpacks::catalog::HUD_FORMAT;
+pub const CURRENT: Since = plx_data::hudpacks::HUD_FORMAT;
 /// Every format major this build reads, with the highest minor of that major it understands. A package
 /// whose major is absent here is `E0403`; one whose minor is above its major's entry is `E0402`.
 pub const SUPPORTED: &[(u8, u8)] = &[CURRENT];
@@ -149,7 +149,7 @@ pub const BUILTIN_MULTIPLEX_ID: &str = "builtin:multiplex";
 /// A string shape a [`Ty::Pattern`] checks. Each is a closed grammar, never a regular expression.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pattern {
-    /// `[a-z0-9.-]`, at least two dot-separated labels, each starting with a letter: `com.plxnative.x`.
+    /// `[a-z0-9.-]`, at least two dot-separated labels, each starting with a letter: `com.multiplex.x`.
     /// The two other strings it accepts are [`BUILTIN_CLASSIC_ID`] and [`BUILTIN_MULTIPLEX_ID`].
     ReverseDns,
     /// `MAJOR.MINOR.PATCH` numeric semver (no pre-release, no build metadata).
@@ -898,7 +898,7 @@ pub static ROOT: Node = Node {
         Field::req("layout", Ty::Object("layout"), "Where the HUD sits and what it holds."),
     ],
     rules: &[],
-    doc: "A HUD document inside a data-only PlxNative bundle.",
+    doc: "A HUD document inside a data-only MultiPlex bundle.",
 };
 
 /// The only owner of package identity, format declarations and resource paths.
@@ -919,7 +919,7 @@ pub static MANIFEST: Node = Node {
         Field::opt("notices", Ty::List { of: &Ty::Pattern(Pattern::PackagePath), max_len: super::bundle::MAX_ENTRIES }, "Declared UTF-8 license and attribution texts."),
     ],
     rules: &[],
-    doc: "The manifest.json of a PlxNative HUD bundle.",
+    doc: "The manifest.json of a MultiPlex HUD bundle.",
 };
 
 pub static HUD_ENTRY: Node = Node {

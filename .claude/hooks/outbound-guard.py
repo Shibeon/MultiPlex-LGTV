@@ -101,7 +101,7 @@ WHAT IT MATCHES. Two halves, and they fail in opposite directions on purpose.
 
 (a) LITERAL VALUES, read at the moment the hook runs out of the gitignored files that hold them —
     `.tv-host` (the dev television's address), `.tv-mac` (its Wake-on-LAN MAC) — and their per-user
-    twins `tv-host`/`tv-mac` under `${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/plxnative}`,
+    twins `tv-host`/`tv-mac` under `${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/multiplex}`,
     which tools/tv-config.sh reads so that every worktree shares one copy — `src/config.local.h`
     (`PMS_HOST`/`PMS_TOKEN`, the real Plex owner token), `tests/manifest.local.json` (PMS host, the
     test user's plex.tv id, this library's ratingKeys, and the shared_server block when there is
@@ -233,7 +233,7 @@ PRIVATE_FILES = (
     "pkg/auth.json",
     # The Lab Diagnostics session (`docs/lab-diagnostics.md`): a bearer secret, a certificate pin
     # and an endpoint that is the developer's own static address. Written by
-    # `tools/plxnative-lab start`, staged into a `make LAB=1` package, and gitignored — the exact
+    # `tools/multiplex-lab start`, staged into a `make LAB=1` package, and gitignored — the exact
     # shape of thing this hook exists to keep out of a PR body.
     "pkg/lab.json",
     # The telemetry endpoints and credentials (`docs/telemetry.md` when it exists). The DSN's public
@@ -248,17 +248,18 @@ PRIVATE_FILES = (
 )
 
 # The per-USER copies of `.tv-host` / `.tv-mac` (tools/tv-config.sh): one set of files per machine
-# instead of one per checkout, under ${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/plxnative}.
+# instead of one per checkout, under ${PLX_TV_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/multiplex}.
 # They sit OUTSIDE every checkout, so they cannot be named relative to `root` like PRIVATE_FILES;
 # `private_paths` adds them. Same values, same rule: the address and MAC are the maintainer's home
-# network, and `cat ~/.config/plxnative/tv-host` must be as refused in a payload as `cat .tv-host`.
+# network, and `cat ~/.config/multiplex/tv-host` must be as refused in a payload as `cat .tv-host`.
 USER_TV_FILES = ("tv-host", "tv-mac")
 
 # Gitignored DIRECTORIES whose every descendant is private (restructure spec §5.6 rule 1): a
 # recording taken against a real server carries the household's every keypress and every server
 # answer. Matched by path COMPONENT wherever the directory sits (the runtime root on the set, a
 # fetched copy under /tmp, a checkout).
-PRIVATE_DIRS = ("plxnative-recordings",)
+# The second name is the directory a build from before the plxnative -> multiplex rename recorded into.
+PRIVATE_DIRS = ("multiplex-recordings", "plxnative-recordings")
 
 # The recording envelope's grammar (`ui/rec.rs`): a payload that carries it is a recording
 # leaving the machine, whatever it is called. The ONE exception the hook computes itself: a file
@@ -330,6 +331,19 @@ def user_config_dir():
         return d
     x = os.environ.get("XDG_CONFIG_HOME")
     if x:
+        return os.path.join(x, "multiplex")
+    h = os.environ.get("HOME")
+    return os.path.join(h, ".config", "multiplex") if h else ""
+
+
+def legacy_user_config_dir():
+    """The per-user directory a checkout from before the plxnative -> multiplex rename wrote, which
+    `tools/tv-config.sh` still reads as a last fallback (`legacy_dir` there): its files hold the same
+    private values, so they are just as refused. "" when PLX_TV_CONFIG_DIR overrides both."""
+    if os.environ.get("PLX_TV_CONFIG_DIR"):
+        return ""
+    x = os.environ.get("XDG_CONFIG_HOME")
+    if x:
         return os.path.join(x, "plxnative")
     h = os.environ.get("HOME")
     return os.path.join(h, ".config", "plxnative") if h else ""
@@ -337,13 +351,13 @@ def user_config_dir():
 
 def private_paths(root):
     """[(label, absolute path)] of every file that holds a private value: the gitignored ones under
-    `root`, then the per-user TV files (labelled `plxnative/<name>`, which is how they read in a
+    `root`, then the per-user TV files (labelled `multiplex/<name>`, which is how they read in a
     refusal)."""
     out = [(rel, os.path.join(root, rel)) for rel in PRIVATE_FILES]
-    d = user_config_dir()
-    if d:
-        out += [("plxnative/" + n + " (the per-user TV config)", os.path.join(d, n))
-                for n in USER_TV_FILES]
+    for d, label in ((user_config_dir(), "multiplex"), (legacy_user_config_dir(), "plxnative")):
+        if d:
+            out += [(label + "/" + n + " (the per-user TV config)", os.path.join(d, n))
+                    for n in USER_TV_FILES]
     return out
 
 
@@ -1037,7 +1051,7 @@ def named_private_paths(seg, root, cwd):
                 seen.add(rel)
                 hits.append((rel, how))
             if under_private_dir(t) and ("<recording>", how) not in hits:
-                hits.append(("<recording> (a plxnative-recordings/ directory: a recording never leaves "
+                hits.append(("<recording> (a multiplex-recordings/ directory: a recording never leaves "
                              "this machine)", how))
             elif os.path.isfile(rp) and under_fixture_dir(rp, root):
                 try:
@@ -1304,7 +1318,7 @@ def main():
         "and tests/manifest.local.json.example uses `<pms-host>`, `<tv-host>`, `<ratingKey>`.\n"
         "\n"
         "If the reader genuinely needs the real value, name the gitignored FILE it comes from\n"
-        "(.tv-host, ~/.config/plxnative/tv-host, src/config.local.h, tests/manifest.local.json) and let\n"
+        "(.tv-host, ~/.config/multiplex/tv-host, src/config.local.h, tests/manifest.local.json) and let\n"
         "them read their own copy.\n"))
     return 2
 

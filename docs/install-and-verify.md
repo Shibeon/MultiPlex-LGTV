@@ -1,10 +1,10 @@
-# Install Plex on LG webOS TV with PlxNative
+# Install Plex on LG webOS TV with MultiPlex
 
-PlxNative is an unofficial, open-source Plex app for LG webOS TVs. It is not yet available in the LG Content Store, but you can install it on a regular LG webOS TV using LG's Developer Mode and a computer. **No root is required.** If something goes wrong, see [troubleshooting](troubleshooting.md).
+MultiPlex is an unofficial, open-source Plex app for LG webOS TVs. It is not yet available in the LG Content Store, but you can install it on a regular LG webOS TV using LG's Developer Mode and a computer. **No root is required.** If something goes wrong, see [troubleshooting](troubleshooting.md).
 
 ## Already have Homebrew Channel?
 
-Open **Homebrew Channel** on your TV, find [**PlxNative**](https://repo.webosbrew.org/apps/app.multiplex.native/), and select **Install**. Then [open PlxNative and sign in](#4-open-plxnative-and-sign-in).
+Open **Homebrew Channel** on your TV, find [**MultiPlex**](https://repo.webosbrew.org/apps/app.multiplex.native/), and select **Install**. Then [open MultiPlex and sign in](#4-open-multiplex-and-sign-in).
 
 You can skip the Developer Mode and computer setup below. If your existing Homebrew Channel installation uses Developer Mode, keep renewing that session as usual.
 
@@ -17,7 +17,7 @@ You will need:
 - a Mac, Windows PC, or Linux computer for the setup described here;
 - the TV and computer on the **same local network**.
 
-The route is **set up the TV → connect from your computer → install PlxNative**. No LG SDK or IDE is required.
+The route is **set up the TV → connect from your computer → install MultiPlex**. No LG SDK or IDE is required.
 
 > **Important:** Developer Mode needs periodic renewal. If it expires and LG disables Developer Mode, apps installed through it are removed. This applies to both installation options below, including Homebrew Channel installed through Developer Mode. [How to keep the apps installed](#important-developer-mode-expires).
 
@@ -52,55 +52,55 @@ The route is **set up the TV → connect from your computer → install PlxNativ
    Keep the Developer Mode defaults: **Username** `prisoner`, **Port** `9922`, and **Authentication** `Dev Mode`. The wizard sets these for you.
 5. Finish adding the TV. In Dev Manager, open **Apps** and check that the **Installed** tab can load the TV's apps.
 
-**Ready to continue:** Dev Manager can display the TV's installed apps. If it cannot connect, see [Connection problems](#connection-problems) before downloading PlxNative.
+**Ready to continue:** Dev Manager can display the TV's installed apps. If it cannot connect, see [Connection problems](#connection-problems) before downloading MultiPlex.
 
-## 3. Choose how to install PlxNative
+## 3. Choose how to install MultiPlex
 
-Both options install PlxNative; neither unlocks extra PlxNative features. The difference is how you install and manage updates.
+Both options install MultiPlex; neither unlocks extra MultiPlex features. The difference is how you install and manage updates.
 
 | | Direct installation | Through Homebrew Channel |
 |---|---|---|
-| **What you add to the TV** | PlxNative only. | Homebrew Channel, then PlxNative. |
+| **What you add to the TV** | MultiPlex only. | Homebrew Channel, then MultiPlex. |
 | **How you update** | Install a newer `.ipk` from your computer using Dev Manager. | Open Homebrew Channel on the TV and select **Update** when available. |
 | **Why choose it** | Fewer steps and no extra catalogue app. | Browse other homebrew apps and install updates with the TV remote. |
 
 **Both options use the Developer Mode setup above and need the same session renewal.** Installing Homebrew Channel does not remove that requirement. Its catalogue can also contain apps with their own requirements; not every homebrew app works on every TV.
 
-### Option A — install PlxNative directly
+### Option A — install MultiPlex directly
 
-**The shorter route if you only want PlxNative.**
+**The shorter route if you only want MultiPlex.**
 
-1. On your computer, open the [latest PlxNative release](https://github.com/Shibeon/MultiPlex-LGTV/releases/latest).
+1. On your computer, open the [latest MultiPlex release](https://github.com/Shibeon/MultiPlex-LGTV/releases/latest).
 2. Under **Assets**, download **`app.multiplex.native_X.Y.Z_arm.ipk`**. `X.Y.Z` is the release's version number. The `.ipk` is the TV app, not something to open on your computer; the manifest and source archives are not installers.
 3. For a manual download, [check the package against the release checksum](#verifying-the-package) before installing it.
 4. In Dev Manager, select your TV, open **Apps**, and click **Install**. Choose the downloaded `.ipk`.
-5. Wait for installation to finish and check that **PlxNative** appears under **Installed**.
+5. Wait for installation to finish and check that **MultiPlex** appears under **Installed**.
 
-Continue to [step 4](#4-open-plxnative-and-sign-in). You do not need to install Homebrew Channel as well.
+Continue to [step 4](#4-open-multiplex-and-sign-in). You do not need to install Homebrew Channel as well.
 
 For future updates, repeat this with the newer `.ipk`. Install over the existing app rather than uninstalling it first.
 
-### Option B — install Homebrew Channel, then PlxNative
+### Option B — install Homebrew Channel, then MultiPlex
 
 **Choose this for a catalogue and app updates on the TV.** Homebrew Channel is a separate TV app; you still use your computer for this initial setup.
 
 1. In **Dev Manager on your computer**, select your TV and open **Apps → Available**. This is the webOS Homebrew catalogue.
 2. Find **Homebrew Channel**, open its entry, and select **Install**.
 3. Wait for installation to finish. **On your TV**, open **Homebrew Channel** from the app launcher.
-4. Find **PlxNative**, open its entry, and select **Install**.
-5. Wait for installation to finish, then continue to [step 4](#4-open-plxnative-and-sign-in).
+4. Find **MultiPlex**, open its entry, and select **Install**.
+5. Wait for installation to finish, then continue to [step 4](#4-open-multiplex-and-sign-in).
 
-For future updates, open PlxNative's entry in Homebrew Channel and select **Update** when offered. Updates are installed when you select them, not automatically.
+For future updates, open MultiPlex's entry in Homebrew Channel and select **Update** when offered. Updates are installed when you select them, not automatically.
 
 Want to try the newest build before it is released? Add the project's nightly repository to Homebrew Channel. See the [nightly builds guide](nightly-builds.md).
 
-## 4. Open PlxNative and sign in
+## 4. Open MultiPlex and sign in
 
-Open **PlxNative** from the TV's app launcher. Scan the on-screen QR code and sign in to the Plex account that has access to your server or shared libraries. Choose your Plex Home profile if prompted.
+Open **MultiPlex** from the TV's app launcher. Scan the on-screen QR code and sign in to the Plex account that has access to your server or shared libraries. Choose your Plex Home profile if prompted.
 
-**Installation is complete.** You can now use PlxNative from the TV launcher. The remaining setup responsibility is keeping Developer Mode active, as described below.
+**Installation is complete.** You can now use MultiPlex from the TV launcher. The remaining setup responsibility is keeping Developer Mode active, as described below.
 
-PlxNative is free and open source. If it's useful to you, you can [support it on Ko-fi](https://ko-fi.com/0xbeb).
+MultiPlex is free and open source. If it's useful to you, you can [support it on Ko-fi](https://ko-fi.com/0xbeb).
 
 ## Important: Developer Mode expires
 
@@ -124,11 +124,11 @@ See [LG's session guidance](https://webostv.developer.lge.com/develop/getting-st
 
 **The apps disappeared:** check **Dev Mode Status** and **Remain Session**. If Developer Mode has been disabled, enable it again and reinstall the apps using the same route.
 
-**PlxNative opens but your libraries are missing:** make sure you signed in to a Plex account with access to a server and that the server is reachable. PlxNative does not include a media library or set up Plex Media Server for you.
+**MultiPlex opens but your libraries are missing:** make sure you signed in to a Plex account with access to a server and that the server is reachable. MultiPlex does not include a media library or set up Plex Media Server for you.
 
-For more connection help, see [webOSbrew's troubleshooting guide](https://www.webosbrew.org/devmode/#troubleshooting). To [report a PlxNative problem](https://github.com/Shibeon/MultiPlex-LGTV/issues/new/choose), include your TV model, webOS version, PlxNative version, installation method, and the exact error. Do not post passwords, Passphrase, Plex tokens, or screenshots containing them. For a how-do-I question about setup, ask in [Discussions > Q&A](https://github.com/Shibeon/MultiPlex-LGTV/discussions/categories/q-a); bugs go to the issue form.
+For more connection help, see [webOSbrew's troubleshooting guide](https://www.webosbrew.org/devmode/#troubleshooting). To [report a MultiPlex problem](https://github.com/Shibeon/MultiPlex-LGTV/issues/new/choose), include your TV model, webOS version, MultiPlex version, installation method, and the exact error. Do not post passwords, Passphrase, Plex tokens, or screenshots containing them. For a how-do-I question about setup, ask in [Discussions > Q&A](https://github.com/Shibeon/MultiPlex-LGTV/discussions/categories/q-a); bugs go to the issue form.
 
-If PlxNative itself is installed and opens but something inside it doesn't work — sign-in, playback, or anything else — see [Troubleshooting](troubleshooting.md).
+If MultiPlex itself is installed and opens but something inside it doesn't work — sign-in, playback, or anything else — see [Troubleshooting](troubleshooting.md).
 
 ---
 
@@ -164,9 +164,9 @@ sha256sum -c ipk.sha256                                    # Linux, with the che
 certutil -hashfile app.multiplex.native_X.Y.Z_arm.ipk SHA256 # Windows
 ```
 
-[Return to direct installation](#option-a--install-plxnative-directly) after checking the file.
+[Return to direct installation](#option-a--install-multiplex-directly) after checking the file.
 
-**If Homebrew Channel installs PlxNative from its catalogue, you have nothing to verify manually.** It fetches that release's `app.multiplex.native.manifest.json`, hashes the download on the television, and refuses to install a package that does not match.
+**If Homebrew Channel installs MultiPlex from its catalogue, you have nothing to verify manually.** It fetches that release's `app.multiplex.native.manifest.json`, hashes the download on the television, and refuses to install a package that does not match.
 
 If you point Homebrew Channel at a bare `.ipk` yourself instead of installing the catalogue entry, that catalogue verification path is bypassed, so verify the package yourself.
 
@@ -184,8 +184,8 @@ This section is invariant across releases. Where a release changes one of these 
 
 Both entries below are restricted to the app, but not at the same mode. The three logs are mode `0640` — owner read/write, the app's own group read, nothing for anyone else — so that on a television that is not rooted, Dev Manager should be able to fetch them and you can attach them to a bug report. The signed-in session is mode `0600`, owner only.
 
-- `/tmp/plxnative-events.log`, `/tmp/plxnative-stderr.log` and `/tmp/plxnative-crash.log` (mode `0640`) — the first two are truncated each launch, while the crash log is append-only so it survives a restart. Because the mode includes group read, another app installed on the same television that runs in PlxNative's group can read these three files too; the event log is scrubbed as described next, and so is the panic text the app appends to the crash log, but the crash tracer's own records (a faulting address, registers, one memory-map line) and the stderr log (whatever aborts and the television's own libraries print) are not. Every event-log line is scrubbed **before it is written**: tokens, header and query credentials, hostnames (including `plex.direct` names that encode your LAN address), bare addresses, Plex GUIDs, search queries, and your server and profile names are rewritten. Media titles, search terms, and subtitle text are never written at all. What remains includes ratingKeys — server-local item numbers used to diagnose playback bugs. Someone with access to the same server could map one back to an item, so still think before posting a log publicly. [`PRIVACY.md`](https://github.com/Shibeon/MultiPlex-LGTV/blob/main/PRIVACY.md) is the full contract.
-- Your signed-in session (mode `0600`), as `<id>-auth.json` under `/media/developer` or `/media/internal` — one access token per server your account can reach. PlxNative capability-probes the documented `com.webos.service.keymanager3` service (TV 24+) and uses its AES-GCM operation when LS2 policy permits it. The older `com.palm.keymanager` AES-CFB service is deliberately not used because it cannot authenticate ciphertext. webOS TV 4.10.2 has neither usable service, so the compatible result there is an atomically replaced, app-owned mode-0600 file. A protected file is never silently downgraded during a temporary service failure. The probe is an ordinary application-service call and the fallback needs no root service or root-only HAL API; store entitlement for Key Manager is still capability-tested at runtime rather than assumed from the OS version.
+- `/tmp/multiplex-events.log`, `/tmp/multiplex-stderr.log` and `/tmp/multiplex-crash.log` (mode `0640`) — the first two are truncated each launch, while the crash log is append-only so it survives a restart. Because the mode includes group read, another app installed on the same television that runs in MultiPlex's group can read these three files too; the event log is scrubbed as described next, and so is the panic text the app appends to the crash log, but the crash tracer's own records (a faulting address, registers, one memory-map line) and the stderr log (whatever aborts and the television's own libraries print) are not. Every event-log line is scrubbed **before it is written**: tokens, header and query credentials, hostnames (including `plex.direct` names that encode your LAN address), bare addresses, Plex GUIDs, search queries, and your server and profile names are rewritten. Media titles, search terms, and subtitle text are never written at all. What remains includes ratingKeys — server-local item numbers used to diagnose playback bugs. Someone with access to the same server could map one back to an item, so still think before posting a log publicly. [`PRIVACY.md`](https://github.com/Shibeon/MultiPlex-LGTV/blob/main/PRIVACY.md) is the full contract.
+- Your signed-in session (mode `0600`), as `<id>-auth.json` under `/media/developer` or `/media/internal` — one access token per server your account can reach. MultiPlex capability-probes the documented `com.webos.service.keymanager3` service (TV 24+) and uses its AES-GCM operation when LS2 policy permits it. The older `com.palm.keymanager` AES-CFB service is deliberately not used because it cannot authenticate ciphertext. webOS TV 4.10.2 has neither usable service, so the compatible result there is an atomically replaced, app-owned mode-0600 file. A protected file is never silently downgraded during a temporary service failure. The probe is an ordinary application-service call and the fallback needs no root service or root-only HAL API; store entitlement for Key Manager is still capability-tested at runtime rather than assumed from the OS version.
 
 The app does not persist the last screen: an authenticated cold launch starts on Home. Upgrades remove the retired `<id>-lastplace.json` bookmark written by older builds.
 

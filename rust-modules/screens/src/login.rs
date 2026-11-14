@@ -1956,7 +1956,7 @@ impl LoginScreen {
 
 /// Is a harness driving this boot? The onboarding offer is a modal question, and a scripted run
 /// (a test identity, a forced profile pick, a recording) must not stop on one. **Narrow on
-/// purpose**, where `dev::any_trigger_present` is broad: every other trigger — `plxnative-login`,
+/// purpose**, where `dev::any_trigger_present` is broad: every other trigger — `multiplex-login`,
 /// `-nowan`, `-signinfail`, the consent state — is how the offer is PUT on screen for a capture,
 /// and a gate that saw them would hide the thing being captured. Read once.
 ///
@@ -1974,7 +1974,7 @@ fn harness_driven() -> bool {
     })
 }
 
-/// Is `plxnative-rec` armed (the recorder's mode value present and valid)? The same raw read
+/// Is `multiplex-rec` armed (the recorder's mode value present and valid)? The same raw read
 /// `dev::scenarios::rec_trigger` makes for the controlled-boot preflight. Compiled out, not merely
 /// guarded, in a release build: a runtime check would leave the trigger name in the binary's bytes,
 /// where `ci/check-package.py` grades them.
@@ -3736,7 +3736,7 @@ impl AuthLike for SessionHost {
                 &s, ALERT_GROUP, Placed { rect: Rect::FULL, rest_rect: Rect::FULL, clip: Rect::FULL, index: None }, &cx);
             assert_eq!(seat.elem, if sendable { ALERT_SEND } else { ALERT_CANCEL }, "{state:?}");
             let body = s.report.details_body();
-            let support = "PlxNative 0 · webOS 0 · set · pin_create";
+            let support = "MultiPlex 0 · webOS 0 · set · pin_create";
             if matches!(state, S::Delivered { .. } | S::Saved { .. }) {
                 assert_eq!(body, ["Report ID: 41de 4cd3 88e4 0416 54de 38f2 787c 3922", support], "{state:?}");
             } else {
@@ -4041,7 +4041,7 @@ impl AuthLike for SessionHost {
         let mut s = bare_screen(phase, 0.0);
         s.error = Arc::from("Can’t reach Plex");
         s.report.offer = Some(incident(state, kind));
-        s.report.support = CString::new("PlxNative 0 · webOS 0 · set · pin_create").unwrap();
+        s.report.support = CString::new("MultiPlex 0 · webOS 0 · set · pin_create").unwrap();
         s
     }
 

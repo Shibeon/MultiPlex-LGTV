@@ -64,7 +64,7 @@ film's own official title card or a frame of the film: asset kind `logo-title-ca
 source for that title's logo and for nothing else, and takes the same licences as every other asset.
 
 Nothing is committed but the manifests and the two captured detail fixtures: the sources and the derived images live in a cache outside
-the repository (`$PLXNATIVE_DEMO_CACHE`, default `~/.cache/plxnative-demo`, ~390 MB of sources,
+the repository (`$MULTIPLEX_DEMO_CACHE`, default `~/.cache/multiplex-demo`, ~390 MB of sources,
 283 MB of it the complete Sintel the player figure plays), so a fresh clone rebuilds them with one
 command. Derivation is ffmpeg with fixed filters and fixed
 encoder settings, so one ffmpeg build derives byte-identical files every time. A derived file's name
@@ -107,8 +107,8 @@ SIZES = {"poster": POSTER, "art": ART, "thumb": THUMB, "photo": HEADSHOT}
 
 
 def cache_dir():
-    env = os.environ.get("PLXNATIVE_DEMO_CACHE")
-    return pathlib.Path(env) if env else pathlib.Path.home() / ".cache" / "plxnative-demo"
+    env = os.environ.get("MULTIPLEX_DEMO_CACHE")
+    return pathlib.Path(env) if env else pathlib.Path.home() / ".cache" / "multiplex-demo"
 
 
 def load():

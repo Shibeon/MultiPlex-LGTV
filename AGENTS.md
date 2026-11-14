@@ -2,7 +2,7 @@
 
 ## Project
 
-PlxNative is a production-quality native Plex client for rooted LG webOS 4.5 TVs. Most of the
+MultiPlex is a production-quality native Plex client for rooted LG webOS 4.5 TVs. Most of the
 application is Rust under `rust-modules/` (the application in `src/`, the layers in their own crates); `src/main.c` is the boot/crash shim,
 `src/starfish.c` is the Feed-only StarfishMediaAPIs seam (compiled only with `PLAYBACK_HAS_FEED`),
 `src/video_plane.c` is the ACB / exported-window display binding both backends share, and `src/svg.c` rasterizes SVGs. Keep changes
@@ -83,7 +83,7 @@ the macOS simulator are valuable, but they cannot prove every device behavior.
 - This repository is public. Never publish values from gitignored private files such as `.tv-host`,
   `.tv-mac`, `src/config.local.h`, `tests/manifest.local.json`, `pkg/auth.json`, `pkg/lab.json`, or
   the other paths enumerated by `.claude/hooks/outbound-guard.py` — including the per-user copies of
-  the TV address and MAC, `~/.config/plxnative/tv-host` and `tv-mac` (the files a worktree reads;
+  the TV address and MAC, `~/.config/multiplex/tv-host` and `tv-mac` (the files a worktree reads;
   see `docs/agent-reference.md`). Use the documented placeholders.
 - webOS native behavior is under-documented. When an answer depends on platform behavior, verify it
   from primary documentation, vendored source, firmware inventories, or the device binaries; do not
@@ -132,7 +132,7 @@ the macOS simulator are valuable, but they cannot prove every device behavior.
   [C=<crate>] [T=filter]`. `C` defaults to the application crate; `C=plx_media` (or `C=media`)
   runs that crate's `hostsim` tests, the same ones `make check`'s hostsim pass runs for it. It runs
   `cargo test --lib -p <crate> --features hostsim` on the pinned
-  toolchain with a throwaway `PLXNATIVE_RUNTIME_DIR` (removed afterwards), incrementally in its own
+  toolchain with a throwaway `MULTIPLEX_RUNTIME_DIR` (removed afterwards), incrementally in its own
   gitignored `rust-modules/target-hostsim`: inside the checkout, so `make disk` and
   `tools/build-gc.sh` see it and it goes with the worktree, like `target-fast`. A `T=` that matches
   no test FAILS (libtest reports `0 passed` and exits 0 for a mistyped name), which includes a
@@ -245,7 +245,7 @@ the macOS simulator are valuable, but they cannot prove every device behavior.
   "Remove from Deck" are all writes to a household's actual viewing record — the managed and Guest profiles
   are real users too. When screenshot or demo work needs particular content, mock the server.
   So is the plex.tv Watchlist: a debug build refuses every add/remove unless the mock's discover
-  stand-in is armed or `plxnative-watchlist-live` exists in the install's runtime root. **Never
+  stand-in is armed or `multiplex-watchlist-live` exists in the install's runtime root. **Never
   create that file unless the owner asks for it in that same session** — with it, a debug build
   writes to the owner's real Watchlist. `.claude/hooks/watchlist-live-guard.py` refuses a command
   that would (`docs/watchlist.md`, "The live switch").

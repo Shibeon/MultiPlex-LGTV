@@ -6,17 +6,17 @@ The recording stops after 60 seconds or 8 MiB, whichever comes first. The switch
 
 ## Collecting the saved log
 
-The saved local file is `plxnative-playback.log` in the install’s runtime directory. It contains up to 8 MiB of the firmware trace and a tail of up to 256 KiB of ordinary app events. It uses the same token/identity scrubber and private log-file permissions as the existing support logs. It adds no uploader or network listener. Use the existing log-collection method (for example, the rooted TV’s file access) to copy the file for support; review its media/device details before posting publicly. There is no in-app downloader in this change.
+The saved local file is `multiplex-playback.log` in the install’s runtime directory. It contains up to 8 MiB of the firmware trace and a tail of up to 256 KiB of ordinary app events. It uses the same token/identity scrubber and private log-file permissions as the existing support logs. It adds no uploader or network listener. Use the existing log-collection method (for example, the rooted TV’s file access) to copy the file for support; review its media/device details before posting publicly. There is no in-app downloader in this change.
 
 | Install | Saved log |
 |---|---|
-| Stable | `/tmp/plxnative-playback.log` |
-| Nightly | `/tmp/app.multiplex.native.nightly/plxnative-playback.log` |
-| Debug | `/tmp/app.multiplex.native.debug/plxnative-playback.log` |
+| Stable | `/tmp/multiplex-playback.log` |
+| Nightly | `/tmp/app.multiplex.native.nightly/multiplex-playback.log` |
+| Debug | `/tmp/app.multiplex.native.debug/multiplex-playback.log` |
 
-The underlying trace is `plxnative-gst.log` beside it. The saved combined log survives a relaunch, but runtime storage is not guaranteed to survive TV standby or reboot. Copy it before powering off. A new recording replaces only the trace; **Save diagnostic log** replaces the combined log.
+The underlying trace is `multiplex-gst.log` beside it. The saved combined log survives a relaunch, but runtime storage is not guaranteed to survive TV standby or reboot. Copy it before powering off. A new recording replaces only the trace; **Save diagnostic log** replaces the combined log.
 
-If saving fails, the row shows **Failed** and the app event log records the failed stage and numeric OS error (`errno`). Worker admission or disconnection failures name that condition and retire **Saving**, so the controls become available again. These messages contain fixed operation labels, not arbitrary error text or viewer paths. A successful save logs `playback diagnostics: saved plxnative-playback.log`; a stopped recording alone does not mean the combined log was saved. Include the app event log when reporting a save failure.
+If saving fails, the row shows **Failed** and the app event log records the failed stage and numeric OS error (`errno`). Worker admission or disconnection failures name that condition and retire **Saving**, so the controls become available again. These messages contain fixed operation labels, not arbitrary error text or viewer paths. A successful save logs `playback diagnostics: saved multiplex-playback.log`; a stopped recording alone does not mean the combined log was saved. Include the app event log when reporting a save failure.
 
 ## Implementation and firmware evidence
 

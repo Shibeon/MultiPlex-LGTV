@@ -26,8 +26,8 @@
 
 use std::path::{Path, PathBuf};
 
-const DATABASE_DIR: &str = "plxnative-sentry-db";
-const PENDING_DIR: &str = "plxnative-sentry-pending";
+const DATABASE_DIR: &str = "multiplex-sentry-db";
+const PENDING_DIR: &str = "multiplex-sentry-pending";
 
 /// Keep the capture backend alive until the app leaves `plex_run` cleanly (see the `Drop` impl).
 pub struct Guard;
@@ -541,7 +541,7 @@ pub fn preview_event() -> Vec<u8> {
         "release": super::release(),
         "environment": super::sender::ENVIRONMENT,
         "dist": "<ELF build id>",
-        "sdk": {"name": "plxnative", "version": "0.16.5"},
+        "sdk": {"name": "multiplex", "version": "0.16.5"},
         "user": {"id": PREVIEW_USER_ID},
         "contexts": {
             "os": {"type": "os", "name": "Linux", "version": "<kernel release>",
@@ -560,11 +560,11 @@ pub fn preview_event() -> Vec<u8> {
             "stacktrace": {
                 "frames": [
                     {"instruction_addr": "<caller address>", "symbol_addr": "<symbol address>",
-                        "function": "<compiled function>", "package": "/private/app/plxnative",
+                        "function": "<compiled function>", "package": "/private/app/multiplex",
                         "filename": "/private/source/example.rs", "lineno": "<source line>",
                         "colno": "<source column>", "in_app": true, "trust": "fp",
                         "addr_mode": "abs"},
-                    {"instruction_addr": "<fault address>", "trust": "context", "package": "/private/app/plxnative"}
+                    {"instruction_addr": "<fault address>", "trust": "context", "package": "/private/app/multiplex"}
                 ],
                 "registers": {"r0": "<address>", "r1": "<address>", "r2": "<address>",
                     "r3": "<address>", "r4": "<address>", "r5": "<address>",
@@ -579,7 +579,7 @@ pub fn preview_event() -> Vec<u8> {
             "stacktrace": {
                 "frames": [{"instruction_addr": "<thread instruction address>",
                     "symbol_addr": "<symbol address>", "function": "<compiled function>",
-                    "package": "/private/app/plxnative", "filename": "/private/source/example.rs",
+                    "package": "/private/app/multiplex", "filename": "/private/source/example.rs",
                     "lineno": "<source line>", "colno": "<source column>", "in_app": true,
                     "trust": "context", "addr_mode": "abs"}],
                 "registers": {"r0": "<address>", "r1": "<address>", "r2": "<address>",
@@ -590,8 +590,8 @@ pub fn preview_event() -> Vec<u8> {
                     "pc": "<address>", "cpsr": "<flags>"}
             }}]},
         "debug_meta": {"images": [{
-            "type": "elf", "code_file": "/private/app/plxnative",
-            "debug_file": "/private/app/plxnative.debug", "code_id": "<ELF code id>",
+            "type": "elf", "code_file": "/private/app/multiplex",
+            "debug_file": "/private/app/multiplex.debug", "code_id": "<ELF code id>",
             "debug_id": "<ELF debug id>", "image_addr": "<load address>",
             "image_size": "<bytes>", "image_vmaddr": "<ELF virtual address>", "arch": "arm"
         }]}
@@ -1268,7 +1268,7 @@ mod tests {
     fn external_mode_moves_only_the_sdks_regular_envelope() {
         let _g = plx_base::testlock::serial();
         let root =
-            std::env::temp_dir().join(format!("plxnative-sentry-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("multiplex-sentry-test-{}", std::process::id()));
         let database = root.join("db");
         let external = database.join("external");
         let pending = root.join("pending");
@@ -1302,7 +1302,7 @@ mod tests {
                 "request": {"url": "must-not-pass"},
                 "extra": {"future_sdk_field": "must-not-pass"},
                 "arbitrary": "must-not-pass",
-                "sdk": {"name": "plxnative", "version": "0.16.5", "future": "must-not-pass"},
+                "sdk": {"name": "multiplex", "version": "0.16.5", "future": "must-not-pass"},
                 "contexts": {
                     "os": {"name": "Linux", "future": "must-not-pass"},
                     "webos": {"type": "webos", "name": "webOS TV", "release": "4.10.2",
@@ -1315,7 +1315,7 @@ mod tests {
                 "exception": {"values": [{
                     "mechanism": {"meta": {"signal": {"number": 11, "name": "SIGSEGV"}}},
                     "stacktrace": {"frames": [
-                    {"instruction_addr": "0x1234", "package": "/media/developer/apps/usr/palm/applications/app.multiplex.native/plxnative", "vars": "must-not-pass"},
+                    {"instruction_addr": "0x1234", "package": "/media/developer/apps/usr/palm/applications/app.multiplex.native/multiplex", "vars": "must-not-pass"},
                     {"instruction_addr": "0xf00", "filename": "/private/source/main.c"}
                 ], "registers": {"pc": "0x1234", "sp": "0xbeef", "future": "must-not-pass"},
                     "future": "must-not-pass"}, "future": "must-not-pass"}]},
@@ -1324,7 +1324,7 @@ mod tests {
                     {"package": "/lib/libc-2.24.so"}
                 ]}}]},
                 "debug_meta": {"future": "must-not-pass", "images": [{
-                    "type": "elf", "code_file": "/media/developer/apps/x/plxnative",
+                    "type": "elf", "code_file": "/media/developer/apps/x/multiplex",
                     "image_addr": "0x10000", "image_size": 4096,
                     "debug_id": "44332211-6655-8877-9900-aabbccddeeff",
                     "future": "must-not-pass"
@@ -1362,9 +1362,9 @@ mod tests {
         );
         assert_eq!(
             v["exception"]["values"][0]["stacktrace"]["frames"][0]["package"],
-            "plxnative"
+            "multiplex"
         );
-        assert_eq!(v["debug_meta"]["images"][0]["code_file"], "plxnative");
+        assert_eq!(v["debug_meta"]["images"][0]["code_file"], "multiplex");
         assert_eq!(v["debug_meta"]["images"][0]["image_size"], 4096);
         assert_eq!(v["contexts"]["webos"]["release"], "4.10.2");
         assert!(v["contexts"]["webos"].get("model").is_none());
@@ -1469,7 +1469,7 @@ mod tests {
     fn an_unreadable_envelope_is_deferred_and_a_malformed_one_deleted() {
         use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir()
-            .join(format!("plxnative-sentry-defer-test-{}", std::process::id()));
+            .join(format!("multiplex-sentry-defer-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let unreadable_id = "91ad1844535b4dac89d95384165d703c";

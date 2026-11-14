@@ -174,7 +174,7 @@ class ParallelRunTests(unittest.TestCase):
             runtimes = sorted(path.name.rsplit('-', 1)[0] for path in outputs.iterdir())
             self.assertEqual(runtimes, ['solo-resolve', 'solo-targets'])
             for path in outputs.iterdir():
-                self.assertIn(path.name.split('-')[1], (path / 'plxnative-recplay').read_text())
+                self.assertIn(path.name.split('-')[1], (path / 'multiplex-recplay').read_text())
 
 
 class OutputFolderTests(unittest.TestCase):
@@ -212,7 +212,7 @@ class OutputFolderTests(unittest.TestCase):
             failed, out = self.main(Path(temp), [ValueError('a/targets: diverged')])
             self.assertTrue(failed)
             (kept,) = (Path(temp) / 'tmp').iterdir()
-            self.assertTrue(kept.name.startswith('plxnative-replay-gate-'))
+            self.assertTrue(kept.name.startswith('multiplex-replay-gate-'))
             self.assertEqual((kept / 'evidence.log').read_text(), 'one replay')
             self.assertIn(f'evidence {kept}', out)
 
@@ -258,7 +258,7 @@ class WindowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / 'fixture').mkdir()
-            (root / 'sim.sh').write_text('#!/bin/sh\nprintf "%s" "$PLXNATIVE_WIN" > "$PLXNATIVE_RUNTIME_DIR/win"\n'
+            (root / 'sim.sh').write_text('#!/bin/sh\nprintf "%s" "$MULTIPLEX_WIN" > "$MULTIPLEX_RUNTIME_DIR/win"\n'
                                          'exit 1\n')
             (root / 'sim.sh').chmod(0o755)
             fixture = root / 'fixture'

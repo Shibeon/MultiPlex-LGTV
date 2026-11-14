@@ -1,4 +1,4 @@
-//! `/tmp/plxnative-tls-selftest` — watch the wrong-clock TLS fallback (`net::keypin`, issue #378)
+//! `/tmp/multiplex-tls-selftest` — watch the wrong-clock TLS fallback (`net::keypin`, issue #378)
 //! work, or refuse, on the real television with no account behind it.
 //!
 //! The developer boot (`--guest`, a token from a trigger file) talks plain HTTP to a compiled-in

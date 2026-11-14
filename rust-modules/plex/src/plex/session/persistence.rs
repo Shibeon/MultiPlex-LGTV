@@ -1150,7 +1150,7 @@ mod db8_policy_tests {
     fn previous_json_wrapper_yields_its_nested_session_payload_and_tombstone() {
         let _serial = plx_base::testlock::serial();
         let root = std::env::temp_dir().join(format!(
-            "plxnative-prior-session-wrapper-{}",
+            "multiplex-prior-session-wrapper-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&root);
@@ -1214,7 +1214,7 @@ mod db8_policy_tests {
     impl TempPersistenceRoot {
         fn new(tag: &str) -> TempPersistenceRoot {
             let dir = std::env::temp_dir().join(format!(
-                "plxnative-persistence-cleanup-outcome-{}-{tag}",
+                "multiplex-persistence-cleanup-outcome-{}-{tag}",
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&dir);
@@ -1257,7 +1257,7 @@ mod db8_policy_tests {
     impl TempLegacyCandidate {
         fn new(tag: &str) -> TempLegacyCandidate {
             let dir = std::env::temp_dir().join(format!(
-                "plxnative-persistence-legacy-candidate-{}-{tag}",
+                "multiplex-persistence-legacy-candidate-{}-{tag}",
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&dir);

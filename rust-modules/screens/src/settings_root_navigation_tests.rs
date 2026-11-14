@@ -191,7 +191,7 @@ fn back_at_the_surface_s_own_root_is_not_handled() {
 }
 
 /// **The remembered-focus round trip (spec §7.3 step 4).** Signed out, the root's rows are
-/// Video & playback / Language / Privacy & data / Legal notices / About PlxNative (signed out
+/// Video & playback / Language / Privacy & data / Legal notices / About MultiPlex (signed out
 /// there is no Favourites row), so row 3 is Legal notices. The engine seats
 /// focus there, OK pushes the index, and a BACK must hand focus back to THAT row — not row 0
 /// — which is the one thing `bridge.rs`'s word-only assertions cannot see from outside `app/`.
@@ -914,40 +914,6 @@ fn the_root_diagnostics_row_reads_the_status_the_runner_answers() {
     let index = root.form.index_of_key(RowKey(root_key(RootId::Diagnostics))).expect("the Diagnostics row");
     assert!(matches!(root.form.activate(index), Some(Activation::Push(SettingsPage::Diagnostics))));
 }
-
-fn hud_return_to_player_hud(remove: bool) {
-    use crate::registry::HudList;
-    use crate::registry::HudCmd;
-    use plx_data::hudpacks::{Entry,Meta,Source,Trust,BUILTIN_CLASSIC};
-    let _g=plx_base::testlock::serial();let _session=scratch_session("hud-ancestor-return");
-    let index=plx_data::hudpacks::catalog::parse(include_bytes!("../../../tests/fixtures/hud-gallery/index.json")).unwrap();
-    let p=index.entries[0].clone();let sha=p.sha();
-    let list=HudList {app_version:"0.10.0".into(),language_tag:"en".into(),
-        catalog:plx_data::hudpacks::catalog::Snapshot {index:Some(std::sync::Arc::new(index)),..Default::default()},
-        entries:vec![Entry {id:BUILTIN_CLASSIC.into(),meta:None,sha:None,source:None,trust:Trust::BuiltIn,loadable:Ok(()),until_restart:false,selected:true,dev_source:None},
-            Entry {id:p.id.clone(),meta:Some(Meta {id:p.id.clone(),name:p.name.clone(),version:p.version,package_format:p.package_format,hud_format:p.hud_format}),
-                sha:Some(sha),source:Some(Source::Registry),trust:Trust::Registry,loadable:Ok(()),until_restart:false,selected:false,dev_source:None}],..HudList::default()};
-    let outer=EntryId(987);let mut s=RouteSurface::new(outer,InstanceId(4),Family::Settings,SettingsPage::Root);
-    step(&mut s,ScreenEvent::Mount,None);
-    let pages=if remove {vec![SettingsPage::Playback,SettingsPage::PlayerHud,SettingsPage::HudGallery,SettingsPage::HudDetail(sha),SettingsPage::HudAbout(sha)]}
-        else {vec![SettingsPage::Playback,SettingsPage::PlayerHud,SettingsPage::HudGallery,SettingsPage::HudDetail(sha)]};
-    for page in pages {
-        let out=forwarded(&mut s,Fx::Nav(NavOp::Push(page)));
-        for e in &out {if let Fx::App(AppFx::Huds(HudCmd::Open(tx)|HudCmd::Watch(tx)))=&e.fx {tx.send(list.clone()).unwrap();}}
-        step(&mut s,ScreenEvent::Tick(Tick{ms:16,dt_us:16000}),None);
-    }
-    assert!(s.inner.entry(outer).is_none(),"the focus surface ID must differ from every inner navigation ID");
-    let action=if remove {4} else {1};
-    let out=step(&mut s,ScreenEvent::Activate(action),Some(FocusKey {entry:outer,elem:action}));
-    assert!(out.iter().any(|e|matches!(&e.fx,Fx::App(AppFx::Huds(HudCmd::Select(id)|HudCmd::Remove(id))) if id==&p.id)));
-    assert_eq!(name(&s),word::PLAYER_HUD,"return must preserve the real Settings ancestor chain");
-    step(&mut s,back_key(),None);assert_eq!(name(&s),word::PLAYBACK);
-}
-
-#[test]
-fn use_hud_returns_to_player_hud_with_an_unrelated_surface_id() {hud_return_to_player_hud(false);}
-#[test]
-fn remove_hud_returns_to_player_hud_with_an_unrelated_surface_id() {hud_return_to_player_hud(true);}
 
 #[test]
 fn retained_offer_expiry_rebuilds_the_switches_without_a_roster_change() {

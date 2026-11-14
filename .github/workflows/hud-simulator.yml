@@ -24,11 +24,7 @@ on:
         type: string
         default: ''
       publish_development:
-        description: 'Publish a source-tagged development utility for registry testing'
-        type: boolean
-        default: false
-      dispatch_probe:
-        description: 'Test registry dispatch credentials without publishing an app release'
+        description: 'Publish a source-tagged development simulator for HUD authors'
         type: boolean
         default: false
   workflow_call:
@@ -42,7 +38,6 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_dispatch' || !inputs.dispatch_probe
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -75,11 +70,11 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_hud_*.py' -v
       - name: Assemble the relocatable, source-bound artifact
         run: |
-          python3 tools/hud_bundle.py --bin rust-modules/target-sim-video/release/plxnative-sim --out out/plxnative-hud-simulator-linux-x86_64.tar.gz
+          python3 tools/hud_bundle.py --bin rust-modules/target-sim-video/release/multiplex-sim --out out/multiplex-hud-simulator-linux-x86_64.tar.gz
           mkdir -p "$RUNNER_TEMP/relocated simulator"
-          tar -xzf out/plxnative-hud-simulator-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated simulator"
-          "$RUNNER_TEMP/relocated simulator/bin/plxnative-sim" --hud-info
-          "$RUNNER_TEMP/relocated simulator/bin/plxnative-sim" --hud-lint "$RUNNER_TEMP/relocated simulator/corpus/canonical.plxhud" --lang all --format json > out/reference-lint.json
+          tar -xzf out/multiplex-hud-simulator-linux-x86_64.tar.gz -C "$RUNNER_TEMP/relocated simulator"
+          "$RUNNER_TEMP/relocated simulator/bin/multiplex-sim" --hud-info
+          "$RUNNER_TEMP/relocated simulator/bin/multiplex-sim" --hud-lint "$RUNNER_TEMP/relocated simulator/corpus/canonical.plxhud" --lang all --format json > out/reference-lint.json
       - name: Save simulator and measurement evidence
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -116,29 +111,3 @@ jobs:
           else
             python3 tools/hud_release.py --artifacts out --source "$SOURCE_SHA" --tag "$RELEASE_TAG"
           fi
-      - name: Ask the registry to re-lint with the published simulator
-        if: inputs.release_tag != ''
-        env:
-          GH_TOKEN: ${{ secrets.HUD_REGISTRY_DISPATCH_TOKEN }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          test -n "$GH_TOKEN" || { echo "::error::HUD_REGISTRY_DISPATCH_TOKEN is required for the registry release check"; exit 1; }
-          python3 tools/hud_registry_dispatch.py --pin out/plxnative-hud-simulator-linux-x86_64.tar.pin.json --release-tag "$RELEASE_TAG"
-  dispatch-probe:
-    if: github.event_name == 'workflow_dispatch' && inputs.dispatch_probe
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Invoke the registry backstop through the configured dispatch credential
-        env:
-          GH_TOKEN: ${{ secrets.HUD_REGISTRY_DISPATCH_TOKEN }}
-          SOURCE_SHA: ${{ github.sha }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          PUBLISH_DEV: ${{ inputs.publish_development }}
-        run: |
-          test -z "$RELEASE_TAG" && test "$PUBLISH_DEV" != true || { echo "choose a probe or publication"; exit 1; }
-          test -n "$GH_TOKEN" || { echo "::error::HUD_REGISTRY_DISPATCH_TOKEN is required"; exit 1; }
-          python3 tools/hud_registry_dispatch.py --probe "$SOURCE_SHA"

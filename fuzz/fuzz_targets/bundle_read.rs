@@ -6,7 +6,7 @@
 //!   an over-bound artifact never gets one;
 //! * a package exists only when no finding is an error, and then it carries that digest and its
 //!   manifest; a refusal always says why (an error finding);
-//! * every finding has the lint shape (`plxnative_fuzz::lint_shaped`);
+//! * every finding has the lint shape (`multiplex_fuzz::lint_shaped`);
 //! * an `expected` digest that differs refuses the artifact with the digest-mismatch finding alone, and
 //!   the right digest changes nothing.
 use libfuzzer_sys::{fuzz_mutator, fuzz_target};
@@ -17,7 +17,7 @@ use plx_base::sha256::sha256;
 fuzz_target!(|data: &[u8]| {
     let decoded = read(data, None);
     for finding in &decoded.findings {
-        plxnative_fuzz::lint_shaped(finding);
+        multiplex_fuzz::lint_shaped(finding);
     }
     if data.len() > MAX_ARTIFACT_BYTES {
         assert!(decoded.sha256.is_none() && decoded.package.is_none() && !decoded.findings.is_empty());
@@ -47,5 +47,5 @@ fuzz_target!(|data: &[u8]| {
 });
 
 fuzz_mutator!(|data: &mut [u8], size: usize, max_size: usize, seed: u32| {
-    plxnative_fuzz::mutate_bundle(data, size, max_size, seed)
+    multiplex_fuzz::mutate_bundle(data, size, max_size, seed)
 });

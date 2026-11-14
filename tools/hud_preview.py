@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Registry HUD preview matrix through the app's shared synthetic screenshot driver.
+"""HUD preview matrix through the app's shared synthetic screenshot driver.
 
 The app compiler supplies each reachable section combination and the actual opener geometry.
 No server/account credentials, TV, screen-local renderer or duplicated HUD layout is involved.
@@ -155,14 +155,14 @@ def fixture(spec, hud):
             # migration and profile fallback read it; no production identity is opened or modified.
             (runtime / "auth.json").write_text(json.dumps({"subtitle_size": "huge", "subtitle_position": "high"}))
         (runtime / "preview.plxhud").write_bytes(hud.read_bytes())
-        (runtime / "plxnative-hud").write_text(str(runtime / "preview.plxhud"))
+        (runtime / "multiplex-hud").write_text(str(runtime / "preview.plxhud"))
     return prepare
 
 
 def capture_scene(spec):
     triggers = {"play": "2011002" if spec["navigation_pair"] else "102", "clocksink": "", "simvideo": "", "focus": "", "hintoff": ""}
     virtual = {"preroll": PREROLL}
-    expect = [f'plxnative-hud: compiled for {spec["lang"]}', "simvideo: first picture decoded"]
+    expect = [f'multiplex-hud: compiled for {spec["lang"]}', "simvideo: first picture decoded"]
     position = 31020 if spec["background"] == "bright" else 446020
     triggers["clockstop"] = str(position)
     if spec["paused"]:
@@ -212,8 +212,8 @@ def capture_scene(spec):
 
 
 def run(binary, hud, output, only=None):
-    env = {k: v for k, v in screenshots.os.environ.items() if not k.startswith("PLXNATIVE_")}
-    env["PLXNATIVE_APP_DIR"] = str(ROOT / "pkg")
+    env = {k: v for k, v in screenshots.os.environ.items() if not k.startswith("MULTIPLEX_")}
+    env["MULTIPLEX_APP_DIR"] = str(ROOT / "pkg")
     with snapshot(binary, hud, env=env) as package:
         inspection = package.inspection
         matrix = plan(inspection)
@@ -244,8 +244,8 @@ def main():
     args = parser.parse_args()
     screenshots.unwind_on_signals()
     if args.plan:
-        env = {key: value for key, value in screenshots.os.environ.items() if not key.startswith("PLXNATIVE_")}
-        env["PLXNATIVE_APP_DIR"] = str(ROOT / "pkg")
+        env = {key: value for key, value in screenshots.os.environ.items() if not key.startswith("MULTIPLEX_")}
+        env["MULTIPLEX_APP_DIR"] = str(ROOT / "pkg")
         with snapshot(args.bin.resolve(), args.hud, env=env) as package:
             print(json.dumps(plan(package.inspection), indent=2, ensure_ascii=False))
     else:

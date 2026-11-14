@@ -1,4 +1,4 @@
-//! Every dev-trigger ARM — the code that reads `/tmp/plxnative-*` through [`plx_base::devtrig::flag`] /
+//! Every dev-trigger ARM — the code that reads `/tmp/multiplex-*` through [`plx_base::devtrig::flag`] /
 //! [`plx_base::devtrig::read`] / [`plx_base::devtrig::latched_flag!`] and reacts to it — gathered on one file (UI
 //! restructure spec v4 §3.3 step 2 / §11, phase 10 lane P). A PURE MOVE: no trigger was renamed,
 //! no timing changed, no ordering changed. Before this phase the arms were spread across four
@@ -24,7 +24,7 @@
 //! file's `*_tick` functions at those same phase boundaries).
 //!
 //! **Not scenarios, deliberately left where they were:** the recorder/replay path
-//! (`plxnative-rec`/`plxnative-recplay`, `app::clock`) is a DIFFERENT kind of thing — it observes
+//! (`multiplex-rec`/`multiplex-recplay`, `app::clock`) is a DIFFERENT kind of thing — it observes
 //! or reproduces a whole session and must never decide which screen a boot starts on (`dev.rs`'s
 //! `DIAG` doc says why) — so its own machinery (`app::recorder::Recplay`) stays in
 //! `app/recorder.rs`; only the two raw trigger reads run through the thin passthroughs
@@ -78,7 +78,7 @@ pub(crate) struct DevFlags {
     pub(crate) onboard_osc: bool,
     pub(crate) nav_osc: bool,
     pub(crate) nav_osc_rk: String,
-    /// `plxnative-nobudget`: read at boot, applied to the one `Budget` at boot, and kept here so
+    /// `multiplex-nobudget`: read at boot, applied to the one `Budget` at boot, and kept here so
     /// a log reader can tell an A leg from a B leg by the flags the boot recorded.
     pub(crate) nobudget: bool,
 }
@@ -104,7 +104,7 @@ pub(crate) struct Scenarios {
     pub(crate) modal_osc_last: u32,
     pub(crate) legal_doc_tried: bool,
     pub(crate) alert_tried: bool,
-    /// how many DOWN presses `plxnative-alert` has spent walking to the delete row.
+    /// how many DOWN presses `multiplex-alert` has spent walking to the delete row.
     pub(crate) alert_step: u8,
     pub(crate) account_osc_last: u32,
     pub(crate) account_osc_down: bool,
@@ -118,10 +118,10 @@ pub(crate) struct Scenarios {
     pub(crate) press_release_at: u32,
     pub(crate) itemmenu_tried: bool,
     pub(crate) acct_tried: bool,
-    /// `/tmp/plxnative-acct`'s value, once read (see `acct_arm`).
+    /// `/tmp/multiplex-acct`'s value, once read (see `acct_arm`).
     pub(crate) acct_rest: Option<Option<u32>>,
     pub(crate) auto_tried: bool,
-    /// `/tmp/plxnative-playurl`, once the `autoplay` arm has asked (see `playurl_latched`).
+    /// `/tmp/multiplex-playurl`, once the `autoplay` arm has asked (see `playurl_latched`).
     pub(crate) playurl_armed: Option<bool>,
     pub(crate) replay_left: u32,
     pub(crate) grid_tried: bool,
@@ -137,45 +137,45 @@ pub(crate) struct Scenarios {
     pub(crate) quality_tried: bool,
     pub(crate) quality_playing_since: Option<u32>,
     pub(crate) detail_tried: bool,
-    /// `/tmp/plxnative-collection=<ratingKey>` — direct Collection-page boot.
+    /// `/tmp/multiplex-collection=<ratingKey>` — direct Collection-page boot.
     pub(crate) collection_tried: bool,
-    /// The headless detail-page walk (`plxnative-detail`/`-play`), see [`ContentBoot`].
+    /// The headless detail-page walk (`multiplex-detail`/`-play`), see [`ContentBoot`].
     pub(crate) content_boot: Option<ContentBoot>,
     pub(crate) play_tried: bool,
-    /// `/tmp/plxnative-play=<rk>` between its ASYNC request and the landing it plays from:
+    /// `/tmp/multiplex-play=<rk>` between its ASYNC request and the landing it plays from:
     /// `(server, ratingKey, the frame clock at which the wait gives up)`. See [`play_arm`].
     pub(crate) play_await: Option<(plx_plex::plex::ServerId, String, u32)>,
     pub(crate) menu_tried: bool,
     pub(crate) menupick_tried: bool,
-    /// dev: the row `/tmp/plxnative-menupick` still owes the track menu, as its RAW second field
+    /// dev: the row `/tmp/multiplex-menupick` still owes the track menu, as its RAW second field
     /// (an absolute row number, or a named Audio-tab target such as `"boost"`/`"loudness"` — see
     /// `menupick_arm`'s doc): the panel opens and is picked on separate frames, so the pick is
     /// carried here until the surface it names exists.
     pub(crate) menupick_target: Option<String>,
-    /// `/tmp/plxnative-subtiming` — see [`subtiming_arm`] and [`Subtiming`].
+    /// `/tmp/multiplex-subtiming` — see [`subtiming_arm`] and [`Subtiming`].
     pub(crate) subtiming: Subtiming,
-    /// `/tmp/plxnative-submenuosc` — see [`submenuosc_arm`] and [`SubmenuOsc`].
+    /// `/tmp/multiplex-submenuosc` — see [`submenuosc_arm`] and [`SubmenuOsc`].
     pub(crate) submenu_osc: SubmenuOsc,
-    /// `/tmp/plxnative-moreosc` — see [`moreosc_arm`]; the same state as `submenu_osc`.
+    /// `/tmp/multiplex-moreosc` — see [`moreosc_arm`]; the same state as `submenu_osc`.
     pub(crate) more_osc: SubmenuOsc,
     pub(crate) pause_tried: bool,
     /// An armed Pause edge: (due at, hold ms, the media position it also waits for).
     pub(crate) pause_script: Option<(u32, Option<u32>, Option<u32>)>,
     pub(crate) pause_resume_at: Option<u32>,
-    /// `/tmp/plxnative-pushbench` — see [`bench`]'s module doc. `None` unarmed; cleared to `None`
+    /// `/tmp/multiplex-pushbench` — see [`bench`]'s module doc. `None` unarmed; cleared to `None`
     /// once its `n` cycles are done, the same shape `content_boot` uses to stop being ticked.
     pub(crate) push_bench: Option<bench::PushBench>,
-    /// `/tmp/plxnative-modalbench` — see [`bench`]'s module doc.
+    /// `/tmp/multiplex-modalbench` — see [`bench`]'s module doc.
     pub(crate) modal_bench: Option<bench::ModalBench>,
-    /// `/tmp/plxnative-deepbench` — see [`bench`]'s module doc.
+    /// `/tmp/multiplex-deepbench` — see [`bench`]'s module doc.
     pub(crate) deep_bench: Option<bench::DeepBench>,
-    /// `/tmp/plxnative-herobench` — see [`bench`]'s module doc and [`bench::HeroBench`].
+    /// `/tmp/multiplex-herobench` — see [`bench`]'s module doc and [`bench::HeroBench`].
     pub(crate) hero_bench: Option<bench::HeroBench>,
-    /// `/tmp/plxnative-holdbench` — see [`bench::PressBench`].
+    /// `/tmp/multiplex-holdbench` — see [`bench::PressBench`].
     pub(crate) hold_bench: Option<bench::PressBench>,
     /// The boot-time trigger flags the loop consults every frame after.
     pub(crate) dev: DevFlags,
-    /// The screenshot pipeline's arms (`plxnative-libtype`, `-libgrid`, `-libshelf`, `-libmenu`, `-clockstop`) and the debt `-autopause` owes the settled capture — see [`screenshot`].
+    /// The screenshot pipeline's arms (`multiplex-libtype`, `-libgrid`, `-libshelf`, `-libmenu`, `-clockstop`) and the debt `-autopause` owes the settled capture — see [`screenshot`].
     pub(crate) shots: screenshot::ScreenshotArms,
 }
 
@@ -183,7 +183,7 @@ pub(crate) struct Scenarios {
 // pre-SDL (today's app/mod.rs:451)
 // =================================================================================================
 
-/// `/tmp/plxnative-stats` — force the Stats-for-nerds overlay on, before SDL or a screen exists,
+/// `/tmp/multiplex-stats` — force the Stats-for-nerds overlay on, before SDL or a screen exists,
 /// so a playback test photographs the same ABR/pipeline evidence on every automated run rather
 /// than depending on a previous manual toggle surviving into this session.
 pub(crate) fn pre_boot() {
@@ -195,26 +195,26 @@ pub(crate) fn pre_boot() {
 // =================================================================================================
 // boot-time arms (today's app/boot.rs) — each named for its trigger, called inline from
 // `app::boot::boot` in the exact order the reads always ran in. The boot-DECISION arms
-// (`plxnative-login`, `-token`) are deliberately thin: `BootTo` is core boot control flow, not
+// (`multiplex-login`, `-token`) are deliberately thin: `BootTo` is core boot control flow, not
 // itself a dev arm, and moving its branches would risk the one thing this phase must not touch.
 // =================================================================================================
 
-/// `/tmp/plxnative-novsync` — uncap the swap interval so `fps=` reports the true GPU render rate.
+/// `/tmp/multiplex-novsync` — uncap the swap interval so `fps=` reports the true GPU render rate.
 pub(crate) fn novsync_armed() -> bool {
     plx_base::devtrig::flag("novsync")
 }
 
-/// `/tmp/plxnative-login` — force the QR login screen even with a usable session.
+/// `/tmp/multiplex-login` — force the QR login screen even with a usable session.
 pub(crate) fn login_forced() -> bool {
     plx_base::devtrig::flag("login")
 }
 
-/// `/tmp/plxnative-token` — the harness/headless test identity, read once. Never logged.
+/// `/tmp/multiplex-token` — the harness/headless test identity, read once. Never logged.
 pub(crate) fn dev_token() -> String {
     match plx_base::devtrig::read("token") {
         Some(s) if !s.is_empty() => {
             #[cfg(feature = "devtriggers")]
-            plx_base::eventlog::log("token: using /tmp/plxnative-token (test identity)");
+            plx_base::eventlog::log("token: using /tmp/multiplex-token (test identity)");
             s
         }
         _ => String::new(),
@@ -229,7 +229,7 @@ pub(crate) fn pms_origin() -> Option<plx_plex::plex::Origin> {
 
 plx_base::devtrig::latched_flag! { pub(crate) fn imagecache_stats_armed = "imagecache-stats"; }
 plx_base::devtrig::latched_flag! {
-    /// `/tmp/plxnative-imgtrace` — per-image poster timeline and every picture-lost event
+    /// `/tmp/multiplex-imgtrace` — per-image poster timeline and every picture-lost event
     /// (`app/adapters/poster/trace.rs`). Absent in shipping builds.
     pub(crate) fn imgtrace_armed = "imgtrace";
 }
@@ -238,12 +238,12 @@ plx_base::devtrig::latched_flag! {
     pub(crate) fn imagecache_bypass_armed = "imagecache-bypass";
 }
 
-/// `/tmp/plxnative-pickuser=<index>` — force the boot picker and auto-select that roster tile.
+/// `/tmp/multiplex-pickuser=<index>` — force the boot picker and auto-select that roster tile.
 pub(crate) fn pickuser_index() -> Option<usize> {
     plx_base::devtrig::read("pickuser").and_then(|s| s.parse().ok())
 }
 
-/// `/tmp/plxnative-logintest` — validate the plex.tv account path end to end on the device.
+/// `/tmp/multiplex-logintest` — validate the plex.tv account path end to end on the device.
 pub(crate) fn arm_logintest() {
     if plx_base::devtrig::flag("logintest") {
         let _ = plx_base::task::spawn_small("logintest", || {
@@ -263,40 +263,40 @@ pub(crate) fn arm_logintest() {
     }
 }
 
-/// `/tmp/plxnative-stillclock=<ms>` — see [`screenshot::arm_stillclock`].
+/// `/tmp/multiplex-stillclock=<ms>` — see [`screenshot::arm_stillclock`].
 pub(crate) fn arm_stillclock() {
     screenshot::arm_stillclock();
 }
 
-/// `/tmp/plxnative-anim` — the animation-diagnostic overlay (off by default).
+/// `/tmp/multiplex-anim` — the animation-diagnostic overlay (off by default).
 pub(crate) fn arm_anim() {
     if plx_base::devtrig::flag("anim") {
         plx_ui::anim::set_enabled(true);
     }
 }
 
-/// `/tmp/plxnative-glassload` — the backdrop-glass LOAD DIAL.
+/// `/tmp/multiplex-glassload` — the backdrop-glass LOAD DIAL.
 pub(crate) fn arm_glassload(glass: &mut plx_ui::frame::glass::GlassPlan) {
     if let Some(v) = plx_base::devtrig::read("glassload") {
         glass.configure_dial(&v);
     }
 }
 
-/// `/tmp/plxnative-navblur` — the blurred-route-transition prototype.
+/// `/tmp/multiplex-navblur` — the blurred-route-transition prototype.
 pub(crate) fn arm_navblur(glass: &mut plx_ui::frame::glass::GlassPlan) {
     if let Some(v) = plx_base::devtrig::read("navblur") {
         glass.configure_navblur(&v);
     }
 }
 
-/// `/tmp/plxnative-overdraw` — the CPU-side per-draw-class overdraw ledger.
+/// `/tmp/multiplex-overdraw` — the CPU-side per-draw-class overdraw ledger.
 pub(crate) fn arm_overdraw() {
     if plx_base::devtrig::flag("overdraw") {
         plx_gfx::overdraw::set_ledger(true);
     }
 }
 
-/// `/tmp/plxnative-drawmask=<classes>` — refuse every draw of the named classes, or, for the card
+/// `/tmp/multiplex-drawmask=<classes>` — refuse every draw of the named classes, or, for the card
 /// class, one PART of its work (`card.interior`, `card.ring`, `card.focus`: `plx_gfx::overdraw`).
 pub(crate) fn arm_drawmask() {
     if let Some(spec) = plx_base::devtrig::read("drawmask") {
@@ -304,16 +304,16 @@ pub(crate) fn arm_drawmask() {
     }
 }
 
-/// `/tmp/plxnative-nocardsplit` — draw every resting card WHOLE again, as before the split of a
+/// `/tmp/multiplex-nocardsplit` — draw every resting card WHOLE again, as before the split of a
 /// resting card into its interior and ring (`gfx::draw_tex_core_in`). Unarmed the split is on,
 /// which is the shipped behaviour; present, the very same binary is the control leg of a split
-/// on/off A/B, with the card-path ledger (`plxnative-overdraw`) booking the whole draws as `off`.
+/// on/off A/B, with the card-path ledger (`multiplex-overdraw`) booking the whole draws as `off`.
 pub(crate) fn arm_cardsplit() {
     if plx_base::devtrig::flag("nocardsplit") {
         plx_gfx::overdraw::set_card_split(false);
     }
-    // `/tmp/plxnative-nopreviewcache` draws the Under posters preview live every frame (as before
-    // `gfx::region_paint`); `/tmp/plxnative-previewsnap` puts the cached quad on whole pixels.
+    // `/tmp/multiplex-nopreviewcache` draws the Under posters preview live every frame (as before
+    // `gfx::region_paint`); `/tmp/multiplex-previewsnap` puts the cached quad on whole pixels.
     if plx_base::devtrig::flag("nopreviewcache") {
         plx_gfx::overdraw::set_region_cache(false);
     }
@@ -322,20 +322,20 @@ pub(crate) fn arm_cardsplit() {
     }
 }
 
-/// `/tmp/plxnative-profile` / `/tmp/plxnative-hwcnt` — the two GPU-time profilers. Both present
+/// `/tmp/multiplex-profile` / `/tmp/multiplex-hwcnt` — the two GPU-time profilers. Both present
 /// is refused; either alone arms its mode.
 ///
 /// Gated on `devtriggers` at the item level rather than left to `devtrig::read` folding to `None`:
 /// `devtrig::read` already makes this whole function inert in a release build, but the disabled-both
 /// diagnostic line below spells out both trigger names in full, and a compiled-but-unreachable
 /// function still carries its own string literals into `--no-default-features` bytes. Compiling
-/// the function out entirely is what actually keeps `plxnative-profile`/`plxnative-hwcnt` out of
+/// the function out entirely is what actually keeps `multiplex-profile`/`multiplex-hwcnt` out of
 /// the binary `ci/check-package.py`'s dev-trigger-catalog check inspects.
 #[cfg(feature = "devtriggers")]
 pub(crate) fn arm_profile_hwcnt() {
     match (plx_base::devtrig::read("profile"), plx_base::devtrig::read("hwcnt")) {
         (Some(_), Some(_)) => {
-            plx_base::eventlog::log("PROFILE disabled: remove either /tmp/plxnative-profile or /tmp/plxnative-hwcnt");
+            plx_base::eventlog::log("PROFILE disabled: remove either /tmp/multiplex-profile or /tmp/multiplex-hwcnt");
         }
         (Some(filter), None) => plx_ui::profile::set_enabled(&filter),
         (None, Some(filter)) => plx_ui::profile::set_hwcnt_enabled(&filter),
@@ -345,23 +345,23 @@ pub(crate) fn arm_profile_hwcnt() {
 #[cfg(not(feature = "devtriggers"))]
 pub(crate) fn arm_profile_hwcnt() {}
 
-/// `/tmp/plxnative-cpuprof` — the render thread's own per-phase CPU clock.
+/// `/tmp/multiplex-cpuprof` — the render thread's own per-phase CPU clock.
 pub(crate) fn arm_cpuprof() {
     if plx_base::devtrig::flag("cpuprof") {
         plx_ui::profile::set_cpu_enabled();
     }
 }
 
-/// `/tmp/plxnative-noidle` — turn the whole-frame present gate off.
+/// `/tmp/multiplex-noidle` — turn the whole-frame present gate off.
 pub(crate) fn arm_noidle() {
     if plx_base::devtrig::flag("noidle") {
         plx_machine::idle::set_enabled(false);
         #[cfg(feature = "devtriggers")]
-        plx_base::eventlog::log("idle: present gate DISABLED by /tmp/plxnative-noidle");
+        plx_base::eventlog::log("idle: present gate DISABLED by /tmp/multiplex-noidle");
     }
 }
 
-/// `/tmp/plxnative-audioenh=off|boost|loudness` — force the Boost Dialog / Normalize Loudness
+/// `/tmp/multiplex-audioenh=off|boost|loudness` — force the Boost Dialog / Normalize Loudness
 /// preference (issue #266) at boot, harness-only.
 ///
 /// Every other boot override here (`dev::playback_quality_override`, `arm_glassload`, …) is
@@ -386,12 +386,12 @@ pub(crate) fn arm_noidle() {
 /// profile's record. Whether that second run happens depends on how the harness boots:
 ///
 /// * A token-injected boot (the default, `--guest` included, since `tools/tv-session.sh` and
-///   `tests/run.py` both write `plxnative-token`) is a dev-token boot that never seats, so the arm
+///   `tests/run.py` both write `multiplex-token`) is a dev-token boot that never seats, so the arm
 ///   sets the live value only, and the next dev-token boot reads the fallback rather than a previous
 ///   run's pick.
 /// * A `session: stored` case (`offline_play`, `offline_play_v6` and `offline_pick_cached` in
 ///   `tests/manifest.json`) skips the token and boots the install's own sign-in, which seats.
-///   `triggers_for_case` still writes `plxnative-audioenh` for it (`off` by default), so the second
+///   `triggers_for_case` still writes `multiplex-audioenh` for it (`off` by default), so the second
 ///   run writes that real profile's own record, and under §3.8.4 it records an own value even for
 ///   `off`: such a case leaves `audio_enhancements: NONE` in the install's signed-in profile.
 ///
@@ -417,18 +417,18 @@ pub(crate) fn arm_audio_enhancements() {
     plx_media::player::set_audio_enhancements(a);
     #[cfg(feature = "devtriggers")]
     plx_base::eventlog::log(&format!(
-        "audioenh: forced boost_dialog={} normalize_loudness={} by /tmp/plxnative-audioenh",
+        "audioenh: forced boost_dialog={} normalize_loudness={} by /tmp/multiplex-audioenh",
         a.boost_dialog, a.normalize_loudness,
     ));
 }
 
-/// `/tmp/plxnative-trackmemory=clear` — forget everything the seated profile's track memory holds,
+/// `/tmp/multiplex-trackmemory=clear` — forget everything the seated profile's track memory holds,
 /// harness-only.
 ///
 /// Track memory is the per-profile record a harness case writes without meaning to: a menu pick on
 /// an episode (`route::commit_audio_pick` / `commit_subtitle_pick`) lands in it, and the next case
 /// that plays the same show would then start from the previous case's tracks. `tests/run.py` writes
-/// `clear` for every case beside `plxnative-audioenh`, so a case's starting memory is a property of
+/// `clear` for every case beside `multiplex-audioenh`, so a case's starting memory is a property of
 /// the manifest instead of of history, the argument `arm_audio_enhancements` makes for the
 /// preference. An unrecognised value is ignored rather than guessed at.
 ///
@@ -457,12 +457,12 @@ pub(crate) fn arm_track_memory(user: &str) {
         .filter(|entry| plx_media::route::remember::<TrackMemoryEntry>(user, entry.key(), |_| None))
         .count();
     #[cfg(feature = "devtriggers")]
-    plx_base::eventlog::log(&format!("trackmemory: cleared {cleared} shows by /tmp/plxnative-trackmemory"));
+    plx_base::eventlog::log(&format!("trackmemory: cleared {cleared} shows by /tmp/multiplex-trackmemory"));
     #[cfg(not(feature = "devtriggers"))]
     let _ = cleared;
 }
 
-/// `/tmp/plxnative-trackmemory=fill[:N]` — give the seated profile `N` (default and ceiling: the
+/// `/tmp/multiplex-trackmemory=fill[:N]` — give the seated profile `N` (default and ceiling: the
 /// per-profile cap, 64) remembered shows with every string at its bound, harness-only.
 ///
 /// This is what makes the DB8 write cost of a document carrying `track_memory` at its budget
@@ -490,88 +490,88 @@ fn fill_track_memory(user: &str, count: &str) {
         })
         .count();
     #[cfg(feature = "devtriggers")]
-    plx_base::eventlog::log(&format!("trackmemory: filled {written} of {wanted} shows by /tmp/plxnative-trackmemory"));
+    plx_base::eventlog::log(&format!("trackmemory: filled {written} of {wanted} shows by /tmp/multiplex-trackmemory"));
     #[cfg(not(feature = "devtriggers"))]
     let _ = written;
 }
 
-/// `/tmp/plxnative-nobudget` — the frame budget's A/B CONTROL LEG (spec §8.1, phase 11).
+/// `/tmp/multiplex-nobudget` — the frame budget's A/B CONTROL LEG (spec §8.1, phase 11).
 ///
 /// Present, admission is what it was before phase 11: the `Poster` quota of three per frame and
 /// nothing else — no time ceiling, no solo rule, and a `Residency` upload (a backdrop, a hero
 /// logo) spending one of those three exactly as it used to. It exists so a device A/B measures
 /// this CHANGE and not the difference between two builds, and it is DIAG for the reason
-/// `plxnative-drawmask` is: an A/B whose two legs boot to different screens has measured the
+/// `multiplex-drawmask` is: an A/B whose two legs boot to different screens has measured the
 /// screen.
 pub(crate) fn nobudget_armed() -> bool {
     plx_base::devtrig::flag("nobudget")
 }
 
-/// `/tmp/plxnative-detailosc`.
+/// `/tmp/multiplex-detailosc`.
 pub(crate) fn detailosc_armed() -> bool {
     plx_base::devtrig::flag("detailosc")
 }
-/// `/tmp/plxnative-homeosc`.
+/// `/tmp/multiplex-homeosc`.
 pub(crate) fn homeosc_armed() -> bool {
     plx_base::devtrig::flag("homeosc")
 }
-/// `/tmp/plxnative-heroosc`.
+/// `/tmp/multiplex-heroosc`.
 pub(crate) fn heroosc_armed() -> bool {
     plx_base::devtrig::flag("heroosc")
 }
-/// `/tmp/plxnative-homefoldosc`.
+/// `/tmp/multiplex-homefoldosc`.
 pub(crate) fn homefoldosc_armed() -> bool {
     plx_base::devtrig::flag("homefoldosc")
 }
-/// `/tmp/plxnative-libosc`.
+/// `/tmp/multiplex-libosc`.
 pub(crate) fn libosc_armed() -> bool {
     plx_base::devtrig::flag("libosc")
 }
-/// `/tmp/plxnative-libswitch`.
+/// `/tmp/multiplex-libswitch`.
 pub(crate) fn libswitch_armed() -> bool {
     plx_base::devtrig::flag("libswitch")
 }
-/// `/tmp/plxnative-searchosc`.
+/// `/tmp/multiplex-searchosc`.
 pub(crate) fn searchosc_armed() -> bool {
     plx_base::devtrig::flag("searchosc")
 }
-/// `/tmp/plxnative-settings=<root|home|privacy|legal|playback|picker-quality|…>`.
+/// `/tmp/multiplex-settings=<root|home|privacy|legal|playback|picker-quality|…>`.
 pub(crate) fn settings_boot_value() -> Option<String> {
     plx_base::devtrig::read("settings")
 }
-/// `/tmp/plxnative-settingsosc`.
+/// `/tmp/multiplex-settingsosc`.
 pub(crate) fn settingsosc_armed() -> bool {
     plx_base::devtrig::flag("settingsosc")
 }
-/// `/tmp/plxnative-modalosc`.
+/// `/tmp/multiplex-modalosc`.
 pub(crate) fn modalosc_armed() -> bool {
     plx_base::devtrig::flag("modalosc")
 }
-/// `/tmp/plxnative-legaldoc`.
+/// `/tmp/multiplex-legaldoc`.
 pub(crate) fn legaldoc_armed() -> bool {
     plx_base::devtrig::flag("legaldoc")
 }
-/// `/tmp/plxnative-alert`.
+/// `/tmp/multiplex-alert`.
 pub(crate) fn alert_armed() -> bool {
     plx_base::devtrig::flag("alert")
 }
-/// `/tmp/plxnative-acctosc`.
+/// `/tmp/multiplex-acctosc`.
 pub(crate) fn acctosc_armed() -> bool {
     plx_base::devtrig::flag("acctosc")
 }
-/// `/tmp/plxnative-consentosc`.
+/// `/tmp/multiplex-consentosc`.
 pub(crate) fn consentosc_armed() -> bool {
     plx_base::devtrig::flag("consentosc")
 }
-/// `/tmp/plxnative-onboardosc`.
+/// `/tmp/multiplex-onboardosc`.
 pub(crate) fn onboardosc_armed() -> bool {
     plx_base::devtrig::flag("onboardosc")
 }
-/// `/tmp/plxnative-navosc[=<ratingKey>]`.
+/// `/tmp/multiplex-navosc[=<ratingKey>]`.
 pub(crate) fn navosc_value() -> Option<String> {
     plx_base::devtrig::read("navosc")
 }
-/// `/tmp/plxnative-pushbench[=<n>[,<ratingKey>]]` — `(n, ratingKey)`, defaulting `n` to 100 and
+/// `/tmp/multiplex-pushbench[=<n>[,<ratingKey>]]` — `(n, ratingKey)`, defaulting `n` to 100 and
 /// `ratingKey` to empty (the empty case is resolved against `navosc`'s own value by the caller,
 /// `app::boot::boot`, before `bench::PushBench::new` ever sees it).
 pub(crate) fn pushbench_value() -> Option<(u32, String)> {
@@ -584,13 +584,13 @@ pub(crate) fn pushbench_value() -> Option<(u32, String)> {
         (parse_bench_n(n), rk.trim().to_string())
     })
 }
-/// `/tmp/plxnative-modalbench[=<n>[,<ratingKey>]]` — `(n, ratingKey)`, the same shape as
+/// `/tmp/multiplex-modalbench[=<n>[,<ratingKey>]]` — `(n, ratingKey)`, the same shape as
 /// [`pushbench_value`] and for the same reason: the item menu leg needs its own ratingKey, and
 /// piggy-backing on `navosc`'s value would also arm `navosc`'s own independent Home<->tab/Detail
 /// bounce (`nav_osc = nav_osc_rk.is_some()` in `app::boot::boot`) — two competing navigators
 /// racing the same nav stack while modalbench tries to measure. Empty is resolved against
 /// `navosc`'s own value by the caller exactly as pushbench's empty case is, so a bare
-/// `plxnative-navosc=<rk>` with no `plxnative-modalbench` value still works; a scene wanting the
+/// `multiplex-navosc=<rk>` with no `multiplex-modalbench` value still works; a scene wanting the
 /// item menu WITHOUT navosc's bounce sets its own `<rk>` here instead.
 pub(crate) fn modalbench_value() -> Option<(u32, String)> {
     plx_base::devtrig::read("modalbench").map(|v| {
@@ -602,7 +602,7 @@ pub(crate) fn modalbench_value() -> Option<(u32, String)> {
         (parse_bench_n(n), rk.trim().to_string())
     })
 }
-/// `/tmp/plxnative-deepbench[=<depth>[,<ratingKey>]]` — `(depth, ratingKey)`, the same shape as
+/// `/tmp/multiplex-deepbench[=<depth>[,<ratingKey>]]` — `(depth, ratingKey)`, the same shape as
 /// [`pushbench_value`]/[`modalbench_value`] and the same empty-value resolution (against
 /// `navosc`'s own ratingKey, by the caller, `app::boot::boot`) — `Library` cannot stand in for a
 /// missing ratingKey here the way it does for `PushBench`, so a `DeepBench` with no ratingKey at
@@ -618,7 +618,7 @@ pub(crate) fn deepbench_value() -> Option<(u32, String)> {
         (parse_bench_n(n), rk.trim().to_string())
     })
 }
-/// `/tmp/plxnative-herobench[=<n>[,<period_ms>[,grid]]]` — `(n, period_ms, target)`, defaulting to
+/// `/tmp/multiplex-herobench[=<n>[,<period_ms>[,grid]]]` — `(n, period_ms, target)`, defaulting to
 /// 100 cycles at [`bench::DEFAULT_HERO_PERIOD_MS`] over the hero carousel. A period below the
 /// carousel's flip cooldown is raised to it by [`bench::HeroBench::new`]; `grid` flips focus
 /// across the first shelf's cards instead.
@@ -631,7 +631,7 @@ pub(crate) fn herobench_value() -> Option<(u32, u32, bench::PongTarget)> {
         (n, period, target)
     })
 }
-/// `/tmp/plxnative-holdbench[=<n>[,<period_ms>[,tap]]]` — `(n, period_ms, kind)`: `n` cycles
+/// `/tmp/multiplex-holdbench[=<n>[,<period_ms>[,tap]]]` — `(n, period_ms, kind)`: `n` cycles
 /// (default 100) of a REAL press-and-hold on the focused card — OK down and kept down so the hold
 /// fill runs and the item menu opens out of it, then Back — or, with `tap`, of OK down and a
 /// direction key before the hold threshold (the press-cancel path). `period_ms` is each half's
@@ -656,27 +656,27 @@ fn parse_bench_n(v: &str) -> u32 {
         v.parse().ok().filter(|n: &u32| *n > 0).unwrap_or(bench::DEFAULT_BENCH_N)
     }
 }
-/// `/tmp/plxnative-framedrop[=<ms>]`.
+/// `/tmp/multiplex-framedrop[=<ms>]`.
 pub(crate) fn framedrop_value() -> Option<String> {
     plx_base::devtrig::read("framedrop")
 }
-/// `/tmp/plxnative-framering[=<ms>]` — the frame-drop detector's context ring
+/// `/tmp/multiplex-framering[=<ms>]` — the frame-drop detector's context ring
 /// (`diag::heartbeat::FrameRing`): write only frames of `<ms>` or more (default 17) and their
 /// neighbours, instead of every frame. `None` when unarmed.
 pub(crate) fn framering_ms() -> Option<f64> {
     plx_base::devtrig::read("framering").map(|s| s.parse().ok().filter(|v: &f64| *v > 0.0).unwrap_or(17.0))
 }
-/// `/tmp/plxnative-firstrun`.
+/// `/tmp/multiplex-firstrun`.
 pub(crate) fn firstrun_armed() -> bool {
     plx_base::devtrig::flag("firstrun")
 }
-/// `/tmp/plxnative-acct[=<ms>]` — auto-open the profile menu (headless capture of the popover).
+/// `/tmp/multiplex-acct[=<ms>]` — auto-open the profile menu (headless capture of the popover).
 /// `None` when unarmed; `Some(None)` opens it as soon as Home is up; `Some(Some(ms))` waits until
 /// the screen has been at rest for `ms` first (simulator only — see `acct_arm`).
 pub(crate) fn acct_armed() -> Option<Option<u32>> {
     plx_base::devtrig::read("acct").map(|v| v.parse().ok())
 }
-/// `/tmp/plxnative-replay[=N]`'s raw content, for [`crate::app::boot::replay_budget`].
+/// `/tmp/multiplex-replay[=N]`'s raw content, for [`crate::app::boot::replay_budget`].
 pub(crate) fn replay_trigger_value() -> Option<String> {
     plx_base::devtrig::read("replay")
 }
@@ -685,7 +685,7 @@ pub(crate) fn replay_trigger_value() -> Option<String> {
 // the headless detail-page walk (today's app/content.rs)
 // =================================================================================================
 
-/// The `/tmp/plxnative-detail`/`-play` headless walk: which section/column to press into, whether
+/// The `/tmp/multiplex-detail`/`-play` headless walk: which section/column to press into, whether
 /// to activate the focused control, and whether to continue into the cast/crew filmography strip.
 /// Moved verbatim out of `app/content.rs` (phase 10 lane P) — its own module doc said as much:
 /// "Content navigation during the legacy route transition" was never true of this type, which
@@ -700,7 +700,7 @@ pub(crate) struct ContentBoot {
     right: u32,
     activate: bool,
     filmography: bool,
-    /// `/tmp/plxnative-bio` — once the person page has landed, present its biography sheet. It
+    /// `/tmp/multiplex-bio` — once the person page has landed, present its biography sheet. It
     /// rides the same wait as `filmography` because it needs the same thing: the person's profile
     /// has to have ARRIVED, or the sheet is offered over a header that has not decided whether its
     /// prose is truncated yet.
@@ -743,7 +743,7 @@ impl ContentBoot {
     }
 }
 
-/// `/tmp/plxnative-detailplay` — whether the headless Play from the content walk pins the HUD for
+/// `/tmp/multiplex-detailplay` — whether the headless Play from the content walk pins the HUD for
 /// a headless capture (`HUD_HEADLESS_MS`) rather than the ordinary linger duration.
 pub(crate) fn detailplay_forces_headless_hud() -> bool {
     plx_base::devtrig::flag("detailplay")
@@ -783,13 +783,13 @@ pub(crate) fn advance_content_boot(app: &mut App, fr: &Frame) {
         return;
     }
     if boot.waiting_person && boot.bio {
-        // `/tmp/plxnative-bio` — the person page's biography sheet, presented through the same
+        // `/tmp/multiplex-bio` — the person page's biography sheet, presented through the same
         // door OK on the header uses (`ContentPanel::Bio`) and gated on the same predicate, so the
         // trigger cannot open a sheet an interactive press would have refused. It exists because
         // this sheet has no other headless route: OK on the header only opens it when the prose is
         // TRUNCATED, and the bio comes from the Discover provider, which a dev-token boot either
         // refuses locally (no stand-in armed) or gets only the mock's synthetic prose from —
-        // so pair it with `/tmp/plxnative-personbio=<text>` for a boot that has any prose at all.
+        // so pair it with `/tmp/multiplex-personbio=<text>` for a boot that has any prose at all.
         let available = app
             .pages
             .nav
@@ -832,7 +832,7 @@ pub(crate) fn advance_content_boot(app: &mut App, fr: &Frame) {
         if let Some(key) = key {
             app.inputs.extend(bridge::script_key(key, Tick { ms: fr.now, dt_us: 0 }));
         } else {
-            // `/tmp/plxnative-tracks=<n>` presents the page's own *Track information* sheet at
+            // `/tmp/multiplex-tracks=<n>` presents the page's own *Track information* sheet at
             // page `n` — the only caller that opens it anywhere but page 1, and the only way a
             // headless capture reaches page 2 at all. It goes through the same door the Languages
             // press does (`bridge::open_content_panel`), so the trigger cannot present a panel the
@@ -860,8 +860,8 @@ pub(crate) fn advance_content_boot(app: &mut App, fr: &Frame) {
                     );
                 }
             }
-            // `/tmp/plxnative-about` presents the page's own *About* sheet — the footer card's
-            // synopsis read in full. It carries no page or cursor, so unlike `plxnative-tracks`
+            // `/tmp/multiplex-about` presents the page's own *About* sheet — the footer card's
+            // synopsis read in full. It carries no page or cursor, so unlike `multiplex-tracks`
             // the trigger is a bare flag; like it, it goes through the same door the OK press on
             // that card uses (`bridge::open_content_panel` over `ContentPanel::About`), so the
             // headless boot cannot present a sheet an interactive press could not.
@@ -923,7 +923,7 @@ mod track_memory_arm_tests {
         session::load().prefs.track_memory.iter().map(|list| list.items.len()).sum()
     }
 
-    /// **`plxnative-trackmemory=clear` forgets what the SEATED profile remembered, through the door.**
+    /// **`multiplex-trackmemory=clear` forgets what the SEATED profile remembered, through the door.**
     /// Each case in the harness starts from empty memory, so a pick one case made is not the next
     /// case's starting tracks. Armed with `clear` only; another profile's seat clears nothing of
     /// this one's; the file loses the entries too, not just the mirror.
@@ -961,7 +961,7 @@ mod track_memory_arm_tests {
         unseed_memory_for_test::<TrackMemoryEntry>();
     }
 
-    /// **`plxnative-trackmemory=fill[:N]` writes `N` worst-case shows through the door, and `clear`
+    /// **`multiplex-trackmemory=fill[:N]` writes `N` worst-case shows through the door, and `clear`
     /// takes them back.** The count defaults to, and is bounded by, the per-profile cap; a count
     /// outside `1..=CAP` or one that is not a number writes nothing (a guess would put an unplanned
     /// document size on the set); a profile that is not the seated one gets none.
@@ -1039,7 +1039,7 @@ mod content_boot_tests {
 // iteration early (the loop `continue`s, as it always did).
 // =================================================================================================
 
-/// The `/tmp/plxnative-search[=<query>]` trigger's seed-and-stand. A host test can drive the
+/// The `/tmp/multiplex-search[=<query>]` trigger's seed-and-stand. A host test can drive the
 /// exact effects the trigger causes rather than re-typing them by hand — see
 /// `app::search_owned_tests::a_seeded_boot_query_survives_the_freshly_mounted_screens_first_sync`,
 /// which calls this function directly and does NOT drive [`plx_base::devtrig::read`] itself (that one line is
@@ -1152,7 +1152,7 @@ fn autoplay_arm_due(route: &AppArg, auto_tried: bool, elapsed_ms: u32, playurl: 
     }
 }
 
-/// `/tmp/plxnative-playurl` as the `autoplay` arm sees it: read once, then held (see [`latched`]).
+/// `/tmp/multiplex-playurl` as the `autoplay` arm sees it: read once, then held (see [`latched`]).
 /// Armed before boot like every boot trigger, and `tests/run.py` clears the `/tmp` triggers between
 /// cases, so a later read could answer differently mid-run.
 fn playurl_latched(slot: &mut Option<bool>) -> bool {
@@ -1287,17 +1287,17 @@ fn grid_library_search_heroidx_arm(app: &mut App, _fr: &mut Frame) {
         if let Some(q) = plx_base::devtrig::read("search") {
             apply_search_boot_trigger(&q, &mut app.pages, &mut app.bridge);
         }
-        // `/tmp/plxnative-watchlist` — boot straight onto the Watchlist page (`SelectTab`, as the
-        // Library and Search triggers above). Pair it with `plxnative-discover=<mock url>` (or a
-        // `plxnative-plextv` redirect, which Discover follows); a dev-token boot with neither armed
+        // `/tmp/multiplex-watchlist` — boot straight onto the Watchlist page (`SelectTab`, as the
+        // Library and Search triggers above). Pair it with `multiplex-discover=<mock url>` (or a
+        // `multiplex-plextv` redirect, which Discover follows); a dev-token boot with neither armed
         // has its Discover reads refused, logged at boot as `discover: base=real reads=refused`.
         // `tools/tv-session.sh --mock-plextv` arms both.
         if plx_base::devtrig::flag("watchlist") {
             crate::app::bridge::nav_select_tab(&mut app.pages, AppArg::Watchlist);
         }
-        // `/tmp/plxnative-catalog=<24 hex>` — boot straight onto the catalog page of that title (a
+        // `/tmp/multiplex-catalog=<24 hex>` — boot straight onto the catalog page of that title (a
         // `ContentArg::Catalog` push over Home, as a Watchlist tile's OK opens it). The page reads
-        // the discover host like the Watchlist page, so pair it with `plxnative-discover=<mock
+        // the discover host like the Watchlist page, so pair it with `multiplex-discover=<mock
         // url>`; a value that is not 24 hex digits arms nothing.
         if let Some(hex) = plx_base::devtrig::read("catalog").and_then(|v| plx_data::watchlist::decode_hex(v.trim())) {
             crate::app::bridge::open_catalog(&mut app.pages, hex, None);
@@ -1307,7 +1307,7 @@ fn grid_library_search_heroidx_arm(app: &mut App, _fr: &mut Frame) {
                 app.bridge.home_command(HomeCmd::SelectHero(n));
             }
         }
-        // `/tmp/plxnative-heropin=<n>` — `heroidx`, then HOLD that billboard (no auto-advance):
+        // `/tmp/multiplex-heropin=<n>` — `heroidx`, then HOLD that billboard (no auto-advance):
         // the screenshot pipeline's pin, so a settled capture shows the slot its scene named.
         if let Some(s) = plx_base::devtrig::read("heropin") {
             if let Ok(n) = s.parse::<c_int>() {
@@ -1317,7 +1317,7 @@ fn grid_library_search_heroidx_arm(app: &mut App, _fr: &mut Frame) {
     }
 }
 
-/// The page a `plxnative-settings=<target>` boot target names, or `None` for a target this build does not know.
+/// The page a `multiplex-settings=<target>` boot target names, or `None` for a target this build does not know.
 /// `tests/manifest.json`'s `settings-*` fps scenes select on the heartbeat word of the page this returns, and
 /// `surface_navigation_tests` pins each of those words.
 pub(crate) fn settings_boot_page(target: &str) -> Option<plx_screens::family::SettingsPage> {
@@ -1394,7 +1394,7 @@ fn press_arm(app: &mut App, fr: &mut Frame) {
     }
 }
 
-/// `/tmp/plxnative-acct` — auto-open the profile menu (headless capture of the surface).
+/// `/tmp/multiplex-acct` — auto-open the profile menu (headless capture of the surface).
 ///
 /// A per-frame ARM rather than a boot assignment, and that is what the surface changed: the menu
 /// used to be a route the boot could simply name (`route = Route::Account { over: BarHost::Home }`
@@ -1423,7 +1423,7 @@ fn acct_arm(app: &mut App, fr: &mut Frame) {
     }
 }
 
-/// `/tmp/plxnative-itemmenu` — snap into the grid and open the press-and-hold card menu on the
+/// `/tmp/multiplex-itemmenu` — snap into the grid and open the press-and-hold card menu on the
 /// focused card (`fps:item-menu`, and the headless capture of the panel).
 ///
 /// It presents through THE SAME PATH the hold does and always did — `HomeCmd::ItemMenu` is queued
@@ -1452,7 +1452,7 @@ fn itemmenu_arm(app: &mut App, fr: &mut Frame) {
     }
 }
 
-/// `/tmp/plxnative-detail=<rk>` — boot straight onto a detail page (`fps:cold-open`).
+/// `/tmp/multiplex-detail=<rk>` — boot straight onto a detail page (`fps:cold-open`).
 ///
 /// **The request is the ASYNC one, and that is the whole scene.** This arm ran
 /// `MetadataCmd::LoadDetailNow` until phase 11 — the deliberately BLOCKING load, two sequential
@@ -1477,13 +1477,13 @@ fn detail_arm(app: &mut App, fr: &mut Frame) -> bool {
                     Ok(sid) => sid,
                     Err(_e) => {
                         #[cfg(feature = "devtriggers")]
-                        plx_base::eventlog::log(&format!("plxnative-detail: refused: {_e}"));
+                        plx_base::eventlog::log(&format!("multiplex-detail: refused: {_e}"));
                         return false;
                     }
                 };
                 app.bridge.metadata_run(plx_data::stores::metadata::MetadataCmd::RequestDetail { sid, rk: rk.to_string() });
                 #[cfg(feature = "devtriggers")]
-                plx_base::eventlog::log(&format!("plxnative-detail: rk={rk} server={} start", sid.raw()));
+                plx_base::eventlog::log(&format!("multiplex-detail: rk={rk} server={} start", sid.raw()));
                 // A HARD CUT onto the page: at boot there is no outgoing screen to replace, so a
                 // dip would fade the page up out of nothing and read as a slow app rather than a
                 // navigated one. `push_detail` + `seed_node` in one call.
@@ -1495,7 +1495,7 @@ fn detail_arm(app: &mut App, fr: &mut Frame) -> bool {
     true
 }
 
-/// `/tmp/plxnative-collection=<ratingKey>` — mount the Collection page through the same argument
+/// `/tmp/multiplex-collection=<ratingKey>` — mount the Collection page through the same argument
 /// a kind-4 card produces. The mock/server supplies the header and children asynchronously.
 fn collection_arm(app: &mut App, fr: &mut Frame) -> bool {
     if app.scenarios.collection_tried || fr.now.wrapping_sub(app.t0) <= 500 { return true; }
@@ -1505,7 +1505,7 @@ fn collection_arm(app: &mut App, fr: &mut Frame) -> bool {
         Ok(sid) => sid,
         Err(_e) => {
             #[cfg(feature = "devtriggers")]
-            plx_base::eventlog::log(&format!("plxnative-collection: refused: {_e}"));
+            plx_base::eventlog::log(&format!("multiplex-collection: refused: {_e}"));
             return false;
         }
     };
@@ -1513,11 +1513,11 @@ fn collection_arm(app: &mut App, fr: &mut Frame) -> bool {
         plx_screens::registry::ContentArg::Collection(plx_plex::plex::collections::CollectionRef::by_rk(
             sid, &rk, 0, plx_platform::i18n::msg::browse_collection_kind()))));
     #[cfg(feature = "devtriggers")]
-    plx_base::eventlog::log(&format!("plxnative-collection: rk={rk} server={} start", sid.raw()));
+    plx_base::eventlog::log(&format!("multiplex-collection: rk={rk} server={} start", sid.raw()));
     true
 }
 
-/// `/tmp/plxnative-hud=<path>` — draw the package at that path instead of the chosen HUD (classic unless a package was picked). Read ONCE, on the first
+/// `/tmp/multiplex-hud=<path>` — draw the package at that path instead of the chosen HUD (classic unless a package was picked). Read ONCE, on the first
 /// player frame (`run::refresh_hud`); the file is read here, the bytes are compiled by the owner, and a
 /// file that does not read or compile is remembered ([`DevPackage`]), so it is neither re-read nor
 /// recompiled every frame. Without the `devtriggers` feature the trigger reads as absent.
@@ -1527,11 +1527,11 @@ pub(crate) fn hud_trigger() -> plx_appkit::player_hud::loaded::DevHud {
     let Some(path) = dev_package_path(&value) else { return DevHud::Off };
     let bytes = crate::app::hud_source::read_artifact(std::path::Path::new(path)).map_err(|e| e.to_string());
     #[cfg(feature = "devtriggers")]
-    plx_base::eventlog::log(&format!("plxnative-hud: path={path} read={}", bytes.as_ref().map_or_else(|e| e.clone(), |b| format!("{} bytes", b.len()))));
+    plx_base::eventlog::log(&format!("multiplex-hud: path={path} read={}", bytes.as_ref().map_or_else(|e| e.clone(), |b| format!("{} bytes", b.len()))));
     DevHud::Package(DevPackage::new(path.to_owned(), bytes))
 }
 
-/// `/tmp/plxnative-play=<rk>` — fetch that item and play its leaf, headless. TWO frames at least,
+/// `/tmp/multiplex-play=<rk>` — fetch that item and play its leaf, headless. TWO frames at least,
 /// since phase 11: the request goes off-thread on the arming frame and the play is dispatched on
 /// the frame its landing arrives.
 ///
@@ -1544,7 +1544,7 @@ pub(crate) fn hud_trigger() -> plx_appkit::player_hud::loaded::DevHud {
 ///
 /// **The `start` line stays where it always was, at the DISPATCH**, not at the request. The
 /// harness's offline cases key on it (`tests/run.py`'s `resolve_pin`: the IPv6 re-point must
-/// PRECEDE `plxnative-play: … start`), and moving a line earlier is exactly the kind of change
+/// PRECEDE `multiplex-play: … start`), and moving a line earlier is exactly the kind of change
 /// that turns an ordering assertion into a coin toss. The request gets its own `… request` line,
 /// which carries no `start` and so cannot be mistaken for one.
 ///
@@ -1565,13 +1565,13 @@ fn play_arm(app: &mut App, fr: &mut Frame) -> bool {
                     Ok(sid) => sid,
                     Err(_e) => {
                         #[cfg(feature = "devtriggers")]
-                        plx_base::eventlog::log(&format!("plxnative-play: refused: {_e}"));
+                        plx_base::eventlog::log(&format!("multiplex-play: refused: {_e}"));
                         return false;
                     }
                 };
                 app.bridge.metadata_run(plx_data::stores::metadata::MetadataCmd::RequestDetail { sid, rk: rk.to_string() });
                 #[cfg(feature = "devtriggers")]
-                plx_base::eventlog::log(&format!("plxnative-play: rk={rk} server={} request", sid.raw()));
+                plx_base::eventlog::log(&format!("multiplex-play: rk={rk} server={} request", sid.raw()));
                 app.scenarios.play_await = Some((sid, rk.to_string(), fr.now.wrapping_add(12_000)));
             }
         }
@@ -1608,7 +1608,7 @@ fn play_await_tick(app: &mut App, fr: &mut Frame) {
             app.scenarios.play_await = None;
             #[cfg(feature = "devtriggers")]
             plx_base::eventlog::log(&format!(
-                "plxnative-play: rk={rk} server={} — no detail landed ({})",
+                "multiplex-play: rk={rk} server={} — no detail landed ({})",
                 sid.raw(),
                 if settled { "the fetch settled without it" } else { "12s" }
             ));
@@ -1618,11 +1618,11 @@ fn play_await_tick(app: &mut App, fr: &mut Frame) {
     app.scenarios.play_await = None;
     if part.is_empty() {
         #[cfg(feature = "devtriggers")]
-        plx_base::eventlog::log(&format!("plxnative-play: rk={rk} server={} — nothing playable on it", sid.raw()));
+        plx_base::eventlog::log(&format!("multiplex-play: rk={rk} server={} — nothing playable on it", sid.raw()));
         return;
     }
     #[cfg(feature = "devtriggers")]
-    plx_base::eventlog::log(&format!("plxnative-play: rk={rk} server={} start", sid.raw()));
+    plx_base::eventlog::log(&format!("multiplex-play: rk={rk} server={} start", sid.raw()));
     if plx_media::route::request_play(&mut app.player.session, app.bridge.metadata_mut(), crate::app::playback::start_caps(), sid, &rk, &part, &vc, &ac, &title, "", None, "") {
         let resume = plx_data::metadata::resume_ns(resume_ms, dur_ms);
         crate::app::playback::start_playback(&mut app.player.session,
@@ -1797,7 +1797,7 @@ fn menu_arm(app: &mut App, fr: &mut Frame) {
     }
 }
 
-/// `/tmp/plxnative-menupick=<tab>,<target>`: `target` is either an absolute `TableView` row
+/// `/tmp/multiplex-menupick=<tab>,<target>`: `target` is either an absolute `TableView` row
 /// number (the original contract), on the Audio tab a NAMED target — `"boost"`/`"loudness"` —
 /// resolved through the panel's own [`plx_appkit::track_menu::TrackRow`] identities
 /// (`TrackMenuState::row_for_audio_target`), or on the Subtitles tab `"track:N"`, the N-th track in
@@ -1810,7 +1810,7 @@ fn menu_arm(app: &mut App, fr: &mut Frame) {
 ///
 /// **The pick is a viewer's.** It goes through the menu's own commit, so it carries the pick's
 /// descriptor and `commit_track` remembers it for the show (seated, episode, accepted), exactly as a
-/// press would; `plxnative-trackmemory=clear` ([`arm_track_memory`]) is what keeps one case's pick
+/// press would; `multiplex-trackmemory=clear` ([`arm_track_memory`]) is what keeps one case's pick
 /// out of the next case's starting tracks. [`subtiming_arm`] and the other setup arms commit with no
 /// descriptor and remember nothing.
 fn menupick_arm(app: &mut App, fr: &mut Frame) {
@@ -1851,7 +1851,7 @@ fn menupick_arm(app: &mut App, fr: &mut Frame) {
     }
 }
 
-/// `/tmp/plxnative-submenuosc=<period_ms>`'s own state — see [`submenuosc_arm`].
+/// `/tmp/multiplex-submenuosc=<period_ms>`'s own state — see [`submenuosc_arm`].
 #[derive(Debug, Default)]
 pub(crate) struct SubmenuOsc {
     /// The period, read once when the arm first runs (`None` = not read yet, `Some(0)` = not armed).
@@ -1900,9 +1900,9 @@ fn submenuosc_next(step: u8, tab: c_int, depth: usize, has_other: bool) -> Subme
     }
 }
 
-/// `/tmp/plxnative-submenuosc=<period_ms>` — the device frame-time scene for the Tracks panel's
+/// `/tmp/multiplex-submenuosc=<period_ms>` — the device frame-time scene for the Tracks panel's
 /// drill-in animation (panel resize + page slide). With the Subtitles menu open
-/// (`plxnative-menu=1`) it presses one REAL key per period through the dispatcher
+/// (`multiplex-menu=1`) it presses one REAL key per period through the dispatcher
 /// ([`submenuosc_next`]'s cycle), so every push, pop and tab switch runs the production handlers
 /// and the spring they start. Shaped like `navosc`/`modalosc`: it never opens or dismisses
 /// anything except that a menu dismissed under it (a stray key) is reopened on the Subtitles tab.
@@ -1951,9 +1951,9 @@ fn moreosc_next(depth: usize) -> (bool, Key) {
     if depth == 0 { (true, Key::Right) } else { (false, Key::Left) }
 }
 
-/// `/tmp/plxnative-moreosc=<period_ms>` — the device frame-time scene for More's Quality drill-in
+/// `/tmp/multiplex-moreosc=<period_ms>` — the device frame-time scene for More's Quality drill-in
 /// (panel resize + page slide), the same shape as [`submenuosc_arm`]: with More open
-/// (`plxnative-more=1`) one REAL key per period through the dispatcher, alternating push and pop.
+/// (`multiplex-more=1`) one REAL key per period through the dispatcher, alternating push and pop.
 /// A More dismissed under it is reopened at the root.
 fn moreosc_arm(app: &mut App, fr: &mut Frame) {
     let period = *app.scenarios.more_osc.period.get_or_insert_with(|| {
@@ -2000,7 +2000,7 @@ mod moreosc_script_tests {
     }
 }
 
-/// `/tmp/plxnative-subtiming`'s own state across frames — see [`subtiming_arm`].
+/// `/tmp/multiplex-subtiming`'s own state across frames — see [`subtiming_arm`].
 #[derive(Debug, Default)]
 pub(crate) struct Subtiming {
     /// `true` once stage 1 (the subtitle commit) has fired, so a later frame does not commit a
@@ -2052,8 +2052,8 @@ fn subtiming_step(now: u32, armed_at: u32, cur_sid: i64, want_sid: i64) -> Subti
     }
 }
 
-/// `/tmp/plxnative-subtiming` — the Timing capsule's own headless trigger (plan
-/// `subtitle-menu-capsule` §5), self-contained rather than riding `plxnative-menupick`: that one
+/// `/tmp/multiplex-subtiming` — the Timing capsule's own headless trigger (plan
+/// `subtitle-menu-capsule` §5), self-contained rather than riding `multiplex-menupick`: that one
 /// fires at 7000 ms and would stack a Tracks panel on top of the capsule this trigger wants alone.
 ///
 /// **Stage 1**, once the item's PLAN has landed and it is not transcoding: pick the first embedded
@@ -2264,7 +2264,7 @@ fn should_replay_after_eos(handed_off_to_up_next: bool, replay_left: u32, playur
     !handed_off_to_up_next && replay_left > 0 && playurl_flag
 }
 
-/// `/tmp/plxnative-replay[=N]` — REPLAY AFTER COMPLETION (LG App Self Checklist #46). Called from
+/// `/tmp/multiplex-replay[=N]` — REPLAY AFTER COMPLETION (LG App Self Checklist #46). Called from
 /// `app::run::playback_tick` right after `finish_playback` has left the player on a real EOS;
 /// `handed_off_to_up_next` is that call's own return value, telling an Up Next handoff apart from
 /// a real exit (see [`should_replay_after_eos`]). Re-arming `auto_tried` sends the next frame back
@@ -2303,7 +2303,7 @@ mod replay_after_eos_tests {
 /// quality, pause, menu, menupick, subtiming, marker), called once per iteration from
 /// `app::run::run` at exactly the position `dev_scripts` occupied. `false` propagates a refused
 /// trigger (an invalid
-/// `plxnative-server` slot) — the loop `continue`s exactly as it always did, skipping the rest of
+/// `multiplex-server` slot) — the loop `continue`s exactly as it always did, skipping the rest of
 /// this frame's arms and phases alike.
 pub(crate) unsafe fn each_frame(app: &mut App, fr: &mut Frame) -> bool {
     #[cfg(feature = "devtriggers")]
@@ -2374,7 +2374,7 @@ pub(crate) fn controlled_each_frame(app: &mut App, fr: &mut Frame) -> bool {
 // governs production per-page work too (`update_home_chrome`) and is not itself a dev arm.
 // =================================================================================================
 
-/// `/tmp/plxnative-pickuser=<index>` — auto-select that roster tile once the who's-watching
+/// `/tmp/multiplex-pickuser=<index>` — auto-select that roster tile once the who's-watching
 /// picker is up. Called from `app::run::update` at the position the arm always occupied.
 pub(crate) fn pickuser_tick(app: &mut App) {
     if !(matches!(app.route(), AppArg::Profiles)
@@ -2403,7 +2403,7 @@ pub(crate) fn pickuser_tick(app: &mut App) {
     }
 }
 
-/// `/tmp/plxnative-navosc` — bounce the route Home↔Library (or Home↔a named detail page) on a
+/// `/tmp/multiplex-navosc` — bounce the route Home↔Library (or Home↔a named detail page) on a
 /// timer. Called from `app::run::land_results` at the position the arm always occupied.
 pub(crate) fn nav_osc_tick(app: &mut App, now: u32) {
     use plx_screens::registry::HomeTab;
@@ -2436,7 +2436,7 @@ pub(crate) fn nav_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-heroosc` — perpetually page the real hero carousel.
+/// `/tmp/multiplex-heroosc` — perpetually page the real hero carousel.
 pub(crate) fn hero_osc_tick(app: &mut App, now: u32) {
     if app.scenarios.dev.hero_osc && now.wrapping_sub(app.scenarios.hero_osc_last) > 700 {
         app.scenarios.hero_osc_last = now;
@@ -2444,7 +2444,7 @@ pub(crate) fn hero_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-homefoldosc` — alternate the real hero↔first-shelf snap.
+/// `/tmp/multiplex-homefoldosc` — alternate the real hero↔first-shelf snap.
 pub(crate) fn home_fold_osc_tick(app: &mut App, now: u32) {
     if app.scenarios.dev.home_fold_osc && now.wrapping_sub(app.scenarios.home_fold_osc_last) > 700 {
         app.scenarios.home_fold_osc_last = now;
@@ -2457,7 +2457,7 @@ pub(crate) fn home_fold_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-homeosc` — sweep the home grid focus top↔bottom to reproduce scroll judder.
+/// `/tmp/multiplex-homeosc` — sweep the home grid focus top↔bottom to reproduce scroll judder.
 pub(crate) fn home_osc_tick(app: &mut App, now: u32) {
     if app.scenarios.dev.home_osc && now.wrapping_sub(app.scenarios.home_osc_last) > 350 {
         app.scenarios.home_osc_last = now;
@@ -2468,7 +2468,7 @@ pub(crate) fn home_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-libosc` — the Library twin of `homeosc`. Sweeps whichever page of the library
+/// `/tmp/multiplex-libosc` — the Library twin of `homeosc`. Sweeps whichever page of the library
 /// family is up (the grid, its Collections page, its Recommended shelves): all three answer
 /// `LibraryCmd::Sweep`, and `fps:library-collections` is this sweep on the Collections page.
 pub(crate) fn lib_osc_tick(app: &mut App, now: u32) {
@@ -2478,7 +2478,7 @@ pub(crate) fn lib_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-libswitch` — cycle EVERY Library switch on a timer. The full grid's alone, on
+/// `/tmp/multiplex-libswitch` — cycle EVERY Library switch on a timer. The full grid's alone, on
 /// purpose and unlike the sweep above: the switches it cycles (type, sort and filter, the library
 /// plate, Unwatched, the A-Z rail) are the grid header's controls, which the Collections page does
 /// not wear (its header is a crumb) and the Recommended page answers `Handled::No`.
@@ -2490,7 +2490,7 @@ pub(crate) fn lib_switch_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-searchosc` — the Search twin of `homeosc`/`libosc`.
+/// `/tmp/multiplex-searchosc` — the Search twin of `homeosc`/`libosc`.
 pub(crate) fn search_osc_tick(app: &mut App, now: u32) {
     if matches!(app.route(), AppArg::Search) && app.scenarios.dev.search_osc && now.wrapping_sub(app.scenarios.search_osc_last) > 350 {
         app.scenarios.search_osc_last = now;
@@ -2501,7 +2501,7 @@ pub(crate) fn search_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-acctosc` — drive the profile menu's own TableView.
+/// `/tmp/multiplex-acctosc` — drive the profile menu's own TableView.
 pub(crate) fn account_osc_tick(app: &mut App, now: u32) {
     if app.scenarios.dev.account_osc && crate::app::bridge::account_menu_up(&app.pages) {
         plx_machine::idle::wake();
@@ -2519,7 +2519,7 @@ pub(crate) fn account_osc_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-modalosc` (with `plxnative-settings=root`) — open/dismiss Settings every 1.5 s.
+/// `/tmp/multiplex-modalosc` (with `multiplex-settings=root`) — open/dismiss Settings every 1.5 s.
 pub(crate) fn modal_osc_tick(app: &mut App, now: u32) {
     if app.scenarios.dev.modal_osc && app.scenarios.settings_tried && now.wrapping_sub(app.scenarios.modal_osc_last) > 1500 {
         app.scenarios.modal_osc_last = now;
@@ -2532,7 +2532,7 @@ pub(crate) fn modal_osc_tick(app: &mut App, now: u32) {
 }
 
 // =================================================================================================
-// stress-bench oscillators (`/tmp/plxnative-pushbench`, `/tmp/plxnative-modalbench`) — see
+// stress-bench oscillators (`/tmp/multiplex-pushbench`, `/tmp/multiplex-modalbench`) — see
 // `bench`'s module doc for the pure state machine both ticks below drive. Half-periods reuse
 // `nav_osc`'s 1400 ms and `modal_osc`'s 1500 ms exactly: "never faster than a user could
 // plausibly drive" (spec) is the same argument those two already settled.
@@ -2692,7 +2692,7 @@ fn push_bench_refresh_person(app: &mut App) {
     }
 }
 
-/// `/tmp/plxnative-pushbench` — see `bench`'s module doc. Called from `land_results` beside
+/// `/tmp/multiplex-pushbench` — see `bench`'s module doc. Called from `land_results` beside
 /// `nav_osc_tick`, the same phase boundary every route-changing dev arm runs at.
 pub(crate) fn push_bench_tick(app: &mut App, now: u32) {
     if app.scenarios.push_bench.is_none() {
@@ -2768,7 +2768,7 @@ fn modal_bench_open(app: &mut App, target: bench::ModalTarget) {
     }
 }
 
-/// `/tmp/plxnative-modalbench` — see `bench`'s module doc. Called from `update` beside
+/// `/tmp/multiplex-modalbench` — see `bench`'s module doc. Called from `update` beside
 /// `modal_osc_tick`, the same phase boundary every Settings-family dev arm runs at. Dismissal is
 /// the single generic `dismiss_surfaces` every modal style already shares (`modal_osc_tick`'s own
 /// reverse leg): a Compact/Sheet/Alert surface is dismissed the same way regardless of which one
@@ -2808,7 +2808,7 @@ pub(crate) fn modal_bench_tick(app: &mut App, now: u32) {
 }
 
 // =================================================================================================
-// deep bench (`/tmp/plxnative-deepbench`) — see `bench`'s module doc for why each cycle here is
+// deep bench (`/tmp/multiplex-deepbench`) — see `bench`'s module doc for why each cycle here is
 // one nav op, not a round trip, and why `Library` never appears in its rotation.
 // =================================================================================================
 
@@ -2873,7 +2873,7 @@ fn deep_bench_close(app: &mut App) {
     crate::app::bridge::nav_pop(&mut app.pages);
 }
 
-/// `/tmp/plxnative-deepbench` — see `bench`'s module doc. Called from `land_results` beside
+/// `/tmp/multiplex-deepbench` — see `bench`'s module doc. Called from `land_results` beside
 /// `push_bench_tick`, the same phase boundary: this bench changes the page stack every step too.
 pub(crate) fn deep_bench_tick(app: &mut App, now: u32) {
     if app.scenarios.deep_bench.is_none() {
@@ -2927,7 +2927,7 @@ pub(crate) fn deep_bench_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-herobench` — see [`bench::HeroBench`]: `n` cycles of two flips of the real Home
+/// `/tmp/multiplex-herobench` — see [`bench::HeroBench`]: `n` cycles of two flips of the real Home
 /// hero carousel through the same `HomeCmd::Flip` the Left/Right key lands on, walking three titles
 /// and back. Called from `land_results` beside the other bench ticks. Each half of the round-trip
 /// clock is one flip, measured to its settle point.
@@ -2980,7 +2980,7 @@ fn press_host(app: &App) -> Option<(bench::PressHost, bool)> {
     }
 }
 
-/// `/tmp/plxnative-holdbench` — see [`bench::PressBench`]: `n` cycles of a REAL press on the focused
+/// `/tmp/multiplex-holdbench` — see [`bench::PressBench`]: `n` cycles of a REAL press on the focused
 /// card, through the key path a remote uses (`script_key`'s edges into `app.inputs`, the same queue
 /// `press_arm` and the grid pong use), so the card's press-in, the hold capsule's fill, the item
 /// menu's open and its dismissal are all inside the graded halves.
@@ -3054,7 +3054,7 @@ pub(crate) fn hold_bench_tick(app: &mut App, now: u32) {
     }
 }
 
-/// `/tmp/plxnative-legaldoc` (with `plxnative-settings=legal`) — one OK on the Legal index.
+/// `/tmp/multiplex-legaldoc` (with `multiplex-settings=legal`) — one OK on the Legal index.
 pub(crate) fn legal_doc_tick(app: &mut App, now: u32, dt: f32) {
     if app.scenarios.dev.legal_doc
         && !app.scenarios.legal_doc_tried
@@ -3066,7 +3066,7 @@ pub(crate) fn legal_doc_tick(app: &mut App, now: u32, dt: f32) {
     }
 }
 
-/// `/tmp/plxnative-alert` (with `plxnative-settings=privacy`) — walk to and open the decision alert.
+/// `/tmp/multiplex-alert` (with `multiplex-settings=privacy`) — walk to and open the decision alert.
 pub(crate) fn alert_tick(app: &mut App, now: u32, dt: f32) {
     if app.scenarios.dev.alert_boot
         && !app.scenarios.alert_tried
@@ -3085,7 +3085,7 @@ pub(crate) fn alert_tick(app: &mut App, now: u32, dt: f32) {
     }
 }
 
-/// `/tmp/plxnative-settingsosc` — hold Settings open under a continuous focus sweep.
+/// `/tmp/multiplex-settingsosc` — hold Settings open under a continuous focus sweep.
 pub(crate) fn settings_osc_tick(app: &mut App, now: u32, dt: f32) {
     if app.scenarios.dev.settings_osc && crate::app::bridge::settings_up(&app.pages) {
         plx_machine::idle::wake();
@@ -3099,7 +3099,7 @@ pub(crate) fn settings_osc_tick(app: &mut App, now: u32, dt: f32) {
     }
 }
 
-/// `/tmp/plxnative-consentosc` — sweep the first-run consent question's focus.
+/// `/tmp/multiplex-consentosc` — sweep the first-run consent question's focus.
 pub(crate) fn consent_osc_tick(app: &mut App, now: u32, dt: f32) {
     if app.scenarios.dev.consent_osc && crate::app::bridge::consent_up(&app.pages) {
         plx_machine::idle::invalidate();
@@ -3113,7 +3113,7 @@ pub(crate) fn consent_osc_tick(app: &mut App, now: u32, dt: f32) {
     }
 }
 
-/// `/tmp/plxnative-onboardosc` — sweep the first-run sources editor's focus.
+/// `/tmp/multiplex-onboardosc` — sweep the first-run sources editor's focus.
 pub(crate) fn onboard_osc_tick(app: &mut App, now: u32, dt: f32) {
     if app.scenarios.dev.onboard_osc && matches!(app.route(), AppArg::Onboard) {
         plx_machine::idle::invalidate();
@@ -3127,7 +3127,7 @@ pub(crate) fn onboard_osc_tick(app: &mut App, now: u32, dt: f32) {
     }
 }
 
-/// `/tmp/plxnative-detailosc` — sweep the detail page's focus down↔up.
+/// `/tmp/multiplex-detailosc` — sweep the detail page's focus down↔up.
 pub(crate) fn detail_osc_tick(app: &mut App, now: u32) {
     if app.scenarios.dev.detail_osc && matches!(app.route(), AppArg::Content(plx_screens::registry::ContentArg::Detail { .. })) {
         let key = if (now / 450) % 2 == 0 { Key::Down } else { Key::Up };
@@ -3141,14 +3141,14 @@ pub(crate) fn detail_osc_tick(app: &mut App, now: u32) {
 // phase's instructions say to leave alone.
 // =================================================================================================
 
-/// `/tmp/plxnative-consent[=<crash|product>]` — forces either first-run purpose even on an
+/// `/tmp/multiplex-consent[=<crash|product>]` — forces either first-run purpose even on an
 /// automated boot. Read by `app::input::maybe_ask_consent`, which stays production code with this
 /// one dev-only branch: presenting the real consent screen is not itself a dev arm.
 pub(crate) fn consent_override() -> Option<String> {
     plx_base::devtrig::read("consent")
 }
 
-/// `/tmp/plxnative-rec` — read by controlled-bootstrap preflight. The recorder/replay MECHANISM
+/// `/tmp/multiplex-rec` — read by controlled-bootstrap preflight. The recorder/replay MECHANISM
 /// stays in `app/recorder.rs` (this phase's instructions: it is not a scenario), but the raw
 /// trigger read goes through the one door every other trigger does.
 ///
@@ -3164,7 +3164,7 @@ pub(crate) fn rec_trigger() -> Result<Option<String>, &'static str> {
     Ok(None)
 }
 
-/// `/tmp/plxnative-recplay` — see [`rec_trigger`].
+/// `/tmp/multiplex-recplay` — see [`rec_trigger`].
 #[cfg(feature = "devtriggers")]
 pub(crate) fn recplay_trigger() -> Result<Option<String>, &'static str> {
     plx_ui::rec::mode_value(&plx_base::devtrig::path("recplay")).map_err(|_| "invalid replay trigger")
@@ -3174,7 +3174,7 @@ pub(crate) fn recplay_trigger() -> Result<Option<String>, &'static str> {
     Ok(None)
 }
 
-/// `/tmp/plxnative-app-init` — an explicit typed initial for a controlled boot, read by
+/// `/tmp/multiplex-app-init` — an explicit typed initial for a controlled boot, read by
 /// `app::bootstrap` in place of capturing one. `None` when the trigger is absent (always, in a
 /// release build); `Some(Err)` when it is present but unreadable. See [`rec_trigger`].
 #[cfg(feature = "devtriggers")]
@@ -3189,8 +3189,8 @@ pub(crate) fn app_init_value() -> Option<Result<serde_json::Value, &'static str>
     None
 }
 
-// The sign-in trouble arms (`plxnative-signinfail`, `plxnative-readout`), the consent-state boot
-// override (`plxnative-consentstate`) and the harness-driven test are READ by modules below this
+// The sign-in trouble arms (`multiplex-signinfail`, `multiplex-readout`), the consent-state boot
+// override (`multiplex-consentstate`) and the harness-driven test are READ by modules below this
 // layer — `auth`, `telemetry`, the login screen — and only read trigger files, so their reads
 // moved down beside them (`auth::scripted`, `telemetry::consent::state_override`,
 // `screens::login::harness_driven`) instead of being reached up into from here.

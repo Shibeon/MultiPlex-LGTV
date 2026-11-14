@@ -60,7 +60,7 @@ pub struct Header<'a> {
     pub copy: &'a str,
     pub copy_size: std::os::raw::c_int,
     /// One key-cap line stacked under the copy's measured height (the Language page's "Hold
-    /// [BACK] to close PlxNative"). Never elided: a screen that sets one owns a fit test for it
+    /// [BACK] to close MultiPlex"). Never elided: a screen that sets one owns a fit test for it
     /// against [`RouteLayout`]'s narrative width.
     pub hint: Option<KeyHint<'a>>,
     /// A loading read-out in the copy: accounted and sentinel-painted at the actual draw.
@@ -71,8 +71,7 @@ pub struct Header<'a> {
     /// `copy` as before.
     pub follow: Option<&'a super::follow_copy::FollowCopy>,
     /// Display-only art in the picture slot ([`RouteLayout::picture_slot`]); no focus or hit stop.
-    /// The one slot for a page's picture: a poster fan, the Under posters tiles, a HUD's preview
-    /// ([`super::follow_copy::LandscapePicture`]).
+    /// The one slot for a page's picture: a poster fan or the Under posters tiles.
     pub picture: Option<&'a dyn super::follow_copy::PictureSlot>,
 }
 

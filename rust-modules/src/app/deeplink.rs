@@ -476,7 +476,7 @@ mod tests {
     /// A Sentry crash envelope path (`main.c` hands that to the spooler first) is not a launch.
     #[test]
     fn a_sentry_envelope_path_is_not_a_link() {
-        assert_eq!(parse("/tmp/plxnative/.sentry-native/abc.envelope"), Parsed::None);
+        assert_eq!(parse("/tmp/multiplex/.sentry-native/abc.envelope"), Parsed::None);
     }
 
     // The link's pure step: a fixture roster and env, one event in, the exact state and effects out.

@@ -295,7 +295,7 @@ pub(crate) fn enter_player(
     }
 }
 
-/// The ONE start-playback ritual (detail OK, home episode OK, and the plxnative-autoplay/
+/// The ONE start-playback ritual (detail OK, home episode OK, and the multiplex-autoplay/
 /// -detailplay/-play dev triggers all share it): arm the resume point BEFORE the first
 /// Load (direct-play av_seek / transcode &offset restart), start the engine, record the
 /// Stop/BACK/EOS return target, reset the HUD focus cursor, and show the HUD. A missed step
@@ -627,7 +627,7 @@ pub(crate) fn drain_uri_track_fallbacks(ps: &mut plx_media::route::PlaybackSessi
 /// `route::commit_audio_pick`/`commit_subtitle_pick`/`commit_forced_only_pick` take the playback
 /// session's `&mut`, which no screen has (§2.2) — the panel returns a
 /// [`TrackCommit`](plx_appkit::track_menu::TrackCommit) and this is where it lands, from the
-/// overlay's `PlayerReq` and from the headless `plxnative-menupick` trigger alike. The two subtitle
+/// overlay's `PlayerReq` and from the headless `multiplex-menupick` trigger alike. The two subtitle
 /// arms go through `route::commit_subtitle_and_sidecar` / `commit_forced_only_and_sidecar`, which
 /// make the same pick commit and also perform its sidecar half (select or deselect), so the sidecar
 /// policy is the route's and not this file's.

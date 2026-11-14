@@ -23,7 +23,7 @@ TWO TIERS, ONE GENERATOR (`--tier`). Everything above and below describes the IN
 pack: the two Plex-scannable trees `tests/manifest.local.json` maps shape keys into.
 `--tier pipeline` builds a second, much smaller pack for the player-PIPELINE tier, which
 has no Plex in it at all — flat 60 s clips served off the dev Mac by
-`tests/serve_fixtures.py` and played through `/tmp/plxnative-playurl`, which carries the
+`tests/serve_fixtures.py` and played through `/tmp/multiplex-playurl`, which carries the
 URL *and* the Load payload declaration. Both packs share every builder, every trap below
 and `verify()`; what differs is the table (`PIPE_SHAPES`), the on-disk layout, and the fact
 that nothing in that table is derived from Plex's watched threshold, its marker detector or
@@ -1034,7 +1034,7 @@ QUICK_SECS = 20
 # THE PIPELINE TIER — a second, much smaller table, for a suite tier with NO PLEX IN IT.
 #
 # `tests/serve_fixtures.py` serves a directory of these clips off the dev Mac, and
-# `/tmp/plxnative-playurl` hands the app one URL plus the Load payload DECLARATION to play
+# `/tmp/multiplex-playurl` hands the app one URL plus the Load payload DECLARATION to play
 # it with (`player::playurl::PlayUrl` -> `route::set_stream_declaration`). Everything from the socket
 # down is then the same code a real playback runs — `stream.rs`' GET, `ff.rs`' AVIO and
 # demux, the `aq.rs` queues, the pump's `Feed()`, the ACB bind — with the server, the
@@ -1057,7 +1057,7 @@ QUICK_SECS = 20
 #   * TrueHD / Atmos. The correct LG Load-payload audio string for TrueHD does not exist
 #     anywhere in this repo, so the shape could not be DECLARED — and the declaration is
 #     this tier's entire subject. A `declare` that is a guess grades a guess.
-#   * PGS and SRT subtitles, in a case that plays by `plxnative-playurl`. The demuxer would carry
+#   * PGS and SRT subtitles, in a case that plays by `multiplex-playurl`. The demuxer would carry
 #     them, but the `sub cue` / `image cue` log lines a case would grade sit behind
 #     `desired_sub_idx`, which only the Plex path ever writes — so such a case would assert
 #     nothing at all. The one subtitle clip here (`pipe_side_reader_srt`) is played through the
@@ -1068,7 +1068,7 @@ QUICK_SECS = 20
 #     audio.
 #
 # `declare` IS THE TRIGGER'S PLAYBACK HALF, recorded verbatim into fixtures.json so the
-# harness writes `/tmp/plxnative-playurl` FROM the pack instead of restating it, and read
+# harness writes `/tmp/multiplex-playurl` FROM the pack instead of restating it, and read
 # back against the finished file by verify(). A declaration that drifts from its own media
 # is precisely the fault this tier cannot otherwise see: the app builds the payload the
 # declaration asked for, never looks at the container, and the case then fails pointing
@@ -1120,7 +1120,7 @@ PIPE_SHAPES = {
         # change in the encoder would hide the content above 24 kHz), and verify() reads the rate
         # and `bits_per_raw_sample` back from ffprobe. The real-FFmpeg host test
         # (`ff_pcm_decode_tests.rs`) holds the decode itself; no `pipeline_cases` entry names this clip
-        # yet: the synthetic tier's `plxnative-playurl` declares a codec but carries no track facts
+        # yet: the synthetic tier's `multiplex-playurl` declares a codec but carries no track facts
         # (`route::stream_pcm` needs the rate, depth and channels of the playing track and refuses
         # a PCM Load without them), so a case would fail at the Load before it graded anything.
         "kind": "clip", "ext": "mkv",
@@ -1524,7 +1524,7 @@ PIPE_SHAPES = {
     # **The CARRIER of the URI product route: a 90 s 720p24 progressive twin of `pipe_hls_720p24_20m`.**
     # `pipe_uri_product_hls_720p24_20m_bound*` do not play this file. The harness's mock PMS serves it as an
     # `--extra-media` movie (ratingKey 990001), so the app has a REAL plan to resolve; the dev route
-    # (`plxnative-uridev`) then answers the qualification with the HLS fixture's URL, and the TV fetches the
+    # (`multiplex-uridev`) then answers the qualification with the HLS fixture's URL, and the TV fetches the
     # HLS stream from the fixture server. What the carrier must be is what the qualifier checks of the plan:
     # at least the stream's 90 s (the offer's duration bounds the playback clock), an audio stream the offer
     # selects (here the only one; `pipe_uri_carrier_720p24_2a` below has two), NO subtitle stream (an item
@@ -1746,7 +1746,7 @@ def out_paths(root, key, spec):
     if spec["kind"] == "clip":
         # The pipeline tier. `tests/serve_fixtures.py` serves a DIRECTORY — the trees below
         # exist for a Plex scanner and this tier has none — and the file is named for the
-        # shape key, so a `plxnative-playurl` URL says which shape it is playing
+        # shape key, so a `multiplex-playurl` URL says which shape it is playing
         # (`…/pipe_hevc_eac3_4k_dovi_p8.mkv`) without a lookup. The `pipe_` prefix and the
         # separate root are also what keep the two tiers off one path: main()'s "longer on
         # disk, keep it" rule would otherwise hand a 60 s pipeline run the full-length
@@ -3266,7 +3266,7 @@ def verify(key, spec, dur, path, ep=None):
                     problems.append("subtitle[%d] last PGS cue at %.1fs, wanted one at %ds"
                                     % (i, cues[-1], want_cues[-1]))
 
-    # ---- THE DECLARATION (pipeline tier). What `/tmp/plxnative-playurl` will tell the
+    # ---- THE DECLARATION (pipeline tier). What `/tmp/multiplex-playurl` will tell the
     # television this stream IS, read back against what it actually is. The app builds its
     # Load payload from the declaration and never consults the container, so a declaration
     # that has drifted from its own media is invisible everywhere but the panel — an H264
@@ -3491,8 +3491,8 @@ def main(argv=None):
                          "directories and keep separate fixtures.json documents."
                          % PIPE_SECS)
     ap.add_argument("--out", default=os.environ.get("FIXTURES_OUT")
-                    or str(Path.home() / "plxnative-fixtures"),
-                    help="output root (default: $FIXTURES_OUT, else ~/plxnative-fixtures). "
+                    or str(Path.home() / "multiplex-fixtures"),
+                    help="output root (default: $FIXTURES_OUT, else ~/multiplex-fixtures). "
                          "Never inside the repo. `--tier pipeline` writes to <out>/pipeline.")
     # `--quick` and `--secs` are one knob under two names, hence the exclusive group: given
     # both, the loser would silently decide the length of a 20-minute build.
@@ -3836,7 +3836,7 @@ def main(argv=None):
                      "tier the pack serves: `integration` records map to ratingKeys in "
                      "tests/manifest.local.json, while a `pipeline` record is a file served "
                      "over HTTP by tests/serve_fixtures.py and its `declare` block is the "
-                     "playback half of the /tmp/plxnative-playurl trigger, verified here "
+                     "playback half of the /tmp/multiplex-playurl trigger, verified here "
                      "against the media it describes."),
         "shapes": shapes_doc,
     }
@@ -3862,7 +3862,7 @@ def main(argv=None):
             # as its own default; the harness picks its own.
             print("\n   Next: serve this directory to the television —")
             print("     ./tests/serve_fixtures.py --root %s --port 8020" % root)
-            print("   Each case then arms /tmp/plxnative-playurl with a URL into that server")
+            print("   Each case then arms /tmp/multiplex-playurl with a URL into that server")
             print("   plus the `declare` block recorded beside the file in fixtures.json.")
             print("   Start it ONCE with a human at the keyboard: the macOS application")
             print("   firewall drops the TV's connections to a new python listener silently.")

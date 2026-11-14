@@ -82,7 +82,7 @@ hostname; `register_origin`/`install` take it, the `Client` carries it for the c
 `net::resolve` holds an append-only table the media plane (`curlio`) consults by host and port.
 TLS validation is untouched here: the name stays in the URL and in SNI. (The only relaxation of CA
 verification on the ordinary request path, issue #378's key mode below, is a separate and narrower rule about a wrong clock; a pin
-changes where an address comes from and nothing about what is trusted.) `/tmp/plxnative-nowan` makes
+changes where an address comes from and nothing about what is trusted.) `/tmp/multiplex-nowan` makes
 every unpinned name fail as a dead resolver would, which is how the case is reproduced on a desk.
 **Since issue #95 the DISCOVERY PROBE is pinned too, not only the winning `Client`.**
 `auth::race_batch` builds a `ResolvePin` for each `https://…plex.direct` candidate from the same
@@ -545,7 +545,7 @@ a dead source is **absent** from Home and states itself in its own library secti
   (`TrackCommit`'s `memo`), `route::commit_audio_pick` / `commit_subtitle_pick` call `route::remember`
   when the route accepted the pick, and nothing else writes it (a movie, an unseated boot, an
   automatic choice and a harness setup commit remember nothing; the harness's
-  `plxnative-trackmemory=clear` removes entries through the same door, and `=fill[:N]` writes N worst-case
+  `multiplex-trackmemory=clear` removes entries through the same door, and `=fill[:N]` writes N worst-case
   shows through it to read the DB8 write cost at the budget). A remembered Off beats the
   account's rule and PMS's embedded selection, but not a server-selected sidecar the app can draw
   (`plan.rs` `pick_subtitle` withholds the memory from the ladder while the item has one).

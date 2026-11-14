@@ -99,7 +99,7 @@ impl TempCandidates {
     fn new(tag: &str) -> (TempCandidates, Vec<std::path::PathBuf>) {
         use std::os::unix::fs::PermissionsExt;
         let base = std::env::temp_dir().join(format!(
-            "plxnative-runtime-fallback-{tag}-{}",
+            "multiplex-runtime-fallback-{tag}-{}",
             std::process::id()
         ));
         plx_base::testscratch::remove_tree(&base);
@@ -201,7 +201,7 @@ fn write_atomic_refuses_a_symlink_planted_at_the_runtime_dir_candidate() {
     use std::os::unix::fs::{symlink, PermissionsExt};
     let _g = plx_base::testlock::serial();
     let dir = std::env::temp_dir().join(format!(
-        "plxnative-runtime-symlink-{}",
+        "multiplex-runtime-symlink-{}",
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&dir);
@@ -241,7 +241,7 @@ fn write_atomic_refuses_a_symlink_planted_at_the_runtime_dir_candidate() {
 fn write_atomic_reports_the_errno_and_parent_stat_per_candidate() {
     use std::os::unix::fs::MetadataExt;
     let _g = plx_base::testlock::serial();
-    let base = std::env::temp_dir().join(format!("plxnative-write-atomic-diag-{}", std::process::id()));
+    let base = std::env::temp_dir().join(format!("multiplex-write-atomic-diag-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
 
@@ -344,7 +344,7 @@ struct TempCanonicalRoot {
 impl TempCanonicalRoot {
     fn new(tag: &str) -> TempCanonicalRoot {
         let dir = std::env::temp_dir().join(format!(
-            "plxnative-session-canonical-{}-{tag}",
+            "multiplex-session-canonical-{}-{tag}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -547,7 +547,7 @@ fn clear_under_a_redirected_legacy_fixture_never_touches_the_canonical_authority
     // every later test in the run — the exact transplant hazard `redirect_for_test`'s own doc
     // comment warns about.
     let dir = std::env::temp_dir().join(format!(
-        "plxnative-session-test-file-guard-{}",
+        "multiplex-session-test-file-guard-{}",
         std::process::id()
     ));
     struct RestoreLegacyFixture(std::path::PathBuf);
@@ -691,7 +691,7 @@ fn clear_cleanup_outcome_maps_all_three_arms_and_never_conflates_unconfirmed_wit
 fn clear_reports_a_non_durable_outcome_when_the_canonical_commit_is_refused() {
     let _serial = plx_base::testlock::serial();
     let dir = std::env::temp_dir().join(format!(
-        "plxnative-session-canonical-not-a-dir-{}",
+        "multiplex-session-canonical-not-a-dir-{}",
         std::process::id()
     ));
     // RAII rather than a bare restore at the end: this test does not use `TempCanonicalRoot`

@@ -2046,7 +2046,7 @@ impl HomeScreen {
     }
 
     /// Is a card focused that the item menu may open on now ([`Self::item_menu_card`])? The
-    /// `plxnative-itemmenu` boot trigger's question, so that it queues the command only when this
+    /// `multiplex-itemmenu` boot trigger's question, so that it queues the command only when this
     /// page would answer it.
     pub fn item_menu_reachable(&self, focus: Option<FocusKey<u32>>) -> bool {
         self.item_menu_card(focus).is_some()

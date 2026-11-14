@@ -9,7 +9,7 @@
 //! placeholder tile-frames with no lookahead, 6,668 with it; with the moving-card decline also off
 //! (`ui::card_motion`) 1,349).
 //!
-//! The dev trigger `plxnative-lookahead=<0-4>` overrides the depth, to measure against another
+//! The dev trigger `multiplex-lookahead=<0-4>` overrides the depth, to measure against another
 //! one: the number of rows to keep warm beyond the painted window in the last direction of travel
 //! (one row the other way is always kept as well). `0` turns the lookahead off — [`rows`] answers
 //! `0`, `GridPart::prepare` returns at once and nothing here is read again — which is how the
@@ -45,7 +45,7 @@ const SETTLE_FRAMES: u8 = 2;
 
 /// How many rows to keep warm ahead: [`DEFAULT_ROWS`], or the dev trigger's count; `0` is off.
 /// Read ONCE. This crate's own unit tests never read the host's trigger file (a leftover
-/// `/tmp/plxnative-lookahead` on a dev machine would otherwise change what they assert): they see
+/// `/tmp/multiplex-lookahead` on a dev machine would otherwise change what they assert): they see
 /// the default, and [`rows_for`] is the pure rule they grade.
 pub(super) fn rows() -> usize {
     static SEEN: OnceLock<usize> = OnceLock::new();
@@ -57,10 +57,10 @@ pub(super) fn rows() -> usize {
         let (rows, how) = match trigger {
             None => (DEFAULT_ROWS, "default"),
             Some(text) => match parse_rows(&text) {
-                Some(rows) => (rows, "plxnative-lookahead"),
+                Some(rows) => (rows, "multiplex-lookahead"),
                 None => {
                     plx_base::eventlog::log(&format!(
-                        "library: plxnative-lookahead {:?} ignored (want a row count 0-{ROWS_MAX}); lookahead stays at {DEFAULT_ROWS}",
+                        "library: multiplex-lookahead {:?} ignored (want a row count 0-{ROWS_MAX}); lookahead stays at {DEFAULT_ROWS}",
                         text.trim()));
                     (DEFAULT_ROWS, "default")
                 }

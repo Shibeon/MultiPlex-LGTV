@@ -10,10 +10,10 @@ notices of the original work are kept. MultiPlex is an independent project: it i
 with, endorsed by or supported by the PlxNative project, Plex, Inc. or LG. Please report problems
 with this app here, not to the original project.
 
-### What is different from PlxNative
+### What is different from the original project
 
 - The app's identity: name, application id (`app.multiplex.native`), icons and splash screen. It
-  installs beside PlxNative rather than replacing it.
+  installs beside the original app rather than replacing it.
 - The device name Plex sees: "MultiPlex (LG TV)".
 - No optional reporting: this fork's builds carry no crash-report or analytics destination, so
   nothing is sent, the first-run question about reports is not asked, and Settings → Privacy &
@@ -24,14 +24,14 @@ MultiPlex features (themes, My list, Watch together, ...) are being brought over
 ### Installing
 
 The television must be rooted, with Homebrew Channel. Every push to `main` builds a debug
-package (`.ipk`) in this repository's GitHub Actions (CI run, artifact `plxnative-<commit>`).
+package (`.ipk`) in this repository's GitHub Actions (CI run, artifact `multiplex-<commit>`).
 Install it with Homebrew Channel or `ares-install`. The detailed steps are in
 [docs/install-and-verify.md](docs/install-and-verify.md).
 
 ---
 
-*The rest of this document is the original PlxNative README, kept for its technical content. Where it
-speaks in the first person, or points to plxnative.com, it describes the original project.*
+*Much of what follows comes from the original project's README, kept for its technical content.
+Where it speaks in the first person, it describes the original author's set-up.*
 
 ## Why this exists
 
@@ -41,7 +41,7 @@ Chromium. Patching it doesn't help — the ceiling isn't the code, it's the brow
 
 So I threw the browser away.
 
-PlxNative draws straight on the GPU and hands video to the same silicon the built-in apps use. No
+MultiPlex draws straight on the GPU and hands video to the same silicon the built-in apps use. No
 Chromium, no JavaScript, no web view. It just draws. Almost all of it is Rust, and I use it every
 day to watch things off my server in the next room.
 
@@ -138,12 +138,12 @@ server. **No root is required.**
 
 Set up LG Developer Mode and connect with webOS Dev Manager, then choose:
 
-- **Install PlxNative directly:** add only PlxNative to the TV; install future `.ipk` updates from
+- **Install MultiPlex directly:** add only MultiPlex to the TV; install future `.ipk` updates from
   your computer.
-- **Install Homebrew Channel first:** get an app catalogue on the TV, then install PlxNative and
+- **Install Homebrew Channel first:** get an app catalogue on the TV, then install MultiPlex and
   its updates with the remote.
 
-**Already have Homebrew Channel?** Find [PlxNative in its catalogue](https://repo.webosbrew.org/apps/app.multiplex.native/)
+**Already have Homebrew Channel?** Find [MultiPlex in its catalogue](https://repo.webosbrew.org/apps/app.multiplex.native/)
 and select **Install**. Skip the computer setup.
 
 **Developer Mode needs periodic renewal.** If it expires and LG disables Developer Mode, apps
@@ -164,18 +164,13 @@ theme. The launcher has no sponsored rows, and on a regular TV it installs throu
 ## Nightly builds
 
 Every day `main` moves, CI cuts a nightly `.ipk` from wherever it stands. It installs beside the
-regular app as **"PlxNative Nightly"** — its own tile, its own sign-in — so trying it never touches
+regular app as **"MultiPlex Nightly"** — its own tile, its own sign-in — so trying it never touches
 the release you already trust.
 
-**With Homebrew Channel:** under Settings choose **Add repository**, enter
-`https://plxnative.com/nightly/repo.json`, then install PlxNative Nightly. Every later nightly
-appears there as an update. The [nightly builds guide](docs/nightly-builds.md) has the steps, how
-the versions work and what to do if something goes wrong.
-
-**Without it:** each build is a
-[prerelease](https://github.com/Shibeon/MultiPlex-LGTV/releases?q=nightly), and the newest is always
-linked from [plxnative.com/nightly/latest.json](https://plxnative.com/nightly/latest.json). Install
-it with Dev Manager; a package installed that way does not update itself.
+Each build is a [prerelease](https://github.com/Shibeon/MultiPlex-LGTV/releases?q=nightly). Install
+it with Dev Manager; a package installed that way does not update itself. The
+[nightly builds guide](docs/nightly-builds.md) has the steps, how the versions work and what to do
+if something goes wrong.
 
 **It is not tested on a television.** It passes the same automated build and packaging checks a
 release does, but nobody has watched it play. Each nightly is deleted 30 days after it is
@@ -184,8 +179,8 @@ published, so link to a specific `.ipk` at your own risk.
 ## Release candidates
 
 Before a release, CI may publish a release candidate as a
-[prerelease](https://github.com/Shibeon/MultiPlex-LGTV/releases?q=rc) named like `PlxNative 0.8.0-rc.1`.
-It is the release build itself, so it **installs as the regular PlxNative app**, replacing the one
+[prerelease](https://github.com/Shibeon/MultiPlex-LGTV/releases?q=rc) named like `MultiPlex 0.8.0-rc.1`.
+It is the release build itself, so it **installs as the regular MultiPlex app**, replacing the one
 you have the way an update would. It is not in the Homebrew Channel, and the Channel will not offer
 the final release over it either: reinstall the final by hand once it is out.
 
@@ -226,18 +221,6 @@ hardware I most need help with. Feature ideas go to [Discussions >
 Ideas](https://github.com/Shibeon/MultiPlex-LGTV/discussions/categories/ideas). Security issues go
 through [`SECURITY.md`](SECURITY.md) rather than a public issue.
 
-## Acknowledgements
-
-Error monitoring for PlxNative is sponsored by [Sentry](https://sentry.io/for/good/).
-
-<a href="https://sentry.io/for/good/">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/sentry-wordmark-light.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/assets/sentry-wordmark-dark.svg">
-    <img alt="Sentry" src="docs/assets/sentry-wordmark-dark.svg" width="160">
-  </picture>
-</a>
-
 ## Licence
 
 [GPL-3.0-or-later](LICENSE), © 2026 Gleb Linnik. The PlxNative name and its brand artwork are excluded — see
@@ -250,13 +233,3 @@ with the binary and not only with this repository.
 This is an unofficial client, not affiliated with, endorsed by, or sponsored by Plex GmbH or LG
 Electronics. "Plex", "Rotten Tomatoes", "IMDb", "TMDB", "LG" and "webOS" are trademarks of their
 respective owners; where they appear in the app, they identify whose service or score is being shown.
-
-## Star history
-
-<a href="https://www.star-history.com/?repos=glinnik21%2Fplx-native&type=date&legend=bottom-right">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=glinnik21/plx-native&type=date&theme=dark&legend=bottom-right">
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=glinnik21/plx-native&type=date&legend=bottom-right">
-    <img alt="Star history chart" src="https://api.star-history.com/chart?repos=glinnik21/plx-native&type=date&legend=bottom-right">
-  </picture>
-</a>

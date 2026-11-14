@@ -85,12 +85,12 @@ the status and the endpoint SHAPE only: no token, and no id beyond what is scrub
 **A debug build does not write unless someone switched it on.** In a `devtriggers` build a `PUT` is
 refused and logged (`WatchlistError::Refused`) unless the loopback stand-in is armed (the stand-in then
 takes the write) or the owner's live switch is on. "Armed" is `account::discover()`, the ONE Discover base
-the person page shares: `/tmp/plxnative-discover`, else the loopback `/tmp/plxnative-plextv` already
+the person page shares: `/tmp/multiplex-discover`, else the loopback `/tmp/multiplex-plextv` already
 redirects plex.tv to (the mock answers both on one listener). The UI flips and then reverts, and the page header says `Debug: watchlist write blocked` until a write
 goes out (`header::dev_blocked_text`, compiled only into a `devtriggers` build, so nightly and stable keep Q8's
 silence). Release builds write. Host tests never reach curl: they drive the request closure.
 
-**Reads are refused on a dev-token boot too.** A dev-token boot (`plxnative-token`) with neither
+**Reads are refused on a dev-token boot too.** A dev-token boot (`multiplex-token`) with neither
 stand-in armed has its READS of the provider refused and logged once per endpoint, the person page's profile
 and credits included, rather than reaching the real host with a server token. That is a fixed decision
 (fail closed), and the cost is accepted: such a boot shows no person biography and no filmography
@@ -109,12 +109,12 @@ mock answers the route for the seasons of its bound shows. The store is
 appends the announced episodes the server lacks that have not aired as of the published day
 (`data/src/upcoming.rs`).
 
-**The live switch** is `plxnative-watchlist-live` in the install's runtime root (on the television
-`/tmp/app.multiplex.native.debug/plxnative-watchlist-live`). It is read once at boot, which logs
+**The live switch** is `multiplex-watchlist-live` in the install's runtime root (on the television
+`/tmp/app.multiplex.native.debug/multiplex-watchlist-live`). It is read once at boot, which logs
 `watchlist: LIVE writes enabled by trigger`; each write that goes out then logs
 `watchlist: LIVE PUT <endpoint shape> -> HTTP <status>`. The owner creates it from their own terminal
 and relaunches the app; a reboot clears `/tmp`, and `tools/tv-session.sh up` and `tests/run.py` sweep
-every `plxnative-*` trigger, so any agent run turns it off again. **No agent creates it unless the owner
+every `multiplex-*` trigger, so any agent run turns it off again. **No agent creates it unless the owner
 asks in that session** (AGENTS.md); `.claude/hooks/watchlist-live-guard.py` refuses a Bash command that
 would, unless it carries the owner's `PLX_WATCHLIST_LIVE_OWNER=1` prefix.
 
@@ -206,7 +206,7 @@ brief's `Remove Show from Watchlist`.
 **plex.tv unreachable.** The page shows the full-screen read-out with Retry (a populated list is never
 blanked). Detail, Home hero and catalog controls draw the outline face when membership is unknown, the item-menu
 row is omitted when there is no face to offer, and a press flips then reverts. Reproduce with
-`/tmp/plxnative-nowan` or the failing-closure tests.
+`/tmp/multiplex-nowan` or the failing-closure tests.
 
 **The count (Q7, decided: option D; reshaped onto the Library's header row, then the MultiPlex web
 page's head).** The page header is the Library's title block and one row (`plx_ui::page_header`;

@@ -37,7 +37,7 @@ Usage:
     tools/abr-calibrate-plant.py --rust                   # the Rust match arms
     tools/abr-calibrate-plant.py --fixtures <dir>         # non-default fixture pack
 
-The default pack is `$FIXTURES_OUT/pipeline` (else `~/plxnative-fixtures/pipeline`), the same root
+The default pack is `$FIXTURES_OUT/pipeline` (else `~/multiplex-fixtures/pipeline`), the same root
 every other fixture reader uses; `--fixtures` overrides it.
 """
 
@@ -57,7 +57,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_FIXTURES = pathlib.Path(
-    os.environ.get("FIXTURES_OUT") or os.path.expanduser("~/plxnative-fixtures"), "pipeline")
+    os.environ.get("FIXTURES_OUT") or os.path.expanduser("~/multiplex-fixtures"), "pipeline")
 
 sys.path.insert(0, str(ROOT / "tests"))
 from run import RE_ABR_SAMPLE as RE_SAMPLE  # noqa: E402

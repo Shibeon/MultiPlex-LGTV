@@ -1,7 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use plx_net::ws::{accept_key, Connection, Event, FrameParser, Opcode, Sender};
-use plxnative_fuzz as _;
+use multiplex_fuzz as _;
 
 const LIMIT: usize = 1024;
 const NONCE: [u8; 16] = [7; 16];

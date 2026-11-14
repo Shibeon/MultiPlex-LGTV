@@ -39,7 +39,7 @@ test twice ... ok
 
 test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-     Running unittests src/main.rs (target/debug/deps/plxnative_storage-0123456789abcdef)
+     Running unittests src/main.rs (target/debug/deps/multiplex_storage-0123456789abcdef)
 test service::tests::starts ... ok
 """
 
@@ -49,7 +49,7 @@ class ParseTest(unittest.TestCase):
         passed, failed = r.parse(LOG)
         self.assertEqual(failed, {"plx_ui::focus::tests::moves_left", "plx_base::twice"})
         self.assertEqual(passed, {"plx_ui::focus::tests::moves_right", "plx_ui::util::sub::deep - should panic",
-                                  "plx_base::focus::tests::moves_right", "plxnative_storage::service::tests::starts"})
+                                  "plx_base::focus::tests::moves_right", "multiplex_storage::service::tests::starts"})
 
     def test_a_name_that_passed_and_failed_in_one_log_counts_as_failed_only(self):
         passed, failed = r.parse(LOG)

@@ -1,4 +1,4 @@
-# Building PlxNative
+# Building MultiPlex
 
 The build, the two installs, the device loop and the test tiers — everything a contributor needs
 that a television owner does not. The
@@ -25,7 +25,7 @@ Windows and needs no webOS NDK; run `tools/sim.ps1 setup` there.
 ```sh
 make setup-env                    # the NDK, and `make setup-rust`: the pinned toolchain, clippy, rustfmt, armv7 std
 brew install cmake sshpass        # or your distribution's equivalent
-make                              # builds pkg/plxnative — a developer build
+make                              # builds pkg/multiplex — a developer build
 make ipk                          # pkg/app.multiplex.native.debug_<version>_arm.ipk
 ```
 
@@ -48,7 +48,7 @@ first, then other lanes' incremental caches, then idle lanes' trees, and the mai
 incremental cache only as the last resort. The cargo seed is never evicted by it.
 It runs from a Claude Code `SessionEnd` hook and from the hourly launchd agent `make disk-watch`
 installs (`tools/install-disk-watch.sh`, macOS only — run it yourself; nothing here installs it
-for you). Logs land in `~/Library/Logs/plxnative-build-gc.log` (or `$PLX_GC_LOG`).
+for you). Logs land in `~/Library/Logs/multiplex-build-gc.log` (or `$PLX_GC_LOG`).
 
 A build also checks the budget when it starts: every cargo-running `make` target runs
 `make disk-preflight` first (`make -s print-disk-entries` lists them). With room it costs one
@@ -58,7 +58,7 @@ nothing cheaper covers the build), and it refuses only when everything it may ta
 cover the build plus a 3 GiB reserve. `PLX_MIN_FREE_MB=0` skips it.
 
 The bundled FFmpeg is not rebuilt per checkout. Its source and object tree is machine-wide under
-`$PLX_BUILD_CACHE` (default `~/.cache/plxnative`), keyed by configure flags and toolchain, so a
+`$PLX_BUILD_CACHE` (default `~/.cache/multiplex`), keyed by configure flags and toolchain, so a
 fresh clone gets its own prefix in seconds rather than minutes.
 
 ## Two flavours, and the default is the developer one
@@ -91,8 +91,8 @@ The platform entry points are deliberately separate:
   host FFmpeg, so the pipeline between the socket and decoder runs on the host. The historical
   `sim`, `sim-run`, and `sim-shot` names remain aliases for these macOS targets.
 - Linux: `make sim-linux` builds the optimized UI/Plex simulator without host FFmpeg. Run the
-  resulting `rust-modules/target-sim/release/plxnative-sim` under X11 or Wayland with
-  `PLXNATIVE_APP_DIR=pkg` (or use the matching path below a custom `SIM_TDIR`).
+  resulting `rust-modules/target-sim/release/multiplex-sim` under X11 or Wayland with
+  `MULTIPLEX_APP_DIR=pkg` (or use the matching path below a custom `SIM_TDIR`).
 - Windows/WSLg: `tools/sim.ps1 build|run|shot|send`, backed by the `make sim-wsl` compatibility
   alias for `sim-linux`. It adds dependency setup, isolated assets/runtime state and WSLg checks.
 
@@ -133,7 +133,7 @@ make TV=<ip> test     # deploy + run
 ```
 
 Skip the install and `deploy` stops with *"the debug flavour is not installed"* rather than
-half-working. Drop the address into `~/.config/plxnative/tv-host` (one line, an IP or hostname; a per-checkout
+half-working. Drop the address into `~/.config/multiplex/tv-host` (one line, an IP or hostname; a per-checkout
 `.tv-host` also works and wins) and you can leave `TV=<ip>` off every command, in every worktree. Ask `make -s print-appid print-appdir print-rundir
 FLAVOR=<f>` when you need to know where a given flavour's binary, logs and dev triggers live.
 

@@ -7,7 +7,7 @@
 //!
 //! | field       | plex.tv said        | the PMS said     |
 //! |-------------|---------------------|------------------|
-//! | Product     | `Plex for webOS`    | `PlxNative`      |
+//! | Product     | `Plex for webOS`    | `MultiPlex`      |
 //! | Version     | `1.0`               | `0.1.0`          |
 //! | Device      | `LG TV`             | `webOS`          |
 //! | Device-Name | `Plex (LG webOS)`   | `Living Room TV` |

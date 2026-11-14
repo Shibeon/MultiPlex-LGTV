@@ -3997,7 +3997,8 @@ let (message, incident,): (&str, Option<IncidentContext>,) = (message, Some(Inci
         // refused token again, and Try again could never recover. Dropping it makes the retry a
         // new QR sign-in; the incident below is raised exactly as before, so its dedup holds.
         match incident {
-            Some(context) => 'raise_incident: {let (flow, context,): (IncidentFlow, IncidentContext,) = (IncidentFlow::SignIn, context,);
+            Some(context) => 'raise_incident: {
+let (flow, context,): (IncidentFlow, IncidentContext,) = (IncidentFlow::SignIn, context,);
 
         let key = IncidentKey { flow, kind: context.kind, link: context.link };
         if let Some(held) = self.common.incident.as_mut().filter(|held| held.key == key) {
@@ -6415,7 +6416,7 @@ mod tests {
 
     /// **A QR sign-in over a stored session seats nobody from that session.** A sign-in that is not
     /// a sign-out (a stored session that could not be activated, *Use another account*, the dev
-    /// `/tmp/plxnative-login` trigger) starts from the stored record, and `Authorized` used to
+    /// `/tmp/multiplex-login` trigger) starts from the stored record, and `Authorized` used to
     /// replace only the account token: the previous account's `user` rode through `SignedIn` (which
     /// even stamped the new account's plex.tv token onto it) into the published profile, so a
     /// single-user account that signed in next opened with the previous account's name on the

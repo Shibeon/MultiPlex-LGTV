@@ -885,7 +885,7 @@ fn a_cold_start_and_a_reload_both_own_the_whole_panel() {
         busy_surface_with(&ps, S::Buffering, false, false),
         Busy::Readout(StatusKind::Working, c"Buffering\u{2026}")
     );
-    // tapping RIGHT during pre-roll (or `/tmp/plxnative-autoseek`): no picture to mark up
+    // tapping RIGHT during pre-roll (or `/tmp/multiplex-autoseek`): no picture to mark up
     assert_eq!(
         busy_surface(&ps, S::Seeking, false),
         Busy::Readout(StatusKind::Working, c"Seeking\u{2026}")
@@ -981,9 +981,9 @@ fn every_failure_row_fits_the_screen_in_every_language() {
     assert!(out.is_empty(), "rows wider than the screen:\n  {}", out.join("\n  "));
 }
 
-/// The sandbox failure's help sentence ends in a URL that cannot break, and it is drawn as the
-/// read-out's note — centred CAPTION, two lines of [`StatusOverlay::REASON_W`]. It must fit
-/// that in every shipped language, or the pointer to the fix is the part an ellipsis eats.
+/// The sandbox failure's help sentence is drawn as the read-out's note — centred CAPTION, two
+/// lines of [`StatusOverlay::REASON_W`]. It must fit that in every shipped language, or the
+/// remedy is the part an ellipsis eats.
 #[test]
 fn the_jail_help_note_fits_the_note_slot_in_every_language() {
     use plx_base::fontcov::advances::ShippedMeasure;

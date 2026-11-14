@@ -1,4 +1,4 @@
-//! `/tmp/plxnative-phcount`: a once-a-second `phcount:` event-log line counting the card draws
+//! `/tmp/multiplex-phcount`: a once-a-second `phcount:` event-log line counting the card draws
 //! that showed a placeholder. Measurement only; the instrument for `tests/run.py --fps --mock
 //! --filter library-burst`, which sums the lines inside its key walk.
 //!

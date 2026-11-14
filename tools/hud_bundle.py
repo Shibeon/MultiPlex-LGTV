@@ -162,9 +162,9 @@ def pack(binary: Path, destination: Path):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(path, target, follow_symlinks=True)
             target.chmod(0o755 if os.access(path, os.X_OK) else 0o644)
-        copy(binary, stage / "bin/plxnative-sim.real")
-        wrapper = stage / "bin/plxnative-sim"
-        wrapper.write_text('#!/bin/sh\nset -eu\nbundle=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\nexport LD_LIBRARY_PATH="$bundle/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexport PLXNATIVE_APP_DIR="${PLXNATIVE_APP_DIR:-$bundle/pkg}"\nexec "$bundle/bin/plxnative-sim.real" "$@"\n')
+        copy(binary, stage / "bin/multiplex-sim.real")
+        wrapper = stage / "bin/multiplex-sim"
+        wrapper.write_text('#!/bin/sh\nset -eu\nbundle=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\nexport LD_LIBRARY_PATH="$bundle/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexport MULTIPLEX_APP_DIR="${MULTIPLEX_APP_DIR:-$bundle/pkg}"\nexec "$bundle/bin/multiplex-sim.real" "$@"\n')
         wrapper.chmod(0o755)
         native_text = ROOT / "pkg/libass-plx-host.so.0"
         if not native_text.is_file():
@@ -213,10 +213,10 @@ def pack(binary: Path, destination: Path):
                 version = subprocess.check_output(["dpkg-query","-W","-f=${Version}",package],text=True)
                 system_packages[package] = version
         (stage / "licenses/system-packages.json").write_text(json.dumps(system_packages,sort_keys=True,indent=2)+"\n")
-        for path in [stage / "bin/plxnative-sim.real", *(stage / "lib").iterdir(), *(stage / "pkg").glob("*.so.*")]:
+        for path in [stage / "bin/multiplex-sim.real", *(stage / "lib").iterdir(), *(stage / "pkg").glob("*.so.*")]:
             relative = "$ORIGIN/../lib" if path.parent.name in {"bin", "pkg"} else "$ORIGIN"
             subprocess.run(["patchelf", "--set-rpath", relative, str(path)], check=True)
-        env = {k: v for k, v in os.environ.items() if not k.startswith("PLXNATIVE_")}
+        env = {k: v for k, v in os.environ.items() if not k.startswith("MULTIPLEX_")}
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         info = json.loads(subprocess.check_output([str(wrapper), "--hud-info"], env=env, text=True))
         if not info["source_sha"] or not source.startswith(info["source_sha"]):

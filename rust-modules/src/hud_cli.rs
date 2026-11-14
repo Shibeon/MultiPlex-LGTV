@@ -18,7 +18,7 @@ const INSPECT: &str = "--hud-inspect";
 const EXIT_CLEAN: i32 = 0;
 const EXIT_FINDINGS: i32 = 1;
 const EXIT_USAGE: i32 = 2;
-const USAGE: &str = "usage: plxnative-sim --hud-lint <file|directory> [--format text|json] [--lang all|<tag>] [--text-skew <profile>] | --hud-pack <directory> --out <file> [--format text|json] | --hud-schema manifest|hud --version <major.minor> | --hud-export builtin:multiplex|builtin:classic --out <file> | --hud-info | --hud-text-metrics [--lang all|<tag>] | --hud-inspect <file|directory> [--lang all|<tag>]";
+const USAGE: &str = "usage: multiplex-sim --hud-lint <file|directory> [--format text|json] [--lang all|<tag>] [--text-skew <profile>] | --hud-pack <directory> --out <file> [--format text|json] | --hud-schema manifest|hud --version <major.minor> | --hud-export builtin:multiplex|builtin:classic --out <file> | --hud-info | --hud-text-metrics [--lang all|<tag>] | --hud-inspect <file|directory> [--lang all|<tag>]";
 
 pub fn wants(args: &[String]) -> bool {
     args.iter().any(|arg| matches!(arg.as_str(), LINT | SCHEMA | EXPORT | PACK | INFO | METRICS | INSPECT))
@@ -137,7 +137,7 @@ fn prepared(source: Source) -> (Option<Vec<u8>>, Decoded) {
 }
 
 fn usage(err: &mut String, reason: &str, help: bool) -> i32 {
-    err.push_str("plxnative-sim: ");
+    err.push_str("multiplex-sim: ");
     err.push_str(reason);
     if help { err.push_str(" ("); err.push_str(USAGE); err.push(')'); }
     err.push('\n');
@@ -557,7 +557,7 @@ mod tests {
             let (code, out, err) = go(list, &unreadable, &never);
             assert_eq!(code, 2, "{list:?}: {err}");
             assert_eq!(out, "", "{list:?}");
-            assert!(err.starts_with("plxnative-sim: "), "{list:?}: {err}");
+            assert!(err.starts_with("multiplex-sim: "), "{list:?}: {err}");
             assert!(err.contains(reason), "{list:?}: expected {reason:?} in {err}");
             assert_eq!(err.matches('\n').count(), 1, "{list:?}: one line: {err:?}");
             assert!(err.ends_with('\n'), "{list:?}: {err:?}");
@@ -569,7 +569,7 @@ mod tests {
         let unreadable = |_: &str| -> Result<String, String> { Err("No such file or directory".to_owned()) };
         let (code, out, err) = go(&["--hud-lint", "gone.plxhud"], &unreadable, &never);
         assert_eq!((code, out.as_str()), (2, ""));
-        assert_eq!(err, "plxnative-sim: cannot read gone.plxhud: No such file or directory\n");
+        assert_eq!(err, "multiplex-sim: cannot read gone.plxhud: No such file or directory\n");
     }
 
     #[test]
@@ -577,11 +577,11 @@ mod tests {
         let no_fonts = || -> Result<Box<dyn Measure>, String> { Err("cannot load fonts: no appfont.ttf".to_owned()) };
         let (code, out, err) = go(&["--hud-lint", "p.json"], &serve(BUILTIN_CLASSIC), &no_fonts);
         assert_eq!((code, out.as_str()), (2, ""));
-        assert_eq!(err, "plxnative-sim: cannot load fonts: no appfont.ttf\n");
+        assert_eq!(err, "multiplex-sim: cannot load fonts: no appfont.ttf\n");
         // the pricing measurer too: no cost is read off a measure that is not the television's
         let (code, out, err) = go_priced(&["--hud-lint", "p.json"], &serve(BUILTIN_CLASSIC), &shipped, &no_fonts);
         assert_eq!((code, out.as_str()), (2, ""));
-        assert_eq!(err, "plxnative-sim: cannot load fonts: no appfont.ttf\n");
+        assert_eq!(err, "multiplex-sim: cannot load fonts: no appfont.ttf\n");
     }
 
     /// A measurer a fraction wider than the television's, standing for the simulator's fractional sums.
@@ -759,7 +759,7 @@ mod tests {
     /// **In a child process, and only under `hostsim`.** The font switch (`TEXT_OK`), the resolved
     /// application directory and the face paths are each set once per process and never taken back, so a
     /// test that shares a process with any other width or path test would grade that test's state (and
-    /// leave this one's behind). `PLXNATIVE_APP_DIR` is honoured only by a `hostsim` build
+    /// leave this one's behind). `MULTIPLEX_APP_DIR` is honoured only by a `hostsim` build
     /// (`paths::ENV_STEERABLE`), and the child must START with it: the directory is resolved on first
     /// use. A crash in the child is the parent's assertion failure, not a dead test binary.
     #[cfg(feature = "hostsim")]
@@ -767,7 +767,7 @@ mod tests {
     fn the_headless_fonts_measure_and_lint_the_classic_without_a_gl_context() {
         const NAME: &str = "the_headless_fonts_measure_and_lint_the_classic_without_a_gl_context";
         let pkg = concat!(env!("CARGO_MANIFEST_DIR"), "/../pkg");
-        if !plx_base::testlock::fresh_process_with_env(module_path!(), NAME, &[("PLXNATIVE_APP_DIR", pkg)]) {
+        if !plx_base::testlock::fresh_process_with_env(module_path!(), NAME, &[("MULTIPLEX_APP_DIR", pkg)]) {
             return;
         }
         // Only ever reached in the child: nothing here has opened a font, and no GL context exists.

@@ -67,7 +67,6 @@ use plx_data::hudpacks::{
     Unloadable, Verdict, WriteOutcome, BUILTIN_CLASSIC, BUILTIN_DEFAULT, BUILTIN_MULTIPLEX,
 };
 use plx_net::net::{RequestFailure, Resp};
-use plx_data::hudpacks::catalog;
 use plx_machine::machine::Measure;
 use plx_platform::i18n::LocaleContext;
 
@@ -93,20 +92,6 @@ pub(crate) fn live_setup() -> Setup {
 /// One effect's blocking work. `None` is an effect with no answer (`Delete`).
 fn run_effect(effect: HudEffect, app_version: &str) -> Option<HudEvent> {
     match effect {
-        // The cache is verified again here, on the storage worker, with the same function a reply goes through.
-        HudEffect::Catalog(catalog::CatalogEffect::Read { tag, at }) => Some(HudEvent::Catalog(catalog::Event::Read {
-            tag, result: read_file(&at, catalog::CACHE_BYTE_LIMIT).and_then(|bytes| catalog::CacheRecord::decode(&bytes, &catalog::ACCEPTED_KEYS).map_err(|cause| {
-                plx_base::eventlog::log(&format!("hud: index cache refused cause={}", cause.cause()));
-                ReadError::Failed
-            })) })),
-        HudEffect::Catalog(catalog::CatalogEffect::Write { tag, at, record }) => Some(HudEvent::Catalog(catalog::Event::Written {
-            tag, outcome: write_file(&at, &record.encode()) })),
-        // The machine kept its cached index and counted the attempt; this is the one line saying why.
-        HudEffect::Catalog(catalog::CatalogEffect::Refused { cause }) => {
-            plx_base::eventlog::log(&format!("hud: index refused cause={}", cause.cause()));
-            None
-        }
-        HudEffect::Catalog(catalog::CatalogEffect::Get { .. }) | HudEffect::FetchRegistry { .. } => None,
         HudEffect::ScanDir { tag, at } => Some(HudEvent::Scanned { tag, result: scan_dir(&at) }),
         HudEffect::ReadFile { tag, at, max_bytes } => Some(HudEvent::Read { tag, result: read_file(&at, max_bytes) }),
         HudEffect::WriteFile { tag, at, bytes } => Some(HudEvent::Written { tag, outcome: write_file(&at, &bytes) }),
@@ -124,13 +109,6 @@ fn run_effect(effect: HudEffect, app_version: &str) -> Option<HudEvent> {
 
 /// The bounded public GET a fetch makes: `plx_net::net::https_get_public_bounded` live, a fake in a host test.
 type Get = fn(&str, usize) -> Result<Resp, RequestFailure>;
-
-/// Registry requests share the bounded public transport, with redirects disabled and no Plex identity.
-type CatalogGet = fn(&str, Option<&str>, usize) -> Result<Resp, RequestFailure>;
-fn catalog_get(url: &str, etag: Option<&str>, limit: usize) -> Result<Resp, RequestFailure> {
-    let headers = etag.map(|value| format!("If-None-Match: {value}")).into_iter().collect::<Vec<_>>();
-    plx_net::net::request_result_evidence(url, &headers, "GET", None, plx_net::net::API, false, Some(limit), None, false)
-}
 
 
 /// One fetch's blocking work: the body at `address`, or why there is none. A failure writes the one `hud:` line it is
@@ -394,28 +372,16 @@ impl Executor {
     }
 }
 
-enum CacheFailure { Read(u64), Write(u64) }
-impl CacheFailure {
-    fn event(self) -> HudEvent {
-        HudEvent::Catalog(match self {
-            Self::Read(tag) => catalog::Event::Read { tag, result: Err(ReadError::Failed) },
-            Self::Write(tag) => catalog::Event::Written { tag, outcome: WriteOutcome::Refused },
-        })
-    }
-}
-
 /// The IO effects of the store in flight, in the order they were started.
 pub(crate) struct HudRunner {
     exec: Executor,
     app_version: Arc<str>,
-    effects: VecDeque<(Option<CacheFailure>, Slot<Option<HudEvent>>)>,
+    effects: VecDeque<Slot<Option<HudEvent>>>,
     /// The fetches in flight, each on its own network thread and answered whenever it finishes, outside `effects`' order:
     /// a fetch that takes seconds must not hold back the listing a `Refresh` starts behind it. The store is busy for the
     /// whole of one, so there is one at most, plus any a `Refresh` displaced whose late answer the store drops.
     fetches: Vec<(Tag, Slot<HudEvent>)>,
     get: Get,
-    catalog_get: CatalogGet,
-    catalog_fetch: Option<(u64, Slot<HudEvent>)>,
 }
 
 impl HudRunner {
@@ -426,8 +392,6 @@ impl HudRunner {
             effects: VecDeque::new(),
             fetches: Vec::new(),
             get: plx_net::net::https_get_public_bounded,
-            catalog_get,
-            catalog_fetch: None,
         }
     }
 
@@ -443,8 +407,6 @@ impl HudRunner {
             effects: VecDeque::new(),
             fetches: Vec::new(),
             get: offline,
-            catalog_get: |_, _, _| Err(plx_net::net::RequestError::Transport.into()),
-            catalog_fetch: None,
         }
     }
 
@@ -457,7 +419,7 @@ impl HudRunner {
 
     /// Nothing is running.
     pub(crate) fn is_idle(&self) -> bool {
-        self.effects.is_empty() && self.fetches.is_empty() && self.catalog_fetch.is_none()
+        self.effects.is_empty() && self.fetches.is_empty()
     }
 
     /// Start the IO effects of `fx`, in order, and leave the ones that are not IO in `fx`.
@@ -468,26 +430,6 @@ impl HudRunner {
                 rest.push(effect);
                 continue;
             }
-            if let HudEffect::Catalog(catalog::CatalogEffect::Get { tag, etag }) = effect {
-                let get = self.catalog_get;
-                self.catalog_fetch = Some((tag, self.exec.run_net(move || {
-                    // The signature and the index are checked here, on the network lane, before the reply reaches the machine.
-                    let result = get(&format!("{}/{}", catalog::ORIGIN, catalog::SIGNED_FILE), etag.as_deref(), catalog::SIGNED_BYTE_LIMIT)
-                        .map(|r| catalog::Reply::http(r.status, r.etag, &r.body, &catalog::ACCEPTED_KEYS)).map_err(|_| ());
-                    HudEvent::Catalog(catalog::Event::Reply { tag, result })
-                })));
-                continue;
-            }
-            if let HudEffect::FetchRegistry { tag, package, max_bytes } = effect {
-                let get = self.catalog_get;
-                let slot = self.exec.run_net(move || {
-                    let result = get(&package.url, None, max_bytes).map_err(|_| FetchError::Unreachable)
-                        .and_then(|r| if r.status == 200 { Ok(r.body) } else { Err(FetchError::Unreachable) });
-                    HudEvent::Fetched { tag, result }
-                });
-                self.fetches.push((tag, slot));
-                continue;
-            }
             if let HudEffect::Fetch { tag, address, max_bytes } = effect {
                 let get = self.get;
                 let slot = self.exec.run_net(move || HudEvent::Fetched { tag, result: fetch(get, &address, max_bytes) });
@@ -495,12 +437,7 @@ impl HudRunner {
                 continue;
             }
             let version = Arc::clone(&self.app_version);
-            let fallback = match &effect {
-                HudEffect::Catalog(catalog::CatalogEffect::Read { tag, .. }) => Some(CacheFailure::Read(*tag)),
-                HudEffect::Catalog(catalog::CatalogEffect::Write { tag, .. }) => Some(CacheFailure::Write(*tag)),
-                _ => None,
-            };
-            self.effects.push_back((fallback, self.exec.run(move || run_effect(effect, &version))));
+            self.effects.push_back(self.exec.run(move || run_effect(effect, &version)));
         }
         *fx = rest;
     }
@@ -509,15 +446,9 @@ impl HudRunner {
     /// hears them in.
     fn ready(&mut self, out: &mut Vec<HudEvent>) {
         while let Some(front) = self.effects.front_mut() {
-            let Some(answer) = front.1.poll() else { break };
-            let (fallback, _) = self.effects.pop_front().expect("front exists");
-            out.extend(answer.flatten().or_else(|| fallback.map(CacheFailure::event)));
-        }
-        if let Some((tag, slot)) = &mut self.catalog_fetch {
-            if let Some(answer) = slot.poll() {
-                out.push(answer.unwrap_or(HudEvent::Catalog(catalog::Event::Reply { tag: *tag, result: Err(()) })));
-                self.catalog_fetch = None;
-            }
+            let Some(answer) = front.poll() else { break };
+            self.effects.pop_front();
+            out.extend(answer.flatten());
         }
         let mut at = 0;
         while at < self.fetches.len() {
@@ -721,16 +652,6 @@ impl HudDriver {
         Self::new(HudRunner::live(""))
     }
 
-    /// A started driver on an offline runner that runs each effect where it is started, with its files in `dir`: what a
-    /// Bridge test puts in place of [`off`](Self::off) to see the commands the Settings page sends reach the store.
-    #[cfg(test)]
-    pub(crate) fn started_in(dir: PathBuf, builtins: Builtins, app_version: &str) -> Self {
-        let mut driver = Self::new(HudRunner::inline(app_version));
-        driver.setup = Some(Setup { candidates: vec![Candidate { dir, volatile: false }], max_pack_bytes: MAX_ARTIFACT_BYTES });
-        driver.start(builtins, app_version);
-        driver
-    }
-
     /// Begin: keep the compiled default built-in ([`BUILTIN_DEFAULT`]) as what draws until the selection resolves to
     /// something else.
     pub(crate) fn start(&mut self, builtins: Builtins, app_version: &str) {
@@ -763,23 +684,6 @@ impl HudDriver {
             return;
         }
         self.step(HudEvent::Refresh { setup: self.setup(), selected });
-        self.step(HudEvent::Catalog(catalog::Event::Load { candidates: self.setup().candidates }));
-    }
-
-    pub(crate) fn open_catalog(&mut self, now: u64) {
-        if self.started {
-            self.step(HudEvent::Catalog(catalog::Event::Open { candidates: self.setup().candidates, now }));
-        }
-    }
-
-    pub(crate) fn cancel_registry(&mut self, sha: Sha) {
-        if self.started { self.step(HudEvent::CancelRegistry { sha }); }
-    }
-
-    pub(crate) fn fetch_registry(&mut self, sha: Sha, app: &str, language: &str) {
-        if self.started {
-            self.step(HudEvent::FetchRegistry { sha, app: app.into(), language: language.into() });
-        }
     }
 
     /// The viewer picked a package (or the built-in).
@@ -1438,7 +1342,7 @@ mod tests {
         let mut runner = HudRunner::inline(APP);
         let (worker, answer) = std::sync::mpsc::channel::<HudEvent>();
         runner.fetches.push((tag, Slot::Waiting(answer)));
-        runner.effects.push_back((None, Slot::Done(Some(None))));
+        runner.effects.push_back(Slot::Done(Some(None)));
         let mut out = Vec::new();
         runner.ready(&mut out);
         assert!(runner.effects.is_empty() && out.is_empty(), "the queue behind a slow fetch still drains");
