@@ -1682,6 +1682,9 @@ pub struct HomeUserRef {
     pub protected: bool,
     pub admin: bool,
     /// plex.tv's `restricted` flag: a managed Home member, captioned as such by the picker.
+    /// Written only when set, so a roster with no managed member keeps the exact bytes every
+    /// earlier build wrote (the legacy-V5 prior-writer goldens pin them).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub restricted: bool,
     #[serde(flatten, default, skip_serializing_if = "OpaqueExtensions::is_empty")]
     pub extensions: OpaqueExtensions,

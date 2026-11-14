@@ -209,7 +209,8 @@ pub struct UserTile {
     /// A managed (restricted) Plex Home member: plex.tv's `restricted` flag. The picker captions
     /// such a tile "managed profile" as the web app does; `false` in every roster written before
     /// the field existed, which reads as no caption rather than a wrong one.
-    #[serde(default)]
+    /// Written only when set, for the same reason as `HomeUserRef::restricted`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub restricted: bool,
 }
 impl UserTile {
