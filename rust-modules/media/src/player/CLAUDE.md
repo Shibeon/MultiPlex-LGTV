@@ -784,7 +784,9 @@ something.
   `SpeedDecoder`) run `media-codecs/src/audio_mode.rs` over their output: a soft-knee compressor with
   make-up gain (Night), centre +3 dB / others -3 dB in the downmix of a surround track or a 2.5 kHz
   presence EQ with gentle compression on stereo and mono (Clear voices), always ending in a -1 dBFS
-  limiter, crossfaded through dry on a change, and falling back to the dry block on a non-finite result.
+  limiter. A change of mode crossfades through dry over 20 ms out and 20 ms in, and the centre lift
+  ramps its downmix gains over 20 ms (`speed_audio::CentreLift`, the same channels lifted or not; off
+  again it is bit-identical to `downmix_by_mask`), falling back to the dry block on a non-finite result.
   Where the TV or a receiver decodes the sound (every native AAC/AC3/EAC3/Opus/DTS track, passthrough, the
   URI engine) no sample passes through the app: the demuxer publishes that as `FeedRaw::app_pcm_audio`
   (`DemuxEffect::AppPcmAudio`, per open), `player::audio_mode_offered` reads it from the readout, and the

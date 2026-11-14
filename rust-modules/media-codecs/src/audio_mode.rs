@@ -9,7 +9,8 @@
 //! * **Voice** on a stereo or mono stream (`VOICE`): a gentler compressor (-26 dB, 2:1, +5 dB) and a
 //!   peaking presence lift of +4 dB at 2.5 kHz (Q 0.9, RBJ biquad); then the limiter. On a
 //!   multichannel source the dialogue lives in the centre, and the app sees it only while it mixes
-//!   the source down (`speed_audio::downmix_by_mask_lifted`: centre +3 dB, every other channel -3 dB);
+//!   the source down (`speed_audio::CentreLift`: centre +3 dB, every other channel -3 dB, faded in and
+//!   out over 20 ms, mixing the same channels as the plain downmix);
 //!   the stage is then told so ([`AudioModeStage::set_centre_lifted`]) and runs the limiter alone,
 //!   as the desktop's `pan` chain does.
 //! * **The limiter** has no lookahead and an instant attack: the gain that brings a sample's
@@ -20,7 +21,10 @@
 //! **A mode never mutes and never breaks playback.** The compressor's gain is bounded to
 //! [-18, +12] dB and its make-up fades out below -55 dB (so the noise floor of a silence is not
 //! pumped up), the limiter can only pull a sample to the ceiling, a change of mode crossfades
-//! (20 ms out, then 20 ms in, so no click), a sample whose arithmetic is not finite is replaced by the
+//! (20 ms out, then 20 ms in) rather than switching between samples, and the centre lift ramps its
+//! gains over 20 ms of its own in the downmix (a test bounds the step between adjacent frames of a
+//! steady 5.1 source to 1/900 of the whole change; that is a ramp, not a proof that no program is
+//! audibly affected), a sample whose arithmetic is not finite is replaced by the
 //! untouched input and the state restarted, and a shape the stage does not handle (more than two
 //! channels, a width other than 16 or 32 bits) passes untouched. `Off` with the crossfade finished
 //! returns before it reads a byte: the samples are bit-exact.
@@ -265,7 +269,7 @@ impl AudioModeStage {
         self.wanted
     }
 
-    /// Whether the PCM handed in was mixed down with its centre lifted (`downmix_by_mask_lifted`
+    /// Whether the PCM handed in was mixed down with its centre lifted (`speed_audio::CentreLift`
     /// found a centre). Voice then compresses nothing and only limits.
     pub fn set_centre_lifted(&mut self, lifted: bool) {
         self.centre_lifted = lifted;

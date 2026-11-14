@@ -234,12 +234,17 @@ fn planar_f32(channels: usize, frames: usize, on: &[usize], value: f32) -> Vec<V
         .collect()
 }
 
+/// Mix with a [`CentreLift`] whose fade is already where `lift` sends it: at a rate of 1 Hz the fade
+/// is shorter than one frame, so the first frame is mixed at the end of it.
+fn settled_mix(mask: u64, channels: usize, planes: &[Vec<u8>], frames: usize, lift: bool) -> (Vec<[f32; 2]>, bool) {
+    use crate::speed_audio::{CentreLift, SampleFormat};
+    let refs: Vec<&[u8]> = planes.iter().map(|p| p.as_slice()).collect();
+    CentreLift::new().downmix(SampleFormat::Flt, true, mask, channels, frames, &refs, 1, lift)
+}
+
 /// The left output of mixing 5.1 (mask 0x3f: FL FR FC LFE BL BR) with signal on `on` only.
 fn left_of_51(on: &[usize], lift: bool) -> (f32, bool) {
-    use crate::speed_audio::{downmix_by_mask_lifted, SampleFormat};
-    let planes = planar_f32(6, 4, on, 0.5);
-    let refs: Vec<&[u8]> = planes.iter().map(|p| p.as_slice()).collect();
-    let (mixed, lifted) = downmix_by_mask_lifted(SampleFormat::Flt, true, 0x3f, 6, 4, &refs, lift);
+    let (mixed, lifted) = settled_mix(0x3f, 6, &planar_f32(6, 4, on, 0.5), 4, lift);
     (mixed[0][0], lifted)
 }
 
@@ -262,23 +267,85 @@ fn the_centre_lift_raises_the_centre_and_only_the_centre() {
     assert!(rel.abs() < 0.01, "surround relative to front moved {rel:.3} dB");
     assert_eq!(lfe, 0.0, "the LFE is still dropped");
     // a full-scale signal on every channel still cannot clip the mix
-    use crate::speed_audio::{downmix_by_mask_lifted, SampleFormat};
-    let planes = planar_f32(6, 4, &[0, 1, 2, 3, 4, 5], 1.0);
-    let refs: Vec<&[u8]> = planes.iter().map(|p| p.as_slice()).collect();
-    let (mixed, _) = downmix_by_mask_lifted(SampleFormat::Flt, true, 0x3f, 6, 4, &refs, true);
+    let (mixed, _) = settled_mix(0x3f, 6, &planar_f32(6, 4, &[0, 1, 2, 3, 4, 5], 1.0), 4, true);
     assert!(mixed.iter().all(|f| f[0].abs() <= 1.0 + 1e-6 && f[1].abs() <= 1.0 + 1e-6));
     // a source with no centre mixes exactly as it always did, lift or not
     let st = planar_f32(2, 4, &[0, 1], 0.25);
     let refs: Vec<&[u8]> = st.iter().map(|p| p.as_slice()).collect();
-    let (a, la) = downmix_by_mask_lifted(SampleFormat::Flt, true, 0x3, 2, 4, &refs, true);
-    let b = crate::speed_audio::downmix_by_mask(SampleFormat::Flt, true, 0x3, 2, 4, &refs);
+    let (a, la) = settled_mix(0x3, 2, &st, 4, true);
+    let b = crate::speed_audio::downmix_by_mask(crate::speed_audio::SampleFormat::Flt, true, 0x3, 2, 4, &refs);
     assert!(!la);
     assert_eq!(a, b);
-    // an unnamed 6-channel layout is read as FFmpeg's 5.1 when lifting
-    let planes = planar_f32(6, 4, &[2], 0.5);
-    let refs: Vec<&[u8]> = planes.iter().map(|p| p.as_slice()).collect();
-    let (m, l) = downmix_by_mask_lifted(SampleFormat::Flt, true, 0, 6, 4, &refs, true);
+    // an unnamed 6-channel layout is mixed by count, whose roles are 5.1's: the same lifted centre
+    let (m, l) = settled_mix(0, 6, &planar_f32(6, 4, &[2], 0.5), 4, true);
     assert!(l && (m[0][0] - fc).abs() < 1e-6);
+}
+
+/// **Lifting changes gains, never the channels mixed.** An unnamed layout keeps `downmix`'s count
+/// set both ways: a 4-channel stream's fourth channel and an 8-channel stream's 7th and 8th are
+/// dropped lifted as they are unlifted, and a named one keeps its roles.
+#[test]
+fn the_lift_mixes_the_same_channels_as_the_unlifted_mix() {
+    for (mask, channels) in [(0u64, 3usize), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8), (0x3f, 6), (0x107, 4), (0x63f, 8), (0x13f, 7)] {
+        for ch in 0..channels {
+            let planes = planar_f32(channels, 4, &[ch], 0.5);
+            let (off, _) = settled_mix(mask, channels, &planes, 4, false);
+            let (on, _) = settled_mix(mask, channels, &planes, 4, true);
+            let silent = |m: &[[f32; 2]]| m[0][0] == 0.0 && m[0][1] == 0.0;
+            assert_eq!(silent(&off), silent(&on), "mask {mask:#x}, {channels} ch: channel {ch} is mixed one way only");
+        }
+    }
+}
+
+/// **Once the lift has faded out, the mix is `downmix_by_mask`'s, bit for bit**, named layout or not.
+#[test]
+fn a_lift_faded_out_mixes_bit_identically_to_the_plain_downmix() {
+    use crate::speed_audio::{downmix_by_mask, CentreLift, SampleFormat};
+    for (mask, channels) in [(0x3fu64, 6usize), (0, 6), (0, 4), (0x63f, 8)] {
+        let frames = 2_000;
+        let planes: Vec<Vec<u8>> = (0..channels)
+            .map(|c| (0..frames).flat_map(|i| (((i * (c + 3)) % 97) as f32 / 97.0 - 0.5).to_ne_bytes()).collect())
+            .collect();
+        let refs: Vec<&[u8]> = planes.iter().map(|p| p.as_slice()).collect();
+        let mut lift = CentreLift::new();
+        let _ = lift.downmix(SampleFormat::Flt, true, mask, channels, frames, &refs, 48_000, true);
+        assert_eq!(lift.position(), 1.0, "faded in within 2000 frames");
+        let _ = lift.downmix(SampleFormat::Flt, true, mask, channels, frames, &refs, 48_000, false);
+        assert_eq!(lift.position(), 0.0, "faded out within 2000 frames");
+        let (after, lifted) = lift.downmix(SampleFormat::Flt, true, mask, channels, frames, &refs, 48_000, false);
+        assert!(!lifted);
+        assert_eq!(after, downmix_by_mask(SampleFormat::Flt, true, mask, channels, frames, &refs), "mask {mask:#x}");
+    }
+}
+
+/// **Turning the lift on or off on a surround source does not click.** A steady 5.1 signal (a
+/// different level on every channel) mixes to a constant; the lift moves that constant by a fixed
+/// amount, and it must get there by a ramp of at most 1/900 of the step a frame (20 ms at 48 kHz is
+/// 960 frames), never in one frame, both ways and for a named and an unnamed layout.
+#[test]
+fn toggling_the_lift_on_a_surround_source_ramps_without_a_click() {
+    use crate::speed_audio::{CentreLift, SampleFormat};
+    for mask in [0x3fu64, 0] {
+        let block = 256;
+        let planes: Vec<Vec<u8>> = (0..6)
+            .map(|c| (0..block).flat_map(|_| (0.1 + 0.1 * c as f32).to_ne_bytes()).collect())
+            .collect();
+        let refs: Vec<&[u8]> = planes.iter().map(|p| p.as_slice()).collect();
+        let (plain, _) = settled_mix(mask, 6, &planes, 1, false);
+        let (lifted, _) = settled_mix(mask, 6, &planes, 1, true);
+        let step = (lifted[0][0] - plain[0][0]).abs().max((lifted[0][1] - plain[0][1]).abs());
+        assert!(step > 0.01, "the lift moves this mix ({step})");
+        let mut lift = CentreLift::new();
+        let mut out = Vec::new();
+        for n in 0..40 {
+            let on = (8..24).contains(&n); // on at block 8, off again at block 24
+            out.extend(lift.downmix(SampleFormat::Flt, true, mask, 6, block, &refs, 48_000, on).0);
+        }
+        let worst = out.windows(2).map(|w| (w[1][0] - w[0][0]).abs().max((w[1][1] - w[0][1]).abs())).fold(0.0f32, f32::max);
+        assert!(worst <= step / 900.0, "mask {mask:#x}: a frame moved {worst}, the whole step is {step}");
+        assert!((out[16 * block][0] - lifted[0][0]).abs() < 1e-6, "fully lifted before it is turned off");
+        assert!((out[out.len() - 1][0] - plain[0][0]).abs() < 1e-6, "and back to the plain mix");
+    }
 }
 
 /// The decode path of a lossy surround track: the converter mixes down (lifting the centre for

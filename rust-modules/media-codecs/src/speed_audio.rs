@@ -242,7 +242,7 @@ impl CentreLift {
         let named = mask != 0 && mask.count_ones() as usize == channels;
         let (base, centre) = if named {
             let bits: Vec<u32> = (0..64).filter(|b| mask >> b & 1 == 1).collect();
-            let centre = bits.iter().position(|b| *b == 2);
+            let centre = bits.iter().position(|b| 1u64 << b == AV_CH_FRONT_CENTER);
             (bits.into_iter().map(role_gain).collect::<Vec<_>>(), centre)
         } else {
             (count_gains(channels), (channels >= 3).then_some(2))
@@ -267,7 +267,7 @@ impl CentreLift {
         let target = if lift { 1.0 } else { 0.0 };
         let step = 1.0 / (LIFT_FADE_S * rate.max(1) as f32).max(1.0);
         let mut gains = vec![[0.0f32; 2]; g0.len()];
-        let mut set = |t: f32, gains: &mut Vec<[f32; 2]>| {
+        let set = |t: f32, gains: &mut Vec<[f32; 2]>| {
             for ((g, a), b) in gains.iter_mut().zip(&g0).zip(&g1) {
                 *g = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
             }
