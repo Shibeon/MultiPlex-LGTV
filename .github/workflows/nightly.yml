@@ -322,7 +322,7 @@ jobs:
           gh release create "$TAG" \
             "dist/$IPK" dist/nightly.sha256 dist/app.multiplex.native.nightly.manifest.json dist/ffmpeg-*.tar.xz dist/build-ffmpeg.sh dist/plxnative-source-*.tar.gz* \
             --target "$SHA" \
-            --title "PlxNative $LABEL" \
+            --title "MultiPlex $LABEL" \
             --prerelease \
             --latest=false \
             --notes-file "$RUNNER_TEMP/notes.md"

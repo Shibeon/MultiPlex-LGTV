@@ -1,4 +1,4 @@
-# PlxNative design system
+# MultiPlex design system
 
 This is an index, not a specification. Every claim below points at the file that actually enforces
 it, because those files are checked by the compiler, by the lint gate, or by a test, and prose is

@@ -1,4 +1,4 @@
-# PlxNative Player HUD bundles 1.0
+# MultiPlex Player HUD bundles 1.0
 
 - Authoring: AUTHORING.md and AGENTS.md
 - Manifest schema: schema/manifest/1.0.json

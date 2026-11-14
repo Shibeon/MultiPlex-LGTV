@@ -898,7 +898,7 @@ pub static ROOT: Node = Node {
         Field::req("layout", Ty::Object("layout"), "Where the HUD sits and what it holds."),
     ],
     rules: &[],
-    doc: "A HUD document inside a data-only PlxNative bundle.",
+    doc: "A HUD document inside a data-only MultiPlex bundle.",
 };
 
 /// The only owner of package identity, format declarations and resource paths.
@@ -919,7 +919,7 @@ pub static MANIFEST: Node = Node {
         Field::opt("notices", Ty::List { of: &Ty::Pattern(Pattern::PackagePath), max_len: super::bundle::MAX_ENTRIES }, "Declared UTF-8 license and attribution texts."),
     ],
     rules: &[],
-    doc: "The manifest.json of a PlxNative HUD bundle.",
+    doc: "The manifest.json of a MultiPlex HUD bundle.",
 };
 
 pub static HUD_ENTRY: Node = Node {

@@ -1519,7 +1519,7 @@
         "plxnative-settings": "player-hud",
         "plxnative-settingsosc": true
       },
-      "comment": "The Player HUD page (installed packages, drop folder, chosen HUD) booted over Playback over the root (`SettingsPage::boot_trail`). settingsosc alternates its first two rows. Opening this page asks the HUD registry for its catalog (`HudCmd::Open` -> `open_catalog`, https://huds.plxnative.com), so a run with no route to it measures the page in its catalog-unavailable state; the frame rate is the page's either way. Not covered: the HUD gallery, detail, about and preview pages (`hud-gallery`, `hud-detail`, `hud-about`, `hud-preview`): the gallery is populated only by that live registry and the other three are addressed by a package sha, which no boot target names."
+      "comment": "The Player HUD page (installed packages, drop folder, chosen HUD) booted over Playback over the root (`SettingsPage::boot_trail`). settingsosc alternates its first two rows. The page reads only the packages on the television: this fork has no online HUD gallery."
     },
     {
       "name": "settings-diagnostics",

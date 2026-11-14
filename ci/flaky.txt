@@ -1,6 +1,6 @@
 # count: 0
 # The flaky-test QUARANTINE list. One entry per test that is known to be flaky and has an owner working
-# on it, as `test<TAB>reason`, where `test` is the key plxnative.com/ci/ shows for it (`package::test::path`,
+# on it, as `test<TAB>reason`, where `test` is the key the CI test report gives it (`package::test::path`,
 # e.g. `plx_ui::focus::tests::moves_right`; tools/ci-test-results.py makes the key) and `reason` names the
 # issue that tracks the fix (`#1234 intermittent timeout under load`).
 #

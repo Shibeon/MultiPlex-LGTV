@@ -197,7 +197,7 @@ pub fn execute(command: Command) -> Status {
     if capture
         .push(
             Duration::ZERO,
-            b"PlxNative playback trace: limit=8MiB duration=60s; local diagnostic recording\n",
+            b"MultiPlex playback trace: limit=8MiB duration=60s; local diagnostic recording\n",
         )
         .is_err()
     {

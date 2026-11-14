@@ -124,7 +124,7 @@ fn emit_document(manifest: bool, version: Since) -> Value {
     root.insert(
         "title".to_owned(),
         Value::String(format!(
-            "PlxNative HUD package, format {}.{}",
+            "MultiPlex HUD package, format {}.{}",
             version.0, version.1
         )),
     );

@@ -38,8 +38,8 @@ the native packer before distribution.
 
 ## Developing a HUD on the TV
 
-`tools/hud-dev` (in the PlxNative repository; the SDK archive does not ship it) puts a source folder, or a `.plxhud`,
-on your television while you edit it. Use a TV that runs a PlxNative build with the Player HUD page, on the same home
+`tools/hud-dev` (in the MultiPlex repository; the SDK archive does not ship it) puts a source folder, or a `.plxhud`,
+on your television while you edit it. Use a TV that runs a MultiPlex build with the Player HUD page, on the same home
 network as the machine you edit on. The tool needs a `plxnative-sim` (`--sim PATH`, else the one on `PATH`, else the
 repository's `make sim-macos` build) and the repository's `tools/hud_package.py`, which it imports.
 
@@ -76,7 +76,7 @@ second) is above any release that only raises the patch: a dev build installed a
 `1.0.4` "not newer", so the TV refuses it and does not treat it as an update. Before you install the published
 version, open the Player HUD page and use the row named after your HUD whose detail reads "Remove" (the page's existing
 way to remove a package), then install from the gallery. The TV also records the dev address in its installed list. A
-PlxNative build older than this feature reads that whole list as read-only: it does not list the dev HUD and cannot
+MultiPlex build older than this feature reads that whole list as read-only: it does not list the dev HUD and cannot
 remove it, so remove the dev install on a newer build before you go back to an older one.
 
 Submit the source folder, attribution README and maintainer contact to

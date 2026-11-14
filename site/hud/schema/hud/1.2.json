@@ -3554,7 +3554,7 @@
   "$id": "https://plxnative.com/hud/schema/hud/1.2.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "A HUD document inside a data-only PlxNative bundle.",
+  "description": "A HUD document inside a data-only MultiPlex bundle.",
   "properties": {
     "$schema": {
       "description": "The HUD document schema URL for editors.",
@@ -3577,6 +3577,6 @@
   "required": [
     "layout"
   ],
-  "title": "PlxNative HUD package, format 1.2",
+  "title": "MultiPlex HUD package, format 1.2",
   "type": "object"
 }

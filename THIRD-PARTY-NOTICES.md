@@ -1,8 +1,8 @@
 # Third-party notices
 
-This file accompanies the **PlxNative** application package (`app.multiplex.native`), an unofficial
-native Plex client for LG webOS 4.x televisions. PlxNative itself is Copyright (c) 2026 Gleb
-Linnik and is distributed under GPL-3.0-or-later (see `LICENSE`; the brand reservation and the
+This file accompanies the **MultiPlex** application package (`app.multiplex.native`), an unofficial
+native Plex client for LG webOS 4.x televisions. MultiPlex is derived from PlxNative, Copyright (c)
+2026 Gleb Linnik and contributors, and is distributed under GPL-3.0-or-later (see `LICENSE`; the brand reservation and the
 non-affiliation statements are in `TRADEMARKS.md`, alongside it in both the repository and this
 package).
 
@@ -28,7 +28,7 @@ Two different situations, and the difference matters for what we owe you.
 
 ### 1.1 FFmpeg — **redistributed inside this package**
 
-PlxNative **ships its own build of FFmpeg**. Earlier releases linked against the television's copy;
+MultiPlex **ships its own build of FFmpeg**. Earlier releases linked against the television's copy;
 they no longer do, because the TV's version moves with the firmware (libavformat 55, 57, 58, 59 and
 60 across webOS 2 to 11) and the components compiled into it cannot be determined from outside.
 
@@ -41,9 +41,9 @@ complete copy of that licence is supplied with this package at `licenses/LGPL-2.
 
 **Complete corresponding source.** The exact upstream tarball these were built from —
 `ffmpeg-9.0.2.tar.xz`, sha256 `8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e`,
-from <https://ffmpeg.org/releases/> — is attached to every PlxNative release alongside the `.ipk`.
+from <https://ffmpeg.org/releases/> — is attached to every MultiPlex release alongside the `.ipk`.
 The sources are **unmodified**: no patches are applied. The complete configure invocation that
-produced them, including every enabled component, is `ci/build-ffmpeg.sh` in the PlxNative
+produced them, including every enabled component, is `ci/build-ffmpeg.sh` in the MultiPlex
 repository, which is also attached to each release. The attached script takes the version, the
 digest and the tarball from its environment, so it needs no network and none of the manifest
 tooling: from a checkout of the release's tag (or its source bundle), with the attached tarball,
@@ -64,7 +64,7 @@ needs to inflate compressed subtitle tracks.
 **You may modify and replace them.** They are ordinary shared libraries, loaded at run time by
 `dlopen` from the application's own directory; no FFmpeg code is linked into the `plxnative`
 executable. Build your own from the source above and put it in the app directory under the same
-file name, and PlxNative will load yours instead, with no change to the application. The `-plx`
+file name, and MultiPlex will load yours instead, with no change to the application. The `-plx`
 suffix in the file names exists so these cannot be confused with — or accidentally replace — the
 television's own FFmpeg; it denotes nothing about their content, which is stock upstream.
 
@@ -75,7 +75,7 @@ built from a different release will be declined rather than misread.
 
 ### 1.2 Native ASS rendering — redistributed inside this package
 
-`libass-plx.so.0` contains the PlxNative facade and this pinned, statically linked stack.
+`libass-plx.so.0` contains the MultiPlex facade and this pinned, statically linked stack.
 The macOS simulator uses the same sources in `libass-plx.0.dylib`; the Linux simulator
 uses `libass-plx-host.so.0`.
 
@@ -98,7 +98,7 @@ verbatim. The library is used unaltered.
 libass and HarfBuzz copyright notices are retained in their licence files above.
 
 The exact upstream archives, checksums and licences are recorded in
-`ci/dependencies.json`. Each versioned PlxNative source release contains all
+`ci/dependencies.json`. Each versioned MultiPlex source release contains all
 five archives, the facade (`src/ass.c`, `src/ass_fonts.c`, `src/ass_text.c`, `src/ass_internal.h`,
 `include/ass.h`), its complete build recipe (`ci/build-libass.sh`, `ci/build-libass.py`) and the
 one local patch to libass. **libass carries that local patch; every other archive is unmodified.**
@@ -114,14 +114,14 @@ HarfBuzz uses FreeType and its built-in Unicode data, without ICU or platform sh
 
 You may modify and rebuild the complete library, including FriBidi, using the
 matching source release, then replace `libass-plx.so.0` in the app directory. The
-application loads that file by absolute path and checks the PlxNative facade ABI.
+application loads that file by absolute path and checks the MultiPlex facade ABI.
 This distribution supplies source for the entire combined library, including the
 GPL-3.0-or-later facade, so recipients can rebuild and relink it. No library in this
 stack is taken from, or installed into, the television's firmware.
 
 ### 1.3 Libraries provided by your television
 
-PlxNative also links dynamically against the following libraries (glibc/GLib are
+MultiPlex also links dynamically against the following libraries (glibc/GLib are
 **LGPL-2.1-or-later**; libcurl is **curl** licensed), which are
 part of your television's own system software and are **not** distributed by us:
 
@@ -132,10 +132,10 @@ part of your television's own system software and are **not** distributed by us:
 | libcurl | 7.x | `libcurl.so.4` or `libcurl.so.5` (whichever the firmware provides) |
 
 libcurl uses the curl license, not LGPL; its distinct grant is listed in section 3.
-For these libraries, PlxNative uses the ordinary shared-library mechanism (LGPL-2.1 §6(b)): no code from
+For these libraries, MultiPlex uses the ordinary shared-library mechanism (LGPL-2.1 §6(b)): no code from
 them is copied into the executable, and the dynamic loader resolves them at run time against the
 television's own `/usr/lib`. To use your own build, install an interface-compatible library under
-the same SONAME. The GPL-3.0-or-later terms under which PlxNative is distributed permit modification of the
+the same SONAME. The GPL-3.0-or-later terms under which MultiPlex is distributed permit modification of the
 application for your own use and reverse engineering for debugging such modifications.
 
 One further disclosure: small fragments of glibc's own startup and compatibility code **are**
@@ -196,7 +196,7 @@ which is distributed under the **MIT** licence (`licenses/MIT.txt`). Where that 
 originally comes from was **not established**. *Modified*: wrapped as standalone SVG files with a
 white fill; the arc flags of `tv.svg` were written out in full for the SVG parser.
 
-The remaining icons in the application are original work by the PlxNative author. See section 4
+The remaining icons in the application are original work by the PlxNative author and the MultiPlex contributors. See section 4
 for a trademark note that applies to some of them.
 
 ### 2.3 Fonts
@@ -508,14 +508,14 @@ enable it) — verified absent from the binary. `rustc-literal-escaper`, `proc_m
   text is supplied as `licenses/GCC-exception-3.1.txt`. Like the glibc startup objects, these are
   part of the NDK's compiler and C runtime (webosbrew native-toolchain) and are System Libraries
   under GPL section 1.
-- **PlxNative auxv compatibility seam** (`src/compat/getauxval.c`), GPL-3.0-or-later. It supplies a bounded immutable process snapshot for the Rust runtime. Project-local linker guards exclude the old NDK `libglibc_polyfills.a` from every newly built ELF.
+- **MultiPlex auxv compatibility seam** (`src/compat/getauxval.c`), GPL-3.0-or-later. It supplies a bounded immutable process snapshot for the Rust runtime. Project-local linker guards exclude the old NDK `libglibc_polyfills.a` from every newly built ELF.
 
 ### 2.6 Native crash capture
 
 **Sentry Native 0.17.6** — Copyright (c) 2019 Sentry and individual contributors. Licence:
 **MIT** (`licenses/MIT.txt`). Its client library is statically linked into `plxnative`; the
 out-of-process `sentry-crash` handler is shipped beside it. The handler is built with its HTTP
-transport disabled: it writes a crash envelope for PlxNative's consent-aware sender to deliver on
+transport disabled: it writes a crash envelope for MultiPlex's consent-aware sender to deliver on
 the next launch. The source is patched for webOS's glibc 2.12 syscall surface and the 32-bit ARM
 APCS frame layout; the pinned source hash is in `ci/dependencies.json` and the complete patch is
 `ci/patches/sentry-native-0001-webos-arm32.patch`.
@@ -548,7 +548,7 @@ file only if its target is itself a `*.plex.direct` name that fails the same way
 ## 3. Dynamically linked, not redistributed
 
 The libraries below are part of your television's software. This package contains no copy of
-them; PlxNative loads them at run time. Their upstream terms and the applicable GPL linking basis must be assessed separately; absence
+them; MultiPlex loads them at run time. Their upstream terms and the applicable GPL linking basis must be assessed separately; absence
 of a bundled copy alone does not establish that no obligation applies.
 
 | Library | Version on this build | Licence | Note |
@@ -563,7 +563,7 @@ of a bundled copy alone does not establish that no obligation applies.
 | libwayland-client | 0.3.0 | MIT | Copyright © 2008-2012 Kristian Høgsberg; © 2010-2012 Intel Corporation; © 2011 Benjamin Franzke; © 2012 Collabora, Ltd. The licence of *this LG build specifically* was not read off the device |
 | luna-service2 | 3.21.2 | Apache-2.0 | Licence taken from the webOS OSE upstream project; not read off this LG build |
 | libgcc_s | the television's own | GPL-3.0-or-later WITH GCC-exception-3.1 | Version not determined; its exported symbol versions stop at `GCC_4.7.0`. Exact source and applicable Runtime Library Exception require audit |
-| FreeType | libtool 6.16.0, i.e. release 2.9.0 (inferred from the so-version, not read from the binary) | FTL OR GPL-2.0-or-later | **Not** linked by PlxNative — reached only inside the television's own SDL2_ttf. Credit given voluntarily: *Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.* |
+| FreeType | libtool 6.16.0, i.e. release 2.9.0 (inferred from the so-version, not read from the binary) | FTL OR GPL-2.0-or-later | **Not** linked by MultiPlex — reached only inside the television's own SDL2_ttf. Credit given voluntarily: *Portions of this software are copyright © The FreeType Project (www.freetype.org). All rights reserved.* |
 
 ---
 
@@ -575,13 +575,13 @@ decline to guess one:
 - `libGLESv2.so.2` — the television's OpenGL ES 2.0 implementation (an LG shim over the ARM Mali
   driver). Proprietary; no published licence located.
 - `libAcbAPI.so.1`, `libplayerAPIs.so.1` (StarfishMediaAPIs), `libpf-1.0.so.1` — LG proprietary
-  media components of webOS. No published licence located. PlxNative uses locally declared
+  media components of webOS. No published licence located. MultiPlex uses locally declared
   interoperability interfaces; the owner has closed the review of their provenance and GPL/platform
   basis, treating them as GPL-3.0 section 1 System Libraries never redistributed with the
   application.
 **Historical NDK archive:** pre-migration builds included `libglibc_polyfills.a`, whose licence was not established. It is excluded from new linker inputs. This does not grant permission for previously distributed copies.
 
-**Non-affiliation.** PlxNative is an independent, unofficial application. It is not affiliated
+**Non-affiliation.** MultiPlex is an independent, unofficial application. It is not affiliated
 with, endorsed by, or sponsored by LG Electronics, Plex GmbH, Fandango Media (Rotten Tomatoes),
 IMDb.com, or The Movie Database. "webOS", "LG", "Plex", "Rotten Tomatoes", "IMDb", "TMDB" and all
 other trademarks are the property of their respective owners. Where those names appear in the
@@ -637,7 +637,7 @@ the GPL-3.0-or-later election. Also retain `licenses/GCC-exception-3.1.txt` and
 
 ## 6. Deliberately not listed
 
-Two third-party components exist in the PlxNative source repository but are **not** part of this
+Two third-party components exist in the MultiPlex source repository but are **not** part of this
 package, and therefore carry no obligation discharged here: **libjpeg-turbo**
 (`libturbojpeg.so.0`, copied to developer televisions by the development deploy step only) and
 **jsmpeg** (a host-side development tool; `tools/stream-screen.py` downloads it at the upstream commit

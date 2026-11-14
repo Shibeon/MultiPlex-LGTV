@@ -1126,7 +1126,7 @@ image's proportions rounded to tokens and are approximate.
   "id": "com.plxnative.examples.reference",
   "version": "1.0.0",
   "name": "Reference",
-  "author": "PlxNative",
+  "author": "MultiPlex",
   "license": "CC0-1.0",
   "hud": {
     "format": "1.0",
@@ -1626,7 +1626,7 @@ and owned by the app's uid, so whether a Dev Mode `prisoner` can then write its 
 - (d) LAN page served by the app: rejected; a listening socket plus a worker (ledger growth, F31), and
   inbound reachability through the TV's firewall is UNVERIFIED.
 - (e) Phone pairing through a relay: rejected; a backend storing user uploads (abuse, moderation, cost).
-  `lab.plxnative.com` is diagnostics infrastructure (`src/lab/control.rs:5`) and is not proposed.
+  The lab diagnostics host (`src/lab/control.rs`) is diagnostics infrastructure and is not proposed.
 - (f) USB stick: not until the jail mount is verified on both profiles (F39).
 
 Every sideload passes the same invariants with no review; Settings labels it "Unreviewed", and installing
@@ -1665,8 +1665,9 @@ spelling per concept and no expressions. Goal: a model given the guide, the sche
 authoring exercise; the other external comparisons below remain design notes.
 
 1. Schema.
-- Where: `https://plxnative.com/hud/schema/{manifest,hud}/1.N.json`, served from this repo's `site/` (static Pages, F40), so the
-  URL is app-owned and stable; the registry mirrors it under `schema/`. A package's schema-URL key names it; the
+- Where: `https://plxnative.com/hud/schema/{manifest,hud}/1.N.json`, the address the upstream served from this repo's `site/`
+  (static Pages, F40). This fork publishes no site, but the URL stays the schema's identifier: a package's `$schema`
+  must equal it exactly (`E0401`), so changing it would refuse every package already written; the registry mirrors it under `schema/`. A package's schema-URL key names it; the
   strict parser checks its document kind and version. The manifest URL follows `package_format` and the HUD URL follows `hud.format`.
 - One schema per document kind and MAJOR.MINOR. Each declared version keeps its published contract when later minors extend it.
 - One source: `hud_format::schema` holds a descriptor table (per key: type, closed values, numeric range,

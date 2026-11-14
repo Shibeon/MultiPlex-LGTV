@@ -517,8 +517,8 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
   changed. The benchmark now restores the file's original mtime, so only the first build of a run is
   an untimed warm-up. One record per day is appended to `build-history.json` on the `ci-metrics`
   branch (the same branch as `ci-history.json`, pushed with a retry because `ci-metrics.yml` writes it
-  too) and summarised into `ci-summary.json` beside it; the page at plxnative.com/ci/ reads those
-  files. The numbers are for the trend of one runner type (3 vCPUs of a shared Apple M1 virtual
+  too) and summarised into `ci-summary.json` beside it (the upstream's page read those files; this
+  fork publishes no such page). The numbers are for the trend of one runner type (3 vCPUs of a shared Apple M1 virtual
   machine; the record names it and the page prints that next to the charts), not the absolute time on
   a dev Mac. **Failures are loud and cost only their own rows.** A build that failed, or a leg that
   left no document, records nothing. A red `make check` makes the `gate` job, and so the run, red (no
@@ -588,11 +588,11 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
   `--worktrees` for lanes idle past `PLX_GC_IDLE_MIN` and holding no non-build ignored file, then the planner's order — and `make disk`
   remains the report to read before deciding whether to intervene yourself. Its last
   section is the disk budget (`tools/disk-budget.py report`, `docs/disk-budget.md`): each tree's
-  PRIVATE bytes, which is what deleting it really frees and not what `du` says, the PlxNative cargo
+  PRIVATE bytes, which is what deleting it really frees and not what `du` says, the MultiPlex cargo
   trees under `/tmp` that nothing above can see, and the order a reclaim would take them in. The
   report is read-only. `tools/disk-budget.py reclaim --to GIB --emit` writes that order as a plan
   file and `tools/build-gc.sh --evict PLAN` deletes what it names — and only that: every path is
-  re-derived from the machine (a derived PlxNative build tree, a rung the ladder makes from that
+  re-derived from the machine (a derived MultiPlex build tree, a rung the ladder makes from that
   kind of tree) and re-probed for liveness (builder in the checkout, cargo or `make check` lock,
   open files, the idle window, a `/tmp` tree's ctime) immediately before it is renamed away. It
   does not stop for a held FFmpeg cache lock the way the other modes do, it never evicts the cargo
@@ -676,7 +676,7 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
   television: `stable` (`app.multiplex.native` — the app users install, the id in every release,
   manifest and channel listing), `debug` (`app.multiplex.native.debug` — the day-to-day developer
   build beside it, with its own launcher tile, its own sign-in and its own runtime root), and
-  `nightly` (`app.multiplex.native.nightly` — a third install beside both, tile "PlxNative Nightly",
+  `nightly` (`app.multiplex.native.nightly` — a third install beside both, tile "MultiPlex Nightly",
   own sign-in, own runtime root, but ALWAYS a `RELEASE=1` build — `release-guard` refuses one
   without it, with no `ALLOW_DEV_ON_STABLE`-shaped hatch, because nightly ships no dev-trigger
   surface ever).
@@ -2585,7 +2585,7 @@ path. Never run only this one before a release. `tests/README.md` has the tier t
   theirs (`app/bridge.rs`'s `back_at_the_first_consent_stage_is_the_root_press_and_leaves_the_question_up`
   pins both halves). BACK is no longer a quit anywhere — the remote's EXIT key
   still is, and `closeByAppId` is still how `make kill`, `tests/run.py` and `tools/tv-session.sh`
-  close the app — so the `/tmp/plxnative-noexitconfirm` bypass went with the "Exit PlxNative?"
+  close the app — so the `/tmp/plxnative-noexitconfirm` bypass went with the "Exit MultiPlex?"
   alert it existed for (both retired 2026-09-03). Text
   entry is the **television's own keyboard**, raised by plain `SDL_StartTextInput` — the backend is
   in LG's Wayland driver, not the webOS extension API, which is why `SDL_webOS.h` looks like it has

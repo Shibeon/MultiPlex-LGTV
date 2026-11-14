@@ -33,7 +33,7 @@ Measured on the owner's machine, 2026-10-19 (these are point-in-time numbers, no
 
 - The volume was 228 GiB; the build-gc log shows free space at 8.3 GiB that morning and 0.9 GiB the
   evening before.
-- `/tmp` held **45.6 GiB in 30 cargo trees by `du`**; 28 were PlxNative's, most with nothing written
+- `/tmp` held **45.6 GiB in 30 cargo trees by `du`**; 28 were MultiPlex's, most with nothing written
   for more than a day, and two (10.4 GiB, an `rs-matter` evaluation) belonged to another project.
 - **Of 5.5 GB per lane, 1.0 GB is shareable by content hash and 3.9 GB is per-lane by nature**
   (the crates that branch dirtied, plus workspace crates whose bytes embed the checkout path). The
@@ -81,7 +81,7 @@ freed-bytes estimate that said it did would stop the ladder early.
 | Hysteresis | +4 GiB | A reclaim runs up to comfort + 4, about one cold host `target`, so the next build does not reclaim again |
 | Reserve | 3 GiB (`PLX_MIN_FREE_MB`) | The margin kept on top of the build's estimate: the preflight refuses when free space cannot cover estimate + reserve. The bare reserve is the floor only when the preflight itself fails (it then fails open unless free space is below the reserve); it is also the figure the `df`-only check it replaced used |
 | Idle | 15 min | A tree written in the last 15 minutes is somebody's current work; a lane is idle only when all of its trees are |
-| `/tmp` garbage | 24 h | A PlxNative `/tmp` tree untouched for a day is nobody's current work |
+| `/tmp` garbage | 24 h | A MultiPlex `/tmp` tree untouched for a day is nobody's current work |
 | Seed | never planned | Lanes cloned from it share its blocks, so deleting it frees almost nothing (12 KiB private against 478 MB by `du`, measured) and makes every new lane's first build cold. `build-gc.sh --seed` (7 days, `PLX_SEED_MAX_DAYS`) stays as a manual prune |
 
 The build's estimate is what it is expected to **add**: 3.4 GiB for `target`, 2.7 for `target-fast`,
@@ -96,10 +96,10 @@ be refused: free space still below the estimate plus the reserve.
 
 | Rung | What | Cost to its owner |
 |---|---|---|
-| 0 | Garbage: tombstones, orphaned fleet trees, trees of lanes `origin/main` already contains, PlxNative `/tmp` trees untouched for 24 h | none, or nobody owns them |
+| 0 | Garbage: tombstones, orphaned fleet trees, trees of lanes `origin/main` already contains, MultiPlex `/tmp` trees untouched for 24 h | none, or nobody owns them |
 | 1 | Content dedup of idle trees | none. **Not built yet; skipped** |
 | 2 | Incremental dirs of OTHER idle lanes | that lane's next edit-rebuild is cold once |
-| 3 | Younger PlxNative `/tmp` trees, idle 15 min | that command's next run is cold |
+| 3 | Younger MultiPlex `/tmp` trees, idle 15 min | that command's next run is cold |
 | 4 | Whole derived trees of OTHER idle lanes | that lane's next check rebuilds the workspace; third-party comes back from the seed |
 | 5 | The main checkout's `--stale` sweep (not sized) | as `build-gc.sh --stale` today |
 | 6 | Budget-critical only: the main checkout's incremental dirs, then the CURRENT checkout's incremental dirs in trees other than the one being built | one cold incremental build |
@@ -149,7 +149,7 @@ almost nothing, and the next lane's first build is cold.
   idle-window `find` (so the tree is spared), and `make disk` prints `-` for the checkout's sizes. The
   `make check` lock is still probed, since it is a flock on a local file and a check running in that
   checkout builds into this very tree.
-- **A cargo tree that is not PlxNative's.** `CACHEDIR.TAG` alone proves nothing (any cargo writes
+- **A cargo tree that is not MultiPlex's.** `CACHEDIR.TAG` alone proves nothing (any cargo writes
   it); a tree is ours only if its `deps/`, `.fingerprint/`, `build/` or `incremental/` hold a
   `plx_*`, `libplx_*` or `plxnative*` entry. Other trees are reported as "not ours" and never planned.
 
@@ -163,7 +163,7 @@ subprocess and `open` made to raise), so `ci/test_disk_budget.py` feeds it synth
 - `$PLX_FLEET_DIR` (default `~/plx-fleet`): fleet lane trees, and the orphans whose worktree is gone.
 - `/tmp` and `$TMPDIR` (or the `os.pathsep` list in `PLX_GC_TMP_ROOTS`): a directory carrying a
   `CACHEDIR.TAG` at most three levels below the root, found without entering a registered checkout
-  or the fleet dir. `python3 tools/disk-budget.py tmp-trees` prints the PlxNative ones; it is the
+  or the fleet dir. `python3 tools/disk-budget.py tmp-trees` prints the MultiPlex ones; it is the
   SAME scanner the report and the planner use, and `--evict` asks it again rather than carrying a
   second implementation.
 - A `/tmp` tree's age is the later of its mtime and its **ctime**. An mtime can be set to anything
@@ -233,7 +233,7 @@ all (exit 2).
 **What `--evict` does with a line.** The plan is untrusted: a stale plan, a hand-edited one and one
 from a future planner must all fail safe, so nothing is taken on its word.
 
-1. *What it is.* The path is resolved physically and must be a derived PlxNative build tree, found
+1. *What it is.* The path is resolved physically and must be a derived MultiPlex build tree, found
    again from the machine: a registered checkout's `rust-modules/target*` or an `incremental` dir in
    one; a `target*` under `$PLX_FLEET_DIR`; an interrupted delete's leftover (`.tmp.`, `.restore.`,
    `.old.`, `.tombstone.`) under `<cache>/cargo-seed` or a `.tombstone.` under `<cache>/ffmpeg`; or a
@@ -290,7 +290,7 @@ $PLX_GC_IDLE_MIN --emit` into a temporary file and `--evict` on it. It replaces 
 (`--incremental`, `--worktrees`, `--lanes`, `--stale`, `--seed`) with the planner's order, which
 differs: the main checkout's incremental cache is the last resort (rung 6) instead of
 the first stage; a lane's vendor build trees are not touched (they are not derived from cargo; only
-`--lanes` and `--all` take them); the cargo seed is never evicted; PlxNative trees left under `/tmp`
+`--lanes` and `--all` take them); the cargo seed is never evicted; MultiPlex trees left under `/tmp`
 are now in scope; and the stop line is the threshold plus 4 GiB. A planner that fails or is missing
 deletes nothing and the log says so. The free-space gate, the single-instance lock and `-n` (which
 takes no lock) are unchanged. With the opt-in cold store configured there is one more stage, between

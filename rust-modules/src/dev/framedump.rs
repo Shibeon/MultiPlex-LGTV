@@ -204,7 +204,7 @@ pub(crate) const FPS: u32 = 60;
 const PACE_SLEEP_US: u64 = 500;
 /// The virtual clock's origin. See the module doc.
 pub(crate) const ORIGIN_MS: u32 = 1_000_000;
-/// The frame size `tools/site_video.py` requires.
+/// The frame size of a dump (1080p, the canvas the app draws at).
 const WIDTH: i32 = 1920;
 const HEIGHT: i32 = 1080;
 
@@ -446,7 +446,7 @@ pub(crate) fn tsv_row(n: u32, t_ms: u32, hash: u64, debt: u32, holds: u32) -> St
     format!("{n}\t{t_ms}\t{hash:016x}\t{debt}\t{holds}\n")
 }
 
-/// The header `tools/site_video.py` demands, byte for byte.
+/// The `frames.tsv` header, byte for byte (a reader keys on it).
 pub(crate) const TSV_HEADER: &str = "n\tt_ms\txxh3\tdebt\tholds\n";
 
 /// JSON string escaping for the summary (only what a message can hold).
@@ -746,7 +746,7 @@ pub(crate) fn iteration_begin(app: &mut App) {
         crate::app::clock::set_replay(ORIGIN_MS + virtual_ms(d.v));
         // The landing clock: a landing is due on a virtual frame, never on a count of iterations.
         app.bridge.landgate().dump_frame(d.v);
-        // The storyboard's compiled key schedule (`site_video.py compile_storyboard`): a key goes down at the FIRST iteration of its virtual frame, so a
+        // The `PLXNATIVE_DUMP_KEYS` schedule: a key goes down at the FIRST iteration of its virtual frame, so a
         // repeat never presses it twice, and comes up [`KEY_UP_AFTER`] virtual frames later, as a
         // finger leaves a remote. Both edges at one instant would make the press machine's commit
         // (`ui::press`: the release is read only once the press has armed, which happens in the
@@ -891,8 +891,8 @@ pub(crate) fn after_draw(app: &App, vx: c_int, vy: c_int, vw: c_int, vh: c_int) 
             return false;
         }
         // The frame is clean: it counts as a virtual frame whether or not it is written.
-        // `frames.tsv`'s `t_ms` is `T(n)` of the WRITTEN index, the output timeline, which is what
-        // `tools/site_video.py` gates. Virtual time is never skipped, so written frame `n` is
+        // `frames.tsv`'s `t_ms` is `T(n)` of the WRITTEN index, the output timeline a reader of
+        // the dump gates on. Virtual time is never skipped, so written frame `n` is
         // virtual frame `preroll + n`.
         let t = virtual_ms(d.written as u64);
         if d.v >= d.cfg.preroll as u64 {

@@ -7,7 +7,7 @@
 # Schema: content/schemas/packages/PackageInfo.json in that repo.
 # Required: title, iconUri, manifestUrl, category, pool, description. Verified 2026-08-04.
 
-title: PlxNative
+title: MultiPlex
 
 # Both icon URLs are raw links to THIS repository's default branch, so they resolve only once the
 # repo is public — and `repogen.lintpkg` rejects a submission whose iconUri does not return 200.
@@ -66,7 +66,7 @@ description: |
   An unofficial, native Plex client for LG webOS televisions.
 
   The official Plex app on these sets runs in Chromium, and on older hardware it shows: shelves
-  stutter, posters open a beat late. PlxNative draws its interface directly on the GPU and hands
+  stutter, posters open a beat late. MultiPlex draws its interface directly on the GPU and hands
   video to the TV's own hardware decoder — the same silicon the built-in apps use — so the picture
   sits on the video plane with the interface composited over it.
 

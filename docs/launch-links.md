@@ -1,7 +1,7 @@
 # Launch links
 
 Another app on the television (a launcher's Continue Watching row, say) can open a Plex title in
-PlxNative by passing it in the launch parameters. The code is `rust-modules/src/app/deeplink.rs`;
+MultiPlex by passing it in the launch parameters. The code is `rust-modules/src/app/deeplink.rs`;
 the argument plumbing is `rust-modules/platform/src/tv/launch.rs`.
 
 ## The contract

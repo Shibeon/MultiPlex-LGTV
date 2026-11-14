@@ -245,7 +245,7 @@ channel:
   `VERIFYHOST=0`. libcurl checks the pin **independently of** VERIFYPEER (documented), and
   `CURLOPT_PINNEDPUBLICKEY` is 7.39+, against the dev set's 7.53.1 — so this reaches every firmware
   the app already claims.
-* No private key ships in PlxNative; the app carries a 32-byte hash. Only that one endpoint's key
+* No private key ships in MultiPlex; the app carries a 32-byte hash. Only that one endpoint's key
   is accepted, which is a narrower trust root than the public CA set.
 
 `net.rs` change: the body of `request` gains an internal `pin: Option<&CStr>` parameter; the

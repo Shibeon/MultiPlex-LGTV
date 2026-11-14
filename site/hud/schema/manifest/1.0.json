@@ -42,7 +42,7 @@
   "$id": "https://plxnative.com/hud/schema/manifest/1.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The manifest.json of a PlxNative HUD bundle.",
+  "description": "The manifest.json of a MultiPlex HUD bundle.",
   "properties": {
     "$schema": {
       "description": "The package manifest schema URL for editors.",
@@ -110,6 +110,6 @@
     "license",
     "hud"
   ],
-  "title": "PlxNative HUD package, format 1.0",
+  "title": "MultiPlex HUD package, format 1.0",
   "type": "object"
 }

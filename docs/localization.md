@@ -1,6 +1,6 @@
-# Help translate PlxNative
+# Help translate MultiPlex
 
-PlxNative's interface is available in English, Spanish, French, Italian, European Portuguese, German, Hungarian, Russian, Polish, Dutch and Belarusian
+MultiPlex's interface is available in English, Spanish, French, Italian, European Portuguese, German, Hungarian, Russian, Polish, Dutch and Belarusian
 (official Cyrillic orthography). Help improve a translation or contribute another language through a pull request
 at https://github.com/Shibeon/MultiPlex-LGTV.
 

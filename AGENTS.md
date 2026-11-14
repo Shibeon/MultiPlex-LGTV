@@ -2,7 +2,7 @@
 
 ## Project
 
-PlxNative is a production-quality native Plex client for rooted LG webOS 4.5 TVs. Most of the
+MultiPlex is a production-quality native Plex client for rooted LG webOS 4.5 TVs. Most of the
 application is Rust under `rust-modules/` (the application in `src/`, the layers in their own crates); `src/main.c` is the boot/crash shim,
 `src/starfish.c` is the Feed-only StarfishMediaAPIs seam (compiled only with `PLAYBACK_HAS_FEED`),
 `src/video_plane.c` is the ACB / exported-window display binding both backends share, and `src/svg.c` rasterizes SVGs. Keep changes
