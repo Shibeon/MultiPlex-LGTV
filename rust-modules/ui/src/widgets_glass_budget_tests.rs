@@ -1,125 +1,69 @@
-//! The top bar's glass at any strip width (the chip's name budget keeps the unfurled capsule off the track) and the dynamic glass refresh cadence.
+//! The top bar's glass at any strip width (the profile chip is a pill of the one glass track) and the dynamic glass refresh cadence.
 
 use super::*;
 #[allow(unused_imports)]
 use super::test_support::*;
 
-/// **The unfurled chip and the glass track can never touch, at ANY strip width** — the one thing
-/// about this band that no shader can fix, so it is arithmetic and it is asserted.
-///
-/// There is ONE blur cache. A second glass surface drawn over the first samples that same
-/// snapshot, so an overlap gets no second blur — only a second scrim and a second rim
-/// composited over material that already carries both, which is the doubling `draw_tab_row`'s
-/// source-pass note measures from the other side (a face reading (52,60,38) came out at
-/// (33,38,26) once it contained itself).
-///
-/// The track is centred and its width is the strip's, which is data (libraries, languages), so the
-/// clearance cannot be bought by capping the track, as it was until 2026-10-30 (the retired
-/// `GLASS_TRACK_MAX` dropped the owner's 679 px Belarusian strip to the flat capsule). It is the
-/// chip's to keep: [`chip_name_budget`] is the name width the bar leaves room for, the owner elides
-/// to it (`profile_chip_text`), and the capsule drawn is [`chip_cap`] of the elided name. So this
-/// sweeps the TRACK from a lone pill to the widest the strip draws and asks the three questions
-/// that chain can get wrong, through the same expressions the product draws with and a font-free
-/// measure: the capsule's right edge plus [`BAND_AIR`] stays left of the track's left edge; a bar
-/// that leaves no room draws the closed circle (no name, nothing unfurled); and the clearance is
-/// TIGHT, within one glyph of the room, so nobody buys it by quietly spending the name.
-#[test]
-fn the_unfurled_chip_never_reaches_the_glass_track_at_any_strip_width() {
-    let measure = crate::fixture::FixtureMeasure;
-    // one ASCII glyph of `FixtureMeasure` at the chip's rung: the finest the elision can land
-    let glyph = theme::size::BODY as f32 * 0.5;
-    // no spaces: `elide_by` trims a cut that lands on one, which would cost the tightness check
-    // a second glyph for a reason that is not the budget's
-    let long = "Abcdefghij".repeat(8);
-    let long = long.as_str();
-    let circle = chip_cap(0.0, 0.0);
-    let widest = TAB_VIEW_MAX + 2.0 * TAB_TRACK_PAD;
-    let (mut no_name, mut named, mut clipped) = (0, 0, 0);
-    let mut w = TAB_ICON_PILL_W + 2.0 * TAB_TRACK_PAD;
-    while w <= widest + 0.01 {
-        let track_left = (crate::consts::SCR_W - w) * 0.5;
-        let budget = chip_name_budget(w);
-        assert!(
-            budget == 0.0 || (CHIP_NAME_MIN..=CHIP_NAME_MAX).contains(&budget),
-            "track {w}: a budget of {budget} is neither no name nor a usable one"
-        );
-        for label in [long, "Guest", ""] {
-            let (_, name, name_w) = profile_chip_text(label, "G", budget, &measure);
-            let cap = chip_cap(1.0, name_w);
-            assert!(
-                name_w <= budget + 0.01,
-                "track {w}: \"{label}\" came out {name_w} wide against a budget of {budget}"
-            );
-            assert!(
-                cap.x + cap.w + BAND_AIR <= track_left + 0.01,
-                "track {w}: the unfurled capsule ends at {} and the track starts at {track_left} \
-                 — they must clear each other by {BAND_AIR}",
-                cap.x + cap.w,
-            );
-            if budget == 0.0 || label.is_empty() {
-                assert!(name.as_bytes().is_empty(), "track {w}: no room, no name (\"{label}\")");
-                assert_eq!((name_w, cap), (0.0, circle), "track {w}: a nameless chip is the closed circle");
-            }
-        }
-        // the capsule only ever grows RIGHTWARD off a fixed edge and only to the name's width
-        let (_, _, long_w) = profile_chip_text(long, "G", budget, &measure);
-        for e in [0.0, 0.25, 0.5, 0.75, 1.0] {
-            let c = chip_cap(e, long_w);
-            assert_eq!((c.x, c.y, c.h), (circle.x, circle.y, circle.h), "only the width moves");
-            assert!(c.w >= circle.w - 0.01 && c.w <= chip_cap(1.0, long_w).w + 0.01);
-        }
-        if budget == 0.0 {
-            no_name += 1;
-        } else {
-            named += 1;
-            // TIGHT: while the bar is what limits the name (not the ceiling), the slack left
-            // between the capsule and the AIR is under one glyph
-            let cap = chip_cap(1.0, long_w);
-            if budget < CHIP_NAME_MAX {
-                clipped += 1;
-                let slack = track_left - BAND_AIR - (cap.x + cap.w);
-                assert!(
-                    slack < glyph + 0.01,
-                    "track {w}: {slack} px of room unspent (a glyph is {glyph})"
-                );
-            }
-        }
-        w += 1.0;
-    }
-    assert!(no_name > 0, "the widest strip must leave the chip no name, or the sweep never met that case");
-    assert!(clipped > 0, "some strips must be what limits the name, or the sweep never met that case");
-    assert!(named > 0, "some strips must leave the chip a name");
+/// MultiPlex's bar, as the application publishes it: Search, the four destinations, the divider,
+/// Settings and the chip's slot.
+fn multiplex_faces() -> Vec<TabFace> {
+    use crate::icons::Icon;
+    vec![
+        TabFace::Icon(Icon::Search),
+        TabFace::IconLabel(Icon::Home, "Home".into()),
+        TabFace::IconLabel(Icon::Movie, "Movies".into()),
+        TabFace::IconLabel(Icon::Tv, "TV Shows".into()),
+        TabFace::IconLabel(Icon::Bookmark, "My list".into()),
+        TabFace::Divider,
+        TabFace::Icon(Icon::Tune),
+        TabFace::Avatar,
+    ]
 }
 
-/// The ceiling is the shipped bar's budget: the Belarusian strip (679 px, the widest of the shipped
-/// locales: Russian, the next, is 666 px, 13 px narrower, by the shipped font's advances) and every
-/// narrower one keep the whole [`CHIP_NAME_MAX`], so the room arithmetic only ever bites on a strip
-/// far past anything shipped. Pinned so a change to the chip's gap, tail or frame that quietly
-/// shrinks every profile name on the TV is a test failure and not a surprise.
+/// **The chip is a pill of the track, at its right end — so the band is ONE glass surface.** It
+/// used to be a second capsule at the left margin, kept off the track by a name budget, because a
+/// second glass surface over the first doubles the material (one blur cache, a second scrim and rim
+/// composited over material that already carries both). Inside the track there is nothing to keep
+/// apart: the slot is the track's last pill, `TAB_TRACK_PAD` from its right end like every end pill,
+/// square, and the avatar stands `CHIP_RING` inside it on every side.
 #[test]
-fn the_shipped_strips_leave_the_chip_its_whole_name_budget() {
-    let belarusian = [168.0, 144.0, 167.0, TAB_ICON_PILL_W, TAB_ICON_PILL_W];
-    let english = [126.0, 146.0, 176.0, TAB_ICON_PILL_W, TAB_ICON_PILL_W];
-    for widths in [&belarusian[..], &english[..]] {
-        assert_eq!(chip_name_budget(tab_track_w(widths)), CHIP_NAME_MAX);
-    }
-    assert_eq!(chip_name_budget(0.0), CHIP_NAME_MAX, "no strip at all constrains nothing");
+fn the_chip_is_the_tracks_last_pill_and_the_avatar_stands_inside_it() {
+    let faces = multiplex_faces();
+    let widths = tab_metrics_from(&faces, |s| s.to_bytes().len() as f32 * 14.0).1;
+    let geometry = tab_geometry(&widths, 0.0);
+    let slot = geometry.pill(faces.len() - 1);
+    let track = geometry.track;
+    assert_eq!((slot.w, slot.h), (TAB_PILL_H, TAB_PILL_H), "the slot is a square pill");
+    assert!((track.x + track.w - TAB_TRACK_PAD - (slot.x + slot.w)).abs() < 0.01,
+        "the slot ends the track, one inset from its round end: {slot:?} in {track:?}");
+    assert!(slot.y - track.y == TAB_TRACK_PAD && track.y + track.h - (slot.y + slot.h) == TAB_TRACK_PAD);
+    let avatar = slot.inset(CHIP_RING);
+    assert_eq!(avatar.w, CHIP_D);
+    assert!(avatar.x > slot.x && avatar.x + avatar.w < slot.x + slot.w, "the focus capsule rings the avatar");
 }
 
-/// A nameless chip has nothing to unfurl for, so every unfurl of [`chip_cap`] is the closed circle,
-/// and a named chip still grows rightward.
+/// **The divider is drawn, never a stop.** It is a face so the faces and keys stay one parallel
+/// pair, but `tab_members` publishes no member for its key: focus and the pointer pass straight from
+/// My list to Settings, and the chip is the bar's last stop.
 #[test]
-fn a_chip_with_no_name_stays_the_closed_circle_and_a_named_one_unfurls() {
-    let circle = chip_cap(0.0, 0.0);
-    assert_eq!(circle.w, circle.h, "the resting surround is circular");
-    for e in [0.0, 0.5, 1.0] {
-        assert_eq!(chip_cap(e, 0.0), circle, "no name, no unfurl (e = {e})");
-    }
-    assert!(chip_cap(1.0, 40.0).w > circle.w, "a name unfurls the capsule");
-    assert_eq!(chip_cap(1.0, CHIP_NAME_MAX), CHIP_CAP_MAX);
+fn the_divider_publishes_no_stop_and_the_chip_is_the_last() {
+    let faces = multiplex_faces();
+    let widths = tab_metrics_from(&faces, |s| s.to_bytes().len() as f32 * 14.0).1;
+    let keys = [TAB_KEY_SEARCH, TAB_KEY_HOME, TAB_KEY_MOVIES, TAB_KEY_SHOWS, TAB_KEY_WATCHLIST,
+        TAB_KEY_DIVIDER, TAB_KEY_SETTINGS, TAB_KEY_CHIP];
+    let mut members = Vec::new();
+    tab_members(&widths, &keys, 1, TopFocus::Chip, 0.0, &mut members);
+    let elems: Vec<u32> = members.iter().map(|m| m.elem).collect();
+    assert_eq!(elems, [TAB_KEY_SEARCH, TAB_KEY_HOME, TAB_KEY_MOVIES, TAB_KEY_SHOWS, TAB_KEY_WATCHLIST,
+        TAB_KEY_SETTINGS, TAB_KEY_CHIP]);
+    let watchlist = members[4].drawn;
+    let settings = members[5].drawn;
+    assert!(settings.x - (watchlist.x + watchlist.w) > 2.0 * 16.0,
+        "the divider stands in the gap, so Settings sits further off than a plain gap");
+    assert!(members.windows(2).all(|pair| pair[0].drawn.x < pair[1].drawn.x), "left to right");
 }
 
-/// The unfurl fades the whole FACE, and the two rim weights are the half that matters.
+/// A faded glass face (`chip_face`: the hold hint's and the scroll capsule's fade, once the chip's unfurl) fades the whole FACE, and the two rim weights are the half that matters.
 ///
 /// `fs_glass.frag` writes `max(u_tint.a * cov, rimw)`: the rim is deliberately allowed to exceed
 /// its own surface's coverage, so that a 1px line survives its antialiased edge. Fade only the
@@ -129,7 +73,7 @@ fn a_chip_with_no_name_stays_the_closed_circle_and_a_named_one_unfurls() {
 /// And at rest it is the track's face to the bit, which is the claim the whole arrangement
 /// rests on: one solve, one material, two surfaces.
 #[test]
-fn the_chips_capsule_fades_its_rim_with_its_scrim_and_rests_on_the_tracks_own_face() {
+fn a_faded_face_fades_its_rim_with_its_scrim_and_rests_on_the_tracks_own_face() {
     let face = plx_gfx::gfx::GlassFace {
         scrim_top: [0.0, 0.0, 0.0, 0.40],
         scrim_bot: [0.0, 0.0, 0.0, 0.52],
@@ -161,21 +105,6 @@ fn the_chips_capsule_fades_its_rim_with_its_scrim_and_rests_on_the_tracks_own_fa
     assert_eq!(
         half.rim_w, face.rim_w,
         "one design-system pixel, at every point of the unfurl"
-    );
-}
-
-/// The chip is a contained control before it is focused: the resting surround is a circle in
-/// the same inset band as the tab track, and focus only WIDENS it rightward for the name —
-/// `profile_chip` draws `chip_cap(e, …)` at every `e`, at full face.
-#[test]
-fn the_profile_chip_has_a_round_surround_at_rest_and_only_widens_on_focus() {
-    let closed = chip_cap(0.0, CHIP_NAME_MAX);
-    let open = chip_cap(1.0, CHIP_NAME_MAX);
-    assert_eq!(closed.w, closed.h, "the resting surround is circular");
-    assert_eq!((closed.x, closed.y, closed.h), (open.x, open.y, open.h));
-    assert!(
-        open.w > closed.w,
-        "focus reveals the name by widening rightward"
     );
 }
 

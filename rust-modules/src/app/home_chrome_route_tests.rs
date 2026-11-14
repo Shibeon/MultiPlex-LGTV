@@ -11,8 +11,14 @@ use super::*;
 use super::test_support::{Drawn, World};
 use super::under_posters_shelf_route_tests::{describe_cards, set, Cell};
 use plx_plex::plex::session::UnderPostersLadder as Details;
-use plx_ui::widgets::{CHIP_FRAME, TAB_TRACK_PAD, TOP_BAR_BOTTOM, TOP_BAR_Y};
+use plx_ui::widgets::{TAB_PILL_H, TAB_TRACK_PAD, TOP_BAR_BOTTOM, TOP_BAR_Y};
 use plx_ui::Rect;
+
+/// The rows the bar's pills stand in, between the side margins: the profile chip is one of those
+/// pills (the track's last), and the track may reach either margin, so a heading inside these rows
+/// stands under the bar's ink wherever the chip and the track happen to be.
+const BAR_ROWS: Rect = Rect::new(plx_ui::consts::MARGIN_X, TOP_BAR_Y,
+    plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X, TAB_PILL_H);
 
 pub(super) const TITLES: [&str; 6] = ["Shelf Alpha", "Shelf Bravo", "Shelf Charlie", "Shelf Delta", "Shelf Echo", "Shelf Foxtrot"];
 
@@ -108,7 +114,7 @@ fn a_resting_heading_is_always_clear_of_the_chrome_and_rests_where_it_did_whatev
             w.frames(40);
             let all = headings(&mut w);
             for h in all.iter().filter(|h| drawn(h)) {
-                if overlaps(h.rect, CHIP_FRAME) {
+                if overlaps(h.rect, BAR_ROWS) {
                     problems.push(format!("{setting}, focus on shelf {shelf}: the heading {:?} at y {:.1} stands under the account chip", h.title, h.rect.y));
                 } else if overlaps(h.rect, band) {
                     problems.push(format!("{setting}, focus on shelf {shelf}: the heading {:?} at y {:.1} stands in the chrome's band", h.title, h.rect.y));
@@ -143,7 +149,7 @@ fn no_heading_is_drawn_over_the_chip_while_the_page_scrolls() {
             for frame in 0..30 {
                 w.step(vec![]);
                 for h in headings(&mut w) {
-                    if overlaps(h.rect, CHIP_FRAME) {
+                    if overlaps(h.rect, BAR_ROWS) {
                         crossed += 1;
                         assert!(h.alpha <= 0.02,
                             "{setting}, Down {press} frame {frame}: the heading {:?} at {:?} is drawn at alpha {} over the chip (none allowed)", h.title, h.rect, h.alpha);
@@ -325,7 +331,7 @@ fn a_held_right_along_a_home_shelf_glides_the_caption_without_a_heading_over_the
             }
             let (frame, glides) = draw_and_glides(&mut w);
             assert_eq!(frame.caption_lines(), want, "{setting}, step {step}: the focused block is the setting's lines");
-            for h in headings_in(&frame).iter().filter(|h| overlaps(h.rect, CHIP_FRAME)) {
+            for h in headings_in(&frame).iter().filter(|h| overlaps(h.rect, BAR_ROWS)) {
                 assert!(h.alpha <= 0.02, "{setting}, step {step}: the heading {:?} at {:?} is drawn at alpha {} over the chip (none allowed)", h.title, h.rect, h.alpha);
             }
             let focused = headings_in(&frame).into_iter().find(|h| h.title == TITLES[2] && drawn(h))

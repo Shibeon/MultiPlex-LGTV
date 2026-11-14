@@ -738,17 +738,17 @@ fn owned_search_walks_the_shared_strip_to_the_chip_and_back_to_the_field() {
     assert_eq!(d.focus().map(|key| key.elem), Some(base + 3),
         "▲ lands under the pill the screen is drawn as selected on");
 
-    for i in 2..10 {
-        frame(&mut d, &mut rig, AppArg::Search, tick(i), script_key(Key::Left, tick(i)));
-    }
-    assert_eq!(d.focus().map(|key| key.elem), Some(base + 4),
-        "◀ walks the pills to the profile chip and stops there rather than wrapping");
-
-    frame(&mut d, &mut rig, AppArg::Search, tick(10), script_key(Key::Right, tick(10)));
+    frame(&mut d, &mut rig, AppArg::Search, tick(2), script_key(Key::Left, tick(2)));
     assert_eq!(d.focus().map(|key| key.elem), Some(base + 3),
-        "▶ walks back onto the FIRST pill — Search, MultiPlex's leading pill — the one it left");
+        "◀ from Search, the bar's first pill, stays there: the profile chip is no longer left of it");
 
-    frame(&mut d, &mut rig, AppArg::Search, tick(11), script_key(Key::Down, tick(11)));
+    for i in 3..12 {
+        frame(&mut d, &mut rig, AppArg::Search, tick(i), script_key(Key::Right, tick(i)));
+    }
+    assert_eq!(d.focus().map(|key| key.elem), Some(plx_ui::widgets::TAB_KEY_CHIP),
+        "▶ walks the pills, past Settings, to the profile chip at the right end and stops there rather than wrapping");
+
+    frame(&mut d, &mut rig, AppArg::Search, tick(12), script_key(Key::Down, tick(12)));
     assert_eq!(d.focus(), Some(field), "▼ off the bar lands on the field, whatever pill it was on");
 }
 

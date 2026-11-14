@@ -198,8 +198,7 @@ fn the_glass_leaves_every_header_opener_as_a_ramp_on_open_and_on_close() {
         ("Library Sort & Filter", crate::Rect::new(1589.0, 146.0, 204.0, 60.0)),
         ("Collections +N", crate::Rect::new(1180.0, 146.0, 118.0, 60.0)),
         ("the libraries menu", crate::Rect::new(94.0, 146.0, 230.0, 60.0)),
-        ("the account chip", crate::widgets::chip_cap(1.0, 60.0)),
-        ("the account chip at rest, a circle", crate::widgets::chip_cap(0.0, 0.0)),
+        ("the account chip, a circle at the bar's right end", crate::Rect::new(1360.0, 26.0, crate::widgets::TAB_PILL_H, crate::widgets::TAB_PILL_H)),
     ];
     for (name, pill) in openers {
         let panel = crate::Rect::new(pill.x, pill.y + pill.h + 14.0, 316.0, 400.0);

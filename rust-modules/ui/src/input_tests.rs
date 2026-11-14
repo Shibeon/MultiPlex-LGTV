@@ -452,13 +452,14 @@ fn strip_pointer_stops_use_drawn_geometry_and_stable_keys() {
 
 /// **The shared bar's pointer stops follow what is drawn** (the tuck, the nav's own chrome alpha).
 ///
-/// The bar the application publishes (`ChromeSnapshot::members`): the profile chip at its frame, then
-/// three pills at the strip's own geometry. They are published at their RESTING rects every frame; the
-/// dispatcher is what puts them where the bar is drawn, and withdraws them when it is not drawn.
+/// The bar the application publishes (`ChromeSnapshot::members`): three pills and the profile chip's
+/// slot at their end, all at the strip's own geometry. They are published at their RESTING rects every
+/// frame; the dispatcher is what puts them where the bar is drawn, and withdraws them when it is not drawn.
 fn publish_bar(d: &mut Dispatcher<FixtureHost>) -> Vec<StripMember<u32>> {
-    use super::widgets::{tab_members, TopFocus, CHIP_FRAME, TAB_KEY_CHIP};
-    let mut members = vec![StripMember::new(TAB_KEY_CHIP, CHIP_FRAME)];
-    tab_members(&[140.0; 3], &[STRIP_BASE, STRIP_BASE + 1, STRIP_BASE + 2], 0, TopFocus::Away, 0.0, &mut members);
+    use super::widgets::{tab_members, TopFocus, TAB_KEY_CHIP, TAB_PILL_H};
+    let mut members = Vec::new();
+    tab_members(&[140.0, 140.0, 140.0, TAB_PILL_H], &[STRIP_BASE, STRIP_BASE + 1, STRIP_BASE + 2, TAB_KEY_CHIP],
+        0, TopFocus::Away, 0.0, &mut members);
     d.nav.tabs.strip = members.clone();
     members
 }
@@ -542,7 +543,7 @@ fn a_click_lands_where_the_half_tucked_bar_is_drawn_not_where_it_rests() {
 fn a_fully_tucked_bar_registers_no_pointer_stops_and_returns_with_the_scroll() {
     let (mut d, mut rig) = boot(FixtureArg::Home);
     let members = publish_bar(&mut d);
-    let chip = members[0];
+    let chip = *members.last().expect("the chip ends the bar");
     draw_tucked(&mut d, &mut rig, 0.0);
     assert_eq!(bar_stops(&d).len(), members.len(), "premise: an untucked bar registers the chip and every pill");
 

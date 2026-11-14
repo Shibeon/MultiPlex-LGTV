@@ -963,6 +963,7 @@ impl RecommendedScreen {
             _ => None,
         };
         if let Some(req) = req { fx.push(Fx::App(AppFx::Library(req))); return Handled::Yes; }
+        if let Some(settings) = crate::registry::strip_settings(elem) { fx.push(Fx::App(settings)); return Handled::Yes; }
         Handled::No
     }
 

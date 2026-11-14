@@ -502,9 +502,13 @@ presentation in a design pass.
    de-emphasised row that still acts.
 
 6. **An icon tab and a bookmark disc are both a mark, never a label.** The strip's faces are
-   `TabFace::{Label, Icon}` (the Watchlist bookmark and Search are `Icon` faces: square, 60 x 60,
-   the mark at `TAB_ICON_D`), and a destination is found by its KEY (`TAB_KEY_WATCHLIST` is
-   `STRIP_BASE + 5`, drawn before Search), never by "the last face". The strip PULSES a mark once
+   `TabFace::{Label, Icon, IconLabel, Divider, Avatar}` (Search and Settings are `Icon` faces: square,
+   60 x 60, the mark at `TAB_ICON_D`; the Watchlist, "My list", is the bookmark with its name), and a
+   destination is found by its KEY (`TAB_KEY_WATCHLIST` is `STRIP_BASE + 5`, `TAB_KEY_SETTINGS`
+   `STRIP_BASE + 6`), never by "the last face". MultiPlex's order is Search, Home, the types, My
+   list, a `Divider` (`TAB_KEY_DIVIDER`, drawn and never a stop), Settings and the profile chip
+   (`TabFace::Avatar` at `TAB_KEY_CHIP`, the track's last pill: the focus capsule rings the avatar
+   `profile_chip_with` draws in `StripRender::avatar_frame`). The strip PULSES a mark once
    after a title is put on the list: `StripRender::pulse(idx)` (`TAB_PULSE_S` 0.4 s, the GLYPH
    grown to `TAB_PULSE_SCALE` about 1.35x with a soft white `TAB_PULSE_GLOW_A` glow around it,
    `tab_pulse_look`) is time-driven, ends at exactly rest, reports through `idle::note_motion`, and
@@ -614,9 +618,8 @@ tried first. None of it is reconstructable from the code without repeating the m
   the arriving one start), so no frame has both. Home keeps its nav and chip shown and owns no
   `Handoff`; a heading that rides under them fades by where it stands through the same spatial rule
   (`scroll_chrome::clearance_under_shown_chrome`). The hold hint and the band (`hold_hint.rs`) keep
-  apart the same way. The chip and the tab track do not have to: they are one band in the shared
-  chrome layer, so a track wide enough to reach inside the chip's footprint costs no inline capture,
-  and all `chip_name_budget` has to keep is `BAND_AIR` between the drawn rects, at ANY strip width
+  apart the same way. The profile chip needs nothing of the kind: it is a pill INSIDE the tab track
+  (`TabFace::Avatar`, the track's last slot), so the bar is one glass surface at any strip width
   (the bar's width never takes its glass away, a strip past `TAB_VIEW_MAX` scrolls inside a track
   that stays glass). Any new live glass in ANOTHER layer that can stand within a band's blur reach
   (68 px past the visible members) must be sequenced with it, or it prices ~1.4M a frame; a
@@ -647,12 +650,12 @@ tried first. None of it is reconstructable from the code without repeating the m
   (the item menu's card, the account chip) is absent from the lens, and a menu stacked over
   another surface's dim, or drawn before the field has latched (the first frames of a modal), or
   over the video plane, falls back to the field ground (`draw` returns `false`), windowed to the
-  panel's rect and graded under `PANEL_LUMA_MAX`. The opener lift is frozen too: the account
-  menu's profile chip, lifted above the dim and the panel (`widgets::lift_profile_chip`, called by the
-  lift pass through `Rig::lift_bar_member`), is a `glass_frozen`
-  capsule on the stack's latched field (`ModalStack::lift_field`, no dim, the host snapshot behind its
-  rim) and requests no backdrop entry or `src` pass; before the field latches the lift draws
-  nothing (the bar's own chip is already on screen at that rect). Only the chip on the tab strip, with no menu up, is live glass. The scrim behind a compact menu is
+  panel's rect and graded under `PANEL_LUMA_MAX`. The opener lift asks for no glass at all: the
+  account menu's profile chip, lifted above the dim and the panel (`widgets::lift_profile_chip`,
+  called by the lift pass through `Rig::lift_bar_member`), is the FOCUSED chip in opaque paint (the
+  strip's `ACCENT` focus capsule at the slot and the avatar over it), so it requests no backdrop
+  entry or `src` pass and needs no latched field. Only the tab track, with no menu up, is live
+  glass. The scrim behind a compact menu is
   `theme::underlay::DIM_COMPACT`, 30%. The face colours and shadow are theme roles
   (`MENU_GLASS_TOP/BOT`, `MENU_SHADOW*`); the face fades with the panel's cascaded alpha.
   `GlassRim::Menu` over the LIVE path (`draw_blur_backdrop`) would turn on a per-frame sharp band

@@ -1553,8 +1553,9 @@ pub enum LoopReq {
     AccountSignIn,
     AccountSignOut,
     /// PRESENTS the Settings surface, rooted at the page, over the same page, so the host route
-    /// does not move: `Root` for the account menu's Settings row, `LibraryFavourites` for the
-    /// Library options menu's Favorite libraries row.
+    /// does not move: `Root` for the account menu's Settings row and the top bar's
+    /// Settings pill ([`strip_settings`]), `LibraryFavourites` for the Library options menu's Favorite
+    /// libraries row.
     /// Reachable signed OUT as well: a person who cannot sign in has still received a copy of this
     /// software, and LG requires the privacy notice to be readable in the app rather than only on
     /// the store listing.
@@ -1562,6 +1563,14 @@ pub enum LoopReq {
     /// Lab builds only, and it changes no route: the tester stays where they were and the toast
     /// says what happened.
     AccountSendDiagnostics,
+}
+
+/// **The top bar's Settings pill** (`widgets::TAB_KEY_SETTINGS`): the one answer every page that
+/// wears the bar gives a press on it, the account menu's own Settings request
+/// ([`LoopReq::OpenSettings`] at [`SettingsPage::Root`]), so the two ways in open the same surface.
+/// `None` for any other element, so a page asks it before its own strip map.
+pub fn strip_settings(elem: u32) -> Option<AppFx> {
+    (elem == plx_ui::widgets::TAB_KEY_SETTINGS).then_some(AppFx::Loop(LoopReq::OpenSettings(SettingsPage::Root)))
 }
 
 /// Any host that carries this bundle. The screens under `screens/` are written against it, so the

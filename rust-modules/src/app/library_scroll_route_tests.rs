@@ -162,7 +162,7 @@ fn the_account_menu_never_opens_over_a_tucked_page(name: &str, mount: fn() -> Wo
             assert!(r.tuck() > 0.99, "{name}: premise: tucked before the route starts");
             let mut seen = Watched::default();
             drive(&mut r, leave, gap, &mut seen);
-            drive(&mut r, &[Key::Left; 5], gap, &mut seen);
+            drive(&mut r, &[Key::Right; 9], gap, &mut seen);
             drive(&mut r, &[Key::Ok], gap, &mut seen);
             for _ in 0..40 { r.step(vec![]); watch(&r, &mut seen); }
             assert!(seen.menu_frames > 0, "{name} (gap {gap}): premise: the route opened the account menu from the chip");
@@ -223,17 +223,20 @@ fn until_tuck_between(r: &mut World, lo: f32, hi: f32) {
 /// Each state mounts its own world, one after the other (a world holds the serial lock, which is not
 /// re-entrant, so the last one is gone before the next is mounted).
 fn a_click_on_the_chip_lands_only_where_the_bar_is_drawn(name: &str, mount: fn() -> World, deep: fn(&mut World)) {
-    use plx_ui::widgets::CHIP_FRAME;
     let menu_after = |r: &mut World, x: f32, y: f32| { r.click(x, y); super::account_menu_up(&r.d) };
-    let rest = CHIP_FRAME;
 
-    {
+    // The chip's resting slot is the track's last pill, wherever the page's strip puts it: read
+    // from the untucked bar, then held as the resting rect for the other two states.
+    let rest = {
         let mut r = mount();
         r.present_bar();
-        let (rect, _) = chip_stop(&r).unwrap_or_else(|| panic!("{name}: an untucked bar registers the chip"));
-        assert_eq!((rect.x, rect.y, rect.w, rect.h), (rest.x, rest.y, rest.w, rest.h), "{name}: untucked, the stop is the frame");
+        let (rest, _) = chip_stop(&r).unwrap_or_else(|| panic!("{name}: an untucked bar registers the chip"));
+        assert_eq!((rest.y, rest.w, rest.h), (plx_ui::widgets::TOP_BAR_Y, plx_ui::widgets::TAB_PILL_H, plx_ui::widgets::TAB_PILL_H),
+            "{name}: untucked, the stop is the chip's square slot on the bar");
+        assert!(rest.x > plx_ui::consts::SCR_W * 0.5, "{name}: the chip stands at the bar's right end ({rest:?})");
         assert!(menu_after(&mut r, rest.cx(), rest.cy()), "{name}: premise: a click on the untucked chip opens the account menu");
-    }
+        rest
+    };
 
     // Part way up: the click at the bottom edge of the RESTING rect is below the lifted chip.
     {

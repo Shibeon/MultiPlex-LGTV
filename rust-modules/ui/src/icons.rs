@@ -257,6 +257,9 @@ pub enum Icon {
     Movie,
     /// The television set — the top bar's TV Shows destination. MultiPlex's `tv` icon.
     Tv,
+    /// Two sliders — the top bar's Settings mark, at its right end. MultiPlex's `settings` icon
+    /// (same path), so Settings reads alike on every MultiPlex client.
+    Tune,
 }
 
 /// **Where a mark's INK sits inside its 24-unit viewBox**, as `(left, right)` fractions — and
@@ -380,6 +383,7 @@ fn src(id: Icon) -> &'static str {
         Icon::Home => include_str!("../../../assets/icons/home.svg"),
         Icon::Movie => include_str!("../../../assets/icons/movie.svg"),
         Icon::Tv => include_str!("../../../assets/icons/tv.svg"),
+        Icon::Tune => include_str!("../../../assets/icons/tune.svg"),
     }
 }
 

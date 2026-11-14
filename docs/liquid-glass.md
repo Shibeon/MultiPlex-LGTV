@@ -357,8 +357,8 @@ all three or none; "glass on Home only" is not an option, however tempting the f
 **Nor does the bar's WIDTH decide it (2026-10-30):** the bar gains entries and its labels change
 length with the language, so no strip drops to the flat capsule for being wide (it used to, past a
 ~672 px cap that silently took the glass from the Belarusian bar); a strip past `TAB_VIEW_MAX`
-scrolls inside a track that stays glass, and the unfurled profile chip is kept off the track by
-eliding its name to the room the bar leaves (`widgets::chip_name_budget`).
+scrolls inside a track that stays glass, and the profile chip is a pill inside that track
+(`TabFace::Avatar`), so the bar is one glass surface.
 It ships, and `/tmp/plxnative-flattabs` is the way back to the flat capsule for a comparison.
 Its density is not a constant — see §6.
 

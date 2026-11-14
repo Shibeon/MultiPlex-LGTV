@@ -251,8 +251,9 @@ record_flow() {
 }
 echo "=== focusfp: $PMS (seed $SEED), out=$OUT ==="
 # 1 boot -> Home -> chip -> grid   (the picker is suppressed by the injected token; a TV flow).
-#   MultiPlex's strip leads with Search, so the chip is two LEFTs from Home.
-record_flow 1 boot-home-chip-grid "" "up left left down down down" 'hubs: landed'
+#   MultiPlex's strip ends with Settings and the profile chip, so the chip is five RIGHTs from Home
+#   (Movies, TV Shows, My list, Settings, the chip; the divider before Settings is no stop).
+record_flow 1 boot-home-chip-grid "" "up right right right right right down down down" 'hubs: landed'
 # 2 grid -> Detail -> BACK
 record_flow 2 grid-detail-back "grid" "down ok sleep:2 back" 'hubs: landed'
 # 3 Home -> Library -> real grid card -> Detail -> BACK to the same Library card. The shot tokens

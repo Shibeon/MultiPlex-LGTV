@@ -131,31 +131,18 @@ fn continuous_document_rail_tracks_both_ends_and_disappears_when_content_fits() 
     assert_eq!(continuous_rail_geom(0.0, 300.0, 300.0), None);
 }
 
-/// **The chip really does sit LEFT of the pills, on their line.**
-///
-/// The D-pad rule every screen that wears the bar adopts — ◀ off the FIRST pill reaches the chip, ▶ walks
-/// back — is only sane while the chip is genuinely the bar's leftmost thing: [`TAB_SIDE_CLEAR`] is the
-/// margin that keeps the CENTRED strip off it, and a strip that grew far enough left to overlap would
-/// make the walk cross two controls occupying one place.
+/// **The track never leaves the side margins, however many pills it holds.** The profile chip is the
+/// strip's own last pill now (MultiPlex's bar), so nothing stands beside the track to keep clear of:
+/// what [`TAB_SIDE_CLEAR`] keeps is the overscan margin, and past it the pills scroll inside a track
+/// that stays where it is.
 #[test]
-fn the_profile_chip_sits_left_of_the_pills() {
-    let r = CHIP_FRAME;
-    // it shares the bar's line with the pills: one control height, one top edge
-    assert_eq!(r.y, TOP_BAR_Y);
-    // one control height with the pills, which is also what makes the focused chip's capsule
-    // the tab track's own band — the two read as one strip of chrome rather than as two
-    // objects at different heights (see `CHIP_D`)
-    assert_eq!(r.h, TAB_PILL_H);
-
-    // the widest strip the row will ever lay out, centred: its left edge must clear the chip
+fn the_widest_track_stays_inside_the_side_margins() {
     for n in 1..=16usize {
         let w = widths_for(n);
-        let track_l = (crate::consts::SCR_W - tab_view_w(&w)) * 0.5 - TAB_TRACK_PAD;
-        assert!(
-            track_l > r.x + r.w,
-            "n={n}: the tab track reaches x={track_l}, over a chip ending at {}",
-            r.x + r.w
-        );
+        let track = tab_geometry(&w, 0.0).track;
+        assert!(track.x >= crate::consts::MARGIN_X - 0.01 && track.x + track.w <= crate::consts::SCR_W - crate::consts::MARGIN_X + 0.01,
+            "n={n}: the track {track:?} leaves the margins");
+        assert_eq!(track.y + TAB_TRACK_PAD, TOP_BAR_Y);
     }
 }
 

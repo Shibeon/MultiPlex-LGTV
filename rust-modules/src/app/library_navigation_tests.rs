@@ -41,7 +41,8 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             .iter()
             .map(|member| member.elem)
             .collect::<Vec<_>>(),
-        vec![base + 4, base + 3, base, base + 1, base + 2, plx_ui::widgets::TAB_KEY_WATCHLIST]
+        vec![base + 3, base, base + 1, base + 2, plx_ui::widgets::TAB_KEY_WATCHLIST,
+            plx_ui::widgets::TAB_KEY_SETTINGS, plx_ui::widgets::TAB_KEY_CHIP]
     );
     let seat = |d: &mut Dispatcher<AppHost>, elem| {
         d.emit(
@@ -64,17 +65,22 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             tick(i),
             script_key(Key::Left, tick(i)),
         );
-        // MultiPlex's strip leads with Search, so the first ◀ off Home lands on it.
-        let expected = if i == 81 { base + 3 } else { base + 4 };
+        // MultiPlex's strip leads with Search, so the first ◀ off Home lands on it and the next stay
+        // there: the profile chip is at the bar's RIGHT end now, and the bar does not wrap.
+        let expected = base + 3;
         assert_eq!(
             d.focus(),
             Some(FocusKey {
                 entry,
                 elem: expected
             }),
-            "Search leads the pills and the profile chip is the left end, not a wrapping stop"
+            "Search leads the pills and is the left end, not a wrapping stop"
         );
     }
+    // The profile chip, at the bar's right end, is a stop but not a remembered pill.
+    seat(&mut d, plx_ui::widgets::TAB_KEY_CHIP);
+    frame(&mut d, &mut rig, AppArg::Library, tick(85), vec![]);
+    assert_eq!(d.focus(), Some(FocusKey { entry, elem: plx_ui::widgets::TAB_KEY_CHIP }));
     assert!(
         content_probe(&d, &rig).contains("pill=-1"),
         "the profile chip is not a remembered pill"
@@ -83,17 +89,13 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
         &mut d,
         &mut rig,
         AppArg::Library,
-        tick(85),
-        script_key(Key::Right, tick(85)),
-    );
-    assert_eq!(d.focus(), Some(FocusKey { entry, elem: base + 3 }));
-    frame(
-        &mut d,
-        &mut rig,
-        AppArg::Library,
         tick(86),
-        script_key(Key::Right, tick(86)),
+        script_key(Key::Left, tick(86)),
     );
+    assert_eq!(d.focus(), Some(FocusKey { entry, elem: plx_ui::widgets::TAB_KEY_SETTINGS }),
+        "◀ from the chip is Settings");
+    seat(&mut d, base);
+    frame(&mut d, &mut rig, AppArg::Library, tick(86), vec![]);
     assert_eq!(d.focus(), Some(FocusKey { entry, elem: base }));
     frame(
         &mut d,
@@ -136,7 +138,7 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             .strip
             .iter()
             .position(|member| member.elem == search.elem),
-        Some(1),
+        Some(0),
         "Search's displayed slot is not its stable control identity"
     );
     rig.take_library_reqs();

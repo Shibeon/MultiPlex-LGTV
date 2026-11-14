@@ -1670,8 +1670,8 @@ impl Bridge {
     }
 
     #[cfg(test)]
-    fn seed_chrome_for_test(&mut self, name: &str, initial: &str, labels: &[&str]) {
-        self.chrome.seed_for_test(name, initial, labels, &self.measure);
+    fn seed_chrome_for_test(&mut self, initial: &str, labels: &[&str]) {
+        self.chrome.seed_for_test(initial, labels, &self.measure);
     }
 
     pub(crate) fn home_command(&mut self, command: HomeCmd) -> bool {
@@ -3024,30 +3024,30 @@ impl Rig<AppHost> for Bridge {
         let p = plx_ui::Painter::root().alpha(nav.chrome_alpha).translate(0.0, -nav.chrome_lift);
         let chrome = self.chrome.read(self.strip.chip_expand_pos());
         self.strip.draw(chrome.labels, p, glass.tab_band_mut());
-        plx_ui::widgets::profile_chip_with(
-            p,
-            chrome.profile,
-            chrome.chip_expand,
-            glass.tab_face(),
-        );
+        // the avatar stands over the strip's focus capsule, which then reads as a ring round it
+        if let Some(slot) = self.strip.avatar_frame(chrome.labels) {
+            plx_ui::widgets::profile_chip_with(p, chrome.profile, chrome.chip_expand, slot);
+        }
     }
-    /// The chip's DRAWN rect: `chip_cap` at the strip's live unfurl and the captured name's width,
-    /// through the host page's tuck (`presented`), exactly what [`Bridge::draw_chrome`] draws.
+    /// The chip's DRAWN rect: its slot at the strip's right end at the strip's live scroll
+    /// (`StripRender::avatar_frame`), through the host page's tuck (`presented`), exactly where
+    /// [`Bridge::draw_chrome`] draws it.
     fn bar_member_rect(&self, elem: u32, presented: plx_ui::screen::NavPresentation) -> Option<plx_ui::Rect> {
-        (elem == plx_ui::widgets::TAB_KEY_CHIP).then(|| {
-            let chrome = self.chrome.read(self.strip.chip_expand_pos());
-            presented.chrome_rect(plx_ui::widgets::chip_cap(chrome.chip_expand.clamp(0.0, 1.0), chrome.profile.name_w))
-        })
+        if elem != plx_ui::widgets::TAB_KEY_CHIP { return None; }
+        let chrome = self.chrome.read(self.strip.chip_expand_pos());
+        self.strip.avatar_frame(chrome.labels).map(|slot| presented.chrome_rect(slot))
     }
-    /// The account menu's chip lift (the dispatcher's `Z::OPENER` pass): the SAME captured profile and
-    /// unfurl [`Bridge::draw_chrome`] used, on the same painter (the host page's tuck, alpha and
-    /// lift), over the stack's frozen ground. The material is this frame's tab face from `GlassPlan`.
+    /// The account menu's chip lift (the dispatcher's `Z::OPENER` pass): the SAME captured profile
+    /// [`Bridge::draw_chrome`] used, in the same slot, on the same painter (the host page's tuck,
+    /// alpha and lift). The lit chip is opaque paint (the focus capsule and the avatar), so it
+    /// needs neither this frame's tab face nor the stack's frozen ground.
     fn lift_bar_member(&mut self, elem: u32, presented: plx_ui::screen::NavPresentation,
-        material: Option<plx_gfx::gfx::GlassFace>, ground: &plx_ui::underlay::UnderlayField) {
+        _material: Option<plx_gfx::gfx::GlassFace>, _ground: &plx_ui::underlay::UnderlayField) {
         if elem != plx_ui::widgets::TAB_KEY_CHIP { return; }
         let chrome = self.chrome.read(self.strip.chip_expand_pos());
+        let Some(slot) = self.strip.avatar_frame(chrome.labels) else { return };
         let p = plx_ui::Painter::root().alpha(presented.chrome_alpha).translate(0.0, -presented.chrome_lift);
-        plx_ui::widgets::lift_profile_chip(p, chrome.profile, chrome.chip_expand, material, ground);
+        plx_ui::widgets::lift_profile_chip(p, chrome.profile, slot);
     }
     fn page_alpha(&self) -> f32 { plx_ui::nav::page_alpha() }
     fn navigation_presentation(&self) -> plx_ui::screen::NavPresentation {
@@ -5552,6 +5552,9 @@ mod sort_filter_vocabulary_route_tests;
 #[cfg(test)]
 #[path = "account_menu_route_tests.rs"]
 mod account_menu_route_tests;
+#[cfg(test)]
+#[path = "settings_pill_route_tests.rs"]
+mod settings_pill_route_tests;
 #[cfg(test)]
 #[path = "card_rest_route_tests.rs"]
 mod card_rest_route_tests;

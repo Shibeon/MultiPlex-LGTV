@@ -1,5 +1,5 @@
 //! The **profile menu** — a registered `Style::Sheet` surface on the shared `ModalStack`, opened
-//! from the top-left profile chip. Switch Plex Home profile ("Change profile" → who's-watching),
+//! from the profile chip at the right end of the top bar. Switch Plex Home profile ("Change profile" → who's-watching),
 //! "Sign out", "Sign in", Settings, and — in a lab build — "Send diagnostics".
 //!
 //! **Navigation owns its lifetime, its phase, its input scope and its dim.** It was
@@ -18,14 +18,11 @@
 //! emptiness told a signed-in owner they were signed out. `peek`, not `load`: a menu opening must
 //! never be able to WRITE the session file (`ci/check-deps.sh`'s `sessionwrite` gate).
 //!
-//! **[`chip_label`] lives here, beside the rows it has to agree with.** `ui/widgets.rs`'s
-//! `profile_chip` labelled itself from `title.is_empty()`, so on a single-user account the two
-//! surfaces disagreed on one screen: the menu headed itself with the owner's name while the chip
-//! that opens it said "Sign in". Fixed 2026-08-23 by MOVING THE WORDS to one resolver rather than
-//! writing the match a second time; two surfaces cannot drift on a question only one of them
-//! answers. That is why `ui/widgets.rs` and `app/chrome.rs` both call INTO this module — the one
-//! place in the tree where `ui/` names `screens/` in production code, and a debt that dies with
-//! `profile_chip`'s standalone re-derivation when the frame plan lands (phase 11).
+//! **The menu names the account; the chip does not.** The chip used to unfurl a label, and the
+//! menu dropped its head when that head only repeated it. MultiPlex's bar puts the chip inside the
+//! track as a bare avatar, so the menu is now the one place the account is named: its head is
+//! always the account's name, or the Account label for a signed-in account with no name and for a
+//! signed-out device.
 
 use std::borrow::Cow;
 
@@ -131,36 +128,6 @@ impl AccountInputs {
     }
 }
 
-/// **What the profile CHIP calls the user** — the unfurled name beside the avatar, and the initial
-/// inside it (its first character).
-///
-/// It lives here, not in `ui::widgets`, because it is a statement about the ACCOUNT and it has to
-/// agree with the menu the chip opens. Every arm is one of this module's own answers:
-///
-/// - a name — the active managed profile, else the persisted roster's owner ([`Account::name`]);
-/// - signed in and nameless — the localized Account label, the same word the menu heads itself with, which
-///   is a missing NAME and not a missing user;
-/// - signed out — the label of the one row the menu then offers, so the chip and the menu behind it
-///   cannot say different things about the same press.
-///
-/// **The bug this replaced** was the chip deciding all three from `current().title.is_empty()`. An
-/// account **without Plex Home** never gets a profile written at all, so that title is empty for a
-/// signed-in owner and the chip offered them "Sign in" — which is the first thing a reviewer on a
-/// fresh test account sees, and the last thing they should.
-pub fn chip_label(acc: &Account) -> String {
-    chip_text(acc.name.as_deref(), acc.signed_in)
-}
-
-/// [`chip_label`] from the two facts it is decided by, so the menu's own builder
-/// ([`account_form`], which holds [`AccountInputs`] and no `Account`) asks the SAME rule.
-fn chip_text(name: Option<&str>, signed_in: bool) -> String {
-    match (name, signed_in) {
-        (Some(n), _) => n.to_string(),
-        (None, true) => plx_platform::i18n::msg::settings_account_title().to_string(),
-        (None, false) => label(Action::SignIn).to_string(),
-    }
-}
-
 fn label(a: Action) -> &'static str {
     match a {
         Action::ChangeProfile => plx_platform::i18n::msg::settings_account_change_profile(),
@@ -174,19 +141,16 @@ fn label(a: Action) -> &'static str {
 /// The menu's header text and its one-section [`Form`], from [`AccountInputs`] — pure, so the
 /// text-fit suite drives the real builder. A named account's own name is user text (the managed
 /// profile or the roster owner), so it is a `server_header`; the fallback "Account" label is this
-/// app's own word for a nameless signed-in account. A head that only repeats the chip's own label
-/// ([`chip_label`]) is not drawn. **Reordering the menu is moving a line.**
+/// app's own word for a nameless signed-in account and for a signed-out device. The head is always
+/// drawn: the chip this menu hangs from is a bare avatar, so the menu is where the account is
+/// named. **Reordering the menu is moving a line.**
 fn account_form(inputs: &AccountInputs) -> (String, Form<Action, Action, Infallible>) {
     let header = inputs
         .name
         .clone()
         .unwrap_or_else(|| plx_platform::i18n::msg::settings_account_title().to_string());
-    // The chip this menu hangs from already says who the account is (N-c): a head that only repeats
-    // it is dropped (an empty header draws no header row), so the panel opens on its first action.
-    // Signed out, the chip reads "Sign in" and the head "Account": different words, so it stays.
-    let repeats_chip = header == chip_text(inputs.name.as_deref(), inputs.signed_in);
-    let mut head = Section::new(if repeats_chip { String::new() } else { header.clone() });
-    if inputs.name.is_some() && !repeats_chip {
+    let mut head = Section::new(header.clone());
+    if inputs.name.is_some() {
         head = head.server_header();
     }
     let mut sec = FormSection::from_head(head);
@@ -219,17 +183,26 @@ fn action_row(a: Action) -> Row {
         .destructive(matches!(a, Action::SignOut))
 }
 
-/// Top-left popover, tucked under the profile chip.
+/// The popover hung under the profile chip at the bar's right end.
 ///
-/// `px` is the app's own side margin: it was a literal 80, which sat 16px outside the 5% overscan
-/// frame — and the chip it hangs off is at `MARGIN_X`, so aligning the two is what the design meant
-/// anyway. `py` clears `widgets::TOP_BAR_BOTTOM` (130) by a `space::MD`.
-fn panel_rect(table: &TableView, measure: &dyn plx_machine::machine::Measure) -> Rect {
+/// Its cross axis is the shared header-menu rule ([`plx_ui::popover::hang_x`]): the chip stands
+/// right of the screen's centre, so the panel's right edge is the chip's, kept inside the safe
+/// frame. Before the chip's live rect has been handed over (`opener_rect`) the panel stands at the
+/// safe frame's right edge, where the chip is. `py` clears `widgets::TOP_BAR_BOTTOM` (130) by a
+/// `space::MD`.
+fn panel_rect(table: &TableView, measure: &dyn plx_machine::machine::Measure, chip: Option<Rect>) -> Rect {
     let pw = table.menu_panel_width(measure);
-    let px = plx_ui::consts::MARGIN_X;
+    let px = panel_x(chip, pw);
     let py = 154.0f32;
     let ph = table.measured_height().clamp(120.0, 440.0);
     Rect::new(px, py, pw, ph)
+}
+
+/// The panel's left edge for a width `w`, hung from the chip (or the safe frame's right edge).
+fn panel_x(chip: Option<Rect>, w: f32) -> f32 {
+    let safe = plx_ui::consts::SAFE;
+    let chip = chip.unwrap_or(Rect::new(safe.x + safe.w - 1.0, safe.y, 1.0, 1.0));
+    plx_ui::popover::hang_x(chip, w, safe)
 }
 
 /// The panel at its TALLEST, for the overscan audit ([`plx_ui::consts::SAFE`]) — the clamp
@@ -237,10 +210,10 @@ fn panel_rect(table: &TableView, measure: &dyn plx_machine::machine::Measure) ->
 /// in and the height comes from a `TableView` no host test can measure.
 #[cfg(any(test, feature = "test-support"))]
 pub fn overscan_rects(out: &mut Vec<(&'static str, plx_ui::Rect)>) {
-    let r = panel_rect(&TableView::new(), &plx_ui::fixture::FixtureMeasure);
+    let r = panel_rect(&TableView::new(), &plx_ui::fixture::FixtureMeasure, None);
     out.push((
         "account menu panel",
-        plx_ui::Rect::new(r.x, r.y, plx_ui::table::MENU_MAX_W, 440.0),
+        plx_ui::Rect::new(panel_x(None, plx_ui::table::MENU_MAX_W), r.y, plx_ui::table::MENU_MAX_W, 440.0),
     ));
 }
 
@@ -296,7 +269,7 @@ impl AccountMenuScreen {
     }
 
     fn frame(&self, measure: &dyn plx_machine::machine::Measure) -> Rect {
-        panel_rect(&self.form.table, measure)
+        panel_rect(&self.form.table, measure, self.popover.opener())
     }
 
     /// Commit the focused row. **Every action dismisses**, exactly as the legacy `on_ok` did by
@@ -660,7 +633,7 @@ impl AuthLike for MenuHost {
         step(&mut menu, &read, ScreenEvent::Mount);
         // the dispatcher hands the surface the chip's live drawn rect before every draw
         // (`Screen::opener_rect`); this rig has no dispatcher, so it plays that part
-        <AccountMenuScreen as Screen<MenuHost>>::opener_rect(&mut menu, plx_ui::widgets::chip_cap(0.0, 0.0));
+        <AccountMenuScreen as Screen<MenuHost>>::opener_rect(&mut menu, Rect::new(1720.0, 26.0, plx_ui::widgets::TAB_PILL_H, plx_ui::widgets::TAB_PILL_H));
         let settled = menu.frame(&plx_ui::fixture::FixtureMeasure);
         assert!(settled.w > 120.0 && settled.h > 120.0, "rig: the menu built its rows ({settled:?})");
         let mut ms = 0;
@@ -931,44 +904,27 @@ impl AuthLike for MenuHost {
         assert_eq!(cleared, "Gleb");
     }
 
-    /// **The chip and the menu, on one account state.** The chip used to answer this from
-    /// `current().title.is_empty()` and so told a signed-in owner with no Plex Home to sign in; the
-    /// menu behind that same press already headed itself "Gleb" and offered "Sign out". One
-    /// resolver now, and this is the test that says the two agree.
+    /// **The menu names the account, whatever the state.** The chip is a bare avatar now, so the
+    /// head is the one place the account is named: the roster owner of a single-user account (whose
+    /// active profile is empty, the case that once told a signed-in owner to sign in), the Account
+    /// label for a nameless signed-in account, and the Account label over Sign in when signed out.
     #[test]
-    fn the_chip_and_its_menu_say_the_same_thing_about_the_account() {
-        // THE BUG: single-user account, empty active profile, named by the roster's admin entry
+    fn the_menu_heads_itself_with_the_account_in_every_state() {
         let s = local(Session {
             account_token: "acct".into(),
             home_users: vec![owner("Gleb")],
             ..Default::default()
         });
         let acc = s.account(Some(&UserRef::default()));
-        assert_eq!(chip_label(&acc), "Gleb");
-        assert_eq!(
-            chip_label(&acc),
-            menu(&s, Some(&UserRef::default())).0,
-            "chip and header, one name"
-        );
-        assert!(
-            !rows_of(&acc, false).contains(&Action::SignIn),
-            "…and the menu never offered Sign in"
-        );
+        assert_eq!(menu(&s, Some(&UserRef::default())).0, "Gleb");
+        assert!(!rows_of(&acc, false).contains(&Action::SignIn), "…and the menu never offered Sign in");
 
-        // signed in, no roster has ever landed: a missing NAME, not a missing user
-        let nameless = local(Session {
-            account_token: "acct".into(),
-            ..Default::default()
-        })
-        .account(None);
-        assert_eq!(chip_label(&nameless), plx_platform::i18n::msg::settings_account_title());
+        let nameless = local(Session { account_token: "acct".into(), ..Default::default() });
+        assert_eq!(account_form(&AccountInputs::of(&nameless.account(None), false)).0,
+            plx_platform::i18n::msg::settings_account_title());
 
-        // Signed out: the chip says exactly what the ACCOUNT row behind it says. That row is
-        // first, and the assertion is on `[0]` rather than on the whole set — the set also carries
-        // Settings, which is not an account action and which the chip has never claimed to speak
-        // for.
         let out = Session::default().account(None);
-        assert_eq!(chip_label(&out), label(Action::SignIn));
+        assert_eq!(account_form(&AccountInputs::of(&out, false)).0, plx_platform::i18n::msg::settings_account_title());
         assert_eq!(rows_of(&out, false)[0], Action::SignIn);
     }
 
@@ -1027,30 +983,38 @@ impl AuthLike for MenuHost {
             [Action::Settings, Action::SignOut]);
     }
 
-    /// **The menu does not head itself with what the chip above it already says** (N-c: "DEMO" over the
-    /// panel the chip "DEMO" opened). The head is dropped exactly when it would read as the chip's own
-    /// label (`chip_label`); a header the chip does not say stays, and the rows are the same either way.
+    /// **The head is always drawn** (it used to be dropped when it repeated the chip's unfurled
+    /// name, N-c; the chip no longer says one), and the rows are the same with any head.
     #[test]
-    fn the_head_is_dropped_only_when_it_repeats_the_chip() {
+    fn the_head_is_always_drawn() {
         let heads = |inputs: &AccountInputs| {
             let (_, form) = account_form(inputs);
             let mut t = FormTable::<Action, Action, Infallible>::new(crate::registry::BAND);
             t.set(form, None);
             t.table.sections.iter().map(|section| section.header.clone()).collect::<Vec<_>>()
         };
-        // a named account: the chip says the name, so the menu does not say it again
         let named = local(Session { account_token: "acct".into(), home_users: vec![owner("Gleb")], ..Default::default() });
         let named = named.account(Some(&UserRef::default()));
-        assert_eq!(chip_label(&named), "Gleb", "premise: the chip says the name");
         let named_inputs = AccountInputs::of(&named, false);
-        assert!(heads(&named_inputs).iter().all(String::is_empty), "named: no head repeats the chip: {:?}", heads(&named_inputs));
-        // signed out the chip says "Sign in" and the menu "Account": different words, so the head stays
+        assert_eq!(heads(&named_inputs), ["Gleb"]);
         let out = Session::default().account(None);
-        assert_ne!(chip_label(&out), plx_platform::i18n::msg::settings_account_title(), "premise: the chip says another word");
-        assert_eq!(heads(&AccountInputs::of(&out, false)), [plx_platform::i18n::msg::settings_account_title()],
-            "signed out: the \"Account\" head stays");
-        // the rows are the same with the head or without
+        assert_eq!(heads(&AccountInputs::of(&out, false)), [plx_platform::i18n::msg::settings_account_title()]);
         assert_eq!(ids(account_form(&named_inputs).1), rows_of(&named, false));
+    }
+
+    /// **The panel hangs from the chip at the bar's right end** (`popover::hang_x`): its right edge
+    /// is the chip's, inside the safe frame, and before the chip's rect arrives it stands at the
+    /// safe frame's right edge.
+    #[test]
+    fn the_panel_hangs_right_aligned_under_the_chip() {
+        let safe = plx_ui::consts::SAFE;
+        let chip = Rect::new(1700.0, 26.0, plx_ui::widgets::TAB_PILL_H, plx_ui::widgets::TAB_PILL_H);
+        let x = panel_x(Some(chip), 400.0);
+        assert_eq!(x + 400.0, chip.x + chip.w, "the panel's right edge is the chip's");
+        let fallback = panel_x(None, 400.0);
+        assert_eq!(fallback + 400.0, safe.x + safe.w, "no chip yet: the safe frame's right edge");
+        let wide = Rect::new(safe.x + safe.w - 30.0, 26.0, 60.0, 60.0);
+        assert!(panel_x(Some(wide), 400.0) + 400.0 <= safe.x + safe.w, "kept inside the safe frame");
     }
 
     /// **Sign out is the last row, behind a separator.** The account menu used to put it one Down

@@ -646,7 +646,7 @@ union. In uninstrumented interleaved `home-grid` runs, removing only that reques
 presented FPS from 34–35 to 42; the HWCNT trace confirmed the live region returned to `728×220`.
 The chip now reproduces the track's solved frost and rim with one local rounded-rect pass. The
 centred track is the band's only backdrop owner; the visual surround remains at rest and unfurls
-with the profile name exactly as before.
+with the profile name exactly as before. **Superseded again 2026-11-14:** the chip is `TabFace::Avatar`, a pill inside the tab track (the track's last slot), so there is no separate chip surface, no surround, no name unfurl and no `chip_capsule`; the bar is one glass surface.
 
 ### What the material costs, in counters (2026-08-19, the shipped default)
 
@@ -899,7 +899,9 @@ below, and they are consistent with it.
 > 88); and the owner's Belarusian strip (679 px once the Watchlist mark joined the bar) lost the
 > glass for 7 px. The cap is gone: the bar is glass at any width, a strip past `TAB_VIEW_MAX`
 > scrolls inside a track that stays glass, and the unfurled chip is kept off the track by its NAME
-> budget instead (`widgets::chip_name_budget`). The widest bar's cost is measured, not priced:
+> budget instead (`widgets::chip_name_budget`; **superseded 2026-11-14:** the chip is
+> `TabFace::Avatar` inside the track and unfurls no name, so `chip_name_budget` is deleted and the
+> chip's slot is the track's own). The widest bar's cost is measured, not priced:
 > 2026-10-30, `FLAVOR=debug`, `ARM_PROFILE=release`, mock, single runs apart from the two 1544 px
 > `hero-pong` legs. `GPU_ACTIVE` p50 on `hero-pong` reads 7.61M flat, 8.70M at 679 px and 9.65M at
 > 1544 px, the widest track. Missed refreshes in cycles 2-60 read 10 flat, 13 at 679 px, and 14 and

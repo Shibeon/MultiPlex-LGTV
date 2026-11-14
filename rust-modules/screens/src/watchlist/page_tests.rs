@@ -1179,9 +1179,9 @@ fn a_scrolled_rest_leaves_no_header_under_the_chrome() {
 /// row, riding the page, is still passing through the band the chip and the strip stand in: the
 /// profile chip painted over the page title ("D ist"; design review F3, the Watchlist's up-move).
 /// On every frame the title is drawn at all (`head_alpha`, the alpha the row's draw wears, above 2%)
-/// its text box must not meet the profile chip as the chrome pass draws it that frame (the resting
-/// [`plx_ui::widgets::CHIP_FRAME`] lifted by the tuck, as `NavPresentation::chrome_rect` does) while
-/// the chip is drawn; and the title arrives over more than a pop and is whole once the page is home.
+/// its text box must not meet the bar's band as the chrome pass draws it that frame (the band
+/// between the side margins, where the track and the chip inside it may stand, lifted by the tuck,
+/// as `NavPresentation::chrome_rect` does) while the bar is drawn; and the title arrives over more than a pop and is whole once the page is home.
 /// (The text census gives the title's place; the alpha is read from the page because the host
 /// harness's recording painter keeps no alpha: `draw_runs` without a discovery pass segfaults.)
 #[test]
@@ -1199,8 +1199,9 @@ fn the_returning_chrome_never_draws_over_the_header_row_still_arriving() {
     for n in 0..120 {
         h.run(1);
         let tuck = tuck(&h);
-        let chip = plx_ui::widgets::CHIP_FRAME;
-        let chip = plx_ui::Rect { y: chip.y - chrome_lift(tuck), ..chip };
+        let pad = plx_ui::widgets::TAB_TRACK_PAD;
+        let chip = plx_ui::Rect::new(plx_ui::consts::MARGIN_X, plx_ui::widgets::TOP_BAR_Y - pad - chrome_lift(tuck),
+            plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X, plx_ui::widgets::TAB_PILL_H + 2.0 * pad);
         if tuck < 0.98 { chip_drawn += 1; }
         let alpha = h.screen.head_alpha();
         if alpha > 0.02 && alpha < 0.98 { arriving += 1; }

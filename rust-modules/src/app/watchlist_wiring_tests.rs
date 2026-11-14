@@ -160,8 +160,10 @@ fn the_strip_press_mounts_the_page_and_the_strip_carries_the_bookmark() {
     let keys: Vec<u32> = d.nav.tabs.strip.iter().map(|member| member.elem).collect();
     let at = |key| keys.iter().position(|k| *k == key).unwrap_or_else(|| panic!("{key} is on the strip: {keys:?}"));
     assert!(at(plx_ui::widgets::TAB_KEY_SEARCH) < at(plx_ui::widgets::TAB_KEY_WATCHLIST),
-        "Search leads the strip and the bookmark closes it");
-    assert_eq!(keys.last(), Some(&plx_ui::widgets::TAB_KEY_WATCHLIST), "the bookmark is the last destination");
+        "Search leads the strip and the bookmark closes the destinations");
+    assert_eq!(&keys[at(plx_ui::widgets::TAB_KEY_WATCHLIST) + 1..],
+        &[plx_ui::widgets::TAB_KEY_SETTINGS, plx_ui::widgets::TAB_KEY_CHIP],
+        "the bookmark is the last destination: only Settings and the profile chip follow it");
 }
 
 /// **The tab's arrival seats in the page, not on the strip.** The page mounts empty (its rows are

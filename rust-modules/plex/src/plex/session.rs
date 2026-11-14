@@ -5743,10 +5743,9 @@ pub fn client_id_from_entropy(mut b: [u8; 16]) -> String {
 /// path enters Home without ever writing one. Reading that emptiness as "signed out" is how a
 /// signed-in owner ends up being offered "Sign in".
 ///
-/// Converted: `screens/account_menu.rs`, and — since 2026-08-23 — the shared top bar's profile chip
-/// (`ui/widgets.rs` `profile_chip`), which was the remaining half of the bug. Both now word
-/// themselves through ONE resolver, `screens::account_menu::chip_label`, so the chip and the menu it
-/// opens cannot disagree about the same account again.
+/// Converted: `screens/account_menu.rs` (the menu names the account) and the shared top bar's
+/// profile chip, whose initial is the first character of [`Account::name`]; the chip says no
+/// name of its own any more, so there is nothing for the two to disagree on.
 pub struct Account {
     /// **This device** holds a session: a plex.tv account token, or at least a server + PMS token
     /// it can stream on. The opposite of "offer them Sign in". Note it describes the session ON

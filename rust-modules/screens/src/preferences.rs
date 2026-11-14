@@ -134,11 +134,10 @@ impl Subject {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Whose { Nobody, Profile(String) }
 impl Whose {
-    /// The seated profile as the profile chip names it (`chrome.rs`): the active profile's title,
-    /// else the roster's owner, else the Account label of a signed-in owner with no name. It reads
-    /// the chip's own session accessors; `account_menu::chip_label` is that rule, but a screen never
-    /// names a sibling. A seat implies a signed-in account, so the chip's signed-out arm (the Sign
-    /// in label) cannot be this page's. Returns the publication generation it read, to notice a change.
+    /// The seated profile as the account menu names it: the active profile's title, else the
+    /// roster's owner, else the Account label of a signed-in owner with no name. It reads the same
+    /// session accessors (`Session::account`); a screen never names a sibling. Returns the
+    /// publication generation it read, to notice a change.
     fn now(inputs: &crate::registry::ScreenInputs) -> (u32, Self) {
         let profile = &inputs.profile;
         if profile.seat() == plx_plex::plex::session::Seat::Unseated { return (profile.generation, Self::Nobody); }

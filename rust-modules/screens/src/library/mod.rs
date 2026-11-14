@@ -1100,6 +1100,7 @@ impl LibraryScreen {
             _ => None,
         };
         if let Some(req) = req { fx.push(Fx::App(AppFx::Library(req))); return Handled::Yes; }
+        if let Some(settings) = crate::registry::strip_settings(elem) { fx.push(Fx::App(settings)); return Handled::Yes; }
         if elem == RETRY && self.readout == Readout::Failed
             && super::plaintext_question::asks(self.plaintext.verdict())
         {

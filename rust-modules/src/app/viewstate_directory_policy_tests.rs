@@ -681,8 +681,8 @@ fn two_bridges_keep_their_own_captured_profile_and_labels_for_a_scrim_lift() {
     let _restore = Restore(plx_plex::plex::session::current_snapshot());
     let mut a = Bridge::for_test(|| 0);
     let mut b = Bridge::for_test(|| 0);
-    a.seed_chrome_for_test("Owner A", "A", &["Home", "Movies", ""]);
-    b.seed_chrome_for_test("Owner B", "B", &["Home", "TV Shows", ""]);
+    a.seed_chrome_for_test("A", &["Home", "Movies", ""]);
+    b.seed_chrome_for_test("B", &["Home", "TV Shows", ""]);
     plx_plex::plex::session::publish_profile_for_test(Some(plx_plex::plex::session::UserRef {
         title: "Global B".into(),
         ..Default::default()
@@ -691,9 +691,8 @@ fn two_bridges_keep_their_own_captured_profile_and_labels_for_a_scrim_lift() {
     // the lift (`Rig::lift_bar_member`) reads exactly this: the bridge's own captured chrome
     let ar = a.chrome.read(0.0);
     let br = b.chrome.read(0.0);
-    assert_eq!(ar.profile.name.to_bytes(), b"Owner A");
     assert_eq!(ar.profile.initial.to_bytes(), b"A");
     assert_eq!(ar.labels.faces, [plx_ui::widgets::TabFace::Label("Home".into()), plx_ui::widgets::TabFace::Label("Movies".into()), plx_ui::widgets::TabFace::Icon(plx_ui::icons::Icon::Search)]);
-    assert_eq!(br.profile.name.to_bytes(), b"Owner B");
+    assert_eq!(br.profile.initial.to_bytes(), b"B");
     assert_eq!(br.labels.faces, [plx_ui::widgets::TabFace::Label("Home".into()), plx_ui::widgets::TabFace::Label("TV Shows".into()), plx_ui::widgets::TabFace::Icon(plx_ui::icons::Icon::Search)]);
 }

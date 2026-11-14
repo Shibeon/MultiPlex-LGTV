@@ -2735,84 +2735,26 @@ pub fn art_scrim(p: Painter, card: Rect, rad: f32, h: f32, a: f32) {
 /// The start of Detail's three-stop bottom shade (`landing_hero::base_scrim_ramp`).
 pub const HERO_BASE_SCRIM_Y0: f32 = 300.0;
 
-/// The profile chip's diameter: ONE control height with the tab pills and the circle-button
-/// family, so the focused chip's capsule — the avatar plus [`TAB_TRACK_PAD`] all round — is
-/// exactly the tab-bar track's band, and the two sit concentric on the top chrome line.
-pub const CHIP_D: f32 = TAB_PILL_H;
-/// Avatar → name air inside the expanded chip, and the capsule's tail past the name. The tail is
-/// bigger so the name isn't crowded against the round end (the tab track reads the same: its own
-/// 8px inset plus the end pill's 18px label padding).
-const CHIP_NAME_GAP: f32 = 14.0;
-const CHIP_NAME_TAIL: f32 = 24.0;
-/// The CEILING of the name budget — a long profile name elides rather than growing the capsule
-/// into the CENTERED tab track sitting a few hundred px to its right. It is a ceiling and not the
-/// budget: the strip may be any width, so the budget a given bar allows is [`chip_name_budget`],
-/// which is this or the room the bar leaves, whichever is less.
-const CHIP_NAME_MAX: f32 = 320.0;
-/// The narrowest name budget worth unfurling for — an ellipsis and a glyph or two (three BODY
-/// ems). Under it the bar leaves the chip no name at all ([`chip_name_budget`] answers `0`) and the
-/// capsule stays the closed circle: a name elided to a lone "…" teaches nothing.
-const CHIP_NAME_MIN: f32 = 3.0 * theme::size::BODY as f32;
-/// **The chip's frame — one rect, owned here, for every page that wears the bar.**
+/// **The profile chip's SLOT** — the bar's RIGHT END ([`TabFace::Avatar`], MultiPlex's bar: a round
+/// avatar inside the same capsule track, after Settings). One square pill the size of the Search and
+/// Settings marks ([`TAB_PILL_H`]), so the strip's travelling focus capsule lands on it exactly as on
+/// any other pill, and the chip and the track are one glass band by construction: the chip has no
+/// capsule of its own any more. The slot's rect is where the strip lays it out
+/// ([`StripRender::avatar_frame`], [`tab_members`]), never a constant — the chip moves with the
+/// strip's width, so a page reads it from the strip.
 ///
-/// A CONSTANT rather than a rect recorded at draw the way [`tab_pill_at`]'s are, and the asymmetry
-/// is the geometry rather than an oversight: the pills SCROLL inside their track, so where one was
-/// drawn is a fact only that draw knows, while the chip sits at the margin on the top-bar line and
-/// never moves within the bar. It is the chip's RESTING frame: a page that tucks the bar draws it
-/// lifted ([`crate::screen::NavPresentation::chrome_rect`]), and the chip's pointer stop is
-/// registered at the lifted rect (or not at all once the bar is not drawn), never at this one. `Rect::new(MARGIN_X, TOP_BAR_Y, CHIP_D, CHIP_D)` used to be written out in
-/// `home.rs`, `library.rs` and `search/mod.rs` — and only the first of the three also recorded it
-/// for a hit test, which is exactly how a control drawn on three screens came to be clickable on
-/// one.
-/// **It is the CAPSULE that lands on the margin, not the avatar** — the chip is a control in the
-/// top BAND, and the band's own material (the tab track) is inset the same [`TAB_TRACK_PAD`] from
-/// its pills. Written as `MARGIN_X` flat until 2026-08-23, which put the focused capsule's left edge
-/// at 88, i.e. 8px into the overscan exclusion zone, on every page that wears this bar.
-pub const CHIP_FRAME: Rect = Rect::new(
-    crate::consts::MARGIN_X + TAB_TRACK_PAD,
-    TOP_BAR_Y,
-    CHIP_D,
-    CHIP_D,
-);
-
-/// **The focused capsule's rect — the ONE expression, drawn and priced from the same place.**
-///
-/// [`profile_chip_with`] draws this and the clearance against the track prices it
-/// ([`chip_name_budget`]); until 2026-08-21 they were two arithmetics that happened to agree: the
-/// draw built the rect inline and a constant restated the same seven terms by hand, in a different
-/// file position, so a pad added to one would have left the other quietly describing a capsule
-/// nobody draws. That rect is what [`chip_name_budget`] keeps
-/// clear of the track, i.e. what keeps the band's two translucent faces from touching — the
-/// design-system rule for a graded field applies with more force here than it does to a scrim: the
-/// drawn shape and the shape a test grades must be one expression, not two that agree.
-///
-/// `e` is the unfurl, 0..1; `name_w` the elided name's measured width ([`CHIP_NAME_MAX`] is the
-/// ceiling of its budget, so `chip_cap(1.0, CHIP_NAME_MAX)` is the widest capsule the control can
-/// ever draw). Only the WIDTH moves — the capsule grows rightward off a fixed left edge. **A chip
-/// with no name (`name_w == 0`) has nothing to unfurl for: it stays the closed circle at every
-/// `e`**, the gap and the tail being the name's air and not the capsule's own width — which is what
-/// a bar too wide to leave the name any room asks of it ([`chip_name_budget`]).
-pub const fn chip_cap(e: f32, name_w: f32) -> Rect {
-    let closed = CHIP_D + 2.0 * TAB_TRACK_PAD;
-    let open = if name_w > 0.0 {
-        closed + CHIP_NAME_GAP + name_w + CHIP_NAME_TAIL
-    } else {
-        closed
-    };
-    Rect::new(
-        CHIP_FRAME.x - TAB_TRACK_PAD,
-        CHIP_FRAME.y - TAB_TRACK_PAD,
-        closed + (open - closed) * e,
-        CHIP_D + 2.0 * TAB_TRACK_PAD,
-    )
-}
-
-/// The chip unfurl's stiffness — brisk, a touch stiffer than the hero slide.
+/// The avatar stands [`CHIP_RING`] inside the slot: focused, the capsule under it shows as a ring
+/// round the picture, which is the chip's whole focus mark.
+pub const CHIP_RING: f32 = 6.0;
+/// The avatar's diameter inside its slot.
+pub const CHIP_D: f32 = TAB_PILL_H - 2.0 * CHIP_RING;
+/// The chip's focus spring (`StripRender::chip_expand_pos`): the avatar's perimeter stroke lights
+/// with it. Brisk, a touch stiffer than the hero slide.
 const K_CHIP: f32 = 300.0;
 
 /// **What in the shared top bar holds the remote.** The bar is ONE control across Home, the Library
-/// and Search, and it has exactly two kinds of stop — the chip at the margin and a pill of the
-/// centred strip — so a screen answers with one value instead of with two booleans that could both
+/// and Search, and it has exactly two kinds of stop — the chip at the strip's right end and every
+/// other pill — so a screen answers with one value instead of with two booleans that could both
 /// say yes. [`StripRender::update`] takes it, which is what makes every screen animate both stops
 /// by construction (the same argument that put the strip's scroll and its capsules there).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -2825,12 +2767,14 @@ pub enum TopFocus {
     Pill(usize),
 }
 impl TopFocus {
-    /// The pill index the strip's own machinery wants, or -1. The strip predates [`TopFocus`] and
+    /// The strip index focus is on, or -1: a pill's own, or the chip's slot (`chip`, the index of
+    /// [`TabFace::Avatar`] / [`TAB_KEY_CHIP`] in this strip). The strip predates [`TopFocus`] and
     /// speaks `c_int`; converting here keeps that one encoding in one place.
-    fn pill(self) -> c_int {
+    fn index(self, chip: Option<usize>) -> c_int {
         match self {
             TopFocus::Pill(i) => i as c_int,
-            _ => -1,
+            TopFocus::Chip => chip.map_or(-1, |i| i as c_int),
+            TopFocus::Away => -1,
         }
     }
 }
@@ -2943,44 +2887,19 @@ fn glass_capsule(
     )
 }
 
-/// **The top-left profile chip** — the whole control, not just its picture: the avatar texture (or
-/// an initial / person-glyph fallback) with the shared tile shadow + sheen, at [`CHIP_FRAME`], with
-/// `StripRender`'s `chip_expand` focus unfurl. Drawn verbatim by Home, the Library and Search, which is what a
-/// piece of SHARED chrome should mean. The session lookup (mutex + UserRef clone) is snapshotted
-/// per profile GENERATION, not per frame.
+/// **The profile chip** — the avatar texture (or an initial / person-glyph fallback) drawn in its
+/// slot at the strip's right end. Drawn verbatim by every page that wears the bar, from the
+/// application's captured profile; the slot comes from the strip ([`StripRender::avatar_frame`]),
+/// which is what keeps the picture on the pill the focus capsule travels to.
 ///
-/// It used to take the rect and the focus amount from its caller, which is how the three screens
-/// came to disagree about it: each wrote out the same rect, Home alone recorded one for a hit test,
-/// and the other two hard-coded `0.0` for the expand because the chip could not be focused there.
-/// A control drawn on three screens and activatable on one is a bug, not a design — the frame, its
-/// stop in the shared hit map (the dispatcher registers it with the strip's) and the spring all live
-/// here now, and a screen's only remaining say is where its own focus is, through [`TopFocus`].
+/// **Draw it AFTER [`StripRender::draw`]**: the picture stands over the strip's focus capsule, which
+/// is what makes the capsule read as a ring round it.
 ///
-/// The unfurl is deliberately a scalar and not a bool: at 1 the chip grows the **tab bar's own
-/// track capsule** around itself and unfurls the profile name to its right. A lifted shadow alone
-/// was far too quiet to read as focus against bright hero art — and the name is what the stop is
-/// actually *for*.
+/// It used to stand alone at the left margin in a glass capsule of its own that unfurled the
+/// profile's name on focus. MultiPlex's bar puts the avatar inside the track at its right end, where
+/// a name has no room to unfurl, so the name went with the capsule: the account menu it opens is
+/// where the account is named.
 ///
-/// **That capsule is the bar's MATERIAL, not a copy of its weights** ([`glass_capsule`]). The track
-/// became solved glass on 2026-08-19 and the chip went on wearing the flat stops it used to share
-/// with it, which is one band drawn in two materials — so it takes the face [`StripRender::draw`]
-/// published this frame ([`BarMaterial`]) and is glass exactly when the track is. Neither surface
-/// solves its own ground: `gfx::sample_ground` has one latch and one rate counter, and two solves
-/// over a non-uniform hero land on two densities with a seam between them.
-///
-/// **Draw it AFTER [`StripRender::draw`], never before**, and there are two reasons now. The unfurled
-/// name reaches right, toward the CENTRED strip; drawn first it is painted over by the track's own
-/// scrim. And the material has to be published before it can be read — drawn first, the chip would
-/// wear the PREVIOUS frame's face, which on the frame a popover opens or a route settles is the
-/// face of a bar that is no longer there. Home has always drawn the two in this order; the Library
-/// and Search drew them the other way round and got away with it only while the chip could not be
-/// focused there, which is the class of bug that made this a shared control in the first place.
-///
-/// The two can no longer MEET, which is the third thing that changed: the name's budget is a
-/// function of the room the bar leaves ([`chip_name_budget`]), so the unfurled capsule clears the
-/// track by [`BAND_AIR`] whatever the strip's width. Overlap had to become impossible for the bar's
-/// design: although the layer mechanism supports stacked glass, overlapping two halves of one
-/// chrome band would still double its material.
 /// Application-owned profile data supplied to the bar. Rendering this view never opens the
 /// session file or asks which profile is current.
 #[derive(Clone, Copy)]
@@ -2990,8 +2909,6 @@ pub struct ProfileChipRead<'a> {
     pub src: u16,
     pub thumb: &'a str,
     pub initial: &'a CStr,
-    pub name: &'a CStr,
-    pub name_w: f32,
 }
 
 /// The borrowed shared-chrome publication used by both its normal paint and a scrim lift.
@@ -3002,104 +2919,18 @@ pub struct ChromeRead<'a> {
     pub chip_expand: f32,
 }
 
-/// Measure and own the chip's two glyph runs when the application's captured profile changes, **or
-/// when the strip's widths do**: `name_budget` is [`chip_name_budget`] of the bar's track, so the
-/// owner re-asks here for either. The result belongs to that captured chrome owner; drawing
-/// performs no session read, elision or global cache lookup.
-///
-/// A budget of `0` is the bar leaving the chip no room: the name is empty and measures `0`, which
-/// [`chip_cap`] draws as the closed circle. (It is not passed to `elide_by`, which reads a budget at
-/// or under zero as "no limit".)
-pub fn profile_chip_text(
-    label: &str,
-    initial: &str,
-    name_budget: f32,
-    measure: &dyn plx_machine::machine::Measure,
-) -> (CString, CString, f32) {
-    let name = if name_budget > 0.0 {
-        CString::new(plx_gfx::text::elide_by(label, name_budget.min(CHIP_NAME_MAX), false, |t| {
-            measure.width_str(t, theme::size::BODY, true)
-        }))
-        .unwrap_or_default()
-    } else {
-        CString::default()
-    };
-    let name_w = if name.as_bytes().is_empty() {
-        0.0
-    } else {
-        measure.width(&name, theme::size::BODY, true)
-    };
-    (CString::new(initial).unwrap_or_default(), name, name_w)
+/// Draw the profile chip in its strip `slot` from captured data. `chip_expand` is this frame's
+/// focus spring (`StripRender` motion owned by the `Bridge`): it lights the avatar's stroke.
+pub fn profile_chip_with(p: Painter, data: ProfileChipRead<'_>, chip_expand: f32, slot: Rect) {
+    profile_avatar(p, data, chip_expand, slot.inset(CHIP_RING));
 }
 
-/// Draw a profile chip from captured data and the bar's material decision for this frame.
-///
-/// `chip_expand` comes from this frame's borrowed [`ChromeRead`] (`StripRender` motion owned by the
-/// `Bridge`), while `bar_material` comes from the application-owned `GlassPlan`. Normal chrome and
-/// its bare-`fn` lift receive those same owner publications rather than recovering either through
-/// a static.
-pub fn profile_chip_with(p: Painter, data: ProfileChipRead<'_>, chip_expand: f32, bar_material: Option<plx_gfx::gfx::GlassFace>) {
-    profile_chip_on(p, data, chip_expand, bar_material, None);
-}
-
-/// [`profile_chip_with`] on a chosen ground for its capsule: `frozen` is the latched underlay field
-/// of the modal stack the chip is lifted over ([`lift_profile_chip`]) as its texture, `None` the live
-/// tab-strip glass.
-fn profile_chip_on(
-    p: Painter,
-    data: ProfileChipRead<'_>,
-    chip_expand: f32,
-    bar_material: Option<plx_gfx::gfx::GlassFace>,
-    frozen: Option<u32>,
-) {
-    let r = CHIP_FRAME;
-    let expand = chip_expand;
+/// The avatar itself, in the circle `r`.
+fn profile_avatar(p: Painter, data: ProfileChipRead<'_>, chip_expand: f32, r: Rect) {
     let d = r.w;
+    let e = chip_expand.clamp(0.0, 1.0);
     let thumb_s = data.thumb;
     let initial_c = data.initial;
-    let name_c = data.name;
-    let name_w = data.name_w;
-    // ---- the capsule UNDER the avatar, ALWAYS: the tab track's material, inset and radius — a
-    // round surround at rest (the control is contained before it is focused, as the track's pills
-    // are), widening rightward with the unfurl to hold the name. The face is at full strength at
-    // every `e`; only the WIDTH moves, which is what `chip_cap` expresses. It was drawn only while
-    // focused, faded in with `e`, until 2026-09-01; the resting surround is the design since, and
-    // it is real glass again since 2026-09-02 (a flat copy of the face stood in for one day). The
-    // band's grab is the union of both surfaces at rest, measured on the set with the surround up:
-    // `home-hero` and `home-fold` both clear 50.
-    let e = expand.clamp(0.0, 1.0);
-    {
-        // The rect comes from [`chip_cap`] rather than being built here, because it is also what
-        // [`chip_name_budget`] keeps clear of the track — see there.
-        let cap = chip_cap(e, name_w);
-        // the tab track's own material — literally the same material: glass when the track
-        // resolved glass this frame, the flat capsule when it did not.
-        if !glass_capsule(p, cap, 1.0, bar_material, frozen) {
-            p.rect_sheened(
-                cap,
-                cap.h * 0.5,
-                theme::scrim_black(theme::TAB_TRACK_A_TOP),
-                theme::scrim_black(theme::TAB_TRACK_A_BOT),
-            );
-        }
-        // the name rides in on the TAIL of the widening, so the glyphs land in a capsule that has
-        // already made room for them instead of smearing across the grow
-        let na = ((e - 0.55) / 0.45).clamp(0.0, 1.0);
-        if na > 0.004 {
-            let ty = plx_gfx::text::text_vcenter_y(theme::size::BODY, 1, r.cy());
-            p.alpha(na).text(
-                name_c.as_ptr(),
-                r.x + d + CHIP_NAME_GAP,
-                ty,
-                theme::size::BODY,
-                theme::TEXT_PRIMARY,
-                0,
-                1,
-            );
-        }
-    }
-    // resting shadow + perimeter stroke always; lift the shadow with the focus (same as shelf tiles)
-    p.focus_shadow(r, d * 0.5, e);
     let mut drew = false;
     if !thumb_s.is_empty() {
         let (t, tw, th) = resolve_tex_wh_on(data.src, thumb_s, 128, 128, 0);
@@ -3126,21 +2957,21 @@ fn profile_chip_on(
                 theme::CONTROL_IDLE_FILL, theme::CONTROL_IDLE_FILL);
         }
         if initial_c.to_bytes().is_empty() {
-            // nobody to name — signed out, or signed in with no roster landed yet. A generic
-            // person glyph either way; the unfurled label above is what tells the two apart.
+            // nobody to name — signed out, or signed in with no roster landed yet: a generic
+            // person glyph either way, at the share of the circle it has always taken
             crate::icons::draw(
                 p,
                 crate::icons::Icon::User,
-                r.inset(14.0),
+                r.inset(d * CHIP_GLYPH_INSET),
                 theme::TEXT_SECONDARY,
             );
         } else {
-            let ty = plx_gfx::text::text_vcenter_y(theme::size::HEADLINE, 1, r.y + d * 0.5);
+            let ty = plx_gfx::text::text_vcenter_y(theme::size::BODY, 1, r.y + d * 0.5);
             p.text(
                 initial_c.as_ptr(),
                 r.x + d * 0.5,
                 ty,
-                theme::size::HEADLINE,
+                theme::size::BODY,
                 theme::TEXT_PRIMARY,
                 1,
                 1,
@@ -3149,6 +2980,10 @@ fn profile_chip_on(
     }
 }
 
+/// The person glyph's inset inside the avatar, as a share of its diameter (14 of the 60 px circle
+/// it was drawn in at the left margin).
+const CHIP_GLYPH_INSET: f32 = 14.0 / 60.0;
+
 /// [`profile_chip_with`], re-drawn above the account menu's scrim AND panel: the lit copy of the
 /// opener the dispatcher's lift pass (`Z::OPENER`, `Dispatcher::lifted_opener`, `Screen::bar_opener`)
 /// asks the rig for (`Rig::lift_bar_member`), the one place any opener is lifted. The control is
@@ -3156,23 +2991,23 @@ fn profile_chip_on(
 /// lift; `p` is the chrome pass's own painter (its alpha and its tuck, `NavPresentation`), so the lit
 /// copy lies exactly on the chip the bar drew.
 ///
-/// **The lift's capsule stands on FROZEN ground** (owner rule, 2026-10-17: no live-refracting glass
-/// over a page): while the menu is up the capsule is `Painter::glass_frozen` over the stack's
-/// latched underlay field, its rim bending the host snapshot, and it requests no backdrop entry or
-/// blur source pass. **Before the field has latched it draws nothing** (CONFIRM2 CB1): the field
-/// latches a frame after the OK that opens the menu, the dim is still 0 on that frame, and the bar's
-/// own chip is already on screen at the same rect — the flat capsule this used to fall back to landed
-/// on top of that one and the chip blinked near-black for a frame on every open. The chip on the tab
-/// strip, with no menu up, stays live glass.
-pub fn lift_profile_chip(
-    p: Painter,
-    data: ProfileChipRead<'_>,
-    chip_expand: f32,
-    bar_material: Option<plx_gfx::gfx::GlassFace>,
-    ground: &crate::underlay::UnderlayField,
-) {
-    let Some(ground) = ground.ground_tex() else { return };
-    crate::guard(|| profile_chip_on(p, data, chip_expand, bar_material, Some(ground)));
+/// The lit copy is the FOCUSED chip: the strip's focus capsule ([`tracked_focus_capsule`], the paint
+/// `TabStrip::draw` gives it, at the slot) and the avatar over it. Both are opaque paint, so it lays the
+/// same pixels the bar's focused chip does and needs no ground: no glass, no frozen field, no
+/// backdrop entry.
+pub fn lift_profile_chip(p: Painter, data: ProfileChipRead<'_>, slot: Rect) {
+    crate::guard(|| {
+        tracked_focus_capsule(p, slot, 1.0);
+        profile_avatar(p, data, 1.0, slot.inset(CHIP_RING));
+    });
+}
+
+/// **The focus capsule of a TRACKED strip** ([`TabGround::Tracked`]): the opaque `ACCENT` capsule
+/// at `r` (radius half its height), at alpha `a`, with no cast and no rim. [`TabStrip::draw`] paints
+/// the travelling capsule through it, and [`lift_profile_chip`] paints the chip's lifted focus
+/// through it, so the lifted chip wears exactly the focus the strip drew under it.
+pub fn tracked_focus_capsule(p: Painter, r: Rect, a: f32) {
+    p.alpha(a).rrect(r, r.h * 0.5, r.h * 0.5, crate::ACCENT);
 }
 
 // ---- CircleButton: circular disc + centered glyph, same keyed/unkeyed ControlStyle family as
@@ -3192,13 +3027,13 @@ pub fn lift_profile_chip(
 /// glyph's own inset slides from the disc's centring to [`DISC_LABEL_LEAD`] across the unfurl, so
 /// both ENDS are exactly the shapes the design draws rather than only the open one.
 ///
-/// Sibling of the profile chip's own unfurl (`chip_cap`), and the same two rules apply: the width
+/// Sibling of the profile chip's former unfurl (`chip_cap`, retired), and the same two rules apply: the width
 /// is the ONE expression both the painter and the hit-test read ([`CircleButton::cap_w`]), and the
 /// label rides the TAIL of the widening so its glyphs land in a capsule that has already made room
 /// for them instead of smearing across the grow.
 ///
-/// The two differ on ONE policy and deliberately: what happens when the word does not fit. The chip
-/// ELIDES to [`chip_name_budget`], the room the bar leaves capped at `CHIP_NAME_MAX`, because a
+/// The two differed on ONE policy and deliberately: what happens when the word does not fit. The chip
+/// ELIDED to `chip_name_budget`, the room the bar left capped at `CHIP_NAME_MAX`, because a
 /// profile name is user data of any length and a shortened name is still a name; only a bar that
 /// leaves no room for a glyph or two takes the name away. A verb is not — half of "Mark as
 /// Unwatched" teaches less than the tick it was meant to explain — so a control with a hard bound
@@ -6477,7 +6312,13 @@ impl TabStrip {
             // The header's flat accent pill: stood out by the pop's outset, nothing else (see [`TabGround::Bare`]).
             TabGround::Bare { focus: true, .. } => cap(&self.foc, crate::ACCENT, None, Grow::focus(ground), false),
             TabGround::Bare { focus: false, .. } => {}
-            TabGround::Tracked { .. } => cap(&self.foc, crate::ACCENT, None, Grow::focus(ground), false),
+            // The one paint of a tracked strip's focus capsule, which the account menu's opener lift
+            // repeats at the chip's slot ([`lift_profile_chip`]).
+            TabGround::Tracked { .. } => {
+                if let Some((r, a)) = self.foc.drawn(top, h, Grow::focus(ground)) {
+                    tracked_focus_capsule(p, r, a);
+                }
+            }
         }
     }
     /// The `(focus, selected)` WHOLE-LABEL coverage of pill `pill` (content-space `(x, w)`) by each
@@ -6737,10 +6578,10 @@ impl Drop for InkClipScope {
     }
 }
 
-// ---- The shared top tab row: profile chip leads at the margin, the global destinations
-// (Home | Movies | TV Shows | Search) sit CENTERED — the tvOS tab-bar idiom. Drawn by BOTH the Home screen and the
-// Library screen so they read as one global tab bar; the pill rects live here so both
-// screens' pointer paths share [`tab_pill_at`]. ----
+// ---- The shared top tab row, MultiPlex's bar: ONE centred track holding Search, the global
+// destinations (Home | Movies | TV Shows | My list), a divider, Settings and the profile chip at
+// its right end. Drawn by every page that wears the bar so they read as one global tab bar; the
+// pill rects live here so every screen's pointer path shares [`tab_pill_at`]. ----
 /// The global destinations: **Home, then a pill per type that HAS a favourite library, then
 /// Search** — two to four of them.
 ///
@@ -6765,7 +6606,7 @@ const TAB_GLYPH_D: f32 = theme::size::BODY as f32;
 const TAB_GLYPH_GAP: f32 = 10.0;
 /// The strip's control keys, by destination identity. A destination is looked up by its key, never
 /// by its position among the captured faces: Search is always `+3` and the profile chip `+4`,
-/// whatever type pills sit between Home and Search.
+/// wherever the strip's order puts them (`app::chrome::strip_keys` writes that order).
 pub const TAB_KEY_HOME: u32 = crate::dispatch::STRIP_BASE;
 pub const TAB_KEY_MOVIES: u32 = crate::dispatch::STRIP_BASE + 1;
 pub const TAB_KEY_SHOWS: u32 = crate::dispatch::STRIP_BASE + 2;
@@ -6775,6 +6616,14 @@ pub const TAB_KEY_CHIP: u32 = crate::dispatch::STRIP_BASE + 4;
 /// BEFORE Search in the strip's visual order (`app::chrome::strip_keys`) — a key is a destination's
 /// identity, never its position.
 pub const TAB_KEY_WATCHLIST: u32 = crate::dispatch::STRIP_BASE + 5;
+/// The Settings mark, `+6` (MultiPlex's sliders, [`crate::icons::Icon::Tune`]): an icon pill after
+/// the divider, before the chip. A press opens the Settings modal, the same route as the account
+/// menu's Settings row; it is never a page the strip selects.
+pub const TAB_KEY_SETTINGS: u32 = crate::dispatch::STRIP_BASE + 6;
+/// The divider's place in the strip ([`TabFace::Divider`], `+7`): a key so the faces and keys stay
+/// one parallel pair, and NEVER a member — [`tab_members`] publishes no stop for it, so focus and the
+/// pointer pass over it.
+pub const TAB_KEY_DIVIDER: u32 = crate::dispatch::STRIP_BASE + 7;
 /// The top chrome band's y — the chip and the pills sit on it (Home and Library alike).
 ///
 /// **Derived from the overscan safe area, not chosen.** It was a bare `44.0` until 2026-08-23, which
@@ -6791,8 +6640,7 @@ const TAB_PILL_PAD: f32 = 18.0;
 /// UNIFORM inset from the tab-bar track to the pills inside it, on every side: the pill (r=30) and
 /// the track (r=38) stay CONCENTRIC (outer radius = inner radius + gap), so an end pill's corner
 /// gap reads even all the way around — 16px ends against 8px verticals looked lopsided on the
-/// selected Home pill. The focused [`profile_chip_with`] wraps itself in the same inset, which is what
-/// makes its capsule and this track one band.
+/// selected Home pill.
 pub const TAB_TRACK_PAD: f32 = 8.0;
 /// The y below which a screen's content is clear of the shared top chrome — the tab track's bottom
 /// edge ([`TOP_BAR_Y`] + the pill height + the track's inset). Exposed so a screen that lets art
@@ -6803,21 +6651,19 @@ pub const TOP_BAR_BOTTOM: f32 = TOP_BAR_Y + TAB_PILL_H + TAB_TRACK_PAD; // 130
 /// here already carry — pill edge to pill edge reads the same). Doubles as the scroll-into-view
 /// context margin, exactly as the season tabs use their advance.
 const TAB_GAP: f32 = 16.0;
-/// How wide the pill strip may grow before it starts scrolling. The row stays CENTERED, but it
-/// must never reach the profile chip (a focus stop of its own at `MARGIN_X`), so the viewport is
-/// the screen less a symmetric chip-clearing margin, less the track's own inset on both ends. The
-/// track stays glass while the pills scroll inside it ([`tab_glass_on`]): the width never decides
-/// the material.
-const TAB_SIDE_CLEAR: f32 = CHIP_FRAME.x + CHIP_D + theme::space::MD;
+/// How wide the pill strip may grow before it starts scrolling. The row stays CENTERED, and since
+/// the profile chip moved inside it (its right end) nothing stands beside it, so the viewport is the
+/// screen less the side margins, less the track's own inset on both ends. The track stays glass
+/// while the pills scroll inside it ([`tab_glass_on`]): the width never decides the material.
+const TAB_SIDE_CLEAR: f32 = crate::consts::MARGIN_X;
 const TAB_VIEW_MAX: f32 = crate::consts::SCR_W - 2.0 * (TAB_SIDE_CLEAR + TAB_TRACK_PAD);
 /// **The shared top bar's outermost drawn chrome, for the overscan audit**
 /// ([`crate::consts::SAFE`]) — the one band Home, the Library and Search all wear, i.e. the
 /// "main page" LG's checklist item #2 is about.
 ///
 /// Each rect is the widest/tallest state the thing can be in: the track at [`TAB_VIEW_MAX`] (past
-/// which the strip scrolls rather than growing), and the chip at full unfurl with a name at its
-/// budget. The chip's own capsule is the rect that matters rather than the avatar — it is the
-/// focused control's visible edge, and it sits [`TAB_TRACK_PAD`] outside the avatar on every side.
+/// which the strip scrolls rather than growing). The profile chip is a pill inside it, so the track
+/// is its edge too.
 #[cfg(any(test, feature = "test-support"))]
 pub fn overscan_rects(out: &mut Vec<(&'static str, Rect)>) {
     let tw = TAB_VIEW_MAX + 2.0 * TAB_TRACK_PAD;
@@ -6839,28 +6685,31 @@ pub fn overscan_rects(out: &mut Vec<(&'static str, Rect)>) {
             TAB_PILL_H,
         ),
     ));
-    out.push(("profile chip", CHIP_FRAME));
-    out.push(("profile chip, focused capsule", CHIP_CAP_MAX));
 }
 
-/// The overscan rect and the strip's real geometry agree at the widest the strip is shown: six
-/// focus stops (Home, both type pills, the Watchlist and Search marks, the chip) fit without scrolling.
+/// The overscan rect and the strip's real geometry agree at the widest the strip is shown: every
+/// stop of MultiPlex's bar (Search, Home, both type pills, My list, Settings, the chip, and the
+/// divider between) fits without scrolling.
 #[cfg(test)]
 mod overscan_strip_tests {
     use super::*;
 
     #[test]
     fn six_stops_do_not_scroll_and_the_drawn_track_clears_the_overscan_rect() {
+        use crate::icons::Icon;
         let faces = [
-            TabFace::Label("Home".into()),
-            TabFace::Label("Movies".into()),
-            TabFace::Label("TV Shows".into()),
-            TabFace::Icon(crate::icons::Icon::Bookmark),
-            TabFace::Icon(crate::icons::Icon::Search),
+            TabFace::Icon(Icon::Search),
+            TabFace::IconLabel(Icon::Home, "Home".into()),
+            TabFace::IconLabel(Icon::Movie, "Movies".into()),
+            TabFace::IconLabel(Icon::Tv, "TV Shows".into()),
+            TabFace::IconLabel(Icon::Bookmark, "My list".into()),
+            TabFace::Divider,
+            TabFace::Icon(Icon::Tune),
+            TabFace::Avatar,
         ];
         // A generous per-glyph measure: wider than any shipped label at BODY.
         let widths = tab_metrics_from(&faces, |s| s.to_bytes().len() as f32 * 20.0).1;
-        assert!(tab_content_w(&widths) <= TAB_VIEW_MAX, "five pills must fit the strip's viewport");
+        assert!(tab_content_w(&widths) <= TAB_VIEW_MAX, "the whole bar must fit the strip's viewport");
         for idx in 0..faces.len() {
             assert_eq!(tab_scroll_target(&widths, idx, 0.0), 0.0, "stop {idx} must not scroll the strip");
         }
@@ -7078,8 +6927,8 @@ impl Default for StripRender {
 /// which trades this failure for its mirror image. Making the rect follow the unfurl re-solves the
 /// whole bar when focus lands on the chip. Keying `sample_ground` per caller costs far less than
 /// its doc used to claim (see there) but puts two densities on one line — which the lane's own
-/// geometry change makes less dangerous than it was, since `chip_name_budget` now guarantees the two
-/// can never be nearer than `BAND_AIR` and are usually ~300px apart. Settle it by LOOKING, with a
+/// geometry change made less dangerous than it was (the retired `chip_name_budget` kept the two
+/// `BAND_AIR` apart; the chip has since moved inside the track and wears no face of its own). Settle it by LOOKING, with a
 /// ground that varies in luminance ACROSS the band: `pat:ramp`, `pat:edge`, `pat:orient`. Every
 /// pattern this was verified on (`flat:*`, `hbars`, `rainbow:70`) is uniform across x or uniform in
 /// L\*, and so is structurally unable to show it.
@@ -7600,61 +7449,6 @@ fn lstar(c: [f32; 4]) -> f32 {
     }
 }
 
-/// The air between the unfurled chip's capsule and the track, at the point they come closest.
-///
-/// Sixteen is the bar's own rung — [`TAB_GAP`], the air between two pills inside the track. It is
-/// not decoration: the two capsules are one band in one material, and a band whose halves TOUCH
-/// draws its two 1px rims side by side, which reads as a bright seam exactly where the design has
-/// a continuous edge. See [`chip_name_budget`].
-const BAND_AIR: f32 = theme::space::SM;
-
-/// **The widest box the profile chip ever draws** — [`chip_cap`] at full unfurl with a name at its
-/// ceiling, i.e. **the rect the control DRAWS**, not a hand-copy of the terms that build it. The
-/// name is elided to at most [`CHIP_NAME_MAX`] before it is measured, so this is arithmetic on
-/// constants and needs no font to evaluate, which is what makes every clearance solved against it
-/// a host test rather than a device capture.
-///
-/// The clearance that reads it is VERTICAL and belongs to another screen: Home's shelf headings
-/// begin at the very margin this capsule sits on, so the grid's resting top (`GRID_TOP_Y`) is
-/// graded against this rect's bottom edge (the home grid's tests), and the overscan audit grades
-/// its edges ([`overscan_rects`]). Exported whole rather than as an edge constant, so the drawn and
-/// the graded rect are one expression. (The HORIZONTAL clearance, against the track, is not read
-/// off this rect: it is the name's budget, [`chip_name_budget`].)
-pub const CHIP_CAP_MAX: Rect = chip_cap(1.0, CHIP_NAME_MAX);
-
-/// **How wide a profile name the bar leaves room for — the one function that keeps the unfurled
-/// chip and the track apart.** `track_w` is the strip's track ([`tab_track_w`]), centred on the
-/// screen, so its left edge is `(SCR_W - track_w) / 2`; the capsule's right edge, [`chip_cap`] at
-/// full unfurl, is the closed circle's plus the name's gap, the name and the tail. The budget is the
-/// name width that leaves [`BAND_AIR`] between the two, capped at [`CHIP_NAME_MAX`] — and `0` when
-/// that room is under [`CHIP_NAME_MIN`], where the chip shows no name and its capsule stays the
-/// closed circle (see [`chip_cap`]).
-///
-/// **This replaced a cap on the TRACK.** The track used to be held to a width (`GLASS_TRACK_MAX`,
-/// 672 px at the end) so that the widest capsule could not reach it, and a strip past it drew the
-/// flat capsule: the owner's Belarusian strip (679 px once the Watchlist mark joined the bar) lost
-/// the glass for 7 px. The bar gains entries and its labels vary by language, so its width must
-/// never decide its material, and the clearance moved to the one party whose width is user data
-/// anyway. A 679 px track leaves 394.5 px of room, so the shipped bar keeps the whole 320; the
-/// budget bites once the room falls under `CHIP_NAME_MAX`, past an 828 px track, and is `0` under
-/// `CHIP_NAME_MIN`, past 1300 px, both short of [`TAB_VIEW_MAX`]: one more pill wider than 133 px
-/// on today's widest strip is already in that range, so a change to the strip can shorten the
-/// name.
-///
-/// The owner of the chip's text re-asks when either input changes (`app::chrome::ChromeSnapshot`:
-/// the strip's widths with `tabs_generation`, the label with the profile), because the elision
-/// belongs to its captured publication and drawing measures nothing.
-pub fn chip_name_budget(track_w: f32) -> f32 {
-    let circle = chip_cap(0.0, 0.0);
-    let track_left = (crate::consts::SCR_W - track_w) * 0.5;
-    let room = track_left - BAND_AIR - (circle.x + circle.w) - (CHIP_NAME_GAP + CHIP_NAME_TAIL);
-    if room < CHIP_NAME_MIN {
-        0.0
-    } else {
-        room.min(CHIP_NAME_MAX)
-    }
-}
-
 /// Is the shared tab track wearing glass this frame?
 ///
 /// **Glass is the material, at ANY width.** The strip's width never decides it: the bar gains
@@ -7664,8 +7458,8 @@ pub fn chip_name_budget(track_w: f32) -> f32 {
 /// priced on the capture path), which dropped the owner's Belarusian strip to the flat capsule by
 /// 7 px; `docs/glass-hardware-budget.md` §11 is why that price was the wrong instrument (the shipped
 /// direct path charges the region at 7/16 and the composite area dominates), and the band's real
-/// grab is `blur_region_for(false, ..)`, 68 px past the members and not 88. What keeps the unfurled
-/// chip off the track is [`chip_name_budget`], not a cap on the track.
+/// grab is `blur_region_for(false, ..)`, 68 px past the members and not 88. The profile chip is
+/// a pill inside the track (its right end), so there is no second capsule for a width to reach.
 ///
 /// `/tmp/plxnative-flattabs` takes the material away, which is how the two are compared on one
 /// television without a second binary — and the one thing that made the flat track the answer for a
@@ -7713,6 +7507,15 @@ pub enum TabFace {
     /// set + TV Shows, bookmark + My list): one pill, the glyph at [`TAB_GLYPH_D`] then
     /// [`TAB_GLYPH_GAP`] then the label, the pill's [`TAB_PILL_PAD`] on both outer ends.
     IconLabel(crate::icons::Icon, String),
+    /// The hairline between the destinations and Settings (MultiPlex's bar): the page header's
+    /// divider ([`crate::page_header::DIVIDER_W`] x [`crate::page_header::DIVIDER_H`],
+    /// [`theme::HEADER_DIVIDER_INK`]), standing in the row's own [`TAB_GAP`] on either side. Its key
+    /// is [`TAB_KEY_DIVIDER`], which [`tab_members`] never publishes: no stop, no capsule.
+    Divider,
+    /// The profile chip's SLOT at the bar's right end: a square pill the size of an icon pill, drawn
+    /// empty by the strip (its capsules land on it as on any pill) and filled by
+    /// [`profile_chip_with`] at [`StripRender::avatar_frame`].
+    Avatar,
 }
 
 /// The shared strip's captured faces, in pill order (Home first, Search's mark last), as the
@@ -7730,12 +7533,13 @@ pub struct TabLabels<'a> {
 fn tab_metrics_from(faces: &[TabFace], measure: impl Fn(&std::ffi::CStr) -> f32) -> (Vec<CString>, Vec<f32>) {
     let words: Vec<CString> = faces.iter().map(|face| match face {
         TabFace::Label(label) | TabFace::IconLabel(_, label) => CString::new(label.as_str()).unwrap_or_default(),
-        TabFace::Icon(_) => CString::default(),
+        TabFace::Icon(_) | TabFace::Divider | TabFace::Avatar => CString::default(),
     }).collect();
     let widths = faces.iter().zip(&words).map(|(face, word)| match face {
         TabFace::Label(_) => measure(word) + 2.0 * TAB_PILL_PAD,
         TabFace::IconLabel(..) => measure(word) + 2.0 * TAB_PILL_PAD + TAB_GLYPH_D + TAB_GLYPH_GAP,
-        TabFace::Icon(_) => TAB_ICON_PILL_W,
+        TabFace::Icon(_) | TabFace::Avatar => TAB_ICON_PILL_W,
+        TabFace::Divider => crate::page_header::DIVIDER_W,
     }).collect();
     (words, widths)
 }
@@ -7755,7 +7559,9 @@ pub fn tab_widths(faces: &[TabFace], measure: &dyn plx_machine::machine::Measure
 /// value through.
 pub fn tab_members(widths: &[f32], keys: &[u32], selected: c_int, focus: TopFocus,
     scroll: f32, out: &mut Vec<crate::containers::tabs::StripMember<u32>>) {
-    let index = if focus.pill() >= 0 { focus.pill() } else { selected.max(0) } as usize;
+    let chip = keys.iter().position(|&key| key == TAB_KEY_CHIP);
+    let focused = focus.index(chip);
+    let index = if focused >= 0 { focused } else { selected.max(0) } as usize;
     let target = tab_scroll_target(widths, index, scroll);
     tab_members_at(widths, keys, scroll, target, out);
 }
@@ -7766,6 +7572,10 @@ fn tab_members_at(widths: &[f32], keys: &[u32], scroll: f32, target: f32,
     let drawn = tab_geometry(widths, scroll);
     let resting = tab_geometry(widths, target);
     for (i, (_, &elem)) in widths.iter().zip(keys).enumerate() {
+        // the divider is drawn, never a stop
+        if elem == TAB_KEY_DIVIDER {
+            continue;
+        }
         out.push(crate::containers::tabs::StripMember {
             elem,
             drawn: drawn.pill(i),
@@ -7825,8 +7635,8 @@ fn tab_stack(widths: &[f32]) -> HStack<'_> {
 fn tab_view_w(widths: &[f32]) -> f32 {
     tab_content_w(widths).min(TAB_VIEW_MAX).max(0.0)
 }
-/// The TRACK's own width — the pill area plus its uniform inset on both sides. What the chip's name
-/// budget is solved against ([`chip_name_budget`]), and what `draw_tab_row` builds its rect from.
+/// The TRACK's own width — the pill area plus its uniform inset on both sides — and what
+/// `draw_tab_row` builds its rect from.
 pub fn tab_track_w(widths: &[f32]) -> f32 {
     tab_view_w(widths) + 2.0 * TAB_TRACK_PAD
 }
@@ -7921,7 +7731,9 @@ fn tab_scroll_target(widths: &[f32], idx: usize, cur: f32) -> f32 {
 /// pending tab off its own `navigation_presentation()` before calling this).
 impl StripRender {
     pub fn update(&mut self, data: TabLabels<'_>, selected: c_int, focus: TopFocus, dt: f32) {
-        let focused = focus.pill();
+        // The chip is a pill of the strip (its right end), so focus on it is focus on its slot: the
+        // capsule travels there like to any pill.
+        let focused = focus.index(data.faces.iter().position(|face| *face == TabFace::Avatar));
         // The chip is the bar's other stop, so its unfurl is stepped here rather than by whichever
         // screen happens to own the focus this frame — the same reason the capsules and the track's
         // weight are. It is also why [`TopFocus`] is one value: with a separate `chip: bool` beside
@@ -7965,6 +7777,23 @@ impl StripRender {
                 }
             });
         }
+    }
+}
+
+impl StripRender {
+    /// **The profile chip's slot as the strip lays it out this frame** ([`TabFace::Avatar`]'s pill
+    /// at the strip's live scroll), in the bar's own space: what [`profile_chip_with`] draws in, what
+    /// the account menu's morph starts from (`Rig::bar_member_rect`) and what its lift draws at.
+    /// `None` when the strip has no chip, or the strip has scrolled it out of its viewport (a slot a
+    /// scissor would cut is not drawn at all, as a label pill past the edge is not).
+    pub fn avatar_frame(&self, data: TabLabels<'_>) -> Option<Rect> {
+        let i = data.faces.iter().position(|face| *face == TabFace::Avatar)?;
+        let scroll = self.tab_scroll.pos;
+        with_tab_metrics_for(data, |_, _, w| {
+            let geometry = tab_geometry(w, scroll);
+            let r = geometry.pill(i);
+            (r.intersect(geometry.clip).w >= r.w - 0.5).then_some(r)
+        })
     }
 }
 
@@ -8161,6 +7990,15 @@ impl StripRender {
                                 .draw(&env, p);
                         });
                     }
+                    // The page header's own hairline, centred on the row.
+                    TabFace::Divider => {
+                        let h = crate::page_header::DIVIDER_H;
+                        let line = Rect::new(r.x, r.y + (r.h - h) * 0.5, r.w, h);
+                        p.rrect(line, 0.0, 0.0, theme::HEADER_DIVIDER_INK);
+                    }
+                    // The chip's slot: the capsules above are its ground, and the avatar is
+                    // [`profile_chip_with`]'s, drawn after the strip at `avatar_frame`.
+                    TabFace::Avatar => {}
                 }
             }
         }

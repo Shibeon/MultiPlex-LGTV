@@ -444,8 +444,8 @@ fn shared_chrome_splits_when_its_glasses_overlap() {
     );
 }
 
-/// The top bar's chip (the profile circle) and its centred track: `BAND_AIR`-clear of each other
-/// at every strip width, so they never overlap, but a track of 1432 px or more starts inside the
+/// Two shared-chrome neighbours (the shape the top bar had while its profile chip stood apart at the
+/// left margin, clear of its centred track): they never overlap, but the track starts inside the
 /// chip's sampling footprint (its rect grown by `BLUR_REACH`). Footprint contact alone must not
 /// split the shared band: that is a second source job and a second page pass for glass that
 /// samples the page, not each other.

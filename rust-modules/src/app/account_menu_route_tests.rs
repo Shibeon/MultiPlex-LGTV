@@ -24,9 +24,9 @@ fn the_profile_chip_opens_the_account_menu_by_keys_and_back_returns_focus_to_it(
     assert!(w.on_nav(), "premise: Up from the header reaches the bar");
     for _ in 0..8 {
         if w.elem() == Some(TAB_KEY_CHIP) { break; }
-        w.press(Key::Left);
+        w.press(Key::Right);
     }
-    assert_eq!(w.elem(), Some(TAB_KEY_CHIP), "Left along the bar reaches the profile chip");
+    assert_eq!(w.elem(), Some(TAB_KEY_CHIP), "Right along the bar reaches the profile chip at its end");
     assert!(!crate::app::bridge::account_menu_up(&w.d), "premise: focus alone opens nothing");
 
     w.press(Key::Ok);
@@ -49,17 +49,18 @@ fn the_profile_chip_opens_the_account_menu_by_keys_and_back_returns_focus_to_it(
 }
 
 /// **The account menu's morph starts on the chip as the BAR draws it** (judgment 8): the rig's
-/// `bar_member_rect` is `chip_cap` at the strip's live unfurl, through the host page's tuck, so a chip
-/// the Watchlist or the Library has tucked is where the lit copy and the morph's seed are. Red against
-/// the constant `widgets::CHIP_PILL` (the avatar's circle at no unfurl, never moved by the tuck).
+/// `bar_member_rect` is the chip's slot at the strip's live scroll (`StripRender::avatar_frame`),
+/// through the host page's tuck, so a chip the Watchlist or the Library has tucked is where the lit
+/// copy and the morph's seed are, and it is the very rect the bar publishes as the chip's stop.
 #[test]
 fn the_chips_drawn_rect_follows_the_bars_unfurl_and_tuck() {
     use plx_ui::dispatch::Rig;
     use plx_ui::screen::NavPresentation;
     let w = World::watchlist("route-account-chip-rect");
     let rest = w.bridge.bar_member_rect(TAB_KEY_CHIP, NavPresentation::default()).expect("the chip is a bar member");
-    assert_eq!(rest.x, plx_ui::widgets::CHIP_FRAME.x - plx_ui::widgets::TAB_TRACK_PAD, "the capsule outsets the avatar");
-    assert_eq!(rest.y, plx_ui::widgets::CHIP_FRAME.y - plx_ui::widgets::TAB_TRACK_PAD);
+    assert_eq!((rest.y, rest.w, rest.h), (plx_ui::widgets::TOP_BAR_Y, plx_ui::widgets::TAB_PILL_H, plx_ui::widgets::TAB_PILL_H),
+        "the chip's slot is a square pill on the bar");
+    assert!(rest.x > plx_ui::consts::SCR_W * 0.5, "at the bar's right end: {rest:?}");
     let tucked = NavPresentation::default().tucked(0.5);
     let moved = w.bridge.bar_member_rect(TAB_KEY_CHIP, tucked).expect("tucked, still the chip");
     assert_eq!(moved, plx_ui::Rect { y: rest.y - plx_ui::screen::chrome_lift(0.5), ..rest }, "the tuck moves the rect the bar draws");
@@ -88,7 +89,7 @@ fn the_dim_and_the_glass_morph_open_and_close_on_one_clock() {
     w.press(Key::Up);
     for _ in 0..8 {
         if w.elem() == Some(TAB_KEY_CHIP) { break; }
-        w.press(Key::Left);
+        w.press(Key::Right);
     }
     assert_eq!(w.elem(), Some(TAB_KEY_CHIP), "premise: the chip holds focus");
     w.settle(30);

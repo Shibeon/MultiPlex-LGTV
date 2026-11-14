@@ -1,7 +1,7 @@
 {
   "watchlist.page.title": {
-    "value": "Watchlist",
-    "description": "Title of the Watchlist page, the destination of the bookmark tab in the tab strip."
+    "value": "My list",
+    "description": "Title of the Watchlist page (the user's plex.tv Watchlist, named as the MultiPlex bar names it), the destination of the bookmark tab in the tab strip, which shows this word beside the bookmark."
   },
   "watchlist.page.sort_filter": {
     "value": "Sort & Filter",

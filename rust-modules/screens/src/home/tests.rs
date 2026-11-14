@@ -1123,11 +1123,9 @@ fn a_continue_watching_episode_is_captioned_by_its_address_not_its_show() {
     assert_eq!(cap(&m(1, 0, 20 * 60_000)), "25m left");
 }
 
+/// The bottom of the bar's one band: the tab track, the profile chip a pill inside it.
 fn top_band_bottom() -> f32 {
-    let chip = plx_ui::widgets::CHIP_CAP_MAX;
-    assert_eq!(chip.y + chip.h, plx_ui::widgets::TOP_BAR_BOTTOM,
-        "the chip capsule and the tab track are one band");
-    chip.y + chip.h
+    plx_ui::widgets::TOP_BAR_BOTTOM
 }
 /// The shelf column of a page of `rows` shelves: poster shelves all the way down, or (`deck_first`)
 /// with the Continue Watching deck of stills on top, which has a pitch of its own. PRODUCTION's
@@ -4930,20 +4928,17 @@ fn a_settled_wash_records_the_same_bits_frame_after_frame() {
 //
 // Measured on the TV, a held RIGHT along the first row re-rendered the chrome glass's blur source on
 // 993 of its frames, each ~6 ms of GPU. These tests walk the same held key through the real page and
-// the same two chrome glasses (the profile chip and the tab track, one shared source) and count the
-// frames on which that source would be re-rendered, `Sources` deciding exactly as it does on the TV.
+// the chrome glass (the tab track, the profile chip a pill inside it) and count the frames on which
+// its source would be re-rendered, `Sources` deciding exactly as it does on the TV.
 
-/// The chrome's two glass surfaces at the geometry the TV logged (`region=8,0,1314,218` before the
-/// non-rising margin): the profile chip's capsule and the tab track, bottom edge `TOP_BAR_BOTTOM`.
-fn chrome_glasses() -> [Rect; 2] {
+/// The chrome's glass surface: MultiPlex's centred tab track (Search, the destinations, Settings and
+/// the chip), about 1080 px wide, bottom edge `TOP_BAR_BOTTOM`.
+fn chrome_glasses() -> [Rect; 1] {
     let pad = plx_ui::widgets::TAB_TRACK_PAD;
     let top = plx_ui::widgets::TOP_BAR_Y - pad;
     let h = plx_ui::widgets::TAB_PILL_H + 2.0 * pad;
-    let chip = plx_ui::widgets::CHIP_FRAME;
-    [
-        Rect::new(chip.x - pad, top, chip.w + 2.0 * pad, h),
-        Rect::new(560.0, top, 674.0, h),
-    ]
+    let w = 1080.0;
+    [Rect::new((plx_ui::consts::SCR_W - w) * 0.5, top, w, h)]
 }
 
 /// One drawn frame of the page plus the chrome glasses; `true` when the chrome source must be
