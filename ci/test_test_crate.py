@@ -149,9 +149,9 @@ class CommandShape(unittest.TestCase):
     def test_deps_adds_the_direct_dependents_from_cargo_metadata(self):
         with World() as w:
             self.assertEqual(sorted(packages_of(w.command("--deps", "machine"))),
-                             ["plx_machine", "plx_ui", "multiplex-modules"])
+                             ["multiplex-modules", "plx_machine", "plx_ui"])
             self.assertEqual(sorted(packages_of(w.command("--deps", "screens"))),
-                             ["plx_screens", "multiplex-modules"])
+                             ["multiplex-modules", "plx_screens"])
 
     def test_the_filter_goes_to_the_runner(self):
         with World() as w:

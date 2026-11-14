@@ -1358,6 +1358,7 @@ derived_output() {
     pkg/*.ipk|pkg/ipk.sha256|pkg/lib*-plx.so.*|pkg/libass-plx-host.so.0*|pkg/libass-plx.0.dylib.*.new) ;;
     pkg/*.dylib|pkg/symbols|pkg/.ffabi-ok|pkg/.ffabi-host-ok|pkg/.build-config|pkg/.config-local-stamp) ;;
     pkg/.flavor|pkg/MultiPlex.app|pkg/MultiPlex-*|pkg/*.link.*|pkg/link-evidence) ;;
+    pkg/plxnative|pkg/plxnative-storage|pkg/plxnative-stackwalk|pkg/plxnative.debug|pkg/PlxNative.app|pkg/PlxNative-*) ;;  # the same, built before the plxnative -> multiplex rename
     ipkroot/*.tar.gz|ipkroot/debian-binary|ipkroot/data/usr|stub/*.so|*.o) ;;
     tools/node_modules|__pycache__|*/__pycache__|*.pyc|.DS_Store|*/.DS_Store) ;;
     fuzz/Cargo.lock|fuzz/.lock-base|fuzz/seeds|fuzz/corpus|fuzz/coverage) ;;   # `make fuzz-hud`: a copied lock, generated seeds, a corpus that regrows. NOT fuzz/artifacts: a crash input is a finding
