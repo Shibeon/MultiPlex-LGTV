@@ -240,7 +240,9 @@ panel is as wide as its longest label or as the control's focused pill, whicheve
 (`TableView::menu_panel_width_from`, the rule the Library's Sort & Filter hangs by too).
 
 **The grid and its captions follow the Library.** Seven columns of 2:3 posters from x 96, 16 px
-apart (`page::COLS`, `GRID_CARD_W`; the last column ends on the row's right text edge, x 1771), the
+apart (`page::COLS` of the shared `RowStyle::poster_wall`, the Library's own recipe, so the two
+walls cannot drift; the last column ends on the row's right text edge, x 1771, and the screen past
+it is reserved from the labels), the
 first row at y 332 (`page::GRID_TOP`, the Library's `LIBRARY_GRID_TOP`), a focused row below the first
 resting at y 332 too. EVERY card is named, as on the web wall and the Library's grid
 (`GridSpec::every_caption`): the title line always on (`caption::every_policy`) over the details line

@@ -135,6 +135,18 @@ impl RowStyle {
         }
     }
 
+    /// **The poster wall** (the MultiPlex list page: the Library's grid and My list's): `cols` home
+    /// posters ([`RowStyle::HOME`]'s aspect) filling `left..right`, [`POSTER_WALL_GAP`] apart, with
+    /// the screen past `right` reserved for the labels ([`RowStyle::right_reserve`]). `named` hangs
+    /// every card's title and details line [`EVERY_CAPTION_DROP`] under it from its leading edge
+    /// (`GridSpec::every_caption`). One recipe, so two walls cannot drift apart.
+    pub const fn poster_wall(left: f32, right: f32, cols: usize, named: bool) -> RowStyle {
+        let base = RowStyle::HOME;
+        let w = poster_wall_w(left, right, cols);
+        let style = RowStyle { w, h: w * base.h / base.w, gap: POSTER_WALL_GAP, ..base }.with_right_reserve(SCR_W - right);
+        if named { style.with_label_drop(EVERY_CAPTION_DROP).with_leading_labels() } else { style }
+    }
+
     /// The home shelf's portrait-poster row: 1.09 focus pop (matches `Home Screen.dc.html`), the big
     /// glow ring, animated scroll. The `ui::press` click dips a focused card from here back toward
     /// `scale(1.0)`, so the pop needs to be large enough for that press-in to read.
@@ -1483,6 +1495,12 @@ pub const SORT_VALUE_REACH: f32 = 56.0;
 /// this far under the UNSCALED poster bottom ([`RowStyle::with_label_drop`]), clear of the focused
 /// card's 1.09 pop (about 15 px on a 324 px poster), so the pop never meets its own words.
 pub const EVERY_CAPTION_DROP: f32 = crate::theme::space::MD;
+/// The air between two columns of a poster wall ([`RowStyle::poster_wall`]).
+pub const POSTER_WALL_GAP: f32 = crate::theme::space::SM;
+/// A poster wall's card width: `cols` posters and their [`POSTER_WALL_GAP`]s fill `left..right`.
+pub const fn poster_wall_w(left: f32, right: f32, cols: usize) -> f32 {
+    (right - left - (cols as f32 - 1.0) * POSTER_WALL_GAP) / cols as f32
+}
 /// How far under an unscaled poster bottom an every-card block reaches: its drop and its two lines
 /// ([`TileLabel::block_h`]'s stack). What the grid culls with.
 pub const EVERY_CAPTION_REACH: f32 = EVERY_CAPTION_DROP + UNDER_LINE_H + UNDER_LINE_GAP + UNDER_CAPTION_H;
@@ -2981,6 +2999,22 @@ mod tests {
         let (x, width) = label_band(Painter::root(), Rect::new(0.0, 0.0, sty.w, sty.h), &sty);
         assert_eq!(x, 0.0);
         assert_eq!(width, SCR_W - sty.right_reserve - EDGE_PAD);
+    }
+
+    /// The shared poster wall fills its band edge to edge at the home poster's aspect, reserves the
+    /// screen past its right edge for the labels, and names every card only when asked.
+    #[test]
+    fn a_poster_wall_fills_its_band_and_reserves_what_lies_past_it() {
+        let (left, right, cols) = (MARGIN_X, SCR_W - MARGIN_X - 60.0, 7);
+        let wall = RowStyle::poster_wall(left, right, cols, true);
+        let span = cols as f32 * wall.w + (cols as f32 - 1.0) * wall.gap;
+        assert!((span - (right - left)).abs() < 0.01, "{cols} posters and their gaps fill the band: {span}");
+        assert_eq!(wall.gap, POSTER_WALL_GAP);
+        assert!((wall.h / wall.w - RowStyle::HOME.h / RowStyle::HOME.w).abs() < 1e-5, "the home poster's aspect");
+        assert_eq!(wall.right_reserve, SCR_W - right);
+        assert_eq!((wall.label_drop, wall.label_start), (Some(EVERY_CAPTION_DROP), LabelStart::Leading));
+        let bare = RowStyle::poster_wall(left, right, cols, false);
+        assert_eq!((bare.w, bare.label_drop), (wall.w, RowStyle::HOME.label_drop), "unnamed: the home row's own labels");
     }
 
     const DT: f32 = 1.0 / 60.0;

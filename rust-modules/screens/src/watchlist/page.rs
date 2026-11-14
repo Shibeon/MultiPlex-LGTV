@@ -141,21 +141,16 @@ pub enum WatchlistIn {
 /// title block and the row of controls.
 pub const GRID_TOP: f32 = header::HEADER_TOP + header::BLOCK_H;
 /// Seven columns across, the Library's poster wall (the MultiPlex list page's): from the row's left
-/// text edge to its right one, [`GRID_GAP`] apart.
+/// text edge to its right one.
 pub(crate) const COLS: usize = 7;
-/// The air between two poster columns: the Library's.
-const GRID_GAP: f32 = theme::space::SM;
 /// A poster's width: [`COLS`] posters and their gaps fill the row's text band.
-pub(crate) const GRID_CARD_W: f32 = (header::GRID_RIGHT - MARGIN_X - (COLS as f32 - 1.0) * GRID_GAP) / COLS as f32;
+#[cfg(test)]
+pub(crate) const GRID_CARD_W: f32 = plx_ui::cards::poster_wall_w(MARGIN_X, header::GRID_RIGHT, COLS);
 
-/// The grid's cards: the shared home poster at the poster aspect, [`GRID_CARD_W`] wide, at the
-/// Library's gap, each with its title and details line hung under it from its left edge (every card
-/// is named, `GridSpec::every_caption`), as the Library's wall.
+/// The grid's cards: the shared poster wall ([`plx_ui::cards::RowStyle::poster_wall`], the
+/// Library's recipe), every card named with its title and details line hung under it.
 fn grid_style() -> plx_ui::cards::RowStyle {
-    let base = plx_ui::cards::RowStyle::HOME;
-    plx_ui::cards::RowStyle { w: GRID_CARD_W, h: GRID_CARD_W * base.h / base.w, gap: GRID_GAP, ..base }
-        .with_label_drop(plx_ui::cards::EVERY_CAPTION_DROP)
-        .with_leading_labels()
+    plx_ui::cards::RowStyle::poster_wall(MARGIN_X, header::GRID_RIGHT, COLS, true)
 }
 
 /// The grid's spec: top, columns. Its rows REST, as the Library's do: a focused row below the first
