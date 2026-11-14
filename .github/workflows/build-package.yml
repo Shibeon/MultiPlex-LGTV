@@ -135,10 +135,9 @@ jobs:
             production|development) ;;
             *) echo "::error::telemetry must be production or development, got '$TELEMETRY'"; exit 1 ;;
           esac
-          # A manifest is keyed to the app id it was generated for, and only two installs have a
-          # Homebrew Channel listing: stable (the webosbrew catalogue's) and nightly (the
-          # project's own repository, `ci/nightly.py repo-json`). Debug is a developer build with
-          # no listing anywhere, so a manifest for it would name a package nothing tracks. Caught
+          # A manifest is keyed to the app id it was generated for, and only two installs carry
+          # one: stable (the webosbrew catalogue's listing) and nightly (attached to its
+          # prerelease beside the package). Debug is a developer build with no listing anywhere, so a manifest for it would name a package nothing tracks. Caught
           # here rather than left to fail later on a stray file mismatch.
           if [ "$HOMEBREW_MANIFEST" = true ] && [ "$FLAVOR" = debug ]; then
             echo "::error::homebrew-manifest is only meaningful for flavor: stable or nightly, got '$FLAVOR'"
@@ -477,7 +476,7 @@ jobs:
           set -euo pipefail
           # The manifest is named for the app id it describes — `app.multiplex.native` for stable,
           # which release.yml and the webosbrew listing resolve by that exact name, and
-          # `app.multiplex.native.nightly` for nightly, which `ci/nightly.py repo-json` reads.
+          # `app.multiplex.native.nightly` for nightly, which nightly.yml attaches to its prerelease.
           if [ "$FLAVOR" = nightly ]; then
             app_id=app.multiplex.native.nightly
             # The nightly tile's own artwork (130 px, badged), so the listing shows the badge

@@ -212,7 +212,7 @@ jobs:
       # trade here either.
       caches: false
       # The nightly package's own manifest (`app.multiplex.native.nightly.manifest.json`), which
-      # `ci/nightly.py repo-json` turns into the project's Homebrew Channel repository. It is
+      # `publish` attaches to the prerelease beside the package. It is
       # NOT the webosbrew catalogue's stable listing — that one is keyed to the stable app id
       # and release.yml alone feeds it.
       homebrew-manifest: true
