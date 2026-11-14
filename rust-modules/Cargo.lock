@@ -261,12 +261,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ed25519-compact"
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9547879431a90e352a35863a54416d92898a787b9af09e6ae2e09a96bd78be80"
-
-[[package]]
 name = "either"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -785,7 +779,6 @@ dependencies = [
 name = "plx_data"
 version = "0.0.0"
 dependencies = [
- "ed25519-compact",
  "plx_base",
  "plx_data",
  "plx_machine",

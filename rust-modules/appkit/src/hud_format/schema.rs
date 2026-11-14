@@ -121,7 +121,7 @@ use crate::player_hud::classic::{HUD_TITLE_SZ, SCRIM_H};
 pub type Since = (u8, u8);
 
 /// The format this build writes and the newest minor it reads of that major.
-pub const CURRENT: Since = plx_data::hudpacks::catalog::HUD_FORMAT;
+pub const CURRENT: Since = plx_data::hudpacks::HUD_FORMAT;
 /// Every format major this build reads, with the highest minor of that major it understands. A package
 /// whose major is absent here is `E0403`; one whose minor is above its major's entry is `E0402`.
 pub const SUPPORTED: &[(u8, u8)] = &[CURRENT];

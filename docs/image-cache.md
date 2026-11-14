@@ -37,12 +37,6 @@ suppress retry storms. Refresh validates decoding before replacing a file and af
 load; it never holds the source-store lock while accessing the network. A failed refresh keeps
 the old image. Changed versioned source paths miss immediately rather than waiting for expiry.
 
-Gallery previews are public immutable PNGs addressed by their SHA-256 filename. They use the same disk LRU,
-workers, decode bounds and GPU cache. Their cache identity is a separate digest namespace, independent of Plex
-accounts and transforms. The worker verifies the compressed bytes before decode or persistence on both disk and
-network paths, uses credential-free HTTPS without redirects, and reuses a valid digest hit regardless of its age.
-A catalog refresh failure keeps dated cached entries available and does not prevent an explicit download retry.
-
 RAM residency remains independent of library size: 64 source slots and a 44 MiB GPU texture
 budget. Demand workers stop claiming requests when combined decoded and pending-upload pixels
 reach 8 MiB; already active decodes can temporarily exceed this admission threshold. If the GPU evicts an image while its source slot survives, the next draw requests its

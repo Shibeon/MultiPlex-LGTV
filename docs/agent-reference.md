@@ -330,12 +330,10 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
   `CARGO_TARGET_DIR` at a `/tmp` directory: those trees were not in any checkout, so no tool
   counted or reclaimed them (28 of them, 45.6 GiB, were found in `/tmp` on 2026-10-19). Refused
   under `RELEASE=1`; `ci/test_managed_targets.py` pins that the target dir is inside the checkout.
-- `make fuzz-hud [T=<target> ...] [SECS=60]` — the `cargo fuzz` package over every parser a HUD package or the
-  registry reaches (`docs/hud-plugins.md`, threat model): `admit` (the whole admission path),
+- `make fuzz-hud [T=<target> ...] [SECS=60]` — the `cargo fuzz` package over every parser a HUD package
+  reaches (`docs/hud-plugins.md`, threat model): `admit` (the whole admission path),
   `bundle_read`, `archive_read` (the 1.0 ZIP container), `svg_check` (the SVG gate in front of nanosvg),
-  `address_parse`, `catalog_parse` (the registry index), `catalog_verify` (the signed index: no input is accepted
-  under the shipped keys; the fuzzer's bytes are also signed with the data layer's TEST ONLY keys to reach what
-  follows the signature check), `catalog_cache` (its cache record, verified again) and `ws_frame` (the
+  `address_parse` and `ws_frame` (the
   WebSocket codec, `plx_net::ws`: the server's upgrade answer and frames, split at any byte). Each target
   asserts only what its code promises (no panic, the documented bounds, round trips) and a crash fails the
   run, with the input in `fuzz/artifacts/<target>/`. The package is a top-level `fuzz/` with its own

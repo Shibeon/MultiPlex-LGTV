@@ -1323,15 +1323,6 @@ impl Bridge {
                 self.huds_notice = None;
                 self.huds_watch(page);
                 self.huds_refresh();
-                if !self.playback_live {
-                    self.huds.open_catalog(plx_telemetry::telemetry::crashreport::now_secs());
-                }
-            }
-            HudCmd::Watch(page) => self.huds_watch(page),
-            HudCmd::CancelRegistry(sha) => self.huds.cancel_registry(sha),
-            HudCmd::FetchRegistry(sha) => {
-                self.huds_notice = None;
-                self.huds.fetch_registry(sha, plx_plex::plex::identity::version(), plx_platform::i18n::current().language().tag());
             }
             HudCmd::Select(id) => self.huds.select(id),
             HudCmd::Remove(id) => {
@@ -1402,12 +1393,6 @@ impl Bridge {
         let tag = plx_platform::i18n::current().language().tag();
         let list = plx_screens::hud_settings::HudList {
             end_time,
-            catalog: self.huds.store().catalog().clone(),
-            catalog_date: self.huds.store().catalog().checked_at.and_then(|s| i64::try_from(s).ok())
-                .and_then(plx_platform::i18n::local_calendar_date)
-                .and_then(|[y,m,d]| plx_platform::i18n::current().date_medium(y, m as u8, d as u8)).unwrap_or_default(),
-            app_version: plx_plex::plex::identity::version().into(),
-            language_tag: tag.into(),
             entries: self.huds.store().entries(),
             drops: self.huds.store().drops(),
             unfit: self.huds.unfit_shas(tag),

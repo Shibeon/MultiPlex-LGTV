@@ -507,8 +507,6 @@ fn mount_page(
         SettingsPage::Picker(kind) => Box::new(super::preferences::PickerPage::new(entry, kind, &cx.views.inputs)),
         SettingsPage::PlayerHud => Box::new(super::hud_settings::HudPage::new(entry)),
         SettingsPage::Diagnostics => Box::new(diagnostics::DiagnosticsPage::new(entry)),
-        page @ (SettingsPage::HudGallery | SettingsPage::HudDetail(..) | SettingsPage::HudAbout(..) | SettingsPage::HudPreview(..)) =>
-            Box::new(super::hud_settings::HudPage::at(entry, page)),
     }
 }
 

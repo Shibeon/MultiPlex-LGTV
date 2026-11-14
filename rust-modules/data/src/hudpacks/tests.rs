@@ -160,7 +160,6 @@ impl Rig {
                 }
             }
             let answer = match effect {
-                HudEffect::Catalog(_) | HudEffect::FetchRegistry { .. } => panic!("registry work requires the catalog rig"),
                 HudEffect::ScanDir { tag, at } => {
                     let dir = at.path();
                     let names = self
@@ -240,8 +239,6 @@ impl Rig {
 
 fn line(effect: &HudEffect) -> String {
     match effect {
-        HudEffect::Catalog(e) => format!("catalog {e:?}"),
-        HudEffect::FetchRegistry { package, .. } => format!("registry {}", package.sha256),
         HudEffect::ScanDir { at, .. } => format!("scan {}", at.path().display()),
         HudEffect::ReadFile { at, .. } => format!("read {}", at.path().display()),
         HudEffect::WriteFile { at, .. } => format!("write {}", at.path().display()),
@@ -274,7 +271,7 @@ fn tag_of(effect: &HudEffect) -> Tag {
         | HudEffect::WriteFile { tag, .. }
         | HudEffect::Fetch { tag, .. }
         | HudEffect::Validate { tag, .. } => *tag,
-        other @ (HudEffect::Catalog(_) | HudEffect::FetchRegistry { .. } | HudEffect::Delete { .. } | HudEffect::Selection { .. } | HudEffect::Notice(_)) => panic!("{other:?} carries no tag"),
+        other @ (HudEffect::Delete { .. } | HudEffect::Selection { .. } | HudEffect::Notice(_)) => panic!("{other:?} carries no tag"),
     }
 }
 
@@ -657,8 +654,8 @@ fn a_listing_reads_each_index_then_each_pack_then_the_drop_folders() {
     assert_eq!(r.entry("org.example.b").trust, Trust::Registry);
 }
 
-/// An unreviewed source is never promoted: a drop and an address are Unreviewed, and only a source
-/// that says registry is Registry.
+/// An unreviewed source is never promoted: a drop and an address are Unreviewed, and only a record an earlier
+/// build wrote from the former registry gallery reads as Registry.
 #[test]
 fn trust_follows_the_source_and_only_the_registry_is_reviewed() {
     assert_eq!(Source::Drop.trust(), Trust::Unreviewed);
@@ -1526,72 +1523,3 @@ fn an_address_the_store_would_not_have_recorded_is_not_a_dev_source() {
     }
 }
 
-fn registry_fixture(bytes: &[u8], revoked: bool) -> Vec<u8> {
-    let meta = match validator(bytes) { Verdict::Loadable(meta) => meta, Verdict::Unloadable(..) | Verdict::Invalid => panic!("fixture") };
-    let sha = Sha::of(bytes).hex();
-    let art = "b".repeat(64);
-    let base = catalog::ORIGIN;
-    serde_json::to_vec(&serde_json::json!({"format":1,"serial":1000,"entries":[{
-        "id":meta.id,"name":meta.name,"version":meta.version,"package_format":"1.0","hud_format":"1.0",
-        "author":"Author","license":"CC0-1.0","app":{},"sha256":sha,"bytes":bytes.len(),
-        "url":format!("{base}/p/{sha}.plxhud"),"unfit":[],
-        "previews":[{"state":"compact","lang":"en","file":format!("{art}.png"),"sha256":art,
-            "url":format!("{base}/previews/{sha}/{art}.png")}]
-    }],"revoked":if revoked {serde_json::json!([{"sha256":sha,"reason":"Withdrawn layout"}])} else {serde_json::json!([])}})).unwrap()
-}
-
-fn publish_catalog(store: &mut HudStore, bytes: Vec<u8>) -> Vec<HudEffect> {
-    let mut fx=vec![];
-    store.step(HudEvent::Catalog(catalog::Event::Open {candidates:vec![],now:10}),&mut fx);
-    let tag=fx.iter().find_map(|e| match e {HudEffect::Catalog(catalog::CatalogEffect::Get {tag,..})=>Some(*tag),HudEffect::Catalog(_) | HudEffect::FetchRegistry { .. } | HudEffect::ScanDir { .. } | HudEffect::ReadFile { .. } | HudEffect::WriteFile { .. } | HudEffect::Delete { .. } | HudEffect::Fetch { .. } | HudEffect::Validate { .. } | HudEffect::Selection { .. } | HudEffect::Notice(_) => None}).unwrap();
-    fx.clear();
-    let signed=catalog::testing::sign(&bytes);
-    store.step(HudEvent::Catalog(catalog::Event::Reply {tag,result:Ok(catalog::Reply::http(200,None,&signed,&catalog::testing::keys()))}),&mut fx);
-    fx
-}
-
-#[test]
-fn revoked_hash_disables_every_install_source_and_survives_later_disk_listing() {
-    let bytes=pack("com.example.revoked","1.0.0");let sha=Sha::of(&bytes);
-    for source in [Source::Drop,Source::Address,Source::Registry] {
-        let mut rig=Rig::with(&[(&bytes,source,&[0])]);
-        // Cache first, then the installed pack: neither order may re-enable the selected hash.
-        publish_catalog(&mut rig.m,registry_fixture(&bytes,true));
-        rig.refresh_selecting("com.example.revoked");
-        assert_eq!(rig.m.resolved(),BUILTIN_DEFAULT);
-        assert_eq!(rig.m.selected(),BUILTIN_DEFAULT);
-        assert_eq!(rig.m.entries()[2].loadable,Err(Unloadable::Revoked));
-        assert_eq!(rig.send(HudEvent::Selected {id:"com.example.revoked".into()}),Handled::No);
-        rig.install(&bytes,source,20);
-        assert_eq!(rig.notices.last(),Some(&Notice::Refused {sha,reason:Refusal::Unloadable(Unloadable::Revoked)}));
-    }
-    let mut rig=Rig::with(&[(&bytes,Source::Drop,&[0])]);rig.refresh_selecting("com.example.revoked");
-    let fx=publish_catalog(&mut rig.m,registry_fixture(&bytes,true));
-    assert!(fx.contains(&HudEffect::Selection {id:String::new()}), "the setting is cleared, so the profile follows the default");
-    assert_eq!(rig.m.resolved(),BUILTIN_DEFAULT);
-}
-
-#[test]
-fn registry_fetch_binds_download_bytes_and_manifest_before_offering_and_never_selects_on_install() {
-    let bytes=pack("com.example.registry","1.0.0");let sha=Sha::of(&bytes);
-    for changed in [false,true] {
-        let mut rig=Rig::new();rig.refresh();publish_catalog(&mut rig.m,registry_fixture(&bytes,false));
-        let mut fx=vec![];
-        rig.m.step(HudEvent::FetchRegistry {sha,app:"0.10.0".into(),language:"en".into()},&mut fx);
-        let tag=match &fx[0] {HudEffect::FetchRegistry {tag,package,..}=> {assert_eq!(package.sha(),sha);*tag},HudEffect::Catalog(_) | HudEffect::ScanDir { .. } | HudEffect::ReadFile { .. } | HudEffect::WriteFile { .. } | HudEffect::Delete { .. } | HudEffect::Fetch { .. } | HudEffect::Validate { .. } | HudEffect::Selection { .. } | HudEffect::Notice(_) => panic!("registry GET")};
-        let mut answer=vec![];
-        rig.m.step(HudEvent::Fetched {tag,result:Ok(if changed {pack("com.example.other","1.0.0")} else {bytes.clone()})},&mut answer);
-        if changed {
-            assert!(rig.m.offer().is_none());assert!(!rig.m.busy());
-            assert!(matches!(answer.as_slice(),[HudEffect::Notice(Notice::Refused {reason:Refusal::Changed,..})]));
-        } else {
-            rig.run(answer);
-            let offer=rig.m.offer().expect("validated offer");assert_eq!(offer.source,Source::Registry);
-            assert_eq!(rig.m.entries().len(),2,"confirmation must precede the first write");
-            rig.send(HudEvent::InstallOffer {sha,now:20});
-            assert_eq!(rig.m.entries()[2].trust,Trust::Registry);
-            assert_eq!(rig.m.selected(),BUILTIN_DEFAULT,"install is distinct from Use HUD");
-            assert_eq!(rig.send(HudEvent::Selected {id:"com.example.registry".into()}),Handled::Yes);
-        }
-    }
-}

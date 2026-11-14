@@ -23,7 +23,6 @@
 //! **Layout** per candidate directory: `packs/<sha256>.plxhud` (content-addressed, so an update is
 //! a new file), `installed.json` (id -> sha, source, installed-at, and for a package fetched from a development
 //! source the address it came from), `drop/` (the sideload drop folder).
-//! `index-cache.json` is the registry gallery's dated conditional-GET cache of the signed index ([`catalog`], verified again on every load); boot reads cached revocations, while only a settings visit authorizes an index GET.
 //! A listing reads every candidate; one sha found in two of them is one package; for one id the higher
 //! `version` wins, and on a tie the earlier candidate.
 //!
@@ -48,8 +47,7 @@
 //! axes, which are checked against the manifest returned by the validator.
 //!
 //! **Package work is sequential**: at most one package request is in flight, so a runner may execute its effects in
-//! order and memory stays bounded by one package, with no cap on how many packages exist. The independent catalog
-//! machine may read or fetch concurrently; its response and cache have their own byte bounds and generation.
+//! order and memory stays bounded by one package, with no cap on how many packages exist.
 //! A `Refresh` replaces work in flight, so it ends an install, a fetch, a held offer or a removal it displaces with a notice and,
 //! once the indexes are read again, deletes the packs that work may have left that no index names (an
 //! unreadable index shields its candidate). A process that dies mid-install is not covered: the store
@@ -68,15 +66,18 @@
 //! | `Removed` | idle | `WriteFile(installed.json)` per candidate holding a record of the id (an unreadable one too), `Delete(pack)`; `Selection(builtin)` when the selected one went |
 //! | `Selected` | any | `Selection(id)` for the built-in or a listed, loadable package; else not handled |
 //!
-//! | `Catalog` | its own addressed phase | bounded cache read/write or conditional index GET; cached revocations apply at boot, network only on settings Open |
-//! | `FetchRegistry` | idle, compatible current index entry | exact-hash GET, validate identity and formats, then hold the same confirmation offer as an address fetch |
-//! | `CancelRegistry` | matching pending fetch/validation/offer | abandon unconfirmed work; confirmed atomic installs continue |
-//!
 //! A pair not listed (a result for a tag nothing awaits, an install while busy) is [`Handled::No`] and
 //! changes nothing. A runner that loses an answer is recovered by the next `Refresh`.
 
 pub mod address;
-pub mod catalog;
+
+/// Latest HUD document version this runtime reads.
+pub const HUD_FORMAT: (u8, u8) = (1, 2);
+
+/// Whether `text` is a HUD format this runtime reads: `HUD_FORMAT`'s major, at any minor up to its own.
+pub fn hud_format_supported(text: &str) -> bool {
+    (0..=HUD_FORMAT.1).any(|minor| text == format!("{}.{minor}", HUD_FORMAT.0))
+}
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -215,7 +216,8 @@ pub enum Source {
     Drop,
     /// An address typed in Settings (`gh:owner/repo[@tag]`, an `https://` URL, an RFC1918 `http://`).
     Address,
-    /// The registry gallery.
+    /// The former online registry gallery. Nothing installs from it any more; the value stays so an
+    /// `installed.json` written by an earlier build still reads, and its packages stay listed.
     Registry,
 }
 
@@ -243,7 +245,7 @@ impl Source {
 pub enum Trust {
     /// Compiled in.
     BuiltIn,
-    /// CI plus human review.
+    /// Installed from the former registry gallery by an earlier build.
     Registry,
     /// A sideload or a drop: no review, and Settings says so.
     Unreviewed,
@@ -270,8 +272,6 @@ pub enum Unloadable {
     OlderFormat,
     /// Outside the package's own `app.min`/`app.max`.
     AppRange,
-    /// This exact archive was withdrawn by the registry, regardless of its install source.
-    Revoked,
 }
 
 /// The runner's answer to a [`HudEffect::Validate`]: `admit`'s strict parse, invariants and app-range check, reduced to what
@@ -400,13 +400,6 @@ pub enum Notice {
 /// The events [`HudStore::step`] takes.
 #[derive(Debug)]
 pub enum HudEvent {
-    /// A registry settings visit, boot cache load or addressed cache/HTTP result. Boot never authorizes a GET.
-    Catalog(catalog::Event),
-    /// Fetch a compatible catalog package. The hash is looked up again in the checked index.
-    FetchRegistry { sha: Sha, app: String, language: String },
-    /// The initiating detail page was destroyed. Pending download/validation/offers may be abandoned;
-    /// an already-confirmed atomic installation continues.
-    CancelRegistry { sha: Sha },
     /// HUD settings opened (or the store started): forget the listing and read every candidate. Always
     /// taken, and it replaces whatever is in flight. A listing is dropped silently. An install ends
     /// with [`Notice::NotWritten`] and a removal with [`Notice::RemoveIncomplete`] (the listing that
@@ -445,10 +438,6 @@ pub enum HudEvent {
 /// The work the store asks of the runner.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HudEffect {
-    /// Registry cache IO or a conditional, redirect-free index request.
-    Catalog(catalog::CatalogEffect),
-    /// A catalog-bound package GET; no redirects and no account headers.
-    FetchRegistry { tag: Tag, package: catalog::Package, max_bytes: usize },
     /// List a directory: [`HudEvent::Scanned`].
     ScanDir { tag: Tag, at: Loc },
     /// Read a file, at most `max_bytes`: [`HudEvent::Read`].
@@ -628,7 +617,6 @@ struct Offer {
     /// Where the bytes came from, for the prompt: the address of a fetch.
     from: Option<address::Address>,
     bytes: Arc<[u8]>,
-    expected: Option<catalog::Package>,
 }
 
 enum Write {
@@ -642,7 +630,7 @@ enum Step {
     /// A drop file is being read again so that what is installed is what was listed.
     Reading { sha: Sha, now: u64 },
     /// A fetch is in flight.
-    Fetching { address: address::Address, expected: Option<catalog::Package> },
+    Fetching { address: address::Address },
     Validating(Offer),
     /// A validated fetch waits for the viewer to confirm or decline (`offer.now` is `None`).
     Offered { offer: Offer, meta: Meta },
@@ -689,7 +677,6 @@ pub struct HudStore {
     selected: String,
     op: Op,
     tags: u32,
-    catalog: catalog::Catalog,
 }
 
 impl Default for HudStore {
@@ -708,7 +695,6 @@ impl HudStore {
             selected: BUILTIN_DEFAULT.to_string(),
             op: Op::Idle,
             tags: 0,
-            catalog: catalog::Catalog::default(),
         }
     }
 
@@ -718,36 +704,6 @@ let handled = 'reduce: {
 let (ev,): (HudEvent,) = (ev,);
 
         match ev {
-            HudEvent::Catalog(event) => {
-                let mut work = Vec::new();
-                let handled = self.catalog.step(event, &mut work);
-                fx.extend(work.into_iter().map(HudEffect::Catalog));
-                if handled { Handled::Yes } else { Handled::No }
-            }
-            HudEvent::CancelRegistry { sha } => {
-                let cancels = match &self.op {
-                    Op::Installing(Installing { step: Step::Fetching { expected: Some(p), .. }, .. }) => p.sha() == sha,
-                    Op::Installing(Installing { step: Step::Validating(offer) | Step::Offered { offer, .. }, .. }) =>
-                        offer.source == Source::Registry && offer.sha == sha && offer.now.is_none(),
-                    Op::Idle | Op::Listing(_) | Op::Installing(_) | Op::Removing(_) => false,
-                };
-                if cancels { drop(std::mem::replace(&mut self.op, Op::Idle)); Handled::Yes } else { Handled::No }
-            }
-            HudEvent::FetchRegistry { sha, app, language } => {
-                if self.busy() || self.catalog.snapshot().revoked(sha).is_some() { break 'reduce Handled::No }
-                let Some(package) = self.catalog.snapshot().index.as_ref().and_then(|i| i.entries.iter().find(|p| p.sha() == sha))
-                    .filter(|p| p.compatible(&app, &language, self.setup.max_pack_bytes)).cloned() else { break 'reduce Handled::No };
-                let Ok(address) = address::parse(&package.url) else { break 'reduce Handled::No };
-                let tag = {
-
-        self.tags = self.tags.wrapping_add(1);
-        Tag(self.tags)
-
-};
-                fx.push(HudEffect::FetchRegistry { tag, package: package.clone(), max_bytes: self.setup.max_pack_bytes });
-                drop(std::mem::replace(&mut self.op, Op::Installing(Installing { tag, step: Step::Fetching { address, expected: Some(package) } })));
-                Handled::Yes
-            }
             HudEvent::Refresh { setup, selected } => {
                 // Always taken: it is how a store whose runner lost an answer recovers. Whatever it
                 // displaces wrote atomically and put the index last, so disk is consistent, and the
@@ -842,7 +798,7 @@ let (mut listing,): (Listing,) = (Listing { todo, flight: None, stray },);
 let (id,): (String,) = (id,);
 
         let allowed = is_builtin(&id)
-            || self.winners().get(id.as_str()).is_some_and(|w| w.loaded.loadable.is_ok() && self.catalog.snapshot().revoked(w.record.sha).is_none());
+            || self.winners().get(id.as_str()).is_some_and(|w| w.loaded.loadable.is_ok());
         if !allowed {
             break 'select Handled::No;
         }
@@ -861,7 +817,7 @@ let (id,): (String,) = (id,);
                 } else {
                     // Ask the runner whether these bytes are a package this app can run.
                     let next = {
-let (offer,): (Offer,) = (Offer { sha, source, now: Some(now), from: None, bytes: bytes.into(), expected: None },);
+let (offer,): (Offer,) = (Offer { sha, source, now: Some(now), from: None, bytes: bytes.into() },);
 
         let tag = {
 
@@ -888,15 +844,11 @@ let (offer,): (Offer,) = (Offer { sha, source, now: Some(now), from: None, bytes
 
 };
                 fx.push(HudEffect::Fetch { tag, address: address.clone(), max_bytes: self.setup.max_pack_bytes });
-                drop(std::mem::replace(&mut self.op, Op::Installing(Installing { tag, step: Step::Fetching { address, expected: None } })));
+                drop(std::mem::replace(&mut self.op, Op::Installing(Installing { tag, step: Step::Fetching { address } })));
                 Handled::Yes
             }
             HudEvent::InstallOffer { sha, now } => match std::mem::replace(&mut self.op, Op::Idle) {
                 Op::Installing(Installing { step: Step::Offered { mut offer, meta }, .. }) if offer.sha == sha => {
-                    if self.catalog.snapshot().revoked(sha).is_some() {
-                        Self::notice(fx, Notice::Refused { sha, reason: Refusal::Unloadable(Unloadable::Revoked) });
-                        break 'reduce Handled::Yes;
-                    }
                     offer.now = Some(now);
                     // Write the pack to candidate `dir`; with no candidate left, nothing was installed.
                     let next = 'write_pack: {
@@ -1030,8 +982,7 @@ let (mut listing, ev,): (Listing, HudEvent,) = (listing, result,);
             | HudEvent::Read { tag: t, .. }
             | HudEvent::Validated { tag: t, .. }
             | HudEvent::Written { tag: t, .. } => *t == tag,
-            HudEvent::Catalog(_) | HudEvent::FetchRegistry { .. } | HudEvent::CancelRegistry { .. }
-            | HudEvent::Refresh { .. } | HudEvent::Install { .. } | HudEvent::Fetch { .. }
+            HudEvent::Refresh { .. } | HudEvent::Install { .. } | HudEvent::Fetch { .. }
             | HudEvent::Fetched { .. } | HudEvent::InstallOffer { .. } | HudEvent::DeclineOffer { .. }
             | HudEvent::InstallDrop { .. } | HudEvent::Selected { .. } | HudEvent::Removed { .. } => false,
         };
@@ -1160,8 +1111,7 @@ let (installing, ev,): (Installing, HudEvent,) = (installing, result,);
             | HudEvent::Validated { tag: t, .. }
             | HudEvent::Written { tag: t, .. }
             | HudEvent::Fetched { tag: t, .. } => *t == tag,
-            HudEvent::Catalog(_) | HudEvent::FetchRegistry { .. } | HudEvent::CancelRegistry { .. }
-            | HudEvent::Refresh { .. } | HudEvent::Install { .. } | HudEvent::Fetch { .. }
+            HudEvent::Refresh { .. } | HudEvent::Install { .. } | HudEvent::Fetch { .. }
             | HudEvent::InstallOffer { .. } | HudEvent::DeclineOffer { .. }
             | HudEvent::InstallDrop { .. } | HudEvent::Selected { .. } | HudEvent::Removed { .. } => false,
         };
@@ -1172,7 +1122,7 @@ let (installing, ev,): (Installing, HudEvent,) = (installing, result,);
             (Step::Reading { sha, now }, HudEvent::Read { result, .. }) => match result {
                 Ok(bytes) if Sha::of(&bytes) == sha => {
                     {
-let (offer,): (Offer,) = (Offer { sha, source: Source::Drop, now: Some(now), from: None, bytes: bytes.into(), expected: None },);
+let (offer,): (Offer,) = (Offer { sha, source: Source::Drop, now: Some(now), from: None, bytes: bytes.into() },);
 
         let tag = {
 
@@ -1190,22 +1140,18 @@ let (offer,): (Offer,) = (Offer { sha, source: Source::Drop, now: Some(now), fro
                     Op::Idle
                 }
             },
-            (Step::Fetching { address, expected }, HudEvent::Fetched { result, .. }) => match result {
+            (Step::Fetching { address }, HudEvent::Fetched { result, .. }) => match result {
                 Err(reason) => {
                     Self::notice(fx, Notice::FetchFailed { reason });
                     Op::Idle
                 }
                 Ok(bytes) => {
                     let sha = Sha::of(&bytes);
-                    if expected.as_ref().is_some_and(|p| p.sha() != sha || p.bytes != bytes.len()) {
-                        Self::notice(fx, Notice::Refused { sha, reason: Refusal::Changed });
-                        Op::Idle
-                    } else if bytes.len() > self.setup.max_pack_bytes {
+                    if bytes.len() > self.setup.max_pack_bytes {
                         Self::notice(fx, Notice::Refused { sha, reason: Refusal::TooLarge });
                         Op::Idle
                     } else {
-                        let source = if expected.is_some() { Source::Registry } else { Source::Address };
-                        let offer = Offer { sha, source, now: None, from: Some(address), bytes: bytes.into(), expected };
+                        let offer = Offer { sha, source: Source::Address, now: None, from: Some(address), bytes: bytes.into() };
                         {
 let (offer,): (Offer,) = (offer,);
 
@@ -1223,10 +1169,7 @@ let (offer,): (Offer,) = (offer,);
                 }
             },
             (Step::Validating(offer), HudEvent::Validated { sha, verdict, .. }) if sha == offer.sha => {
-                let checked = self.judge(offer.sha, &verdict).and_then(|meta| {
-                    if offer.expected.as_ref().is_some_and(|p| p.id != meta.id || p.name != meta.name || p.version != meta.version
-                        || p.package_format != meta.package_format || p.hud_format != meta.hud_format) { Err(Refusal::Changed) } else { Ok(meta) }
-                });
+                let checked = self.judge(offer.sha, &verdict);
                 match checked {
                     Err(reason) => {
                         Self::notice(fx, Notice::Refused { sha: offer.sha, reason });
@@ -1426,18 +1369,11 @@ let (mut removing,): (Removing,) = (removing,);
         }
 
 };
-// The cache can land before the installed-pack listing: apply the same rule after either.
-        if self.winners().get(self.selected.as_str()).is_some_and(|w| self.catalog.snapshot().revoked(w.record.sha).is_some()) {
-            self.selected = Self::fall_back(fx);
-        }
         handled
 
 }
 
     // -------- readers --------
-
-    /// The current gallery view, including dated cache status and revocation reasons.
-    pub fn catalog(&self) -> &catalog::Snapshot { self.catalog.snapshot() }
 
     /// Whether a listing, install or removal is running (installing and removing wait for the idle).
     pub fn busy(&self) -> bool {
@@ -1453,7 +1389,7 @@ let (mut removing,): (Removing,) = (removing,);
     /// else the default built-in ([`BUILTIN_DEFAULT`]).
     pub fn resolved(&self) -> &str {
         if is_builtin(&self.selected)
-            || self.winners().get(self.selected.as_str()).is_some_and(|w| w.loaded.loadable.is_ok() && self.catalog.snapshot().revoked(w.record.sha).is_none())
+            || self.winners().get(self.selected.as_str()).is_some_and(|w| w.loaded.loadable.is_ok())
         {
             &self.selected
         } else {
@@ -1481,7 +1417,7 @@ let (mut removing,): (Removing,) = (removing,);
                 sha: Some(win.record.sha),
                 source: Some(win.record.source),
                 trust: win.record.source.trust(),
-                loadable: if self.catalog.snapshot().revoked(win.record.sha).is_some() { Err(Unloadable::Revoked) } else { win.loaded.loadable },
+                loadable: win.loaded.loadable,
                 until_restart: win.loaded.volatile,
                 selected: self.selected == id,
                 dev_source: win.record.from.clone(),
@@ -1599,7 +1535,6 @@ let (mut removing,): (Removing,) = (removing,);
 
     /// Whether `verdict` for `sha` may be installed now, and the package it describes.
     fn judge(&self, sha: Sha, verdict: &Verdict) -> Result<Meta, Refusal> {
-        if self.catalog.snapshot().revoked(sha).is_some() { return Err(Refusal::Unloadable(Unloadable::Revoked)) }
         let (meta, unloadable) = match verdict {
             Verdict::Invalid => return Err(Refusal::Invalid),
             Verdict::Loadable(meta) => (meta, None),
@@ -1789,7 +1724,7 @@ where D: serde::Deserializer<'de> {
 
 /// An invalid or unsupported index is read-only in its entirety. Its evidence and every possible
 /// referenced blob stay on disk. A current record binds the archive digest and both format axes; its HUD
-/// format is any this runtime reads ([`catalog::hud_format_supported`]: an installed 1.1 or 1.2 package must not
+/// format is any this runtime reads ([`hud_format_supported`]: an installed 1.1 or 1.2 package must not
 /// make the whole index read-only and every package vanish).
 fn parse_index(bytes: &[u8]) -> Dir {
     let readonly = || Dir { access: Access::ReadOnly, ..Dir::default() };
@@ -1798,7 +1733,7 @@ fn parse_index(bytes: &[u8]) -> Dir {
     if file.v != INDEX_FORMAT { return readonly(); }
     let mut index = Index::new();
     for (id, record) in file.packs {
-        if is_builtin(&id) || !valid_package_id(&id) || record.package_format != "1.0" || !catalog::hud_format_supported(&record.hud_format) {
+        if is_builtin(&id) || !valid_package_id(&id) || record.package_format != "1.0" || !hud_format_supported(&record.hud_format) {
             return readonly();
         }
         let Some(sha) = Sha::parse(&record.sha) else { return readonly() };

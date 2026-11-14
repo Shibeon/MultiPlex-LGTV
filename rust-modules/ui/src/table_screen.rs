@@ -71,8 +71,7 @@ pub struct Header<'a> {
     /// `copy` as before.
     pub follow: Option<&'a super::follow_copy::FollowCopy>,
     /// Display-only art in the picture slot ([`RouteLayout::picture_slot`]); no focus or hit stop.
-    /// The one slot for a page's picture: a poster fan, the Under posters tiles, a HUD's preview
-    /// ([`super::follow_copy::LandscapePicture`]).
+    /// The one slot for a page's picture: a poster fan or the Under posters tiles.
     pub picture: Option<&'a dyn super::follow_copy::PictureSlot>,
 }
 

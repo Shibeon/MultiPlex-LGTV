@@ -126,7 +126,6 @@ fn a_pair_with_a_page_that_does_not_hold_is_drawn_whole_as_before() {
     let w = Rect::FULL.w;
     for (stack, leaving) in [
         (vec![SettingsPage::Root, SettingsPage::ConsentStage(0)], None),
-        (vec![SettingsPage::Playback, SettingsPage::HudPreview(plx_data::hudpacks::Sha::of(b"push-test"))], None),
         (vec![SettingsPage::Root], Some(SettingsPage::ConsentStage(0))),
     ] {
         let popping = leaving.is_some();
@@ -158,20 +157,18 @@ fn a_settled_surface_draws_its_top_page_with_no_frame() {
 /// through `DrawFrame::narrative_painter` / `list_painter` itself.
 fn held_pages() -> Vec<SettingsPage> {
     use SettingsPage::*;
-    let sha = plx_data::hudpacks::Sha::of(b"push-test");
     let mut pages = vec![
         Root, Language, UnderPosters, UnderPostersDetails(PosterKind::Movie), UnderPostersDetails(PosterKind::Show), Contribute,
         Playback, AudioSubtitles, Favourites, LibraryFavourites, Privacy, Legal, About, Document(0), Preview(0), Diagnostics,
-        PlayerHud, HudGallery, HudDetail(sha), HudAbout(sha),
+        PlayerHud,
     ];
     pages.extend(PICKERS.iter().map(|k| Picker(*k)));
     pages
 }
 
 /// The pages drawn WHOLE through the push's translate, and the precise reason each one is.
-fn not_held() -> [(SettingsPage, &'static str); 2] {
+fn not_held() -> [(SettingsPage, &'static str); 1] {
     [
-        (SettingsPage::HudPreview(plx_data::hudpacks::Sha::of(b"push-test")), "a full-screen scene with its own controls drawn over it: there is no narrative column to hold"),
         (SettingsPage::ConsentStage(0), "the first-run question: its own family never pushes a PushFrame, and its card is one piece"),
     ]
 }

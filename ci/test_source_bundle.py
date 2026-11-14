@@ -573,7 +573,7 @@ class RepositoryTreeScan(unittest.TestCase):
         lock = (Path(__file__).resolve().parents[1] / 'rust-modules/Cargo.lock').read_text()
         pinned = set(re.findall(r'^name = "([^"]+)"$', lock, re.M))
         vendored = {name.split('/')[1] for name in PUBLIC_SAMPLE_FILES if name.startswith('cargo-vendor/')}
-        self.assertIn('ed25519-compact', vendored)
+        self.assertIn('rcgen', vendored)
         self.assertEqual(sorted(vendored - pinned), [])
 
 
