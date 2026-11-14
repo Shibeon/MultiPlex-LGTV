@@ -1,4 +1,4 @@
-{"updated":"2026-11-14T07:18:28Z",
+{"updated":"2026-11-14T07:23:27Z",
 "ci":[
 {"id":43517997405,"at":"2026-11-13T22:17:04Z","sha":"3f4899126","title":"Texte visible : \u00ab Made for a newer MultiPlex \u00bb","pr":null,"conclusion":"failure","attempt":1,"jobs":{"which gates apply":6,"host python/shell/C gates":590,"armv7 cross-build and artifact assertions":489,"host lint + type-checks":304,"host harness tests":412,"cross-build (armv7) + artifact assertions":4},"failed":["host checks (NOT a device gate)","host unit tests (default features)","host unit tests (hostsim)"]},
 {"id":43527317455,"at":"2026-11-13T23:28:03Z","sha":"2eaca7291","title":"Confidentialit\u00e9 : pas de question de consentement sans destination de rapports, mentions l\u00e9gales MultiPlex","pr":null,"conclusion":"failure","attempt":1,"jobs":{"which gates apply":5,"host unit tests (default features)":407,"host python/shell/C gates":397,"armv7 cross-build and artifact assertions":380,"host harness tests":426,"host lint + type-checks":233,"cross-build (armv7) + artifact assertions":4},"failed":["host checks (NOT a device gate)","host unit tests (hostsim)"]},
@@ -17,6 +17,6 @@
 {"id":43570017143,"at":"2026-11-14T07:12:48Z","sha":"62668dcea","title":"Test du compte de la biblioth\u00e8que : parcourir les langues livr\u00e9es","pr":null,"conclusion":"success","attempt":1,"jobs":{"Windows launcher syntax":21,"macOS tests against bundled FFmpeg and ASS":250,"Linux simulator build + launch":325,"macOS simulator build + launch":169}}
 ],
 "nightly":[],
-"cancelled":{"2026-11-14":{"push":3,"pull_request":0}},
+"cancelled":{"2026-11-14":{"push":4,"pull_request":0}},
 "daily":[],
 "flaky":[]}
