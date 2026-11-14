@@ -192,7 +192,7 @@ person the provider has never heard of. To see them, arm the stand-in. The event
 reads=refused` at boot). **Before opening a person page, read the boot line**: `discover:
 base=stand-in reads=open` (or `base=real reads=refused`) means nothing reaches the real provider;
 `base=real reads=open` means a stored or interactive session that WILL, so do not open the page.
-`tools/screenshots.py`, `tools/site_video.py` and `tools/watchlist_captures.py` arm both triggers and
+`tools/screenshots.py` and `tools/watchlist_captures.py` arm both triggers and
 fail the run unless the boot logged `discover: base=stand-in` (`mock_pms.discover_stand_in_problem`).
 
 ## Drive it, then screenshot
@@ -247,15 +247,13 @@ sign-in may legitimately have advanced by the time the app is foregrounded again
 
 ## Documentation screenshots
 
-`make screenshots` regenerates every image under `docs/screenshots/`, and the website's close-up
-stills (the Features "look" panels use `closeup-glass` and `closeup-tiles`) and link-preview card under `site/media/`, from a committed scene manifest, against the
+`make screenshots` regenerates every image under `docs/screenshots/` from a committed scene manifest, against the
 mock server's demo library — no Plex account, no television, no gitignored file:
 
 ```sh
 make demo-library                     # fetch (sha256-pinned, ~390 MB once) + derive; screenshots runs it too
 make screenshots                      # build the sim, render every scene + CREDITS.md into docs/screenshots/
 make screenshots SHOT_SCENES=home,ux-detail.jpg SHOT_OUT=/tmp/shots   # a subset, somewhere else
-make screenshots SHOT_SCENES=home,site-glass,site-glass-narrow,site-tiles,site-up-next   # the site's images
 make screenshots SHOT_CHECK=1         # render each scene twice; fail unless within its bound
 make screenshots SHOT_HERO=sintel     # pin another film as the home hero for this run
 make screenshots SHOT_HERO_VARIANTS=1 # also home-hero-<film>.jpg for each hero candidate
@@ -266,24 +264,12 @@ make screenshots SHOT_HERO_VARIANTS=1 # also home-hero-<film>.jpg for each hero 
   and the files it becomes. No key is sent. `tools/screenshots.py` arms `token`, `plextv` (plex.tv
   replaced by the mock) and `stillclock` itself on every scene, and refuses a run whose log shows
   a `BADTRIGGER`, a trigger that gave up, or a request the mock could not answer.
-- **An output is a file, a crop and a size.** An output's `dest` is `docs` (default,
-  `docs/screenshots/`) or `site` (`site/media/`). A scene may render supersampled
+- **An output is a file, a crop and a size.** An output's `dest` is `docs` (the default and only
+  one, `docs/screenshots/`). A scene may render supersampled
   (`render_scale` 1..4); an output may `crop` (`[x, y, w, h]` in 1920x1080 canvas pixels,
   fractions allowed, whatever the scale), resample to `size` (refused if it would change the
-  crop's shape) and set a JPEG `quality`. The `site-*` scenes cut the site's close-ups at 3x/4x
-  on the hand-cut framing (the scene's `state` records how each crop was matched). A `card`
-  output (`og-card.jpg`, on the `home` scene) is not cut from the capture: `tools/render-og-card.sh`
-  composes `site/og/card.html` around the home figure the same run staged, so a run that includes
-  `home` needs a headless Chromium (Chrome, Chromium or a Playwright cache; `CHROME=` overrides).
+  crop's shape) and set a JPEG `quality`.
   Outputs are all-or-nothing: one failed scene and nothing is written anywhere.
-- **After a stable release these refresh themselves** (`site-video.yml`'s `stills` job,
-  `tools/site_stills.py`, on Linux/llvmpipe with the pinned ffmpeg): every scene is captured twice and the pair
-  must agree within the scene's `max_delta`, the first capture is adopted. `python3 tools/site_stills.py files`
-  lists them; `files --manual` is empty today (only the TV photograph `navblur-transition.jpg` is by hand). A Mac
-  render is a preview of what the bot commits (the two differ by renderer noise, not by content).
-- **The site's copies follow the render.** (The page shows the `closeup-glass` and `closeup-tiles` stills in its Features look panels, so a re-render changes live site imagery; the `closeup-player` set and the narrow glass cut are unused by the page (phones crop the wide glass still), still produced and staged.) After re-rendering the `site-*` scenes, run
-  `python3 tools/render-site-variants.py` (the WebP of every close-up and the phone copies of
-  tiles and player) and then `python3 tools/render-site-glows.py`; both read the rendered JPEGs.
 - **Screenshot triggers worth knowing.** `grid=<row>,<col>` (Home), `libgrid=<row>,<col>` (the
   library's poster grid), `libshelf=<shelf>,<col>` (a shelf on the Recommended page only, so arm
   `libtype=recommended` first; the view scrolls to it),
@@ -425,44 +411,17 @@ device-verified" is a useful, honest status. "Verified" without a TV is not.
   is a screenshot facility for the documentation's player figure; it says nothing about LG's
   decoder, the video plane or picture timing on the television.
 
-## The frame dump (the demo video's renderer)
+## The frame dump
 
-`make site-video-sim` builds the simulator for the demo-video pipeline (`--no-default-features
---features hostsim,play-feed,devtriggers,placeholder-sentinel`, release, its own target dir, libass only), and
-`python3 tools/site_video.py render --out DIR --storyboard` plays `tests/video/feel.json` (positions and durations, compiled to the driver's key schedule: Home hero, hero paged to the second page and back, down to the Continue Watching shelf, the third card's Detail opened with OK and scrolled with five downs past its Cast & Crew row to the About section, back, the Movies library walked down with arrows only to its All poster grid and across it, walked back up and left with one back, about 30 s; nothing opened from Detail, no modal; shot with the hold hint taught, so card rests and the card OK are not capped: `render --storyboard` sets the `plxnative-hintoff` trigger (`devtriggers` builds only; it calls `hold_hint::teach_all_for_dev`, once, at boot) because the capsule is a one-time teaching overlay and a film has no viewer to teach) and records its sha256, `--extra-holds`, `--trigger`, how far each beat still moved at its end (`storyboard.rest`) and which titles it opened and `hold_hint: suppressed` in `render.json`. Before the film boots the launcher signs the simulator in to the mock's Demo account through the app's own QR sign-in (a prep boot with the `plxnative-login` trigger), so the profile chip, one `left` from the Home pill that `up` from the hero lands on, reads "Demo" and never "Sign in" should a beat press `left` there. A pushed page is filmed LIVE under the dip, never as a held image (`plx_gfx::dump`'s one page rule: every dip frame re-captures the page, `PageImage::step_filmed`), so a page that mounts hidden and fades in (an `Xfade` mount, the Library's) fades in as it does in the product, with its entrance springs playing, and nothing cuts when the dip ends. Either way `render` runs the simulator headless against the mock catalog (without `--storyboard` it holds Home for `--frames`, 180 by default) and leaves
-`master.mkv`, `frames.tsv`, `dump.json` and `render.json`. The simulator side is
-`rust-modules/src/dev/framedump.rs`, armed by `PLXNATIVE_DUMP=<dir>` (its module doc lists the
-variables). It drives the app from VIRTUAL time (`clock::set_replay`, 60 fps), forces a present every
-iteration at swap interval 0, and WRITES a frame only when nothing is still arriving (no placeholder
-drawn, no queued upload, an idle poster source, no open landing claim). While a placeholder, an
-upload, the poster source or a claim is outstanding it repeats the frame with `dt == 0` and writes
-nothing; virtual time is never skipped, so a push to a page is filmed as the product plays it (70 ms
-out, two consecutive alpha-0 frames (the out ramp clamps to 0, then `DipPhase::Hold`, as in the
-product), 140 ms in, then live. The product freezes the image captured at the floor through the In half and
-on while the destination's layout moves; a dump re-captures the page live on every frame of the dip
-instead, so the destination's springs, such as the Library's focused caption fading in, are
-filmed and nothing cuts). A capture with debt is re-captured on each repeat until clean
-(`plx_gfx::dump::held_repeat`).
-`--preroll` (default 60) only chooses how much boot is not written. `site_video.py gates` fails any
-`frames.tsv` row whose `t_ms` is not `round(n * 1000 / 60)`. Run it twice and compare `frames.tsv`
-(`site_video.py gates --frames-b`): the xxh3 column must match. The stronger check is
-`site_video.py hold-gate --out DIR [--keys 120:right,...]`, which renders the scene with no extra
-holds and with seeded extra held repeats on every frame (`PLXNATIVE_DUMP_EXTRA_HOLDS`) and requires
-columns 1-4 of `frames.tsv` equal. `--keys <virtual frame>:<key>,...` (`PLXNATIVE_DUMP_KEYS`) is
-the key schedule a storyboard compiles to (the down edge on that frame, the up edge six frames
-later); virtual frames count from the start of the preroll. `--trigger NAME=VALUE` writes a boot
-trigger (`--trigger detail=102` boots on that rating key's page). Each virtual frame is also run to a
-fixed point (a clean iteration must reproduce the previous one's picture; hold reason `settling`), so
-a frame never depends on how many iterations preceded it.
-A failed run leaves `master.partial.mkv`/`frames.partial.tsv`, never a `master.mkv`.
-
-What is and is not shown. Determinism is shown for the scenes the hold-injection gate was run on
-(Home held, `right`, `down`, `ok` into Detail, a four second hold, `back`; and Detail booted at a
-rating key). A modal or popover fails the run closed (its dim
-field is still sampled on a cadence). `Bridge::open_claims` covers Hubs and Browse discovery; the
-rest of the argument for session drains and unclaimed stores is in `framedump.rs`'s "Claims". The
-canonical render is `.github/workflows/site-video.yml` (Ubuntu 24.04, Xvfb + Mesa llvmpipe, rendered twice
-and hold-gated; it refreshes the site's film after a stable release, and `-f publish=false` is a dry run
-that publishes nothing: `docs/agent-reference.md`, "How the site demo video updates itself");
-a run on a Mac is a non-canonical preview. Not a screenshot tool: it never opens the TV and never replaces
-`make screenshots`.
+`make site-video-sim` builds the frame-dump simulator (`--no-default-features --features
+hostsim,play-feed,devtriggers,placeholder-sentinel`, release, its own target dir, libass only; the
+target keeps the name of the upstream's site demo video, its first user, which this fork removed with
+the landing page). The simulator side is `rust-modules/src/dev/framedump.rs`, armed by
+`PLXNATIVE_DUMP=<dir>` (its module doc lists the variables). It drives the app from VIRTUAL time
+(`clock::set_replay`, 60 fps), forces a present every iteration at swap interval 0, and WRITES a frame
+only when nothing is still arriving (no placeholder drawn, no queued upload, an idle poster source, no
+open landing claim); virtual time is never skipped, so a push to a page is recorded as the product
+plays it. Its callers today are `tools/screenshots.py`'s `virtual` scenes (one selected frame of the
+stream) and the HUD authoring simulator (`hud-simulator.yml`, `tools/hud_bundle.py`). A modal or
+popover fails a dump closed unless the caller allows it. Not a screenshot tool on its own: it never
+opens the TV and never replaces `make screenshots`.

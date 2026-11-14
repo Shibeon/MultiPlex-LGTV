@@ -1,8 +1,13 @@
 //! **The frame dump** (the demo video's S5b): the simulator renders a storyboard from VIRTUAL time
 //! and writes every frame it declares clean, as raw RGB24 for `ffmpeg -c:v ffv1 -level 3 -g 1`, one
-//! xxh3 per frame into `frames.tsv`, and a summary into `dump.json`. `tools/site_video.py render`
-//! is the launcher that owns the pipe, the pinned ffmpeg, the sentinel scan and `render.json`.
-//! Simulator only: this file compiles under `hostsim` + `devtriggers` and nowhere else.
+//! xxh3 per frame into `frames.tsv`, and a summary into `dump.json`. Simulator only: this file
+//! compiles under `hostsim` + `devtriggers` and nowhere else.
+//!
+//! **MultiPlex:** the upstream's site film and its launcher (`tools/site_video.py`, the storyboard
+//! `tests/video/feel.json`, `.github/workflows/site-video.yml`) were removed with its landing page. The
+//! dump itself stays: `tools/screenshots.py`'s `virtual` scenes drive it and `make site-video-sim`
+//! builds it for the HUD authoring simulator. The references to those removed files below record how
+//! the dump was designed and gated; they are not tools this checkout carries.
 //!
 //! **Armed by `PLXNATIVE_DUMP=<dir>`** (where `frames.tsv` and `dump.json` go), read once at the
 //! first loop iteration. The rest, all optional:

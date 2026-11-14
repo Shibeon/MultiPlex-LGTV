@@ -34,9 +34,8 @@ on:
     #     telemetry/src/diag/schema.rs), `LICENSE` (`include_str!`ed by screens/src/legal.rs and
     #     packaged), and `LICENSING.md`, `TRADEMARKS.md`, `THIRD-PARTY-NOTICES.md` (ci/check-package.py
     #     grades the packaged payload against them; the Makefile ships them in the .ipk);
-    #   * `docs/screenshots/CREDITS.md` and `site/credits.html` (tests/test_demo_library.py
-    #     cross-checks the two), `site/index.html` (same file, footer link), `site/ci/**`
-    #     (tools/test_ci_history.py reads the CI page), `site/hud/**` (rust-modules/src/hud_cli.rs
+    #   * `docs/screenshots/CREDITS.md` (tests/test_demo_library.py regenerates and compares it),
+    #     `site/hud/**` (rust-modules/src/hud_cli.rs
     #     `include_str!`s the schema golden; rust-modules/appkit/src/hud_format/site_tests.rs reads the
     #     examples and lint reports), and `docs/measurements/*-logs/*.log` (the tools/test_abr_*.py and
     #     tools/test_scrub_logs.py suites replay them).
@@ -48,15 +47,15 @@ on:
     # re-runs over the whole tree on the next push that does trigger this workflow, and again on
     # the release source bundle (ci/make-source-bundle.py) before anything ships; excluding prose
     # from this trigger defers it, it does not remove it. (This has always been true of the
-    # `docs/**/*.md` and `site/**` excludes; it is written down here so the comment stays honest.)
+    # `docs/**/*.md` excludes; it is written down here so the comment stays honest.)
     # Likewise `docs/release-notes/v*.md` and `docs/release-audits/v*.md` are linted by
     # ci/check-package.py only for the STABLE flavour (release.yml and rc.yml); this workflow
     # builds `FLAVOR=debug` (see the cross-build job), so they stay excluded.
     # This filter applies to `push` ONLY. `main` requires two status checks (`host checks (NOT a
     # device gate)` and `cross-build (armv7) + artifact assertions`), and a pull request whose
     # workflow never starts never reports them, so it could only be admin-merged (Dependabot's
-    # requirements-docs.txt bump, #772). `pull_request` therefore starts on EVERY PR and the
-    # `changes` job below applies this same list to the PR's changed files (ci/ci_paths.py reads
+    # bump of a since-removed site-build requirements file, #772). `pull_request` therefore
+    # starts on EVERY PR and the `changes` job below applies this same list to the PR's changed files (ci/ci_paths.py reads
     # it from this file): a PR that touches nothing a gate reads skips the heavy jobs, and the two
     # required names still report, green, from their always-running aggregators.
     paths: &ci_paths
@@ -77,23 +76,8 @@ on:
       # replayed by tools/test_abr_calibrate_plant.py, test_abr_transfer_bound.py and
       # test_scrub_logs.py (make check): must stay a trigger
       - 'docs/measurements/*-logs/*.log'
-      - '!site/**'
-      # graded by tests/test_demo_library.py (make check): must stay a trigger
-      - 'site/credits.html'
-      # tests/test_demo_library.py:744 greps the landing page's footer link to the credits page
-      - 'site/index.html'
-      # tools/test_ci_history.py (make check) reads the CI page's index.html and asserts that
-      # milestones.json stays gone, so the whole directory is a trigger
-      - 'site/ci/**'
-      # hud_cli.rs include_str!s the schema golden; appkit's site_tests.rs reads the examples and lint reports
-      - 'site/hud/**'
-      # Site-build tooling: run only by pages.yml, which exercises it on every deploy. No gate
-      # here (make check, ci/, tests/) reads or imports these. NOT .github/workflows/pages.yml:
-      # ci/test_ci_timeouts.py reads every workflow file, so that one must stay a trigger.
-      - '!tools/render-doc-page.py'
-      - '!tools/subset-site-fonts.py'
-      - '!tools/render-site-glows.py'
-      - '!tools/requirements-docs.txt'
+      # `site/` holds only `site/hud/` (the landing page was removed): hud_cli.rs include_str!s the
+      # schema golden and appkit's site_tests.rs reads the examples and lint reports, so `**` keeps it a trigger
       - '!.agents/**/*.md'
       - '!rust-modules/**/*.md'
       # Agent/editor configuration: the hooks are gates (.claude/hooks stays a trigger), the rest

@@ -1,11 +1,11 @@
-# Feeds the live build-time page at https://plxnative.com/ci/ (site/ci/index.html).
+# Records CI build times on the orphan `ci-metrics` branch (the upstream drew a live page on its own
+# site from them; this fork has no such page).
 #
 # After a CI / Simulator CI / Nightly run finishes this appends the new runs, with their per-job
 # seconds, conclusion and attempt, to ci-history.json on the orphan `ci-metrics` branch
 # (tools/ci-history.py), and derives ci-summary.json from it and from build-history.json
-# (tools/ci-summary.py: the page's "now" block, the slowest list and the regressions). The page reads
-# those files from raw.githubusercontent.com, so a finished run shows up without a Pages deploy.
-# Nothing on `main` changes.
+# (tools/ci-summary.py: the "now" block, the slowest list and the regressions), readable from
+# raw.githubusercontent.com. Nothing on `main` changes.
 #
 # WHICH RUNS. A developer waits on pull-request runs as much as on a merge, so the runs recorded are
 #   * pushes to main of CI and Simulator CI (head_branch main), and

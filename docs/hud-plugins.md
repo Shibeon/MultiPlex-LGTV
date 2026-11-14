@@ -243,7 +243,8 @@ Other subsystems the plan touches
   the redirect doors are `https_get_public(url)` (no headers, no body bound) and, since PR11,
   `https_get_public_bounded(url, max_body)` (the same request with `Some(max_body)`),
   `PUBLIC_MAX_REDIRECTS = 5` (`:146`); curl 7.53.1 (`:2098`). App text entry is `src/textinput.rs`; a QR
-  encoder is `ui/src/qr.rs`. The site is static GitHub Pages (`site/CNAME`, `.github/workflows/pages.yml`).
+  encoder is `ui/src/qr.rs`. The upstream's site was static GitHub Pages (`site/CNAME`, `.github/workflows/pages.yml`);
+  this fork removed both and keeps only `site/hud/`.
 - F41. Crypto and parsing: before PR14 there was no signature crate (`grep ed25519|minisign|ring =|signature` over every
   `Cargo.toml` printed nothing; PR14 added `ed25519-compact` to `plx_data`); `plx_base` has `sha256`, `b64`, `spki`; a duplicate-key-preserving JSON
   reader exists, private (`ui/src/rec/strict_json.rs`, `mod strict_json;` at `ui/src/rec.rs:40`); no JSON

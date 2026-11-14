@@ -409,13 +409,13 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
     the failing message says the same. Run it locally with
     `python3 ci/check-build-budgets.py --graph --src rust-modules/src` plus one `--src` per layer crate,
     as `ci.yml` spells it (add `--binary <path>` to grade a stripped binary); `ci/test_build_budgets.py` covers pass, fail, warn and the json schema.
-  - *Live chart.* https://plxnative.com/ci/ (`site/ci/index.html`, noindex, not linked from the
-    landing page) is the working instrument for what a developer waits on: a "now" block (each
+  - *CI metrics data.* (The upstream drew these as a live page on its own site, `site/ci/`; this fork
+    removed that page and keeps only the data.) The data is what a developer waits on: a "now" block (each
     metric's 7-day median, its change against the previous 7 days and 30 days ago: worse ones first,
     then the waits, the local loop and the longest jobs; a job under a minute, a part of a whole and a
     healthy no-op build are behind a disclosure), the slowest CI jobs and the slowest local steps
     right now (two lists: the benchmark runner is not comparable with CI), any regression of the last week with the commits in it, and the
-    time series behind them. It reads three files from the orphan `ci-metrics` branch
+    time series behind them. It lives in three files on the orphan `ci-metrics` branch
     (raw.githubusercontent.com): `ci-history.json` (runs), `build-history.json` (the daily
     benchmark, written by the benchmark workflow) and `ci-summary.json` (derived: `tools/ci-summary.py`
     computes the "now" rows with their order and selection, the two slowest lists and the regressions as pure functions, so a later
@@ -537,184 +537,12 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
   the rule and the merge, `ci/test_build_bench.py` the restore and the failure reports, and
   `ci/test_ci_workflows.py` the workflow's triggers (no pull-request trigger), guards, permissions,
   legs and timeouts.
-- **How the site demo video updates itself** (`.github/workflows/site-video.yml`, the last job of
-  `release.yml`, `site_video.py`'s `release-ref` / `needs-render` / `adopt`). The
-  film refreshes AFTER A STABLE RELEASE and after nothing else: `release.yml`'s final job
-  (`site-video`, `continue-on-error`, `actions: write` as its only write scope) dispatches
-  `site-video.yml` ON THE NEW TAG (`gh workflow run site-video.yml --ref vX.Y.Z`) once the release is
-  published (a `workflow_dispatch` is the one event a `GITHUB_TOKEN` may start a run with). There is
-  no schedule and no pull-request or push trigger; a release candidate, a nightly, a branch or a
-  commit are refused by `release-ref` (`tests/test_site_video.py`, `ReleaseRefGuard`, holds the
-  repository's real tags), and a maintenance-line patch (not on main) is skipped by the hook and
-  refused by the workflow. **The workflow renders its own checkout and no input names a ref**: a run
-  on a tag has caches of its own (a cache is restorable only by runs of the ref that wrote it and the
-  branches below it, never by main), so the cache steps that restore into the tree being rendered
-  cannot poison anything main runs (CodeQL reads a checkout of a ref an input names, followed by cache
-  steps, as "cache poisoning via execution of untrusted code"). Five jobs (`stills`, the film's sibling, is the next bullet).
-  `decide` (`contents: read`) reads `github.ref`: a tag must be a stable `vX.Y.Z` whose commit is an
-  ancestor of main for the run to publish, `refs/heads/main` (a maintainer's manual dispatch) may
-  publish, and a branch renders as a dry run only (a tag that is not a stable `vX.Y.Z` on main fails `decide`
-  at once, before any rendering, unless `-f publish=false` makes it a dry run too); it then asks `needs-render`: if the git trees
-  of everything that can change a pixel (`TREE_PATHS`) equal the `tree_hash.combined` recorded in the
-  committed `site/media/feel.manifest.json` AND the stills' inputs equal their own committed manifest, the run ends GREEN without rendering. `render`
-  (`contents: read`) renders the checkout and applies every gate below; any failure leaves the site as
-  it was and the run red. `publish` (`contents: write`, the only write token in the workflow) checks
-  out `main` (a literal `ref: main`; a dry run checks out the dispatched ref instead and keeps no
-  credential), downloads the artifact (data) and runs MAIN's tool, never the rendered ref's code:
-  `site_video.py adopt <artifact dir> --write --derive --expect-rev <sha>`. It verifies the artifact
-  (`linux-ci`, sha256s, gates passed, clean tree, and that it was rendered from that commit's
-  inputs), and when the six media files differ from main's it copies them with the manifest,
-  regenerates the feel glows and the credits page, REWRITES the `codecs=` strings of
-  `site/index.html` from the new files' own `avcC` / `av1C` boxes (a re-encode that moves a profile or
-  level must not leave the page declaring the old one, which `CommittedSiteMedia` would catch on main),
-  checks that only the film's and the stills' files changed, and commits as github-actions[bot] (`Site: demo video
-  re-rendered for vX.Y.Z`, or `demo video and stills` / `stills` for what changed, `main@<sha>` for a manual dispatch; the body carries the gates' summary and
-  the run URL), rebasing onto the tip of main and retrying the push (never forcing). A film
-  byte-identical to the committed one commits nothing and writes nothing, the manifest included, so the
-  manifest keeps naming the tree the film was last rendered for (the next release with changed inputs
-  renders again; a release rarely comes twice a week). `pages` DISPATCHES `pages.yml` on main (`gh
-  workflow run pages.yml --ref main`): a push with `GITHUB_TOKEN` does not start it, and the
-  `github-pages` environment admits deployments from the `main` branch only, so a run on a tag cannot
-  call it; the deploy is its own run ("Deploy landing page"), where a failed deploy shows. **It never
-  blocks a release**: it is a separate run, dispatched after the release exists; if it fails the
-  release stays, the site keeps what it had (a failed `render` keeps the old film; a failed `stills` with a green
-  `render` lands the film and keeps the old stills), and the red "Site video" run is the notice. **Taste is
-  not gated**: the gates prove the film is deterministic and well encoded, not that it is good, so look
-  at the site after a release. Operate it: re-run for a tag `gh workflow run site-video.yml --ref
-  vX.Y.Z`; render anyway (and publish) `gh workflow run site-video.yml --ref main -f force=true`; a
-  dry run (everything but the push and the deploy, printing the `git diff --stat` it would commit)
-  `-f publish=false`, which is how a change to the workflow is proved from its branch (`--ref
-  my-branch`; a branch never publishes whatever `publish` says); a bad film is `git revert <the bot's
-  commit>` (it takes the stills with it) and a push to main (the push triggers `pages.yml`). Turn it off by deleting the `site-video`
-  job at the end of `release.yml`. A render costs about 55 runner minutes (measured on run
-  37805253785).
-- **How the site's stills update themselves** (`site-video.yml`'s `stills` job, `tools/site_stills.py`,
-  `tests/test_site_stills.py`; the same run, workflow and bot commit as the film above, not a second workflow).
-  Every still a SIMULATOR makes, found by reading the generating tools (`site_stills.py files` lists them:
-  `tests/screenshots/scenes.json`'s outputs with their `CREDITS.md`, then the WebP and phone copies of
-  `render-site-variants.py` and the glows of `render-site-glows.py`), refreshes after a stable release when the
-  git objects of their inputs (`TREE_PATHS`, recorded as `tree_hash.combined` in `site/media/stills.manifest.json`)
-  moved, or on `force`; an app whose inputs did not move renders nothing and commits no stills, whatever the
-  renderer's noise. `decide` asks `needs-render`; `stills` (`contents: read`, its own checkout, the pinned
-  `ubuntu-24.04`, Xvfb, llvmpipe, the host FFmpeg built with `HOST=1 ci/build-ffmpeg.sh` and copied into `pkg/`
-  AFTER `make screenshots-sim` (on a fresh checkout the Makefile's `RUST_CFG` stamp deletes `pkg/lib*-plx.so.*`
-  while parsing, and without them `ff.rs` finds no FFmpeg and every stream ends at once: the player scenes'
-  "EOS pushed at true EOF"), the BtbN ffmpeg from `site_video.py ffmpeg-fetch` first on PATH as the ONE encoder,
-  `CHROME_ARGS=--no-sandbox` for the runner's Chrome that composes the link card) renders every scene with
-  `tools/screenshots.py --check-determinism --retry-unstable --report`: each scene is captured TWICE and the second
-  must agree with the first within the scene's noise bound; the first is adopted. **The bound is "stable", not
-  "byte-identical": llvmpipe's blur and glass passes round differently from run to run (a handful of scenes differ on
-  a few to a few hundred pixels, by one level), so demanding identical bytes fails nearly every run.** The bound is the
-  scene manifest's `max_delta` (default 1, `site-up-next` 2, each with its `tolerance_reason`) on the raw PNG captures,
-  where one level of rounding is one level (a JPEG spreads it over a block, up to 6 levels). Measured on the runner
-  (4 full renders, 16 scenes, and 28 isolated pairs of `site-tiles`): every pair within 1 level on 0 to 498 pixels,
-  except that in two of the four full renders ONE 3x scene (`site-tiles`, then `site-glass`) had a capture that
-  settled 2 to 4 s late and differed by 13 levels on 364 thousand of its 18.7 million pixels (a stalled runner, caught
-  mid-fade). So a pair that disagrees takes a THIRD capture and the first capture another agrees with is adopted
-  (`stable_capture`); three that never agree in any pair fail the job. A missing poster, a card that popped late or a
-  different row is tens of levels off in every capture that has it (`tests/test_site_stills.py` proves the bound on
-  synthetic captures). A failed `stills` job names the scene and its files, leaves the run red, does not block
-  the film's `publish` (a failed film blocks everything), and the committed stills stand; re-run it. `publish` runs
-  main's `site_stills.py adopt DIR --write --expect-rev` (refuses a non-`linux-ci` platform, a set that is not
-  exactly `output_files()`, a wrong sha256, a missing or over-bound verdict for any scene (the bound re-read from
-  main's `scenes.json`), other inputs), checks the path allow-list, and makes ONE commit with the film. Identical
-  output commits nothing, the manifest included. Every simulator scene is automated, the two player scenes
-  included. `docs/screenshots/navblur-transition.jpg` is a photograph of the panel and is regenerated by nobody.
-  `MANUAL_SCENES` stays as the place to put a scene the runner cannot make, with its reason. Operate as the
-  film: `gh workflow run site-video.yml --ref my-branch -f publish=false -f force=true` is the dry run.
-- **The site demo video's render** (`.github/workflows/site-video.yml`, `render`; `contents:
-  read`, one artifact kept 30 days). It is the CANONICAL render: `ubuntu-24.04` (pinned, never
-  `-latest`), the same libass caches and `./.github/actions/apt-install` action as
-  `simulators.yml`'s Linux job, with that job's SDL/GL/Xvfb package list plus `mesa-utils` (`glxinfo`,
-  which the manifest reads) and, in a second step, the apt `ffmpeg` and `python3-pil` that derive the demo art. It renders under Xvfb 1920x1080 on Mesa llvmpipe
-  (`LIBGL_ALWAYS_SOFTWARE=1`, `GALLIUM_DRIVER=llvmpipe`, `LP_NATIVE_VECTOR_WIDTH=256`, `LC_ALL=C`, `TZ=UTC`). It builds `make
-  site-video-sim`, fetches and derives the demo library (`tools/demo_library.py fetch` + `derive`,
-  the sources cached on the hash of `assets.json`, `derive` run cold every time; `fetch` backs
-  off on a wikimedia 429), fetches the pinned tool ffmpeg, runs `site_video.py render --storyboard`
-  (the film below) TWICE in separate processes, fails unless the two `frames.tsv` agree in columns 1-4 AND the two masters decode to the
-  same frames (a `framemd5` list; container byte equality is reported beside it), runs
-  `site_video.py hold-gate --storyboard` (the film with and without seeded extra held repeats, two more
-  renders, their masters deleted at once), rescans for the sentinel, then `encode`, `contact-sheet`,
-  `gates` and `manifest`. The manifest's `environment`
-  records the runner image version, OS, CPU model, Mesa and LLVM versions (`glxinfo -B`), the
-  packages behind them and the variables above, because the video is defined as what this pinned
-  stack renders; a new image is a new fingerprint, not a failure. `adopt` takes the artifact (a zip,
-  or the directory `download-artifact` unpacked; `--derive` also regenerates the feel glows and the
-  credits page). It reads no private file and holds no secret beyond the run's `GITHUB_TOKEN`.
-- **What the site demo video films, and how to make it.** One command, after `make site-video-sim`
-  and `python3 tools/demo_library.py fetch derive`:
-  `python3 tools/site_video.py render --out DIR --storyboard`, then `encode`, `gates` (see the
-  workflow above for the full sequence). A macOS render is a preview; only the Linux workflow's
-  artifact is adoptable. The film is `tests/video/feel.json`: positions and durations, never titles
-  (the demo catalog's order, `tests/demo_library/catalog.json`, decides what is under each position).
-  The demo mock's rows carry the `Image[]` a modern PMS sends (`CatalogLibrary._image_list`: a stamped
-  `clearLogo` only where the catalog has a logo, an episode's or a season's naming its show's). A row with no list
-  reads as an older server's and gets the legacy `/clearLogo` lookup, a 404 for each `logo_none_approved` title
-  (Metropolis, in the Continue Watching deck), and the frame dump ends the run on a failed art request.
-  It is the Home hero held under a second, `right` to the hero's Info button, `right` again (the
-  carousel turns forward to the second page), `left` to Continue and `left` again (back to the first
-  page), `down` onto the Continue Watching row, `right` twice to its third card and `ok` for that
-  title's Detail (the shelf's `ok` opens details, the default Continue Watching setting; nothing
-  plays), `down` to its Cast & Crew row (a portrait for each of the seven performers, from the
-  catalog's `people`: an openly licensed photograph of the actor or a frame of the film,
-  `tools/demo_library.py`, "People"), four more `down`s through the rest of the page (the title's
-  collection, its linked heading a stop of its own, then More Like This) to the About section at its
-  foot, with no `ok` anywhere on the page (each one there opens another page or a reader), `back`
-  (the shelf, that card focused; Detail's `back` leaves the page from wherever it is scrolled), `up` `up` to the Home pill (Up lands on the page's own pill; the
-  profile chip is one `left` away, off this route) and `right` on to the Movies tab, `ok` for the Movies library. The film's Movies leg predates the Library redesign: the page is now one
-  header row over the full poster grid, with no shelves and no All heading, so the recorded presses
-  through shelves to Type and Filter chips no longer match it and `feel.json` needs a re-walk (header
-  row, then `down` into the grid and a few moves inside its columns, then back to the top) before the
-  film is re-rendered (the Library's `back` takes one region a press, grid top, header, tab bar, then
-  Home, so the leg's single `back` returns Home only from the bar); the page is left that way, then `down` onto Continue, about 30 s. A `back` pressed lower on the Movies
-  page jumps it to its top first; that jump is NOT filmed, because its first Linux render wrote
-  different frames under the hold-injection gate (104 of 1734, from the press to the end of the
-  return Home), so it is a motion the dump cannot yet vouch for. Keys of one
-  gesture share a beat and are pressed 230 to 380 ms apart, faster than the springs settle: only a
-  beat's END is held to rest. The Movies page is walked with arrows only (no `ok`, so a miscounted
-  press cannot open anything there) and never reaches the grid's sixth column, whose `right` is the
-  letter rail. The beat rests were set from
-  the settle times measured on the previous film's frames (a hero page turn about 1.15 s, a page
-  scroll about 1.1 s, a card move about 0.7 s, a page push about 0.9 s) plus a quarter second; the
-  grid's and the Detail's scrolls are new and unmeasured until their first render. The last frame equals the first to within 1/255 per channel (`storyboard.loop` in `render.json` and `feel.manifest.json` counts the pixels that differ). Every
-  hero page it shows passes `demo_library.py hero-report` and is not `not_in_video`, and the title
-  whose Detail it opens is not one whose hero page it shows. NOT filmed: anything opened from Detail, any
-  popover or modal, any title flagged `not_in_video` opened (`gates` checks the mock's request log,
-  and that no stream, transcode, timeline, scrobble or play-queue request was made), and the
-  hold-hint capsule: the film is shot with the hint taught. The capsule is a one-time teaching
-  overlay (it stands after 1.5 s of rest on a card, once per install across every card screen, Home included, and once more on the Detail season pill after a shorter rest). A hidden hint also appears after 200 ms of an `ok` hold, with a fill in its cap; a short click leaves it hidden. A film has no
-  viewer to teach, so `render --storyboard` writes the `plxnative-hintoff` trigger
-  (`HINT_OFF` in `site_video.py`; the app reads it once at boot, in `devtriggers` builds only, and
-  calls `hold_hint::teach_all_for_dev`, which marks the hint learned and both of its showings spent for the run) and `render.json` records `hold_hint: suppressed`. The hint's own timing is unchanged,
-  and no card rest in the film is capped by it. `up` from the hero lands on the Home pill, one `left` short of the profile chip, so the film as walked
-  no longer passes the chip; the launcher still runs, before the film boots, a prep boot of the simulator
-  with the `plxnative-login` trigger: the app's own QR sign-in completes against the mock (served
-  with `authorize_after=2`) and stores a "Demo" account, which is what the chip reads when focus
-  passes it (never "Sign in"), should a beat press `left` there. Gates specific to the film: `storyboard/rest` (every beat's last 12
-  frames differ from the first of them by at most 3/255 in every channel, or by more in at most
-  0.01 % of the pixels; the spring tails), `storyboard/opened`, `storyboard/no-playback`,
-  `storyboard/loop` (read from `end.match_first_frame` in `feel.json`: the last frame differs from
-  the first by at most 1/255 in every channel; `storyboard.loop` in the manifest records the count) and `hero-pool` (fail closed: every hero page the film SHOWED, read from the app's event log
-  (`home: hero page slot N rk=R`, one line per page turn, plus the pinned page), is in the
-  hero-report pass set and not `not_in_video`; `render.json` records them under `hero_pool`).
-  The size gate compares each file with the committed one (1.25x); a render whose `storyboard_sha256` differs from the committed manifest's is another film, so its four videos are held to the `size_new_film_bytes` ceilings instead, once, and the ratio governs again after that film is committed. The H.264 encodes pin the last frame's QP with a one-frame x264 zone (`zones=LAST,LAST,q=H264_LAST_FRAME_QP`): mbtree gives the never-referenced last frame a coarse QP and `seam/*` compares it with the heavily referenced first frame (0.9947 against the 0.995 floor on the 29 s film; forcing an IDR there measured worse, 0.9903).
-  A page push or pop dips through about three flat frames of the backdrop between the outgoing fade
-  and the incoming one: that is the app's own page transition, not a hold. The AV1 encodes use CRF 22 with a keyframe every 8 s (`AV1_CODEC`; the 720p one every 12 s,
-  `AV1_720_GOP`, to stay under the 1.25x size limit). They were re-tuned for HEADROOM
-  after the first Linux render read min VMAF 79.69 against the 80.0 floor on the 1080p one (macOS 80.10, at CRF 28 / 2 s; the 720p one, at CRF 25 / 4 s, read SSIM min 0.9709
-  against 0.97): the macOS preview then read VMAF min 84.5 and 85.3, SSIM min 0.9796
-  and 0.9746; the committed Linux film's own numbers are the `vmaf/*` and `ssim/*` gates in `site/media/feel.manifest.json`. The floors did not move; a lower CRF is paid for by the longer GOP, never by a looser gate. The H.264 encodes declare the lowest level
-  their picture needs (`H264_LEVELS`: 720p60 High@3.2 with 5 refs, 1080p60 High@4.2 with 4), because x264's veryslow preset
-  uses 16 reference frames and left to itself writes High@5.0 / High@5.1, which several phone decoders refuse and which is the
-  fallback path where AV1 is missing. Measured on the macOS master: the capped files are 1.2 % and 0.8 % larger and read the
-  same quality (VMAF mean 97.10 / 97.10, min 89.34 / 89.96 against the floors 93 / 80; SSIM min 0.9857 / 0.9853 against 0.97).
-  `adopt --write` rewrites the `codecs=` strings of `site/index.html` from the adopted files' boxes, so the page follows
-  the files. The SSIM and VMAF gates pair frames by index in ONE time base
-  (`BY_INDEX`, `settb=1/60,setpts=N`): pairing in each file's own time base rounded two frames of
-  this film onto their neighbours and read them as SSIM 0.66 and VMAF 0.
-  A page pushed in a dump is never a held image: the dip re-captures it every frame and it is live the
-  frame the dip ends (`PageImage::step_filmed`), so the Library's cards pop and its focused caption
-  fade in under the dip, with no cut at the end of it.
+- **The site demo video and stills (removed).** The upstream refreshed its landing page's demo film
+  and simulator-made close-ups after each stable release (`site-video.yml`, `tools/site_video.py`,
+  `tools/site_stills.py`, `tests/video/feel.json`). This fork removed the landing page with its
+  deploy workflow (`pages.yml`), and that machinery with it. The frame dump the film used
+  (`rust-modules/src/dev/framedump.rs`, built by `make site-video-sim`) stays: `tools/screenshots.py`'s
+  `virtual` scenes and the HUD authoring simulator (`hud-simulator.yml`) still drive it.
 - `make test` — `deploy` then `run` (the normal iteration command).
 - `make kill` — close the app on the TV.
 - **`make SYMBOLS=1 symbols`** — build with DWARF and split it into **`pkg/plxnative.debug`**, the
@@ -1382,14 +1210,9 @@ every thin back-edge with `file:line` (the work list for breaking it up); `--dot
 - `docs/install-and-verify.md` — the invariant half a release note used to repeat every time:
   which asset is which, both install routes and why the Homebrew Channel wins, how to check the
   sha256 per platform, and what the app writes, reads and reaches on your television.
-- `site/` — the landing page (`index.html`/`styles.css`/`site.js`/`CNAME`); `.github/workflows/
-  pages.yml` stages its screenshots, logo and fonts from their existing README/app locations
-  rather than copying them into `site/`. The close-up stills `site/media/closeup-*.jpg` and the
-  link-preview card `site/media/og-card.jpg` are `make screenshots` outputs (the page shows `closeup-glass` and `closeup-tiles` in its Features look panels; phones crop the wide `closeup-glass` rather than use `closeup-glass-narrow`; `closeup-player` and the narrow glass cut are no longer referenced, though still rendered and staged; the page's four app screenshots are `docs/screenshots/{home,library,search,player}.jpg`, staged by `pages.yml`) (`ui-sim` skill,
-  "Documentation screenshots"): the card is `site/og/card.html` (not deployed) rendered around
-  the home figure by `tools/render-og-card.sh`; re-render after editing the card. Their WebP and
-  phone (`-narrow`) copies come from those JPEGs through `tools/render-site-variants.py`, and the
-  glows behind them through `tools/render-site-glows.py`: run both, in that order, after a re-render.
+- `site/` — only `site/hud/` remains: the HUD format's published JSON Schemas and examples, the
+  goldens `rust-modules/appkit/src/hud_format/site_tests.rs` checks and the HUD registry mirrors. The
+  upstream's landing page (and its `pages.yml` deploy) was removed from this fork.
 - `pkg/` — deployable payload: `appinfo.json` (native app manifest), `plxnative` binary, icons,
   `appfont*.ttf`, and the prebuilt `.ipk`.
 - `ipkroot/` — ipk staging (`ctl/control`, `data/`, `debian-binary`); assembled by `make ipk`.

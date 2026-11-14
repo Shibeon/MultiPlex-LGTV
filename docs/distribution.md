@@ -1259,7 +1259,6 @@ deploy key, this becomes an infinite loop — that is the thing to remember. The
 already on one: `main`'s required-checks ruleset rejects the workflow token (GH013), so `prepare`
 and `publish` check out with `ssh-key: ${{ secrets.MAIN_PUSH_KEY }}`, a write deploy key the
 ruleset names as a bypass actor, and `prepare` pushes the tag separately over the token URL.
-`site-video.yml`'s publish checkout uses the same key.
 
 *`needs` exposes only DIRECT dependencies.* `legal-gate`, `build` and `publish` cannot see
 `prepare`, so the resolved tag is computed once in `guard` and published as `needs.guard.outputs.tag`;
@@ -1495,7 +1494,8 @@ compares versions by **plain string equality** — its `versionHigher()` helper 
 keyed to the stable id, so nightlies are served from `https://plxnative.com/nightly/repo.json`
 (users add it under Homebrew Channel > Settings > Add repository). `ci/nightly.py repo-json`
 builds it from the newest nightly release: the index, that nightly's manifest with an absolute
-`ipkUrl`, and a description page; `pages.yml` stages it after every published nightly. Because the
+`ipkUrl`, and a description page; the upstream's site deploy (`pages.yml`) staged it after every published
+nightly. This fork removed that workflow and the site, so it serves no such repository. Because the
 Channel compares version strings, each nightly's PACKAGE version carries its cut date as the patch
 (`X.Y.YYYYMMDD`, `ci/version_rule.py::nightly_package_triplet`) — the reported version
 (`X.Y.Z-nightly-YYYYMMDD`) is the human one. `repo-json` refuses a manifest whose id, sha256 or

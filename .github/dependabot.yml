@@ -83,18 +83,6 @@ updates:
       actions:
         patterns: ["*"]
 
-  # tools/requirements-docs.txt, installed by pages.yml.
-  - package-ecosystem: pip
-    directory: /tools
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: Tools
-    groups:
-      python-tools:
-        patterns: ["*"]
-
   # tools/package.json: the Sentry CLI and the Copilot CLI that the Makefile and workflows run.
   - package-ecosystem: npm
     directory: /tools
