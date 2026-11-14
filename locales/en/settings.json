@@ -132,6 +132,18 @@
       "name": "str"
     }
   },
+  "settings.profiles.current": {
+    "value": "Current profile",
+    "description": "Profile picker: caption under the avatar of the profile that is signed in now"
+  },
+  "settings.profiles.owner": {
+    "value": "Owner",
+    "description": "Profile picker: caption under the Plex Home owner's (administrator's) avatar"
+  },
+  "settings.profiles.managed": {
+    "value": "Managed profile",
+    "description": "Profile picker: caption under a managed (restricted) Plex Home member's avatar"
+  },
   "settings.onboard.title": {
     "value": "Which libraries do you want?",
     "description": "Settings, account, onboarding or privacy UI: settings.onboard.title"

@@ -206,6 +206,11 @@ pub struct UserTile {
     pub uuid: String,
     pub protected: bool, // needs a PIN
     pub admin: bool,
+    /// A managed (restricted) Plex Home member: plex.tv's `restricted` flag. The picker captions
+    /// such a tile "managed profile" as the web app does; `false` in every roster written before
+    /// the field existed, which reads as no caption rather than a wrong one.
+    #[serde(default)]
+    pub restricted: bool,
 }
 impl UserTile {
     fn of(u: &HomeUser) -> UserTile {
@@ -216,6 +221,7 @@ impl UserTile {
             uuid: u.uuid.clone(),
             protected: u.protected,
             admin: u.admin,
+            restricted: u.restricted,
         }
     }
     fn of_ref(u: &session::HomeUserRef) -> UserTile {
@@ -226,6 +232,7 @@ impl UserTile {
             uuid: u.uuid.clone(),
             protected: u.protected,
             admin: u.admin,
+            restricted: u.restricted,
         }
     }
     fn to_ref(&self) -> session::HomeUserRef {
@@ -236,6 +243,7 @@ impl UserTile {
             thumb: self.thumb.clone(),
             protected: self.protected,
             admin: self.admin,
+            restricted: self.restricted,
             extensions: Default::default(),
         }
     }

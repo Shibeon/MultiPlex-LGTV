@@ -1239,6 +1239,19 @@ pub fn corner_mark(p: Painter, card: Rect, rad: f32, icon: crate::icons::Icon) {
     crate::icons::draw(p, icon, tick, theme::TILE_MARK_INK);
 }
 
+/// **The initial on a circular avatar that has no picture**: the first letter of `name`, upper-cased
+/// and centred on `avatar` (the drawn rect), as the web app's profile face does when a member has
+/// no thumb. The disc under it is the tile's own absent ground; this only adds the letter, so an
+/// avatar with a picture never calls it. A blank `name` draws nothing.
+pub fn avatar_initial(p: Painter, avatar: Rect, name: &str) {
+    let Some(first) = name.trim_start().chars().next() else { return };
+    let Ok(run) = CString::new(first.to_uppercase().collect::<String>()) else { return };
+    Label::new(run.as_ptr(), theme::size::HERO, theme::TEXT_SECONDARY)
+        .bold()
+        .h(HAlign::Center)
+        .draw(p, avatar);
+}
+
 /// **A badge on a circular avatar**: `icon` on a small disc standing on the avatar's lower-right
 /// rim, the profile picker's padlock for a PIN-protected profile (the web app's `.profile-lock`:
 /// a 1.9rem disc inset 0.2rem from the corner of an 8rem face). `avatar` is the rect actually

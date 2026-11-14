@@ -1681,6 +1681,8 @@ pub struct HomeUserRef {
     pub thumb: String,
     pub protected: bool,
     pub admin: bool,
+    /// plex.tv's `restricted` flag: a managed Home member, captioned as such by the picker.
+    pub restricted: bool,
     #[serde(flatten, default, skip_serializing_if = "OpaqueExtensions::is_empty")]
     pub extensions: OpaqueExtensions,
 

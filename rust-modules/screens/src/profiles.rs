@@ -131,6 +131,8 @@ const ROW_Y: f32 = 384.0;
 const NAME_DY: f32 = AvatarRow::STYLE.h
     + AvatarRow::STYLE.h * (AvatarRow::STYLE.focus_scale - 1.0) * 0.5
     + theme::space::MD;
+/// The caption line's offset below `ROW_Y`: one name line and a `space::XS` under the name band.
+const CAPTION_DY: f32 = NAME_DY + theme::size::LABEL as f32 + theme::space::XS;
 const PIN_LEN: usize = 4;
 const FOOTER_Y: f32 = 780.0;
 const FOOTER_H: f32 = 60.0;
@@ -1230,12 +1232,45 @@ impl ProfilesScreen {
         self.sync_pin_state();
     }
 
-    /// The padlock on a PIN-protected profile's avatar (`widgets::avatar_badge`), so the picker says
-    /// which profiles will ask for a PIN before one is chosen, as the web app's picker does.
-    fn draw_lock(p: Painter, u: &auth::UserTile, avatar: Rect) {
+    /// What the shared avatar tile does not draw on its own, as the web app's picker shows it: the
+    /// member's initial when plex.tv sent no picture (`widgets::avatar_initial`), and the padlock on
+    /// a PIN-protected profile (`widgets::avatar_badge`), so the picker says which profiles will ask
+    /// for a PIN before one is chosen.
+    fn draw_face(p: Painter, u: &auth::UserTile, avatar: Rect) {
+        if u.thumb.is_empty() {
+            plx_ui::widgets::avatar_initial(p, avatar, &u.title);
+        }
         if u.protected {
             plx_ui::widgets::avatar_badge(p, avatar, plx_ui::icons::Icon::Lock);
         }
+    }
+
+    /// The line under a member's name, the web app's: the profile signed in now, else the Home's
+    /// owner (plex.tv's `admin`), else a managed member (`restricted`); an ordinary member has none.
+    fn caption(&self, u: &auth::UserTile) -> Option<&'static str> {
+        use plx_platform::i18n::msg;
+        if !self.seated.is_empty() && *u.uuid == *self.seated {
+            Some(msg::settings_profiles_current())
+        } else if u.admin {
+            Some(msg::settings_profiles_owner())
+        } else if u.restricted {
+            Some(msg::settings_profiles_managed())
+        } else {
+            None
+        }
+    }
+
+    fn draw_caption(p: Painter, caption: Option<&str>, cx: f32) {
+        let Some(t) = caption.and_then(|c| CString::new(c).ok()) else { return };
+        p.text(
+            t.as_ptr(),
+            cx,
+            ROW_Y + CAPTION_DY,
+            theme::size::CAPTION,
+            theme::TEXT_TERTIARY,
+            1,
+            0,
+        );
     }
 
     fn draw_name(
@@ -1780,8 +1815,9 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
                 continue; // draw the focused tile last (ring over neighbours)
             }
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), false, f.measure);
-            Self::draw_lock(p, u, rect);
+            Self::draw_face(p, u, rect);
             Self::draw_name(p, u, cx_, false, f.measure);
+            Self::draw_caption(p, self.caption(u), cx_);
             f.stop(
                 p,
                 Stop {
@@ -1807,9 +1843,10 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
                 AvatarRow::STYLE.h,
             );
             Self::draw_name(p, u, cx_, true, f.measure);
+            Self::draw_caption(p, self.caption(u), cx_);
             // the click dip folds into the focused avatar's pop (1.0 when idle)
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), true, f.measure);
-            Self::draw_lock(p, u, rect);
+            Self::draw_face(p, u, rect);
             f.stop(
                 p,
                 Stop {
@@ -1963,5 +2000,21 @@ mod retained_input_tests {
             }
             _ => panic!("a profile avatar uses its retained server"),
         }
+    }
+
+    /// The caption under a name is the web picker's: the seated profile first, then the Home's
+    /// owner, then a managed member; an ordinary member gets none.
+    #[test]
+    fn the_caption_names_the_seated_owner_and_managed_profiles() {
+        use plx_platform::i18n::msg;
+        let mut s = test_support::bare(Pad::new());
+        s.seated = Arc::from("seat");
+        let tile = |uuid: &str, admin: bool, restricted: bool| auth::UserTile {
+            uuid: uuid.into(), admin, restricted, ..Default::default()
+        };
+        assert_eq!(s.caption(&tile("seat", true, false)), Some(msg::settings_profiles_current()));
+        assert_eq!(s.caption(&tile("owner", true, false)), Some(msg::settings_profiles_owner()));
+        assert_eq!(s.caption(&tile("kid", false, true)), Some(msg::settings_profiles_managed()));
+        assert_eq!(s.caption(&tile("member", false, false)), None);
     }
 }
