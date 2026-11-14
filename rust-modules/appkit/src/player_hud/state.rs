@@ -677,8 +677,14 @@ const _: () = assert!(ELEM_CHAPTER_BASE >= plx_ui::geom::NAMESPACE_FLOOR && ELEM
 pub const ELEM_SECTION_BASE: u32 = 100;
 /// One past the last element a section's buttons can take.
 pub const ELEM_SECTION_END: u32 = 0x1000;
-/// `+ 0..=1` — Info, then Chapters when the item has any.
+/// `+ 0..=2` — Info, then Chapters when the item has any, then More (a package's `open_more` pill).
 pub const ELEM_TAB_BASE: u32 = 20;
+/// `+ 0..MAX_HEAD_ITEMS` — the head's controls ([`super::geometry::GROUP_HEAD`]), between the repair-free
+/// fixed elements and the section range.
+pub const ELEM_HEAD_BASE: u32 = 60;
+/// One past the last head element.
+pub const ELEM_HEAD_END: u32 = ELEM_HEAD_BASE + super::geometry::MAX_HEAD_ITEMS as u32;
+const _: () = assert!(ELEM_FAILURE_END <= ELEM_HEAD_BASE && ELEM_HEAD_END <= ELEM_SECTION_BASE);
 /// The element of the control with this ordinal.
 pub const fn control_elem(ordinal: i32) -> u32 {
     ELEM_CONTROL_BASE + ordinal as u32

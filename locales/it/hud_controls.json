@@ -1,5 +1,9 @@
 {
+  "player.hud.exit": "Indietro",
+  "player.hud.more": "Altro",
   "player.hud.play_pause": "Riproduci / Pausa",
+  "player.hud.seek_back_caption": "−{seconds} s",
+  "player.hud.seek_forward_caption": "+{seconds} s",
   "player.hud.skip_back": "Salta indietro",
   "player.hud.skip_forward": "Salta avanti",
   "player.up_next.seconds_left": "Prossimo episodio · {seconds} s"

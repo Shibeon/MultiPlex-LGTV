@@ -1271,9 +1271,13 @@
     "value": "Choose how the playback controls look.",
     "description": "Settings > Playback > Player HUD: the line under the page title."
   },
-  "settings.hud.builtin": {
-    "value": "Built-in",
-    "description": "Settings > Playback > Player HUD: the name of the HUD that ships with the app (its row says only this, no trust label under it)."
+  "settings.hud.builtin_classic": {
+    "value": "Classic",
+    "description": "Settings > Playback > Player HUD: the name of the app's original built-in HUD (its row says only this, no trust label under it)."
+  },
+  "settings.hud.builtin_multiplex": {
+    "value": "MultiPlex",
+    "description": "Settings > Playback > Player HUD: the name of the default built-in HUD, laid out like the MultiPlex web player; the product name, not translated."
   },
   "settings.hud.unreviewed": {
     "value": "Unreviewed",

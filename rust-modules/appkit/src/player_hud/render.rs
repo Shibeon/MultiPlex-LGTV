@@ -606,7 +606,7 @@ fn walk<H: Host>(
                             next: rects.next,
                         };
                         let decor = Decor { still: rects.still.is_some(), caption: rects.caption.is_some() };
-                        let rest = |r| match r { Rest::Bare => TransportRest::Bare, Rest::Solid => TransportRest::Solid, _ => TransportRest::Film };
+                        let rest = |r| match r { Rest::Bare => TransportRest::Bare, Rest::Solid => TransportRest::Solid, Rest::Plate => TransportRest::Plate, _ => TransportRest::Film };
                         let focus = |f| match f { Focus::Ring => TransportFocus::Ring, Focus::Accent => TransportFocus::Accent };
                         let look = up_next::Look {
                             credits: up_next::ButtonLook { rest: rest(*credits_rest), focus: focus(*credits_focus) },
@@ -631,7 +631,7 @@ fn walk<H: Host>(
                         });
                     }
                 }
-                DrawOp::Playbar { track, fill, track_ink, clock_size, knob, clocks, mark, clock_rects, .. } => {
+                DrawOp::Playbar { track, fill, track_ink, clock_size, knob, clocks, mark, clock_rects, remaining, .. } => {
                     let mut live = Playbar::live(f.model, f.busy, f.focus, row.since_play_ms(f.now), f.now);
                     live.clock_grow = row.preview.motion.clock_grow(f.now);
                     // a cancelled scrub's knob returns to the playhead rather than jumping to it
@@ -646,6 +646,7 @@ fn walk<H: Host>(
                         clocks: *clocks,
                         mark: *mark,
                         end_time_lane: clock_rects.end_time,
+                        remaining: remaining.as_ref().map_or(theme::TEXT_SECONDARY, |ink| ink.at(holds)),
                     };
                     draw_playbar_look(q, live, look, f.measure);
                     bar = Some((live, *track));
@@ -654,8 +655,8 @@ fn walk<H: Host>(
                 DrawOp::Rule { rect, ink } => sections::rule(q, *rect, ink, f),
                 DrawOp::Icon { rect, asset, ink } => sections::icon(compiled, q, *rect, asset, ink, f),
                 DrawOp::Image { rect, bind, radius } => sections::image(f, q, *rect, bind, *radius),
-                DrawOp::Facts { rect, order, badges, genres_max, playback_fact, size, bold, ink } => {
-                    sections::facts(f, q, *rect, order, badges, *genres_max, *playback_fact, *size, bold, ink)
+                DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink } => {
+                    sections::facts(f, q, *rect, order, badges, stream, *genres_max, *playback_fact, *size, bold, ink)
                 }
                 DrawOp::Strip { .. } => sections::strip(f, df, row, q, op, moved, compiled),
             }
@@ -820,6 +821,7 @@ fn classic_glyph(act: Option<HudCommand>, m: &HudModel) -> Icon {
             SeekBy::Setting(super::command::SeekDir::Forward) => Icon::FastForward,
         },
         Some(HudCommand::FromBeginning) => Icon::Restart,
+        Some(HudCommand::Exit) => Icon::ChevronLeft,
         Some(HudCommand::GoToDetail | HudCommand::ToggleStats | HudCommand::ToggleSection(_)) => Icon::Info,
         Some(HudCommand::OpenTracks(TrackTab::Subtitles)) | None => Icon::Cc,
     }
@@ -857,11 +859,15 @@ fn draw_labelled(compiled: &Compiled, f: &Frame<'_>, row: &HudMotion, e: &plx_ui
         _ => c.label.as_str(),
     };
     let Ok(label) = CString::new(label) else { return };
-    let (focused, scale) = if !c.is_action && c.widget == Widget::Pill && c.command == "toggle_section" {
+    let (focused, scale) = if let Some(i) = state.tab_slot(c).and_then(|i| i32::try_from(i).ok()) {
+        (f.focus == super::geometry::GROUP_TABS && f.tab == i, 1.0)
+    } else if !c.is_action && c.widget == Widget::Pill && c.command == "toggle_section" {
         let Some(i) = c.section.as_deref().and_then(tab_of_section) else { return };
         (f.focus == super::geometry::GROUP_TABS && f.tab == i, 1.0)
     } else if let Some(i) = row_index.and_then(|i| i32::try_from(i).ok()) {
         (f.focus == GROUP_ROW && f.btn == i, row.scale(i))
+    } else if let Some(i) = head_index(state, c) {
+        (f.focus == super::geometry::GROUP_HEAD && f.btn == i, 1.0)
     } else {
         let Some(i) = super::geometry::section_buttons(state).position(|k| k.id == c.id) else { return };
         ((f.focus == GROUP_SECTION && usize::try_from(f.btn).is_ok_and(|b| b == i)) || row.held_button() == Some(i), row.section_scale(i))
@@ -871,7 +877,8 @@ fn draw_labelled(compiled: &Compiled, f: &Frame<'_>, row: &HudMotion, e: &plx_ui
         .enabled(c.act.is_some_and(|act| act.enabled(&model)))
         .focused(focused).scale(scale).ground(ControlGround::Unkeyed)
         .rest_face(match c.rest { _ if section_open(state, c) => TransportRest::Solid,
-            Rest::Bare => TransportRest::Bare, Rest::Solid => TransportRest::Solid, _ => TransportRest::Film })
+            Rest::Bare => TransportRest::Bare, Rest::Solid => TransportRest::Solid, Rest::Plate => TransportRest::Plate,
+            _ => TransportRest::Film })
         .focus_face(match c.focus { Focus::Accent => TransportFocus::Accent, Focus::Ring => TransportFocus::Ring });
     if c.face == Default::default() {
         button.draw(e, q);
@@ -881,6 +888,31 @@ fn draw_labelled(compiled: &Compiled, f: &Frame<'_>, row: &HudMotion, e: &plx_ui
             Glyph::Svg(svg) => button.svg(svg).draw(e, q),
         }
     }
+}
+
+/// The index of `c` among the state's head controls ([`super::geometry::head_controls`]), `None` for any other.
+fn head_index(state: &CompiledState, c: &crate::hud_format::compile::ControlRect) -> Option<i32> {
+    super::geometry::head_controls(state).position(|k| k.id == c.id).and_then(|i| i32::try_from(i).ok())
+}
+
+/// **A disc's caption** (`caption: true`, format 1.2): the app's short read-out under the glyph. A `seek` names its
+/// interval: the viewer's Skip interval under `by: "setting"`, the literal seconds otherwise. `None` for any other
+/// control and for a disc that asked for none.
+fn caption_of(c: &crate::hud_format::compile::ControlRect, m: &HudModel) -> Option<String> {
+    use super::command::SeekDir;
+    if !c.caption {
+        return None;
+    }
+    let (back, secs) = match c.act? {
+        HudCommand::Seek(SeekBy::Setting(dir)) => (dir == SeekDir::Back, i64::from(m.skip_secs)),
+        HudCommand::Seek(SeekBy::Secs(n)) => (n.get() < 0, i64::from(n.get()).abs()),
+        _ => return None,
+    };
+    Some(if back {
+        plx_platform::i18n::msg::player_hud_seek_back_caption(secs)
+    } else {
+        plx_platform::i18n::msg::player_hud_seek_forward_caption(secs)
+    })
 }
 
 /// One control, at the rect the compile placed it.
@@ -910,16 +942,25 @@ fn draw_control(
         // the model cannot disagree); its glyph is its `face` at the command's state, else the command's
         // own; its rest and focus faces are the widget's.
         Widget::Disc => {
-            let ControlSlot::Discs(controls) = f.slot else { return };
+            // a head disc stands outside the row, so it draws whatever occupies the row
+            let head = head_index(state, c).filter(|_| !c.is_action && row_index.is_none());
+            let controls = match f.slot {
+                ControlSlot::Discs(controls) => controls,
+                _ if head.is_some() => f.model.controls,
+                _ => return,
+            };
             let (i, focused, scale) = if c.is_action {
                 let Some(i) = super::geometry::section_buttons(state).position(|k| k.id == c.id) else { return };
                 let Ok(index) = i32::try_from(i) else { return };
                 (index, (f.focus == GROUP_SECTION && f.btn == index) || row.held_button() == Some(i), row.section_scale(i))
+            } else if let Some(i) = head {
+                (i, f.focus == super::geometry::GROUP_HEAD && f.btn == i, 1.0)
             } else {
                 let Some(i) = row_index.and_then(|i| i32::try_from(i).ok()) else { return };
                 (i, f.focus == GROUP_ROW && f.btn == i, row.scale(i))
             };
             let model = HudModel { controls, ..*f.model };
+            let caption = caption_of(c, &model).and_then(|text| CString::new(text).ok());
             let button = TransportButton::new(i, c.rect)
                 .enabled(c.act.is_some_and(|act| act.enabled(&model)))
                 .focused(focused)
@@ -932,11 +973,16 @@ fn draw_control(
                     Rest::Film | Rest::Custom => TransportRest::Film,
                     Rest::Bare => TransportRest::Bare,
                     Rest::Solid => TransportRest::Solid,
+                    Rest::Plate => TransportRest::Plate,
                 })
                 .focus_face(match c.focus {
                     Focus::Accent => TransportFocus::Accent,
                     Focus::Ring => TransportFocus::Ring,
                 });
+            let button = match caption.as_deref() {
+                Some(caption) => button.caption(caption),
+                None => button,
+            };
             match glyph_of(compiled, c, &model) {
                 Glyph::Icon(icon) => button.icon(icon).draw(e, q),
                 Glyph::Svg(svg) => button.svg(svg).draw(e, q),

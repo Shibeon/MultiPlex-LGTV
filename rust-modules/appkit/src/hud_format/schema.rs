@@ -132,6 +132,9 @@ pub fn versions() -> impl Iterator<Item = Since> {
 }
 /// The version every 1.0 entry arrived in.
 pub const V1_0: Since = (1, 0);
+/// The version the MultiPlex player's vocabulary arrived in (the `exit` command, the `title.name`,
+/// `title.subtitle` and `clock.now` binds, a `facts` cell's `stream` pills and a control's `caption`).
+pub const V1_2: Since = (1, 2);
 
 /// The one `id` that is not reverse-DNS: the built-in HUD (D2). [`Pattern::ReverseDns`] accepts exactly this
 /// string besides reverse-DNS names, so the built-in's own file parses like any package. That the id parses
@@ -139,11 +142,15 @@ pub const V1_0: Since = (1, 0);
 /// from (compiled in), never from this string, and a store that takes files from outside refuses it.
 pub const BUILTIN_CLASSIC_ID: &str = "builtin:classic";
 
+/// The MultiPlex built-in's `id` (format 1.2, the default HUD): the other string [`Pattern::ReverseDns`] accepts
+/// besides reverse-DNS names, under the same rule as [`BUILTIN_CLASSIC_ID`].
+pub const BUILTIN_MULTIPLEX_ID: &str = "builtin:multiplex";
+
 /// A string shape a [`Ty::Pattern`] checks. Each is a closed grammar, never a regular expression.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pattern {
     /// `[a-z0-9.-]`, at least two dot-separated labels, each starting with a letter: `com.plxnative.x`.
-    /// The one other string it accepts is [`BUILTIN_CLASSIC_ID`].
+    /// The two other strings it accepts are [`BUILTIN_CLASSIC_ID`] and [`BUILTIN_MULTIPLEX_ID`].
     ReverseDns,
     /// `MAJOR.MINOR.PATCH` numeric semver (no pre-release, no build metadata).
     Semver,
@@ -163,9 +170,9 @@ impl Pattern {
     /// pins the two to the same answer. A length bound is the parser's, so a regex may accept a longer string.
     pub const fn regex(self) -> &'static str {
         match self {
-            // The first alternative is [`BUILTIN_CLASSIC_ID`], the one string the parser accepts besides a
-            // reverse-DNS name; a test pins the regex to the parser on it.
-            Pattern::ReverseDns => r"^(builtin:classic|[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+)$",
+            // The first two alternatives are [`BUILTIN_CLASSIC_ID`] and [`BUILTIN_MULTIPLEX_ID`], the strings the parser
+            // accepts besides a reverse-DNS name; a test pins the regex to the parser on them.
+            Pattern::ReverseDns => r"^(builtin:classic|builtin:multiplex|[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+)$",
             Pattern::Semver => r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
             Pattern::FormatVersion => r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
             Pattern::SchemaUrl => r"^https://[!-~]+$",
@@ -540,6 +547,14 @@ pub static COMMANDS: &[Cmd] = &[
         ],
         doc: "Stats for nerds, on or off for this session.",
     },
+    Cmd {
+        name: "exit",
+        since: V1_2,
+        params: &[],
+        rules: &[],
+        face_states: &[],
+        doc: "Leave playback, as the Back key does from the bare picture. Its classic glyph is a back chevron.",
+    },
 ];
 
 /// The conditions of 1.0 (`when` and the keys of a state-keyed value): a string, or an array that must
@@ -655,19 +670,24 @@ pub static SPACE_TOKENS: &[(&str, f32)] = &[
 /// `fast-forward` are deliberately NOT here: `Icon::Rewind` and `Icon::FastForward` are a read-out
 /// beside the clock, "never a control" (the design system forbids a rewind button), so they cannot be a
 /// control face; a package that wants them draws its own asset. A minor can add a glyph; none can be
-/// removed, so the list starts at the stricter reading.
-pub static BUILTIN_ICONS: &[(&str, Icon)] = &[
-    ("previous", Icon::Previous),
-    ("restart", Icon::Restart),
-    ("pause", Icon::Pause),
-    ("play", Icon::Play),
-    ("next", Icon::Next),
-    ("info", Icon::Info),
-    ("more", Icon::More),
-    ("cc", Icon::Cc),
-    ("audio", Icon::Audio),
-    ("close", Icon::Close),
-    ("check", Icon::Check),
+/// removed, so the list starts at the stricter reading. The third field is the format a glyph arrived in:
+/// naming one in an older package is `E0107`, as a newer key or command is.
+pub static BUILTIN_ICONS: &[(&str, Icon, Since)] = &[
+    ("previous", Icon::Previous, V1_0),
+    ("restart", Icon::Restart, V1_0),
+    ("pause", Icon::Pause, V1_0),
+    ("play", Icon::Play, V1_0),
+    ("next", Icon::Next, V1_0),
+    ("info", Icon::Info, V1_0),
+    ("more", Icon::More, V1_0),
+    ("cc", Icon::Cc, V1_0),
+    ("audio", Icon::Audio, V1_0),
+    ("close", Icon::Close, V1_0),
+    ("check", Icon::Check, V1_0),
+    ("chevron-left", Icon::ChevronLeft, V1_2),
+    ("plus", Icon::Plus, V1_2),
+    ("skip-back", Icon::SkipBack, V1_2),
+    ("skip-forward", Icon::SkipForward, V1_2),
 ];
 
 /// What precedes a built-in glyph's name in a face: `builtin:play`. The parser reads it from here.
@@ -698,8 +718,13 @@ pub fn space_token(name: &str) -> Option<f32> {
 pub fn builtin_icon(name: &str) -> Option<Icon> {
     BUILTIN_ICONS
         .iter()
-        .find(|(n, _)| *n == name)
-        .map(|(_, icon)| *icon)
+        .find(|(n, _, _)| *n == name)
+        .map(|(_, icon, _)| *icon)
+}
+
+/// The format a built-in glyph arrived in, by its name WITHOUT the `builtin:` prefix, or `None`.
+pub fn builtin_icon_since(name: &str) -> Option<Since> {
+    BUILTIN_ICONS.iter().find(|(n, _, _)| *n == name).map(|(_, _, since)| *since)
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -749,6 +774,9 @@ pub static BINDINGS: &[Binding] = &[
     Binding { name: "info.facts", since: V1_0, doc: "The playing item's facts run, fitted by a `facts` cell." },
     Binding { name: "label.chapters", since: V1_0, doc: "The app's Chapters label (app text, localized)." },
     Binding { name: "label.info", since: V1_0, doc: "The app's Info label (app text, localized)." },
+    Binding { name: "title.name", since: V1_2, doc: "The playing item's own name (server text): an episode's title, else the item's title." },
+    Binding { name: "title.subtitle", since: V1_2, doc: "The line under `title.name`: an episode's show and address (\"Show · S1 · E4\"), else the item's year; empty when neither is known. Server text, may elide." },
+    Binding { name: "clock.now", since: V1_2, doc: "The wall-clock time, in the TV's 12- or 24-hour format (app text, never elides: like `label.*` it takes no `w` and no `max_lines`). The app supplies it once a frame; the HUD reads no clock." },
 ];
 
 /// What a `text` cell's `bind` may name.
@@ -761,6 +789,9 @@ pub const TEXT_BINDS: &[&str] = &[
     "label.info",
     "item.start",
     "item.title",
+    "title.name",
+    "title.subtitle",
+    "clock.now",
 ];
 /// What an `image` cell's `bind` may name.
 pub const IMAGE_BINDS: &[&str] = &["info.still"];
@@ -795,8 +826,19 @@ pub const BODY_SIZES: &[&str] = &[
 ];
 /// The three alignments of a cell in its band, and of the Up Next column.
 const ALIGNS: Ty = Ty::Enum(&["start", "center", "end"]);
-/// The two focus faces and the four rest faces of a control (the item node and an Up Next button).
-const RESTS: Ty = Ty::Enum(&["film", "bare", "solid"]);
+/// The two focus faces and the rest faces of a control (the item node and an Up Next button). `plate`
+/// arrived in 1.2 ([`ENUM_VALUES_SINCE`]).
+const RESTS: Ty = Ty::Enum(&["film", "bare", "solid", "plate"]);
+
+/// **Enum values newer than their key.** A minor can add a value to a closed list; naming it in an older
+/// package is `E0107`, as a newer key is, and the older formats' schemas do not list it. A value is
+/// named here once, so no two lists may hold one of these names (a test pins it).
+pub static ENUM_VALUES_SINCE: &[(&str, Since)] = &[("plate", V1_2)];
+
+/// The format an enum value arrived in: its [`ENUM_VALUES_SINCE`] entry, else 1.0.
+pub fn enum_value_since(name: &str) -> Since {
+    ENUM_VALUES_SINCE.iter().find(|(n, _)| *n == name).map_or(V1_0, |(_, since)| *since)
+}
 const FOCI: Ty = Ty::Enum(&["accent", "ring"]);
 
 const F_WHEN: Field = Field::opt(
@@ -866,7 +908,7 @@ pub static MANIFEST: Node = Node {
     fields: &[
         Field::opt("$schema", Ty::Pattern(Pattern::SchemaUrl), "The package manifest schema URL for editors."),
         Field::req("package_format", Ty::Pattern(Pattern::FormatVersion), "MAJOR.MINOR of the package container profile."),
-        Field::req("id", Ty::Pattern(Pattern::ReverseDns), "The package's reverse-DNS identity. builtin:classic is reserved for the embedded package."),
+        Field::req("id", Ty::Pattern(Pattern::ReverseDns), "The package's reverse-DNS identity. builtin:classic and builtin:multiplex are reserved for the embedded packages."),
         Field::req("version", Ty::Pattern(Pattern::Semver), "The plugin's numeric MAJOR.MINOR.PATCH version."),
         Field::req("name", Ty::Text { max_len: 64 }, "The display name."),
         Field::req("author", Ty::Text { max_len: 64 }, "The author."),
@@ -1147,6 +1189,12 @@ pub static CELL_TEXT: Node = Node {
             require: &[],
             forbid: &["w", "max_lines"],
         },
+        Rule::IfValue {
+            key: "bind",
+            equals: "clock.now",
+            require: &[],
+            forbid: &["w", "max_lines"],
+        },
     ],
     doc: "A line of bound text. App-owned text (`label.*`, `item.start`) takes no `w` and no `max_lines`.",
 };
@@ -1276,6 +1324,13 @@ pub static CELL_FACTS: Node = Node {
             "The badge chips, in order: an ordered subset. `content_rating` is in `order` or `badges`, never both.",
         )
         .default("[]"),
+        Field::opt(
+            "stream",
+            Ty::EnumList(&["resolution", "dynamic_range", "stream_mode", "audio_codec"]),
+            "The stream pills, after the badges: what THIS session's stream is (the picture's resolution as a solid amber pill, its dynamic range outlined, Direct Play or a conversion on the neutral fill, the audio codec dashed). An ordered subset; a fact the stream does not state draws no pill.",
+        )
+        .default("[]")
+        .at(V1_2),
         Field::req("size", Ty::Enum(BODY_SIZES), "A type-scale rung name."),
     ],
     rules: &[Rule::Disjoint { a: "order", b: "badges" }],
@@ -1349,6 +1404,9 @@ pub static CELL_PLAYBAR: Node = Node {
         .default("\"follow_head\""),
         Field::req("clock_size", Ty::Enum(BODY_SIZES), "The clocks' type-scale rung."),
         Field::opt("end_time_width", PX_W, "Width in px reserved at the right edge for the remaining clock, separator and estimated finish time. Omit to show only the remaining clock.").at((1, 1)),
+        Field::opt("remaining", Ty::Ink, "The remaining clock's ink: a theme token or a palette name. Omit for the secondary text ink.")
+            .keyable()
+            .at(V1_2),
         Field::opt(
             "mark",
             Ty::Enum(&["after_elapsed", "busy_only"]),
@@ -1534,6 +1592,13 @@ pub static ITEM: Node = Node {
             Ty::Face,
             "The glyph: an asset id, `builtin:<icon>`, or a per-state map for a command that has states. Absent: the command's classic glyph.",
         ),
+        Field::opt(
+            "caption",
+            Ty::Bool,
+            "A `disc`'s app-owned read-out under its glyph, inside the disc: a `seek` names its interval (\"-30 s\", the viewer's Skip interval under `by: \"setting\"`). Only a `seek` disc has one; any other control ignores the key.",
+        )
+        .default("false")
+        .at(V1_2),
         F_WHEN,
         F_GAP_BEFORE,
         F_GAP_AFTER,
@@ -1659,13 +1724,15 @@ mod freeze_tests {
                 "toggle_section",
                 "from_beginning",
                 "go_to_detail",
-                "toggle_stats"
+                "toggle_stats",
+                "exit"
             ]
         );
         assert_eq!(CONDITIONS.len(), 11);
+        // the ten of 1.0, and `exit` of 1.2 (the MultiPlex player's back chevron)
         assert!(COMMANDS
             .iter()
-            .all(|c| c.since == V1_0 && !c.doc.is_empty()));
+            .all(|c| (c.since == V1_0 || (c.name == "exit" && c.since == V1_2)) && !c.doc.is_empty()));
         assert!(CONDITIONS
             .iter()
             .all(|c| c.since == V1_0 && !c.doc.is_empty()));
@@ -1681,7 +1748,7 @@ mod freeze_tests {
         let unique_conditions: HashSet<_> = CONDITIONS.iter().map(|c| c.name).collect();
         assert_eq!(
             (unique_commands.len(), unique_conditions.len()),
-            (10, 11),
+            (11, 11),
             "names are unique"
         );
     }
@@ -1702,7 +1769,7 @@ mod freeze_tests {
         assert_eq!(space_token("MD"), Some(theme::space::MD));
         assert!(BUILTIN_ICONS
             .iter()
-            .all(|(n, i)| builtin_icon(n) == Some(*i)));
+            .all(|(n, i, _)| builtin_icon(n) == Some(*i)));
         assert_eq!(builtin_icon("restart"), Some(Icon::Restart));
         assert!(builtin_icon("builtin:play").is_none());
     }
@@ -1960,8 +2027,9 @@ mod tests {
         assert!(CONDITIONS.iter().all(|c| c.since <= CURRENT));
         assert!(BINDINGS.iter().all(|b| b.since <= CURRENT));
         assert!(
-            every_field().iter().filter(|(_, f)| f.since > V1_0).all(|(_, f)| f.key == "end_time_width" && f.since == (1, 1)),
-            "the end-time lane is the only 1.1 addition"
+            every_field().iter().filter(|(_, f)| f.since > V1_0).all(|(_, f)| (f.key == "end_time_width" && f.since == (1, 1))
+                || (matches!(f.key, "stream" | "caption" | "remaining") && f.since == V1_2)),
+            "the end-time lane is the only 1.1 addition, the stream pills, the disc caption and the remaining clock's ink the 1.2 fields"
         );
     }
 
@@ -2268,7 +2336,7 @@ mod tests {
     fn hud_format_schema_binding_lists_are_subsets_of_the_catalogue_and_card_scope_is_by_name() {
         let names: HashSet<_> = BINDINGS.iter().map(|b| b.name).collect();
         assert_eq!(names.len(), BINDINGS.len(), "binding names are unique");
-        assert_eq!(BINDINGS.len(), 30);
+        assert_eq!(BINDINGS.len(), 33);
         for list in [
             TEXT_BINDS,
             IMAGE_BINDS,
@@ -2385,11 +2453,11 @@ mod tests {
             builtin_icon("close") == Some(Icon::Close)
                 && builtin_icon("check") == Some(Icon::Check)
         );
-        let names: HashSet<_> = BUILTIN_ICONS.iter().map(|(n, _)| *n).collect();
+        let names: HashSet<_> = BUILTIN_ICONS.iter().map(|(n, _, _)| *n).collect();
         assert_eq!(names.len(), BUILTIN_ICONS.len());
         assert!(BUILTIN_ICONS
             .iter()
-            .all(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_lowercase() || c == '-')));
+            .all(|(n, _, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_lowercase() || c == '-')));
         // The worked example's built-in faces all resolve.
         for used in ["previous", "restart", "pause", "play", "next", "info"] {
             assert!(builtin_icon(used).is_some(), "builtin:{used}");
@@ -2459,6 +2527,7 @@ mod tests {
                 "ink",
                 "playback_fact",
                 "badges",
+                "stream",
                 "size"
             ]
         );
@@ -2475,6 +2544,7 @@ mod tests {
                 "clocks",
                 "clock_size",
                 "end_time_width",
+                "remaining",
                 "mark",
                 "grab"
             ]
@@ -2511,6 +2581,7 @@ mod tests {
                 "rest",
                 "focus",
                 "face",
+                "caption",
                 "when",
                 "gap_before",
                 "gap_after"
@@ -2537,7 +2608,7 @@ mod tests {
         assert_eq!(en(&CELL, "align"), ["start", "center", "end"]);
         assert_eq!(en(&CELL, "valign"), ["top", "center", "bottom"]);
         assert_eq!(en(&ITEM, "widget"), ["disc", "pill", "button"]);
-        assert_eq!(en(&ITEM, "rest"), ["film", "bare", "solid"]);
+        assert_eq!(en(&ITEM, "rest"), ["film", "bare", "solid", "plate"]);
         assert_eq!(en(&ITEM, "focus"), ["accent", "ring"]);
         assert_eq!(
             en(&UP_NEXT, "countdown"),

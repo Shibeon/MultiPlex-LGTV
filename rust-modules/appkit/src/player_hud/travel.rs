@@ -1,5 +1,5 @@
 //! **The order vertical focus travel follows: the order the layout draws.** The transport's groups that
-//! have a stop in the current state ([`GROUP_SCRUB`], [`GROUP_ROW`], [`GROUP_TABS`], and what an open
+//! have a stop in the current state ([`GROUP_SCRUB`], [`GROUP_ROW`], [`GROUP_TABS`], [`GROUP_HEAD`], and what an open
 //! section draws, [`GROUP_STRIP`] and [`GROUP_SECTION`]), ordered top to bottom by the rects the compiled
 //! layout reports ([`HudGeometry`], the open strip's rect, the open section's buttons). Each links to its
 //! neighbours both ways ([`Order::links`]); the top group's Up and the bottom group's Down are the
@@ -25,7 +25,7 @@ use plx_ui::Rect;
 #[cfg(test)]
 use super::geometry::{frame_state, geometry};
 use super::geometry::{
-    section_buttons, HudGeometry, GROUP_ROW, GROUP_SCRUB, GROUP_SECTION, GROUP_STRIP,
+    section_buttons, HudGeometry, GROUP_HEAD, GROUP_ROW, GROUP_SCRUB, GROUP_SECTION, GROUP_STRIP,
     GROUP_TABS,
 };
 use super::command::Section;
@@ -34,7 +34,7 @@ use super::strip::strip_of;
 use crate::hud_format::compile::{Compiled, CompiledState};
 
 /// How many groups the transport has to order: one per kind of stop.
-const ORDER_SLOTS: usize = 5;
+const ORDER_SLOTS: usize = 6;
 
 /// **The groups with a stop in a state, top to bottom.** A value: copy it, compare it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -129,7 +129,9 @@ pub fn order_content(compiled: &Compiled, open: u8, slot: ControlSlot, chapters:
     if open & Section::Info.open_bit() != 0 {
         stops[4] = buttons_span(state).map(|(top, _)| (GROUP_SECTION, top));
     }
-    // insertion sort over at most five entries: stable, so equal tops keep the fixed order above
+    // the head's controls beside the title (format 1.2), wherever the package stands them
+    stops[5] = head_span(&geo).map(|(top, _)| (GROUP_HEAD, top));
+    // insertion sort over at most six entries: stable, so equal tops keep the fixed order above
     let mut order = Order::EMPTY;
     for (group, top) in stops.into_iter().flatten() {
         let mut at = order.len;
@@ -158,6 +160,11 @@ fn merged(a: Span, b: Span) -> Span {
 /// with none.
 pub(crate) fn tabs_span(geo: &HudGeometry) -> Option<Span> {
     geo.tabs.iter().flatten().map(|pill| span_of(*pill)).reduce(merged)
+}
+
+/// The vertical extent of the head's controls a geometry report places, `None` with none.
+fn head_span(geo: &HudGeometry) -> Option<Span> {
+    geo.head.iter().flatten().map(|c| span_of(*c)).reduce(merged)
 }
 
 /// The vertical extent of the strip a state places, `None` for a state with no strip.
@@ -283,7 +290,7 @@ mod tests {
         let reference = reference();
         for open in [0, CHAPTERS, INFO, CHAPTERS | INFO] {
             let geo = geometry(&reference, open, slot, true, false);
-            assert_eq!(geo.tabs, [None, None], "open {open}: the reference's openers are discs of the row");
+            assert_eq!(geo.tabs, [None, None, None], "open {open}: the reference's openers are discs of the row");
             let want = Some(HudCommand::ToggleSection(Section::Info));
             let (state, _) = frame_state(&reference, open, slot, true, false).expect("the reference has the state");
             let info = state.controls.iter().find(|c| c.act == want).expect("the Info disc");
@@ -292,7 +299,8 @@ mod tests {
         }
         let tabs = fixture(include_str!("../hud_format/fixtures/tabs/hud.json"));
         let geo = geometry(&tabs, 0, slot, true, false);
-        assert!(geo.tabs.iter().all(Option::is_some), "a pill is a tab: {:?}", geo.tabs);
+        assert!(geo.tabs[..2].iter().all(Option::is_some), "a pill is a tab: {:?}", geo.tabs);
+        assert_eq!(geo.tabs[2], None, "the fixture places no More pill");
     }
 
     #[test]

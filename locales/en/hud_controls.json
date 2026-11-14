@@ -1,7 +1,29 @@
 {
+  "player.hud.exit": {
+    "value": "Back",
+    "description": "Accessible name of a declared player HUD control that leaves playback (a back chevron)."
+  },
+  "player.hud.more": {
+    "value": "More",
+    "description": "Label of the player HUD's More pill, which opens the player menu."
+  },
   "player.hud.play_pause": {
     "value": "Play / Pause",
     "description": "Label for a declared player HUD pill or button that toggles playback; stable wording so its measured width does not change when paused."
+  },
+  "player.hud.seek_back_caption": {
+    "value": "−{seconds}s",
+    "description": "Read-out inside the player's skip-back disc: the interval it jumps, in whole seconds; keep it short.",
+    "args": {
+      "seconds": "i64"
+    }
+  },
+  "player.hud.seek_forward_caption": {
+    "value": "+{seconds}s",
+    "description": "Read-out inside the player's skip-forward disc: the interval it jumps, in whole seconds; keep it short.",
+    "args": {
+      "seconds": "i64"
+    }
   },
   "player.hud.skip_back": {
     "value": "Skip back",

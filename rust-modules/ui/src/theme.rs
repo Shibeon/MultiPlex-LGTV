@@ -467,6 +467,10 @@ pub const CONTROL_IDLE_FILL: [f32; 4] = with_a(NEUTRAL_650, 0.92);
 /// one `--control-idle-ink`, and the UNKEYED face below is a white film over a black ramp, which is
 /// still a dark surface — see [`CONTROL_IDLE_FILL_UNKEYED`].
 pub const CONTROL_IDLE_INK: [f32; 4] = WHITE;
+/// The **plate** rest face (`widgets::TransportRest::Plate`): the idle keyed surface, dark and nearly
+/// opaque, standing on the video plane as the MultiPlex web player's resting discs do. The glyph keeps
+/// [`CONTROL_IDLE_INK`] and the rim the unkeyed ground's idle edge.
+pub const CONTROL_PLATE_FILL: [f32; 4] = CONTROL_IDLE_FILL;
 
 // ── The UNKEYED ground: a control standing on the VIDEO PLANE ────────────────
 // Everything above assumes the ground can be SAMPLED — the page read its own artwork and a control
@@ -1417,6 +1421,26 @@ pub const TECH_VIDEO_INK: [f32; 4] = AMBER_300;
 pub const TECH_AUDIO_INK: [f32; 4] = VIOLET_300;
 /// Accessibility tracks (CC, SDH, AD): neutral, the secondary text stop.
 pub const TECH_ACCESS_INK: [f32; 4] = COOL_300;
+
+// ── The player's stream pills (the MultiPlex HUD's `facts.stream` run, `widgets::BadgeStyle::Solid`
+// and `Rimmed`) ─────────────────────────────────────────────────────────────────────────────────────
+// Facts about THIS session's stream standing on the picture: the resolution as the one solid amber
+// capsule (the picture's hue, [`TECH_VIDEO_INK`]'s stop); the other three on one dark neutral ground,
+// so a bright picture never tints them: the dynamic range rimmed, the stream mode plain, the audio
+// codec under a quieter rim (the web player's dashed pill, one pass here).
+/// The resolution pill's fill: the picture's amber, [`TECH_VIDEO_INK`]'s stop.
+pub const STREAM_RES_FILL: [f32; 4] = AMBER_300;
+/// The resolution pill's label on that fill: the amber family's near-black.
+pub const STREAM_RES_INK: [f32; 4] = AMBER_950;
+/// The label of the neutral stream pills.
+pub const STREAM_PILL_INK: [f32; 4] = COOL_0;
+/// The neutral stream pills' ground: the controls' idle surface ([`CONTROL_IDLE_FILL`]), dark and nearly
+/// opaque, so the picture behind cannot tint it.
+pub const STREAM_PILL_FILL: [f32; 4] = CONTROL_IDLE_FILL;
+/// The dynamic-range pill's rim: the overlays' neutral keyline.
+pub const STREAM_PILL_RIM: [f32; 4] = OVERLAY_BORDER;
+/// The audio pill's rim: quieter than [`STREAM_PILL_RIM`], a fact about the sound beside the picture's.
+pub const STREAM_PILL_RIM_QUIET: [f32; 4] = with_a(WHITE, 0.30);
 /// The drained state, for both a hollow tomato and a negated crowd — `COOL_400`, the same stop
 /// [`TEXT_TERTIARY`] resolves to, because the negation is literally "this has the weight of a
 /// caption now". Its own role ON that stop rather than an alias OF the text token: a verdict mark

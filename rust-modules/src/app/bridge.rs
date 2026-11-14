@@ -1280,10 +1280,10 @@ impl Bridge {
         self.huds_publish();
     }
 
-    /// Begin the player-HUD store with the compiled classic as what draws until a package lands, and read
-    /// what is installed. Boot calls it once, outside any frame; a controlled run never does.
-    pub(crate) fn huds_start(&mut self, classic: plx_appkit::player_hud::loaded::LoadedHud) {
-        self.huds.start(classic, plx_plex::plex::identity::version());
+    /// Begin the player-HUD store with the compiled built-ins, the default drawing until the selection resolves to
+    /// something else, and read what is installed. Boot calls it once, outside any frame; a controlled run never does.
+    pub(crate) fn huds_start(&mut self, builtins: super::adapters::huds::Builtins) {
+        self.huds.start(builtins, plx_plex::plex::identity::version());
         self.huds_refresh();
     }
 

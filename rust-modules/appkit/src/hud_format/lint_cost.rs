@@ -833,6 +833,18 @@ mod tests {
         }
     }
 
+    /// **The default built-in is within its class too**, every state under every slot in every shipped language. A
+    /// built-in is never linted at run time ([`crate::player_hud::loaded::load_multiplex`] compiles it directly), so
+    /// this is the only gate: a package that copied it must pass `--hud-lint`, and a package refused for its cost must
+    /// not fall back to a default that is itself over a ceiling. The ceilings are the television's; the package is
+    /// trimmed to them (the stream pills live in the Info section), never the other way round.
+    #[test]
+    fn every_state_of_multiplex_is_within_its_class() {
+        const MULTIPLEX: &str = include_str!("fixtures/multiplex/hud.json");
+        let over: Vec<_> = e1401(MULTIPLEX, &[]).into_iter().map(|f| f.message).collect();
+        assert!(over.is_empty(), "{} states over their class:\n{}", over.len(), over.join("\n"));
+    }
+
     #[test]
     fn every_state_of_classic_and_the_reference_is_within_its_class() {
         // The builtin classic must never be rejected by its own lint, and the reference is the design's own

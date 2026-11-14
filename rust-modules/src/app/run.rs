@@ -399,8 +399,8 @@ fn clock_and_press(app: &mut App, fr: &mut Frame) {
 /// for this language: the fit, the price and the load are one tick each (so one frame never carries two compiles), and
 /// none runs while a player is up. Every compile reaches the mounter through [`adopt_hud`]. A
 /// language change does not recompile: the language is fixed for the process (`i18n`'s `CURRENT` is a `OnceLock`; a
-/// changed setting is the "confirmed next-launch" one) and takes effect at the next launch. `builtin:classic` always
-/// loads, so after this `app.hud` is `Some`.
+/// changed setting is the "confirmed next-launch" one) and takes effect at the next launch. The default built-in
+/// always loads, so after this `app.hud` is `Some`.
 fn refresh_hud(app: &mut App) {
     use plx_appkit::player_hud::loaded::{DevHud, DevStep};
     let cx = plx_platform::i18n::current();
@@ -430,7 +430,7 @@ fn refresh_hud(app: &mut App) {
         }
     }
     if app.hud.is_none() {
-        let hud = plx_appkit::player_hud::loaded::load_classic(plx_plex::plex::identity::version(), cx, app.bridge.measure());
+        let hud = super::adapters::huds::load_default(plx_plex::plex::identity::version(), cx, app.bridge.measure());
         adopt_hud(&mut app.bridge, &mut app.hud, hud);
     }
 }
@@ -445,8 +445,9 @@ pub(super) fn boot_hud(bridge: &mut super::bridge::Bridge, controlled: bool) -> 
     if controlled {
         return None;
     }
-    let loaded = plx_appkit::player_hud::loaded::load_classic(plx_plex::plex::identity::version(), plx_platform::i18n::current(), bridge.measure());
-    bridge.huds_start(loaded.clone());
+    let builtins = super::adapters::huds::Builtins::load(plx_plex::plex::identity::version(), plx_platform::i18n::current(), bridge.measure());
+    let loaded = builtins.default().clone();
+    bridge.huds_start(builtins);
     let mut hud = None;
     adopt_hud(bridge, &mut hud, loaded);
     hud
@@ -710,6 +711,8 @@ fn hud_model(
         stats: crate::app::diagnostics::enabled(),
         bitmap_key: plx_media::player::active_bitmap_key(playpos_ns),
         bitmap_by_key: plx_media::player::bitmap_by_key,
+        // the wall clock is the caller's to fill (`publish_player_model`), only for a HUD that shows one
+        now: None,
     }
 }
 
@@ -737,6 +740,11 @@ fn publish_player_model(app: &mut App) {
         matches!(app.rec, super::recorder::Recplay::Off) && !app.bridge.is_controlled_replay()
             // a HUD with no finish-time lane draws no estimate, so none is projected for it
             && app.hud.as_ref().is_some_and(|hud| hud.compiled.declares_end_time()));
+    // The wall clock a `clock.now` text shows: read here, app-side, and handed to the HUD as a value. A
+    // recording or controlled replay has no wall clock of its own, so none is shown there.
+    let live_clock = matches!(app.rec, super::recorder::Recplay::Off) && !app.bridge.is_controlled_replay()
+        && app.hud.as_ref().is_some_and(|hud| hud.compiled.declares_clock());
+    model.now = if live_clock { clock::unix_ms().and_then(|ms| clock::local_minute(ms.div_euclid(1000))) } else { None };
     model.marker_prefs = app.bridge.marker_preferences();
     model.covered = app.pages.surface_up();
     if let Some(screen) = super::bridge::player_mut(&mut app.pages) { screen.set_model(model); }
@@ -4772,6 +4780,8 @@ mod lifecycle_regression_tests {
         use plx_appkit::player_hud::{geometry::GROUP_TABS, ELEM_SCRUB, ELEM_TAB_BASE};
         let _serial = plx_base::testlock::serial();
         let mut app = app();
+        // classic's tab 0 (Info) is a drawn tab; the default MultiPlex package puts Info in its head
+        app.bridge.seed_player_compiled(plx_appkit::player_hud::loaded::classic_for_test());
         super::super::bridge::nav_push(&mut app.pages, AppArg::Player);
         frame(&mut app, 16);
         pin_headless_hud(&mut app, 16, Some(0));
@@ -5000,6 +5010,7 @@ mod lifecycle_regression_tests {
         };
         // classic folds nothing
         let mut app = self::app();
+        app.bridge.seed_player_compiled(plx_appkit::player_hud::loaded::classic_for_test());
         super::super::bridge::nav_push(&mut app.pages, AppArg::Player);
         frame(&mut app, 16);
         open_more(&mut app, 100);

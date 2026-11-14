@@ -56,6 +56,7 @@ fn labels() -> AppLabels {
         go_to_show: msg::widgets_info_go_show().to_owned(),
         go_to_movie: msg::widgets_info_go_movie().to_owned(),
         commands: AppLabels::in_language(plx_platform::i18n::current()).commands,
+        clock_samples: AppLabels::in_language(plx_platform::i18n::current()).clock_samples,
     }
 }
 
@@ -124,7 +125,10 @@ fn frozen_base() -> HudGeometry {
         items: [None; crate::player_hud::geometry::MAX_ROW_ITEMS],
         tab_row: Rect::new(96.0, 949.0, 0.0, 64.0),
         title: Rect::new(96.0, 768.0, 0.0, 0.0),
-        tabs: [None; 2],
+        tabs: [None; crate::player_hud::geometry::HUD_TABS],
+        tab_acts: [None; crate::player_hud::geometry::HUD_TABS],
+        head: [None; crate::player_hud::geometry::MAX_HEAD_ITEMS],
+        head_acts: [None; crate::player_hud::geometry::MAX_HEAD_ITEMS],
         band: HudBand { ceil_y: 780.0, controls_top_y: 792.0, lift: 200.0, rise: [0.0; 3] },
         open_height: 0.0,
     }
@@ -999,6 +1003,24 @@ fn the_focus_face_and_the_playbar_looks_reach_the_draw_list() {
     assert_eq!(bar(&reference), (KnobMode::Always, ClockMode::Ends, MarkMode::BusyOnly));
     let play = compact(&reference, Slot::Discs).control("play").expect("the play disc").clone();
     assert_eq!((play.focus, play.rest), (Focus::Ring, Rest::Solid));
+}
+
+/// Format 1.2's faces reach the draw list: MultiPlex rests its discs and its More pill on the dark `plate`
+/// and inks its remaining clock `TEXT_PRIMARY`, as the web player does; a package that names no
+/// `remaining` (classic) keeps the secondary ink (`None`).
+#[test]
+fn the_plate_rest_and_the_remaining_ink_reach_the_draw_list() {
+    let remaining = |c: &Compiled| match compact(c, Slot::Discs).ops.iter().find(|o| matches!(o, DrawOp::Playbar { .. })) {
+        Some(DrawOp::Playbar { remaining, .. }) => remaining.as_ref().map(|ink| ink.at(|_| false)),
+        _ => panic!("no playbar"),
+    };
+    assert_eq!(remaining(&build(CLASSIC, &FM)), None);
+    let multiplex = build(crate::hud_format::MULTIPLEX_HUD, &FM);
+    assert_eq!(remaining(&multiplex), Some(plx_ui::theme::TEXT_PRIMARY));
+    let state = compact(&multiplex, Slot::Discs);
+    for id in ["exit", "skip_back", "play", "skip_forward", "more"] {
+        assert_eq!(state.control(id).map(|c| c.rest), Some(Rest::Plate), "{id}");
+    }
 }
 
 /// **The report holds the whole row.** `HudGeometry::items` was five stops wide (classic's row) and the

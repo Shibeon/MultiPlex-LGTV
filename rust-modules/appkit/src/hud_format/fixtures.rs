@@ -17,6 +17,7 @@ macro_rules! source {
 pub fn files(name: &str) -> Vec<File> {
     match name {
         "classic" => source!("classic", []),
+        "multiplex" => source!("multiplex", []),
         "minimal" => source!("minimal", []),
         "reference" => source!("reference", ["subs-bubble", "list", "gear", "eq", "back10", "fwd30"]),
         "hero-center" => source!("hero-center", []),
@@ -29,6 +30,7 @@ pub fn files(name: &str) -> Vec<File> {
 pub fn hud(name: &str) -> &'static str {
     match name {
         "classic" => include_str!("fixtures/classic/hud.json"),
+        "multiplex" => include_str!("fixtures/multiplex/hud.json"),
         "minimal" => include_str!("fixtures/minimal/hud.json"),
         "reference" => include_str!("fixtures/reference/hud.json"),
         "hero-center" => include_str!("fixtures/hero-center/hud.json"),

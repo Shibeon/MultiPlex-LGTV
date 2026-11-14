@@ -17,7 +17,7 @@ needs Ubuntu 24.04-compatible glibc, the system Mesa driver, Xvfb and ffmpeg/Pil
 It relocates independently of the source/build checkout. No real Plex configuration is included.
 
 Headless commands are `--hud-info`, `--hud-text-metrics`, `--hud-inspect FILE_OR_DIRECTORY`,
-`--hud-schema manifest|hud --version 1.0`, `--hud-export builtin:classic --out FILE`,
+`--hud-schema manifest|hud --version 1.0`, `--hud-export builtin:classic|builtin:multiplex --out FILE`,
 `--hud-pack DIRECTORY --out FILE`, and `--hud-lint FILE_OR_DIRECTORY --format json --lang all`.
 The native packer freezes manifest.json, hud.json and declared resource/notice files into a
 canonical `.plxhud` archive. Preview tools pack a directory once, then use the same archive bytes

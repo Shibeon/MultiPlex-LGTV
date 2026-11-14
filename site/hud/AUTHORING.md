@@ -7,7 +7,10 @@ Copy `examples/minimal/`, give manifest.json a unique reverse-DNS ID, name, auth
 and start its plugin version at `1.0.0`. Package format and `hud.format` are both `1.0`.
 Use `schema/manifest/1.0.json` for metadata and resource declarations and `schema/hud/1.0.json` for
 hud.json. To declare the optional playbar end-time lane, set `hud.format` to `"1.1"` and use
-`schema/hud/1.1.json`. Resource IDs refer to ordinary package-relative SVG files, never inline data or URLs.
+`schema/hud/1.1.json`. Format `"1.2"` (`schema/hud/1.2.json`) adds the `exit` command, the `title.name`,
+`title.subtitle` and `clock.now` bindings, a facts row's `stream` pills, an item's `caption`, the `plate` rest face, `playbar.remaining` and four icons; the
+app's default HUD, `builtin:multiplex` (`plxnative-sim --hud-export builtin:multiplex`), is a worked example of
+each, and it passes `--hud-lint --lang all` (cost ceilings included) as shipped. Resource IDs refer to ordinary package-relative SVG files, never inline data or URLs.
 
 Build and validate using the same immutable artifact:
 

@@ -4956,6 +4956,9 @@ pub enum TransportRest {
     /// the focused colours at rest: the accent plate under the dark glyph, with no cast (the cast
     /// is what FOCUS adds)
     Solid,
+    /// a dark opaque plate ([`theme::CONTROL_PLATE_FILL`]) under the white glyph, the idle film's rim
+    /// round it: a control that stays legible over a bright picture without the HUD's ramp
+    Plate,
 }
 
 /// A [`TransportButton`]'s FOCUS face — what the remote's arrival changes.
@@ -5009,7 +5012,15 @@ pub struct TransportButton<'a> {
     pub scale: f32,
     pub rest: TransportRest,
     pub focus: TransportFocus,
+    /// A short app read-out under the glyph, inside the disc (the MultiPlex HUD's skip discs: "−30 s"):
+    /// the glyph rises to make room and the two are centred as one run.
+    pub caption: Option<&'a std::ffi::CStr>,
 }
+/// A captioned disc's glyph, as a share of the disc ([`TransportButton::caption`]): smaller than
+/// [`DISC_ICON_RATIO`]'s so the glyph and its caption stand inside the disc together.
+const DISC_CAPTION_ICON_RATIO: f32 = 0.30;
+/// The air between a captioned disc's glyph and its caption.
+const DISC_CAPTION_GAP: f32 = theme::space::XS * 0.5;
 impl<'a> TransportButton<'a> {
     pub fn new(which: i32, frame: Rect) -> Self {
         Self {
@@ -5024,9 +5035,12 @@ impl<'a> TransportButton<'a> {
             scale: 1.0,
             rest: TransportRest::Film,
             focus: TransportFocus::Accent,
+            caption: None,
         }
     }
     pub fn icon(mut self, icon: crate::icons::Icon) -> Self { self.icon = Some(icon); self }
+    /// The read-out under the glyph ([`TransportButton::caption`]).
+    pub fn caption(mut self, caption: &'a std::ffi::CStr) -> Self { self.caption = Some(caption); self }
     pub fn svg(mut self, svg: crate::icons::Svg<'a>) -> Self { self.svg = Some(svg); self }
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
@@ -5075,6 +5089,12 @@ impl<'a> TransportButton<'a> {
         };
         TransportLook { plate, cast: accent, ring: focused && self.focus == TransportFocus::Ring }
     }
+    /// The colours of `look`'s plate and glyph: the shared control face, on the dark plate when the
+    /// disc rests in [`TransportRest::Plate`] and focus has not brought the accent plate.
+    fn face(&self, look: TransportLook) -> ControlFace {
+        ControlStyle::Accent.face(look.plate == Plate::Accent, self.ground, self.palette)
+            .plated(self.rest == TransportRest::Plate && look.plate == Plate::Film)
+    }
 }
 impl View for TransportButton<'_> {
     fn draw(&self, _e: &Env, p: Painter) {
@@ -5085,7 +5105,7 @@ impl View for TransportButton<'_> {
         // tokens written twice, which is how a ground (or a palette) reaches one and not the other.
         // A disabled disc is never focused, however the builder was called ([`Self::look`]).
         let look = self.look();
-        let face = ControlStyle::Accent.face(look.plate == Plate::Accent, self.ground, self.palette);
+        let face = self.face(look);
         let ink = if self.enabled { face.ink } else { theme::INK_DISABLED };
         // **The same edge every other control wears** — [`control_rim`], not a bare `rect`. This was
         // the one control family the rim missed: `Button` and `CircleButton` both took it and these
@@ -5111,8 +5131,22 @@ impl View for TransportButton<'_> {
             let ring = Rect::new(r.x - o, r.y - o, r.w + o * 2.0, r.h + o * 2.0);
             p.rring(ring, ring.w * 0.5, theme::CONTROL_FOCUS_RING_W, theme::CONTROL_FOCUS_RING);
         }
-        let s = (r.w * DISC_ICON_RATIO).round();
-        let ir = Rect::new(r.x + (r.w - s) * 0.5, r.y + (r.h - s) * 0.5, s, s);
+        let ir = match self.caption {
+            // the glyph and its caption are one run centred in the disc, the caption on its cap band
+            Some(caption) => {
+                let s = (r.w * DISC_CAPTION_ICON_RATIO).round();
+                let size = theme::size::CAPTION;
+                let (cap_top, baseline) = plx_gfx::text::text_cap_band(size, 1);
+                let run = s + DISC_CAPTION_GAP + (baseline - cap_top);
+                let top = r.y + (r.h - run) * 0.5;
+                p.text(caption.as_ptr(), r.cx(), top + s + DISC_CAPTION_GAP - cap_top, size, ink, 1, 1);
+                Rect::new(r.x + (r.w - s) * 0.5, top, s, s)
+            }
+            None => {
+                let s = (r.w * DISC_ICON_RATIO).round();
+                Rect::new(r.x + (r.w - s) * 0.5, r.y + (r.h - s) * 0.5, s, s)
+            }
+        };
         if let Some(svg) = self.svg {
             crate::icons::draw_svg(p, svg, ir, ink);
             return;
@@ -8227,6 +8261,18 @@ struct ControlFace {
     spent: [f32; 4],
 }
 
+impl ControlFace {
+    /// This idle face on the dark opaque plate ([`TransportRest::Plate`], [`theme::CONTROL_PLATE_FILL`])
+    /// when `plate`, else unchanged. Only the surface changes: the ink stays the idle white.
+    fn plated(self, plate: bool) -> Self {
+        if plate {
+            Self { top: theme::CONTROL_PLATE_FILL, body: theme::CONTROL_PLATE_FILL, ..self }
+        } else {
+            self
+        }
+    }
+}
+
 /// A control's EDGE — the 1px perimeter the design system has always asked every control to wear
 /// and which none of them wore.
 ///
@@ -8624,8 +8670,10 @@ impl<'a> Button<'a> {
     /// The face this pill draws now.
     fn face_now(&self) -> ControlFace {
         let mut face = match self.rest {
-            Some(rest) => ControlStyle::Accent.face(
-                rest == TransportRest::Solid || self.accent_focus(), self.ground, self.palette),
+            Some(rest) => {
+                let accent = rest == TransportRest::Solid || self.accent_focus();
+                ControlStyle::Accent.face(accent, self.ground, self.palette).plated(rest == TransportRest::Plate && !accent)
+            }
             None => self.style.face_at(if self.enabled { self.focus.unwrap_or(f32::from(self.focused)) } else { 0.0 }, self.ground, self.palette),
         };
         if !self.enabled {
@@ -8976,6 +9024,15 @@ pub enum BadgeStyle {
     /// outline the way the PLEX PASS capsule's outline form does ([`Painter::rring`]). The hue is
     /// what the pill is about, so the caller passes a `TECH_*` role, never a raw colour.
     Ring { ink: [f32; 4] },
+    /// A SOLID capsule: `fill` inside, the label in `ink` — the player's resolution pill
+    /// ([`theme::STREAM_RES_FILL`] / [`theme::STREAM_RES_INK`]), the one stream fact the run leads with.
+    Solid { fill: [f32; 4], ink: [f32; 4] },
+    /// A capsule `fill`ed and RIMMED in `rim`, the label in `ink`, in ONE pass ([`Painter::rect_rimmed_w`]) — the
+    /// player's outlined and audio stream pills ([`theme::STREAM_PILL_FILL`] under [`theme::STREAM_PILL_RIM`] or
+    /// [`theme::STREAM_PILL_RIM_QUIET`]): a dark ground keeps the label legible over a bright picture, and the rim is
+    /// what tells the pills apart. The web player's audio pill is dashed; a dash is a draw call each (some thirty a
+    /// pill, every frame), so the quiet rim stands for it at one.
+    Rimmed { fill: [f32; 4], rim: [f32; 4], ink: [f32; 4] },
 }
 /// [`BadgeStyle::Ring`]'s corner radius and stroke: the PLEX PASS capsule's outline geometry, so
 /// the two outlined capsule families on the Detail hero share one silhouette.
@@ -9162,6 +9219,14 @@ pub fn badge(
         }
         BadgeStyle::Ring { ink } => {
             p.rring(r, RING_RAD, RING_STROKE, ink);
+            ink
+        }
+        BadgeStyle::Solid { fill, ink } => {
+            p.rrect(r, RING_RAD, RING_RAD, fill);
+            ink
+        }
+        BadgeStyle::Rimmed { fill, rim, ink } => {
+            p.rect_rimmed_w(r, RING_RAD, fill, fill, rim, 0.0, RING_STROKE);
             ink
         }
     };
@@ -9619,6 +9684,25 @@ mod transport_faces_tests {
             TransportLook { plate: Plate::Film, cast: false, ring: false },
             "the default is the film"
         );
+    }
+
+    /// `plate`: the film's plate and rim in the dark opaque fill, the white glyph kept; the accent focus
+    /// still brings its own plate, and a ring focus keeps the dark one.
+    #[test]
+    fn a_plate_disc_rests_on_the_dark_fill_and_focus_still_brings_its_face() {
+        let plate = |b: TransportButton<'static>| b.ground(ControlGround::Unkeyed).rest_face(TransportRest::Plate);
+        let rest = plate(TransportButton::new(0, R));
+        assert_eq!(rest.look(), TransportLook { plate: Plate::Film, cast: false, ring: false });
+        let face = rest.face(rest.look());
+        assert_eq!((face.top, face.body), (theme::CONTROL_PLATE_FILL, theme::CONTROL_PLATE_FILL));
+        let film = || TransportButton::new(0, R).ground(ControlGround::Unkeyed);
+        assert_eq!(face.ink, film().face(film().look()).ink, "the glyph keeps the idle ink");
+        assert_eq!(draw(rest), draw(film()), "the same plate and rim, only the fill differs");
+        let accent = plate(TransportButton::new(0, R)).focused(true);
+        let film_focused = film().focused(true);
+        assert_eq!(accent.face(accent.look()).body, film_focused.face(film_focused.look()).body);
+        let ring = plate(TransportButton::new(0, R)).focus_face(TransportFocus::Ring).focused(true);
+        assert_eq!(ring.face(ring.look()).body, theme::CONTROL_PLATE_FILL, "a ring keeps the dark plate");
     }
 
     /// `ring`: the rest face stays and a ring stands outside it. Disabled discs never wear it.

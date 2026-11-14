@@ -41,7 +41,7 @@ use std::borrow::Cow;
 use std::sync::mpsc::{self, Receiver};
 
 use plx_data::hudpacks::address::{self, AddressError};
-use plx_data::hudpacks::{DropFile, Entry, FetchError, Notice, OfferView, Refusal, Sha, Trust, Unloadable, BUILTIN_CLASSIC};
+use plx_data::hudpacks::{is_builtin, DropFile, Entry, FetchError, Notice, OfferView, Refusal, Sha, Trust, Unloadable, BUILTIN_MULTIPLEX};
 use plx_machine::machine::{
     Canon, Cx, Delivery, Edge, Effects, EntryId, FocusKey, Fx, GroupId, Handled, InputEvent, InputKind, InputOwner, InstanceId, Key, LogicalState,
     Machine, MachineId, TextEdit, NavOp,
@@ -212,12 +212,13 @@ fn parent_title() -> &'static str {
     plx_platform::i18n::msg::settings_playback_title()
 }
 
-/// The package row's name: the built-in is "Built-in" (the app's own word for itself, and the one string its row says),
-/// any other the author's text.
+/// The package row's name: a built-in's is the app's own word for it ("MultiPlex", the default, or "Classic"; the one
+/// string its row says), any other the author's text.
 fn name_of(entry: &Entry) -> String {
     match &entry.meta {
         Some(meta) => meta.name.clone(),
-        None => plx_platform::i18n::msg::settings_hud_builtin().to_owned(),
+        None if entry.id == BUILTIN_MULTIPLEX => plx_platform::i18n::msg::settings_hud_builtin_multiplex().to_owned(),
+        None => plx_platform::i18n::msg::settings_hud_builtin_classic().to_owned(),
     }
 }
 
@@ -364,7 +365,7 @@ fn hud_form(list: &HudList, draft: Option<&TextBuffer>, saving_end_time: bool) -
             list.catalog.index.as_ref().is_some_and(|index| index.entries.iter().any(|p| p.sha() == sha
                 && p.compatible(&list.app_version, &list.language_tag, plx_appkit::hud_format::bundle::MAX_ARTIFACT_BYTES)))
                 && list.catalog.revoked(sha).is_none() && !list.unfit.contains(&sha));
-        if entry.id != BUILTIN_CLASSIC && !managed_in_gallery {
+        if !is_builtin(&entry.id) && !managed_in_gallery {
             let row = Row::new(msg::settings_hud_remove_named(&name)).server_label();
             removals = removals.item_keyed(HudId::Remove(entry.id.clone()), RowKey(REMOVE_KEY + i as u32), RowKind::Button, HudAction::Remove(entry.id.clone()), row).disabled(list.package_busy);
             says.push((HudId::Remove(entry.id.clone()), msg::settings_hud_remove_detail().to_owned()));

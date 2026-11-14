@@ -31,8 +31,9 @@
 //! refused), then write the pack FIRST and `installed.json` second, so the switch is one atomic rename
 //! of the index. The first candidate that takes both writes is used; a package only the last,
 //! volatile (`/tmp`-backed) candidate took is [`Entry::until_restart`]. A new package replaces an
-//! installed one of its id only with a strictly higher `version` ([`Semver`]). `builtin:classic` is
-//! refused from every source: the built-in entry is compiled in, always listed, always selectable.
+//! installed one of its id only with a strictly higher `version` ([`Semver`]). The built-in ids
+//! (`builtin:multiplex`, the default, and `builtin:classic`, [`BUILTINS`]) are refused from every source: the
+//! built-in entries are compiled in, always listed, always selectable.
 //!
 //! **A development source is remembered** (PR15). An install from an address whose [`Address::dev_source`] is set (an
 //! `http://` URL on a private LAN address: an author's machine) records that address with the package, and
@@ -93,12 +94,30 @@ use serde_json::Map;
 /// (`app/adapters/huds.rs::tests`).
 pub const BUILTIN_CLASSIC: &str = "builtin:classic";
 
+/// The id of the MultiPlex built-in HUD (format 1.2): the transport row of the MultiPlex web player (a
+/// skip-back disc, play/pause, a skip-forward disc), the title, stream pills and the wall clock at the top,
+/// and a More pill. The same literal as `appkit::hud_format::schema::BUILTIN_MULTIPLEX_ID`.
+pub const BUILTIN_MULTIPLEX: &str = "builtin:multiplex";
+
+/// **What a profile that never chose plays with, and what a selection that went away falls back to**:
+/// the MultiPlex HUD. The owner chose parity with the MultiPlex web player (MultiPlex fork, 2026-11-14);
+/// classic stays one selection away in Settings.
+pub const BUILTIN_DEFAULT: &str = BUILTIN_MULTIPLEX;
+
+/// The compiled-in HUDs, in the order the package list shows them: the default first.
+pub const BUILTINS: [&str; 2] = [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC];
+
+/// Is `id` one of the compiled-in HUDs, which no file may claim?
+pub fn is_builtin(id: &str) -> bool {
+    BUILTINS.contains(&id)
+}
+
 /// The manifest/index identifier bound, shared with the appkit descriptor walker.
 pub const MAX_PACKAGE_ID_BYTES: usize = 256;
 
-/// A reverse-DNS package identity, including the reserved embedded Classic identity.
+/// A reverse-DNS package identity, including the reserved embedded identities ([`BUILTINS`]).
 pub fn valid_package_id(text: &str) -> bool {
-    if text == BUILTIN_CLASSIC {
+    if is_builtin(text) {
         return true;
     }
     text.len() <= MAX_PACKAGE_ID_BYTES
@@ -270,7 +289,7 @@ pub enum Verdict {
 /// Why an install is refused. Nothing is written for any of them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// Claims `builtin:classic`, which only the compiled-in entry may carry.
+    /// Claims a built-in id ([`BUILTINS`]), which only the compiled-in entries may carry.
     BuiltinId,
     /// Did not validate (or carries a version that is not `MAJOR.MINOR.PATCH`).
     Invalid,
@@ -445,7 +464,8 @@ pub enum HudEffect {
     /// Admit these bytes (the format lives above this layer): parse them and check the invariants and the app range,
     /// with no layout: [`HudEvent::Validated`].
     Validate { tag: Tag, sha: Sha, bytes: Arc<[u8]> },
-    /// The selection the profile setting must now hold (the store changed it, or the user picked it).
+    /// The selection the profile setting must now hold (the store changed it, or the user picked it); `""` clears it,
+    /// so the profile follows the default built-in.
     Selection { id: String },
     /// An operation ended: the Settings page says so.
     Notice(Notice),
@@ -685,7 +705,7 @@ impl HudStore {
             dirs: Vec::new(),
             packs: BTreeMap::new(),
             drops: Vec::new(),
-            selected: BUILTIN_CLASSIC.to_string(),
+            selected: BUILTIN_DEFAULT.to_string(),
             op: Op::Idle,
             tags: 0,
             catalog: catalog::Catalog::default(),
@@ -774,7 +794,7 @@ let (setup, selected,): (Setup, String,) = (setup, selected,);
         self.dirs = vec![Dir::default(); n];
         self.packs.clear();
         self.drops.clear();
-        self.selected = if selected.is_empty() { BUILTIN_CLASSIC.to_string() } else { selected };
+        self.selected = if selected.is_empty() { BUILTIN_DEFAULT.to_string() } else { selected };
         self.setup = setup;
         let mut todo: VecDeque<Job> = (0..n).map(Job::Index).collect();
         todo.push_back(Job::Plan);
@@ -821,7 +841,7 @@ let (mut listing,): (Listing,) = (Listing { todo, flight: None, stray },);
             HudEvent::Selected { id } => 'select: {
 let (id,): (String,) = (id,);
 
-        let allowed = id == BUILTIN_CLASSIC
+        let allowed = is_builtin(&id)
             || self.winners().get(id.as_str()).is_some_and(|w| w.loaded.loadable.is_ok() && self.catalog.snapshot().revoked(w.record.sha).is_none());
         if !allowed {
             break 'select Handled::No;
@@ -939,7 +959,7 @@ let (offer, meta, dir,): (Offer, Meta, usize,) = (offer, meta, 0,);
             HudEvent::Removed { id } => 'begin_removal: {
 let (id,): (String,) = (id,);
 
-        if self.busy() || id == BUILTIN_CLASSIC {
+        if self.busy() || is_builtin(&id) {
             break 'begin_removal Handled::No;
         }
         if !self.dirs.iter().any(|dir| dir.index.contains_key(&id)) {
@@ -979,8 +999,7 @@ let (mut removing,): (Removing,) = (Removing { id, dirs, incomplete: false, flig
         self.packs.retain(|sha, _| dirs.iter().any(|d| d.index.values().any(|r| r.sha == *sha)));
         let listed = self.winners().contains_key(removing.id.as_str());
         if !listed && self.selected == removing.id {
-            self.selected = BUILTIN_CLASSIC.to_string();
-            fx.push(HudEffect::Selection { id: self.selected.clone() });
+            self.selected = Self::fall_back(fx);
         }
         let id = removing.id;
         Self::notice(
@@ -1382,8 +1401,7 @@ let (mut removing,): (Removing,) = (removing,);
         self.packs.retain(|sha, _| dirs.iter().any(|d| d.index.values().any(|r| r.sha == *sha)));
         let listed = self.winners().contains_key(removing.id.as_str());
         if !listed && self.selected == removing.id {
-            self.selected = BUILTIN_CLASSIC.to_string();
-            fx.push(HudEffect::Selection { id: self.selected.clone() });
+            self.selected = Self::fall_back(fx);
         }
         let id = removing.id;
         Self::notice(
@@ -1410,8 +1428,7 @@ let (mut removing,): (Removing,) = (removing,);
 };
 // The cache can land before the installed-pack listing: apply the same rule after either.
         if self.winners().get(self.selected.as_str()).is_some_and(|w| self.catalog.snapshot().revoked(w.record.sha).is_some()) {
-            self.selected = BUILTIN_CLASSIC.into();
-            fx.push(HudEffect::Selection { id: self.selected.clone() });
+            self.selected = Self::fall_back(fx);
         }
         handled
 
@@ -1432,30 +1449,31 @@ let (mut removing,): (Removing,) = (removing,);
         &self.selected
     }
 
-    /// What a playback starts with: the selection when it is listed and loadable, else the built-in.
+    /// What a playback starts with: a built-in selection as it is; another when it is listed and loadable,
+    /// else the default built-in ([`BUILTIN_DEFAULT`]).
     pub fn resolved(&self) -> &str {
-        if self.selected != BUILTIN_CLASSIC
-            && self.winners().get(self.selected.as_str()).is_some_and(|w| w.loaded.loadable.is_ok() && self.catalog.snapshot().revoked(w.record.sha).is_none())
+        if is_builtin(&self.selected)
+            || self.winners().get(self.selected.as_str()).is_some_and(|w| w.loaded.loadable.is_ok() && self.catalog.snapshot().revoked(w.record.sha).is_none())
         {
             &self.selected
         } else {
-            BUILTIN_CLASSIC
+            BUILTIN_DEFAULT
         }
     }
 
-    /// The package list: the built-in first, then one row per installed id, by id.
+    /// The package list: the built-ins first ([`BUILTINS`]), then one row per installed id, by id.
     pub fn entries(&self) -> Vec<Entry> {
-        let mut out = vec![Entry {
-            id: BUILTIN_CLASSIC.to_string(),
+        let mut out: Vec<Entry> = BUILTINS.iter().map(|id| Entry {
+            id: id.to_string(),
             meta: None,
             sha: None,
             source: None,
             trust: Trust::BuiltIn,
             loadable: Ok(()),
             until_restart: false,
-            selected: self.selected == BUILTIN_CLASSIC,
+            selected: self.selected == *id,
             dev_source: None,
-        }];
+        }).collect();
         for (id, win) in self.winners() {
             out.push(Entry {
                 id: id.to_string(),
@@ -1587,7 +1605,7 @@ let (mut removing,): (Removing,) = (removing,);
             Verdict::Loadable(meta) => (meta, None),
             Verdict::Unloadable(meta, why) => (meta, Some(*why)),
         };
-        if meta.id == BUILTIN_CLASSIC {
+        if is_builtin(&meta.id) {
             return Err(Refusal::BuiltinId);
         }
         if let Some(why) = unloadable {
@@ -1610,6 +1628,15 @@ let (mut removing,): (Removing,) = (removing,);
         self.dirs.get(dir).is_some_and(|d| {
             d.index.values().any(|r| r.sha == sha)
         })
+    }
+
+    /// The selected package is gone (removed, revoked): the store draws the default built-in, and the profile setting
+    /// is CLEARED (`""`) rather than written with the default's id, so the profile keeps following the default as it
+    /// changes. Before `builtin:multiplex` this wrote `builtin:classic`, which a profile still holds as if chosen
+    /// (`docs/hud-plugins.md`, D15). Returns the id the store now draws, for its `selected`.
+    fn fall_back(fx: &mut Vec<HudEffect>) -> String {
+        fx.push(HudEffect::Selection { id: String::new() });
+        BUILTIN_DEFAULT.to_string()
     }
 
     fn notice(fx: &mut Vec<HudEffect>, notice: Notice) {
@@ -1761,7 +1788,9 @@ where D: serde::Deserializer<'de> {
 }
 
 /// An invalid or unsupported index is read-only in its entirety. Its evidence and every possible
-/// referenced blob stay on disk. A current record binds the archive digest and both format axes.
+/// referenced blob stay on disk. A current record binds the archive digest and both format axes; its HUD
+/// format is any this runtime reads ([`catalog::hud_format_supported`]: an installed 1.1 or 1.2 package must not
+/// make the whole index read-only and every package vanish).
 fn parse_index(bytes: &[u8]) -> Dir {
     let readonly = || Dir { access: Access::ReadOnly, ..Dir::default() };
     let Ok(JsonObject(file)) = serde_json::from_slice::<JsonObject<IndexFile>>(bytes) else { return readonly() };
@@ -1769,7 +1798,7 @@ fn parse_index(bytes: &[u8]) -> Dir {
     if file.v != INDEX_FORMAT { return readonly(); }
     let mut index = Index::new();
     for (id, record) in file.packs {
-        if id == BUILTIN_CLASSIC || !valid_package_id(&id) || record.package_format != "1.0" || record.hud_format != "1.0" {
+        if is_builtin(&id) || !valid_package_id(&id) || record.package_format != "1.0" || !catalog::hud_format_supported(&record.hud_format) {
             return readonly();
         }
         let Some(sha) = Sha::parse(&record.sha) else { return readonly() };

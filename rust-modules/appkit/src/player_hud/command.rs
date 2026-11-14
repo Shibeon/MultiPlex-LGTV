@@ -143,6 +143,8 @@ pub enum HudCommand {
     GoToDetail,
     /// Show or hide Stats for nerds.
     ToggleStats,
+    /// Leave playback, as the Back key does from the bare picture (format 1.2).
+    Exit,
 }
 
 impl HudCommand {
@@ -162,7 +164,8 @@ impl HudCommand {
             | HudCommand::OpenMore(_)
             | HudCommand::ToggleSection(Section::Info)
             | HudCommand::FromBeginning
-            | HudCommand::ToggleStats => true,
+            | HudCommand::ToggleStats
+            | HudCommand::Exit => true,
         }
     }
 }
@@ -222,6 +225,7 @@ impl HudCommand {
             "from_beginning" => HudCommand::FromBeginning,
             "go_to_detail" => HudCommand::GoToDetail,
             "toggle_stats" => HudCommand::ToggleStats,
+            "exit" => HudCommand::Exit,
             _ => return None,
         })
     }
@@ -328,6 +332,7 @@ mod tests {
             HudCommand::ToggleSection(Section::Info),
             HudCommand::FromBeginning,
             HudCommand::ToggleStats,
+            HudCommand::Exit,
         ] {
             assert!(always.enabled(&idle), "{always:?}");
         }
@@ -395,6 +400,7 @@ mod tests {
         assert_eq!(HudCommand::from_item("from_beginning", &none), Some(HudCommand::FromBeginning));
         assert_eq!(HudCommand::from_item("go_to_detail", &none), Some(HudCommand::GoToDetail));
         assert_eq!(HudCommand::from_item("toggle_stats", &none), Some(HudCommand::ToggleStats));
+        assert_eq!(HudCommand::from_item("exit", &none), Some(HudCommand::Exit));
         let by = |by| Params { by: Some(by), ..Params::default() };
         assert_eq!(HudCommand::from_item("seek", &by(ByParam::Secs(-10))), Some(HudCommand::Seek(secs(-10))));
         assert_eq!(HudCommand::from_item("seek", &by(ByParam::Secs(30))), Some(HudCommand::Seek(secs(30))));

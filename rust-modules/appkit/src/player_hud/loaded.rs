@@ -12,9 +12,10 @@
 //! measurer is passed in. The draw ([`super::render`])
 //! walks the result and computes nothing.
 //!
-//! `builtin:classic` is the only package that ships in this release, and it always loads (it is embedded
-//! and a test parses and compiles it clean in every shipped language): [`load_classic`] cannot fail. A
-//! dev package that does not parse is refused ([`DevStep::Report`]) and the owner keeps drawing what it drew: the chosen package, or classic.
+//! Two packages ship compiled in: `builtin:multiplex` (format 1.2, the default) and `builtin:classic`. Both always
+//! load (they are embedded and a test parses and compiles each clean in every shipped language): [`load_classic`] and
+//! [`load_multiplex`] cannot fail. A dev package that does not parse is refused ([`DevStep::Report`]) and the owner
+//! keeps drawing what it drew: the chosen package, or a built-in.
 
 use std::sync::Arc;
 
@@ -81,6 +82,18 @@ pub fn answers_every_frame(compiled: &Compiled) -> bool {
 /// parses and compiles them in all twelve languages, so a failure here is a build that no test passed.
 pub fn load_classic(app_version: &str, cx: &LocaleContext, measure: &dyn Measure) -> LoadedHud {
     load(crate::hud_format::CLASSIC_PACKAGE, app_version, cx, measure).expect("the embedded builtin:classic parses")
+}
+
+/// `builtin:multiplex`, the embedded default package ([`crate::hud_format::MULTIPLEX_PACKAGE`]), compiled; infallible
+/// for the reason [`load_classic`] is (`multiplex_loads_with_no_findings_in_every_shipped_language`).
+pub fn load_multiplex(app_version: &str, cx: &LocaleContext, measure: &dyn Measure) -> LoadedHud {
+    load(crate::hud_format::MULTIPLEX_PACKAGE, app_version, cx, measure).expect("the embedded builtin:multiplex parses")
+}
+
+/// **`builtin:multiplex` for a test that builds a player page**: [`classic_for_test`]'s English and fixture advances.
+#[cfg(any(test, feature = "test-support"))]
+pub fn multiplex_for_test() -> Arc<Compiled> {
+    load_multiplex("0.0.0-test", plx_platform::i18n::english(), &plx_ui::fixture::FixtureMeasure).compiled
 }
 
 /// **`builtin:classic` for a test that builds a player page**: English on the fixture advances
@@ -234,6 +247,25 @@ mod tests {
             assert!(!hud.compiled.states().is_empty(), "{}", language.tag());
             assert_eq!(hud.key.lang, hud.language.tag());
         }
+    }
+
+    /// The embedded MultiPlex package loads clean in every shipped language, answers every frame the player can be in,
+    /// and is byte for byte the packing of its source directory. Its More pill reads "More" (format 1.2's label for a
+    /// root `open_more`; a 1.0 or 1.1 package's reads "Options", the width it was fitted at).
+    #[test]
+    fn multiplex_loads_with_no_findings_in_every_shipped_language() {
+        for language in SHIPPED {
+            let cx = LocaleContext::resolve(language, None, None, None, None);
+            let hud = load_multiplex("0.0.0-test", &cx, &ShippedMeasure);
+            assert!(hud.compiled.findings().is_empty(), "{}: {:?}", language.tag(), hud.compiled.findings());
+            assert!(answers_every_frame(&hud.compiled), "{}", language.tag());
+            assert!(hud.compiled.declares_clock(), "the MultiPlex head shows the wall clock");
+            let state = hud.compiled.lookup(0, crate::hud_format::Slot::Discs, true, false, false).expect("the compact state");
+            let more = state.control("more").expect("the More pill");
+            assert_eq!(more.label, plx_platform::i18n::msg::player_hud_more_in(&cx), "{}", language.tag());
+        }
+        assert_eq!(crate::hud_format::MULTIPLEX_PACKAGE, &crate::hud_format::fixtures::bytes("multiplex")[..],
+            "fixtures/multiplex.plxhud is fixtures/multiplex/ packed: run plxnative-sim --hud-pack again");
     }
 
     /// **Classic answers every frame the player can be in**, in every shipped language: for every slot the

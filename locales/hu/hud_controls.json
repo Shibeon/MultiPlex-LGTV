@@ -1,5 +1,9 @@
 {
+  "player.hud.exit": "Vissza",
+  "player.hud.more": "Továbbiak",
   "player.hud.play_pause": "Lejátszás / Szünet",
+  "player.hud.seek_back_caption": "−{seconds} s",
+  "player.hud.seek_forward_caption": "+{seconds} s",
   "player.hud.skip_back": "Ugrás vissza",
   "player.hud.skip_forward": "Ugrás előre",
   "player.up_next.seconds_left": "Következő epizód · {seconds} mp"

@@ -62,8 +62,8 @@
       "description": "The HUD document and its independent schema version."
     },
     "id": {
-      "description": "The package's reverse-DNS identity. builtin:classic is reserved for the embedded package.",
-      "pattern": "^(builtin:classic|[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+)$",
+      "description": "The package's reverse-DNS identity. builtin:classic and builtin:multiplex are reserved for the embedded packages.",
+      "pattern": "^(builtin:classic|builtin:multiplex|[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+)$",
       "type": "string"
     },
     "license": {

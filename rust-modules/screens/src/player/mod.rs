@@ -43,7 +43,7 @@ use plx_machine::machine::{
 use plx_ui::cards::{CardEvent, CardSource, SectionFrame};
 use plx_ui::geom::IndexElem;
 use plx_appkit::player_hud::command::{HudCommand, Section};
-use plx_appkit::player_hud::geometry::{HudGeometry, GROUP_FAILURE, GROUP_ROW, GROUP_SCRUB, GROUP_SECTION, GROUP_STRIP, GROUP_TABS};
+use plx_appkit::player_hud::geometry::{HudGeometry, GROUP_FAILURE, GROUP_HEAD, GROUP_ROW, GROUP_SCRUB, GROUP_SECTION, GROUP_STRIP, GROUP_TABS};
 use plx_appkit::player_hud::model::HudModel;
 use plx_appkit::player_hud::{self, ControlSlot, SubtitleBitmaps, motion::HudMotion};
 use plx_ui::screen::{
@@ -351,9 +351,10 @@ impl PlayerScreen {
     /// was actually painted for the next Tick. Pointer hits are registered by [`Self::record_stops`],
     /// from this screen's `Focusable`.
     ///
-    /// It draws the compiled package ([`Self::compiled`]: `builtin:classic` unless the seated profile chose an
-    /// installed package that fits the language, or a dev package was asked for) through `player_hud::render`. A package with no state for this frame draws nothing (a
-    /// frame `builtin:classic` is never in, `classic_answers_every_frame_the_player_can_be_in`), and says so
+    /// It draws the compiled package ([`Self::compiled`]: the default `builtin:multiplex` unless the seated profile chose
+    /// `builtin:classic` or an installed package that fits the language, or a dev package was asked for) through `player_hud::render`. A package with no state for this frame draws nothing (a
+    /// frame neither built-in is ever in, `classic_answers_every_frame_the_player_can_be_in` and
+    /// `multiplex_loads_with_no_findings_in_every_shipped_language`), and says so
     /// ONCE in the event log rather than every frame; its geometry is the same empty report
     /// (`player_hud::geometry::geometry`), so what is drawn and what is hit stay one statement.
     pub fn draw_hud<H: Host>(
@@ -472,6 +473,8 @@ impl PlayerScreen {
             // clickable: `Motion::chrome_interactive`
             GROUP_ROW => hud_drawn && !failed && self.middle_up() && self.row.chrome_interactive(),
             GROUP_TABS => hud_drawn && !failed && self.row.chrome_interactive(),
+            // the head's controls (format 1.2: the back chevron, an Info disc) fade with the chrome like the tabs
+            GROUP_HEAD => hud_drawn && !failed && self.row.chrome_interactive(),
             // an open section's page: its stops exist while it is drawn (a failure takes the frame outright)
             GROUP_STRIP => hud_drawn && !failed && self.hud.sections.contains(Section::Chapters),
             GROUP_SECTION => hud_drawn && !failed && self.hud.sections.contains(Section::Info),
@@ -485,6 +488,7 @@ impl PlayerScreen {
             GROUP_SCRUB => player_hud::ELEM_SCRUB,
             GROUP_ROW => player_hud::control_elem(i as i32),
             GROUP_TABS => player_hud::ELEM_TAB_BASE + i,
+            GROUP_HEAD => player_hud::geometry::head_elem(i),
             GROUP_FAILURE => player_hud::ELEM_FAILURE_BASE + i,
             GROUP_SECTION => player_hud::geometry::section_elem(i),
             GROUP_STRIP => player_hud::ELEM_CHAPTER_BASE + i,
@@ -782,6 +786,10 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Machine<H> for PlayerScreen 
                     self.hud.nav.focus = group;
                     if group == GROUP_TABS {
                         self.hud.nav.tab = (to.elem - player_hud::ELEM_TAB_BASE) as i32;
+                    }
+                    if group == GROUP_HEAD {
+                        // the head control the engine holds: the disc the ring draws on
+                        self.hud.nav.btn = (to.elem - player_hud::ELEM_HEAD_BASE) as i32;
                     }
                     if group == GROUP_SECTION {
                         // the open section's button the engine holds: the pop the motion lifts
@@ -1211,9 +1219,15 @@ impl PlayerScreen {
                 self.hud.nav.focus = GROUP_TABS;
                 self.hud.nav.tab = tab as i32;
                 self.seat_elem(fx, e);
-                if let Some(section) = Section::of_tab(tab as i32) {
-                    Self::ask(fx, PlayerReq::Command(HudCommand::ToggleSection(section)));
-                }
+                self.tab_pressed(tab as usize, chapters, fx);
+                Handled::Yes
+            }
+            e if (player_hud::ELEM_HEAD_BASE..player_hud::ELEM_HEAD_END).contains(&e) => {
+                let i = e - player_hud::ELEM_HEAD_BASE;
+                self.hud.nav.focus = GROUP_HEAD;
+                self.hud.nav.btn = i as i32;
+                self.seat_elem(fx, e);
+                self.head_pressed(i as usize, chapters, fx);
                 Handled::Yes
             }
             // an open section's own stops are pressed by the engine (`PressCommit`), not clicked
@@ -1339,7 +1353,7 @@ impl PlayerScreen {
         if self.jump_key(ps, key, edge, now, fx) {
             return Handled::Yes;
         }
-        if self.hud.visible_at_press && matches!(self.hud.nav.focus, GROUP_ROW | GROUP_STRIP)
+        if self.hud.visible_at_press && matches!(self.hud.nav.focus, GROUP_ROW | GROUP_STRIP | GROUP_HEAD)
             && matches!(key, Key::Left { alt: false } | Key::Right { alt: false }) {
             // The strip is a list walked a card at a time, so a held direction is paced; the control row's own
             // steps are not (its focus lands on the next disc at the remote's rate, as it always did).
@@ -1516,9 +1530,14 @@ impl PlayerScreen {
             .filter(|e| Self::hud_group_of(*e) == Some(GROUP_TABS))
             .map(|e| e - player_hud::ELEM_TAB_BASE)
         {
-            if let Some(section) = Section::of_tab(tab as i32) {
-                Self::ask(fx, PlayerReq::Command(HudCommand::ToggleSection(section)));
-            }
+            self.tab_pressed(tab as usize, self.model.chapters, fx);
+        } else if let Some(i) = focused
+            .filter(|e| Self::hud_group_of(*e) == Some(GROUP_HEAD))
+            .map(|e| e - player_hud::ELEM_HEAD_BASE)
+        {
+            // a head control asks at once, as a tab does: the back chevron, the Info disc beside the title
+            self.scrub.cancel();
+            self.head_pressed(i as usize, self.model.chapters, fx);
         } else {
             let req = self.toggle_play(None, now);
             Self::ask(fx, req);
@@ -1572,6 +1591,35 @@ impl PlayerScreen {
         Self::ask(fx, PlayerReq::ArmControlRow);
     }
 
+    /// **Tab `tab` was pressed** (OK or a click): what the package placed in that slot
+    /// (`HudGeometry::tab_acts`: a section's pill, or format 1.2's More pill), asked of the app as any
+    /// control's command is. A slot the geometry names no command for keeps the tab's own section.
+    fn tab_pressed<H: AppLike>(&mut self, tab: usize, chapters: bool, fx: &mut Effects<'_, H>) {
+        let command = self.geometry_for(chapters).tab_acts.get(tab).copied().flatten()
+            .or_else(|| Section::of_tab(tab as i32).map(HudCommand::ToggleSection));
+        // a drawn pill is its own availability (the layout draws Chapters only for an item with chapters)
+        if let Some(command) = command {
+            Self::ask(fx, PlayerReq::Command(command));
+        }
+    }
+
+    /// **Head control `i` was pressed** (format 1.2's back chevron or Info disc): its command, the same
+    /// [`PlayerReq::Command`] a disc of the row asks; `exit` is the app's BACK ritual (`HudCommand::Exit`).
+    fn head_pressed<H: AppLike>(&mut self, i: usize, chapters: bool, fx: &mut Effects<'_, H>) {
+        let command = self.geometry_for(chapters).head_acts.get(i).copied().flatten();
+        if let Some(command) = command.filter(|c| c.enabled(&self.model)) {
+            Self::ask(fx, PlayerReq::Command(command));
+        }
+    }
+
+    /// The tab a sideways key from tab `from` lands on: the next slot the layout draws a pill in, or `from`.
+    fn tab_step(&self, chapters: bool, from: i32, forward: bool) -> i32 {
+        let geo = self.geometry_for(chapters);
+        let from = usize::try_from(from).unwrap_or(0);
+        plx_ui::focus::next_enabled_index(from, geo.tabs.len(), forward, |i| geo.tabs[i].is_some())
+            .map_or(from as i32, |i| i as i32)
+    }
+
     /// **The screen's answer to `Step::Edge`**: the dispatcher re-delivers a direction the engine
     /// could not move, from a group whose edge rule is `EdgeRule::Screen`, as the same key with
     /// `at_edge` set. `focused` names the group it left. The ends are the ends of the drawn order
@@ -1601,7 +1649,7 @@ impl PlayerScreen {
         let group = focused.and_then(Self::hud_group_of);
         let order = self.travel_order(chapters);
         let toward_tabs_key = if order.toward_tabs() == Dir::Up { consts::Key::Up } else { consts::Key::Down };
-        let transport = matches!(group, Some(GROUP_SCRUB | GROUP_ROW | GROUP_TABS));
+        let transport = matches!(group, Some(GROUP_SCRUB | GROUP_ROW | GROUP_TABS | GROUP_HEAD));
         match (group, key) {
             // an open page holds the transport up, so the hide this press asks for would show nothing now and
             // fire when the page closes: it is swallowed, and the ring stays where it is
@@ -1783,9 +1831,8 @@ impl PlayerScreen {
             // Horizontal row travel is delegated to FocusEngine in handle_key.
             input::ScrubPress::Row => {}
             input::ScrubPress::Tabs => {
-                let max_tab = if plx_appkit::chapters_panel::has_chapters(meta) { 1 } else { 0 };
-                self.hud.nav.tab =
-                    (self.hud.nav.tab + if fwd { 1 } else { -1 }).clamp(0, max_tab);
+                // the next pill the layout draws (Info, Chapters, a 1.2 More pill), held at the ends
+                self.hud.nav.tab = self.tab_step(plx_appkit::chapters_panel::has_chapters(meta), self.hud.nav.tab, fwd);
                 // the tab pill the engine holds follows, or OK would open the one just left
                 Self::repair_focus(fx, GROUP_TABS);
             }
@@ -2083,6 +2130,9 @@ impl PlayerScreen {
             if group == GROUP_TABS {
                 self.hud.nav.tab = (elem - player_hud::ELEM_TAB_BASE) as i32;
             }
+            if group == GROUP_HEAD {
+                self.hud.nav.btn = (elem - player_hud::ELEM_HEAD_BASE) as i32;
+            }
             if group == GROUP_SECTION {
                 self.hud.nav.btn = (elem - player_hud::ELEM_SECTION_BASE) as i32;
             }
@@ -2310,12 +2360,26 @@ impl PlayerScreen {
 
     /// Which of the HUD's three transport groups holds `elem` — the failure row and the repair
     /// card are not the transport's, and answer `None`.
+    /// **The head control stacked nearest above (`down` false) or below `from`**: one whose centre is past `from`'s
+    /// rect on that side, the vertically nearest, then the horizontally nearest. `None` when the head has none there
+    /// (a level row), and the order's links take the key off the head.
+    fn head_stacked(geo: &HudGeometry, from: usize, down: bool) -> Option<usize> {
+        let here = geo.head.get(from).copied().flatten()?;
+        let (hx, hy) = (here.x + here.w * 0.5, here.y + here.h * 0.5);
+        (0..geo.head.len())
+            .filter_map(|i| geo.head[i].map(|r| (i, r.x + r.w * 0.5, r.y + r.h * 0.5)))
+            .filter(|&(i, _, cy)| i != from && if down { cy > here.y + here.h } else { cy < here.y })
+            .min_by(|a, b| ((a.2 - hy).abs(), (a.1 - hx).abs()).partial_cmp(&((b.2 - hy).abs(), (b.1 - hx).abs())).unwrap_or(std::cmp::Ordering::Equal))
+            .map(|(i, _, _)| i)
+    }
+
     fn hud_group_of(elem: u32) -> Option<GroupId> {
         use player_hud::{ELEM_FAILURE_BASE, ELEM_SCRUB, ELEM_TAB_BASE};
         match elem {
             e if e == ELEM_SCRUB => Some(GROUP_SCRUB),
             e if player_hud::row_index(e).is_some() => Some(GROUP_ROW),
             e if (ELEM_TAB_BASE..ELEM_FAILURE_BASE).contains(&e) => Some(GROUP_TABS),
+            e if (player_hud::ELEM_HEAD_BASE..player_hud::ELEM_HEAD_END).contains(&e) => Some(GROUP_HEAD),
             e if (player_hud::ELEM_SECTION_BASE..player_hud::ELEM_SECTION_END).contains(&e) => Some(GROUP_SECTION),
             e if (player_hud::ELEM_CHAPTER_BASE..plx_ui::dispatch::STRIP_BASE).contains(&e) => Some(GROUP_STRIP),
             _ => None,
@@ -2375,6 +2439,20 @@ impl PlayerScreen {
                 seat: Seat::First,
                 reachable: AxisMask::BOTH,
                 edge: [EdgeRule::Screen; 4],
+                extent: *first,
+                len: last + 1,
+                elem: plx_ui::screen::ElemKind::Control,
+            });
+        }
+        // The head's controls (format 1.2): a row walked sideways by `neighbour`, entered and left vertically by the
+        // order's links like the tabs; Up off it, as the top of the order, is the screen's (`answer_edge`).
+        if let (Some(first), Some(last)) = (geo.head.iter().flatten().next(), geo.head.iter().rposition(Option::is_some)) {
+            out.push(GroupSpec {
+                id: GROUP_HEAD,
+                kind: GroupKind::Row { wrap: false },
+                seat: Seat::First,
+                reachable: AxisMask::BOTH,
+                edge: [EdgeRule::Screen, EdgeRule::Screen, EdgeRule::Stop, EdgeRule::Stop],
                 extent: *first,
                 len: last + 1,
                 elem: plx_ui::screen::ElemKind::Control,
@@ -2451,6 +2529,9 @@ impl PlayerScreen {
             e if (ELEM_TAB_BASE..ELEM_FAILURE_BASE).contains(&e) => {
                 geo.tabs.get((e - ELEM_TAB_BASE) as usize).copied().flatten()?
             }
+            e if (player_hud::ELEM_HEAD_BASE..player_hud::ELEM_HEAD_END).contains(&e) => {
+                geo.head.get((e - player_hud::ELEM_HEAD_BASE) as usize).copied().flatten()?
+            }
             e if (ELEM_FAILURE_BASE..ELEM_FAILURE_END).contains(&e) => {
                 player_hud::FailureReadout::now(H::session(cx)).frames(cx.measure)[(e - ELEM_FAILURE_BASE) as usize]?
             }
@@ -2520,6 +2601,17 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Focusable<H> for PlayerScree
             }
             _ => {}
         }
+        if Self::hud_group_of(key.elem) == Some(GROUP_HEAD) {
+            let geo = self.hud_geometry(cx);
+            let index = (key.elem - player_hud::ELEM_HEAD_BASE) as usize;
+            let to = match dir {
+                Dir::Left | Dir::Right => plx_ui::focus::next_enabled_index(index, geo.head.len(), dir == Dir::Right, |i| geo.head[i].is_some()),
+                // the head may stack its controls (the MultiPlex back chevron over its Info disc): Up and Down step to
+                // the nearest one above or below before the order's links take the key off the head
+                Dir::Up | Dir::Down => Self::head_stacked(&geo, index, dir == Dir::Down),
+            };
+            return to.map_or(Step::Edge, |i| Step::Move(FocusKey { entry: self.entry, elem: player_hud::geometry::head_elem(i as u32) }));
+        }
         if let Some(index) = player_hud::row_index(key.elem) {
             let forward = match dir { Dir::Left => false, Dir::Right => true, _ => return Step::Edge };
             let chapters = plx_appkit::chapters_panel::has_chapters(H::metadata(cx));
@@ -2561,8 +2653,27 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Focusable<H> for PlayerScree
             // the control that opened the section focus is leaving, when it is a tab; else the tab the user last
             // stood on (a move down from the scrubber returns to it), held to the tabs this item has
             GROUP_TABS => self.opener_to_land_on(g, cx).unwrap_or_else(|| {
-                let last = if plx_appkit::chapters_panel::has_chapters(H::metadata(cx)) { 1 } else { 0 };
-                player_hud::ELEM_TAB_BASE + self.hud.nav.tab.clamp(0, last) as u32
+                let geo = self.hud_geometry(cx);
+                let drawn = |i: usize| geo.tabs.get(i).is_some_and(Option::is_some);
+                let want = usize::try_from(self.hud.nav.tab).unwrap_or(0);
+                let tab = if drawn(want) { want } else { (0..geo.tabs.len()).find(|&i| drawn(i)).unwrap_or(0) };
+                player_hud::ELEM_TAB_BASE + tab as u32
+            }),
+            // the head control the ring last stood on when it is still drawn, else the lowest drawn (the one nearest the
+            // bar it is entered from: the MultiPlex Info disc under the back chevron), the first of a level row
+            GROUP_HEAD => self.opener_to_land_on(g, cx).unwrap_or_else(|| {
+                let geo = self.hud_geometry(cx);
+                let drawn = |i: usize| geo.head.get(i).is_some_and(Option::is_some);
+                let want = usize::try_from(self.hud.nav.btn).ok().filter(|&i| self.hud.nav.focus == GROUP_HEAD && drawn(i));
+                let lowest = (0..geo.head.len())
+                    .filter_map(|i| geo.head[i].map(|r| (i, r.y + r.h)))
+                    .fold(None, |best: Option<(usize, f32)>, (i, bottom)| match best {
+                        Some((_, b)) if b >= bottom => best,
+                        _ => Some((i, bottom)),
+                    })
+                    .map(|(i, _)| i);
+                let i = want.or(lowest).unwrap_or(0);
+                player_hud::geometry::head_elem(i as u32)
             }),
             GROUP_FAILURE => player_hud::ELEM_FAILURE_BASE,
             GROUP_REPAIR => REPAIR_CANCEL,

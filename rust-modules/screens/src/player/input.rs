@@ -19,7 +19,7 @@
 
 use plx_appkit::held_key::HeldKey;
 use plx_appkit::player_hud::command::Section;
-use plx_appkit::player_hud::geometry::{GROUP_ROW, GROUP_SCRUB, GROUP_SECTION, GROUP_STRIP, GROUP_TABS};
+use plx_appkit::player_hud::geometry::{GROUP_HEAD, GROUP_ROW, GROUP_SCRUB, GROUP_SECTION, GROUP_STRIP, GROUP_TABS};
 use plx_machine::machine::GroupId;
 use std::os::raw::c_int;
 
@@ -466,8 +466,8 @@ pub fn scrub_press(hud_vis: bool, focus: GroupId, seekable: bool) -> ScrubPress 
         return ScrubPress::Reveal;
     }
     match focus {
-        // the chapters strip is walked sideways by the engine like the row
-        GROUP_ROW | GROUP_STRIP => ScrubPress::Row,
+        // the chapters strip and the head (format 1.2) are walked sideways by the engine like the row
+        GROUP_ROW | GROUP_STRIP | GROUP_HEAD => ScrubPress::Row,
         GROUP_TABS => ScrubPress::Tabs,
         // an open section's buttons are a column: a sideways key has nowhere to go and must not scrub
         GROUP_SECTION => ScrubPress::Nothing,

@@ -102,13 +102,31 @@ pub(super) fn text_of(f: &Frame<'_>, bind: &str) -> Option<String> {
         "info.summary" => info_content(f.meta).map(|c| c.summary),
         "label.info" => tab_labels(false)[0].map(str::to_owned),
         "label.chapters" => tab_labels(true)[1].map(str::to_owned),
+        // format 1.2: the item's own name, the line under it, and the wall clock the app supplied
+        "title.name" => Some(f.meta.now_playing().map_or_else(|| words(plx_media::route::title_cptr(f.ps)),
+            |n| if n.is_real_episode && !n.ep_title.is_empty() { n.ep_title.clone() } else { n.title.clone() })),
+        "title.subtitle" => Some(f.meta.now_playing().map_or_else(String::new, subtitle)),
+        "clock.now" => f.model.now.and_then(|time| plx_platform::i18n::current().time_of_day(time)),
         _ => None,
+    }
+}
+
+/// **The line under `title.name`**: an episode's show and printed address (`"Show · S1 · E4"`,
+/// [`plx_ui::fmt::episode_address`]), else the item's year; empty when neither is known.
+pub(super) fn subtitle(n: &plx_data::metadata::NowPlaying) -> String {
+    if n.is_real_episode {
+        let address = plx_ui::fmt::episode_address(n.season, n.index);
+        [n.title.as_str(), address.as_str()].iter().filter(|s| !s.is_empty()).copied().collect::<Vec<_>>().join(" \u{b7} ")
+    } else if n.year > 0 {
+        n.year.to_string()
+    } else {
+        String::new()
     }
 }
 
 /// Whether `bind` is one of the section text binds [`text`] draws.
 pub(super) fn is_section_text(bind: &str) -> bool {
-    matches!(bind, "info.title" | "info.summary" | "label.info" | "label.chapters")
+    matches!(bind, "info.title" | "info.summary" | "label.info" | "label.chapters" | "title.name" | "title.subtitle" | "clock.now")
 }
 
 /// The frame a [`TextView`] draws a line box into so the box's top lands on `top`: the view takes the CAP
@@ -145,6 +163,9 @@ pub(super) fn text(
     let Some(content) = text_of(f, bind) else { return };
     let bold = bold.at(holds(f));
     let view = text_view(&content, size, bold, ink.at(holds(f)), max_lines, leading);
+    // The clock's room is its WIDEST time (`compile::text_label`): it stands against the room's end, so the
+    // time does not drift sideways as its digits change.
+    let view = if bind == "clock.now" { view.h(plx_ui::label::HAlign::Right) } else { view };
     view.draw(if alpha < 1.0 { q.alpha(alpha) } else { q }, line_frame(rect, size, bold));
 }
 
@@ -163,6 +184,7 @@ pub(super) fn facts_run(
     rect: Rect,
     order: &[String],
     badges: &[String],
+    stream: &[String],
     genres_max: u32,
     playback_fact: bool,
     size: i32,
@@ -171,9 +193,11 @@ pub(super) fn facts_run(
 ) -> Option<FactsRun> {
     let c = info_content(f.meta)?;
     let (order, badges): (Vec<&str>, Vec<&str>) = (order.iter().map(String::as_str).collect(), badges.iter().map(String::as_str).collect());
+    let stream: Vec<&str> = stream.iter().map(String::as_str).collect();
     let shape = FactsShape {
         order: &order,
         badges: &badges,
+        stream: &stream,
         genres_max: genres_max as usize,
         playback_fact,
         ink: ink.at(holds(f)),
@@ -202,13 +226,14 @@ pub(super) fn facts(
     rect: Rect,
     order: &[String],
     badges: &[String],
+    stream: &[String],
     genres_max: u32,
     playback_fact: bool,
     size: i32,
     bold: &Live<bool>,
     ink: &Live<Rgba>,
 ) {
-    if let Some(run) = facts_run(f, rect, order, badges, genres_max, playback_fact, size, bold, ink) {
+    if let Some(run) = facts_run(f, rect, order, badges, stream, genres_max, playback_fact, size, bold, ink) {
         run.draw(q, rect.x, rect.y + rect.h * 0.5, f);
     }
 }
@@ -269,10 +294,10 @@ pub(super) fn group_for<T: AsRef<DrawOp>>(
                 let h = (!text.is_empty() || (*max_lines == 1 && content.is_some())).then(|| view.measure_h(rect.w));
                 (Body::Text { view, rect: *rect, alpha: *alpha, op: child_ops[0] }, h)
             }
-            [DrawOp::Facts { rect, order, badges, genres_max, playback_fact, size, bold, ink }] => {
+            [DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink }] => {
                 let bold = Live { base: bold.at(predicates), cases: Vec::new() };
                 let ink = Live { base: ink.at(predicates), cases: Vec::new() };
-                let run = facts_run(f, *rect, order, badges, *genres_max, *playback_fact, *size, &bold, &ink);
+                let run = facts_run(f, *rect, order, badges, stream, *genres_max, *playback_fact, *size, &bold, &ink);
                 let h = run.as_ref().is_some_and(|r| r.n > 0).then_some(rect.h);
                 (Body::Facts { run, rect: *rect }, h)
             }
@@ -309,9 +334,9 @@ pub(super) fn decor(compiled: &Compiled, f: &Frame<'_>, q: Painter, op: &DrawOp,
         DrawOp::Rule { rect, ink: value } => rule(q, *rect, &ink(value), f),
         DrawOp::Icon { rect, asset, ink: value } => icon(compiled, q, *rect, asset, &ink(value), f),
         DrawOp::Image { rect, bind, radius } => image(f, q, *rect, bind, *radius),
-        DrawOp::Facts { rect, order, badges, genres_max, playback_fact, size, bold, ink: value } => {
+        DrawOp::Facts { rect, order, badges, stream, genres_max, playback_fact, size, bold, ink: value } => {
             let bold = Live { base: bold.at(holds), cases: Vec::new() };
-            facts(f, q, *rect, order, badges, *genres_max, *playback_fact, *size, &bold, &ink(value));
+            facts(f, q, *rect, order, badges, stream, *genres_max, *playback_fact, *size, &bold, &ink(value));
         }
         _ => {}
     }

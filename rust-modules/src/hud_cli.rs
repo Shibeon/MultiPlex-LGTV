@@ -18,7 +18,7 @@ const INSPECT: &str = "--hud-inspect";
 const EXIT_CLEAN: i32 = 0;
 const EXIT_FINDINGS: i32 = 1;
 const EXIT_USAGE: i32 = 2;
-const USAGE: &str = "usage: plxnative-sim --hud-lint <file|directory> [--format text|json] [--lang all|<tag>] [--text-skew <profile>] | --hud-pack <directory> --out <file> [--format text|json] | --hud-schema manifest|hud --version <major.minor> | --hud-export builtin:classic --out <file> | --hud-info | --hud-text-metrics [--lang all|<tag>] | --hud-inspect <file|directory> [--lang all|<tag>]";
+const USAGE: &str = "usage: plxnative-sim --hud-lint <file|directory> [--format text|json] [--lang all|<tag>] [--text-skew <profile>] | --hud-pack <directory> --out <file> [--format text|json] | --hud-schema manifest|hud --version <major.minor> | --hud-export builtin:multiplex|builtin:classic --out <file> | --hud-info | --hud-text-metrics [--lang all|<tag>] | --hud-inspect <file|directory> [--lang all|<tag>]";
 
 pub fn wants(args: &[String]) -> bool {
     args.iter().any(|arg| matches!(arg.as_str(), LINT | SCHEMA | EXPORT | PACK | INFO | METRICS | INSPECT))
@@ -164,8 +164,12 @@ pub(crate) fn run(
             EXIT_CLEAN
         }
         Command::Export { id, output } => {
-            if id != "builtin:classic" { return usage(err, &format!("unknown package {id:?} to export; known: builtin:classic"), false); }
-            match (io.write)(&output, BUILTIN_CLASSIC) { Ok(()) => EXIT_CLEAN, Err(reason) => usage(err, &reason, false) }
+            let bytes = match id.as_str() {
+                "builtin:classic" => BUILTIN_CLASSIC,
+                "builtin:multiplex" => plx_appkit::hud_format::MULTIPLEX_PACKAGE,
+                _ => return usage(err, &format!("unknown package {id:?} to export; known: builtin:multiplex, builtin:classic"), false),
+            };
+            match (io.write)(&output, bytes) { Ok(()) => EXIT_CLEAN, Err(reason) => usage(err, &reason, false) }
         }
         Command::Metrics { langs } => {
             let measure = match measure() { Ok(value) => value, Err(reason) => return usage(err, &reason, false) };
@@ -542,7 +546,7 @@ mod tests {
             (&["--hud-lint", "p.json", "--lang", "system"], "not \"system\""),
             (&["--hud-lint", "p.json", "--lang", "de", "--lang", "fr"], "--lang given twice"),
             (&["--hud-export"], "--hud-export needs a package id"),
-            (&["--hud-export", "nope", "--out", "out.plxhud"], "unknown package \"nope\" to export; known: builtin:classic"),
+            (&["--hud-export", "nope", "--out", "out.plxhud"], "unknown package \"nope\" to export; known: builtin:multiplex, builtin:classic"),
             (&["--hud-schema", "hud", "--version", "1.0", "--hud-export", "builtin:classic", "--out", "out.plxhud"], "only one HUD tool mode"),
             (&["--hud-lint", "p.json", "--hud-schema", "hud", "--version", "1.0"], "only one HUD tool mode"),
             (&["--hud-schema", "extra", "--version", "1.0"], "--hud-schema needs manifest or hud"),
@@ -725,7 +729,7 @@ mod tests {
 
     #[test]
     fn each_document_schema_uses_the_native_emitter_without_loading_files_or_fonts() {
-        for (kind, version, expected) in [("manifest", "1.0", schema_emit::emit_manifest(bundle::CURRENT)), ("hud", "1.0", schema_emit::emit((1, 0))), ("hud", "1.1", schema_emit::emit((1, 1)))] {
+        for (kind, version, expected) in [("manifest", "1.0", schema_emit::emit_manifest(bundle::CURRENT)), ("hud", "1.0", schema_emit::emit((1, 0))), ("hud", "1.1", schema_emit::emit((1, 1))), ("hud", "1.2", schema_emit::emit((1, 2)))] {
             let (code, out, err) = go(&["--hud-schema", kind, "--version", version], &|_| panic!("schema read input"), &never);
             assert_eq!((code, err.as_str()), (0, ""));
             assert_eq!(out, format!("{expected:#}\n"));

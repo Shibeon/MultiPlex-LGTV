@@ -41,6 +41,8 @@ thread_local! {
     /// A wall-clock Unix sample and its monotonic frame tick; advanced between five-second refreshes.
     static UNIX: Cell<Option<(u32, Option<i64>)>> = const { Cell::new(None) };
     static LOCAL_END: Cell<Option<(i64, Option<[i32; 2]>)>> = const { Cell::new(None) };
+    /// The last local wall-clock minute [`local_minute`] converted, keyed by the minute's Unix start.
+    static LOCAL_NOW: Cell<Option<(i64, Option<[i32; 2]>)>> = const { Cell::new(None) };
 }
 
 /// The date every replay frame answers: a recording has no calendar of its own, and a fixed one keeps
@@ -87,6 +89,20 @@ pub(crate) fn unix_ms() -> Option<i64> {
 }
 
 /// Cache timezone conversion until the projected second changes or the wall clock is refreshed.
+/// **The local `[hour, minute]` of the Unix second `seconds`**, for the HUD's wall clock: converted once a
+/// minute (its own cache, so the finish-time projection's [`local_end_time`] keeps its own).
+pub(crate) fn local_minute(seconds: i64) -> Option<[i32; 2]> {
+    let minute = seconds.div_euclid(60) * 60;
+    LOCAL_NOW.with(|cache| {
+        if let Some((_, local)) = cache.get().filter(|(cached, _)| *cached == minute) {
+            return local;
+        }
+        let local = plx_platform::i18n::local_clock_time(minute);
+        cache.set(Some((minute, local)));
+        local
+    })
+}
+
 pub(crate) fn local_end_time(seconds: i64) -> Option<[i32; 2]> {
     LOCAL_END.with(|cache| {
         if let Some((_, local)) = cache.get().filter(|(cached, _)| *cached == seconds) {

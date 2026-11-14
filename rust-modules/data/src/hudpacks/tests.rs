@@ -39,11 +39,13 @@ fn validator(bytes: &[u8]) -> Verdict {
         return Verdict::Invalid;
     }
     let Some((id, version)) = head.split_once('@') else { return Verdict::Invalid };
+    // `#hud=1.2` names the package's HUD format
+    let hud_format = flag.strip_prefix("hud=").unwrap_or("1.0");
     let meta = Meta {
         id: id.to_string(),
         name: format!("{id} name"),
         version: version.to_string(),
-        package_format: "1.0".to_string(), hud_format: "1.0".to_string(),
+        package_format: "1.0".to_string(), hud_format: hud_format.to_string(),
     };
     match flag {
         "newer" => Verdict::Unloadable(meta, Unloadable::NewerFormat),
@@ -326,14 +328,14 @@ fn install_writes_the_pack_then_the_index() {
     let verdict = validator(&bytes);
     let (_, fx) = step(&mut m2, HudEvent::Validated { tag: tag_of(&fx[0]), sha, verdict });
     assert_eq!(fx.iter().map(line).collect::<Vec<_>>(), [format!("write {}", pack_path(0, sha).display())]);
-    assert_eq!(m2.entries().len(), 1, "the pack alone lists nothing");
+    assert_eq!(m2.entries().len(), 2, "the pack alone lists nothing");
 
     let (_, fx) = step(&mut m2, HudEvent::Written { tag: tag_of(&fx[0]), outcome: WriteOutcome::Done });
     assert_eq!(fx.iter().map(line).collect::<Vec<_>>(), [format!("write {}", index_path(0).display())]);
     let HudEffect::WriteFile { bytes: index, .. } = &fx[0] else { panic!("{fx:?}") };
     let written = parse_index(index).index;
     assert_eq!(written["org.example.hud"], record_at(sha, Source::Address, 100));
-    assert_eq!(m2.entries().len(), 1, "the index is not down yet");
+    assert_eq!(m2.entries().len(), 2, "the index is not down yet");
 
     let (_, fx) = step(&mut m2, HudEvent::Written { tag: tag_of(&fx[0]), outcome: WriteOutcome::Done });
     assert_eq!(
@@ -345,7 +347,7 @@ fn install_writes_the_pack_then_the_index() {
             until_restart: false,
         })]
     );
-    assert_eq!(m2.entries().len(), 2);
+    assert_eq!(m2.entries().len(), 3);
     assert!(!m2.busy());
 }
 
@@ -436,7 +438,7 @@ fn only_the_volatile_candidate_gives_until_restart() {
     r.refresh();
     r.install(&bytes, Source::Address, 1);
     assert_eq!(r.notices.last(), Some(&Notice::NotWritten { sha: Some(Sha::of(&bytes)) }));
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
     assert!(r.files.is_empty());
 }
 
@@ -448,7 +450,7 @@ fn the_same_sha_in_two_directories_lists_once() {
     let sha = Sha::of(&bytes);
     let mut r = Rig::with(&[(&bytes, Source::Address, &[0, 2])]);
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, "org.example.hud"]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.hud"]);
     let reads = r.log.iter().filter(|e| matches!(e, HudEffect::ReadFile { at, .. } if at.rel.starts_with(PACKS_DIR))).count();
     let validations = r.log.iter().filter(|e| matches!(e, HudEffect::Validate { sha: s, .. } if *s == sha)).count();
     assert_eq!((reads, validations), (1, 1));
@@ -457,7 +459,7 @@ fn the_same_sha_in_two_directories_lists_once() {
     // Candidate 0's copy is damaged: the volatile one is read instead, and says so.
     r.files.insert(pack_path(0, sha), b"damaged".to_vec());
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, "org.example.hud"]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.hud"]);
     assert!(r.entry("org.example.hud").until_restart);
 }
 
@@ -478,7 +480,7 @@ fn a_drop_file_with_the_builtin_id_is_refused_and_the_builtin_stays_selectable()
     assert_eq!(r.send(HudEvent::InstallDrop { sha, now: 1 }), Handled::Yes);
     assert_eq!(r.notices.last(), Some(&Notice::Refused { sha, reason: Refusal::BuiltinId }));
     assert!(r.lines(mark).iter().all(|l| !l.starts_with("write")), "{:?}", r.lines(mark));
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
 
     // Bytes from an address are refused the same way, and an index that claims it lists nothing.
     r.install(&bytes, Source::Address, 2);
@@ -488,7 +490,7 @@ fn a_drop_file_with_the_builtin_id_is_refused_and_the_builtin_stays_selectable()
     r.files.insert(index_path(1), index_bytes(&index).to_vec());
     r.files.insert(pack_path(1, sha), bytes.clone());
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
     assert_eq!(r.entry(BUILTIN_CLASSIC).trust, Trust::BuiltIn);
 
     // The built-in is selectable (and so is "nothing picked").
@@ -514,7 +516,7 @@ fn a_higher_version_replaces_the_lower_one_and_a_lower_one_does_not() {
     let mark = r.log.len();
     r.install(&v110, Source::Address, 2);
     assert_eq!(r.entry("org.example.hud").meta.unwrap().version, "1.1.0");
-    assert_eq!(r.ids().len(), 2, "one row per id");
+    assert_eq!(r.ids().len(), 3, "one row per id");
     assert!(r.lines(mark).contains(&format!("delete {}", pack_path(0, Sha::of(&v100)).display())));
     assert!(!r.files.contains_key(&pack_path(0, Sha::of(&v100))));
     assert_eq!(r.index_of(0).len(), 1);
@@ -561,11 +563,11 @@ fn removing_the_selected_package_selects_the_builtin() {
 
     let mark = r.log.len();
     assert_eq!(r.send(HudEvent::Removed { id: "org.example.hud".into() }), Handled::Yes);
-    assert_eq!(r.m.selected(), BUILTIN_CLASSIC);
-    assert_eq!(r.selections, ["org.example.hud", BUILTIN_CLASSIC]);
+    assert_eq!(r.m.selected(), BUILTIN_DEFAULT);
+    assert_eq!(r.selections, ["org.example.hud", ""], "the setting is cleared, so the profile follows the default");
     assert_eq!(r.notices.last(), Some(&Notice::Removed { id: "org.example.hud".into() }));
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
-    assert!(r.entry(BUILTIN_CLASSIC).selected);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
+    assert!(r.entry(BUILTIN_DEFAULT).selected);
     let lines = r.lines(mark);
     assert_eq!(lines[0], format!("write {}", index_path(0).display()));
     assert_eq!(lines[1], format!("delete {}", pack_path(0, sha).display()));
@@ -614,7 +616,7 @@ fn a_validated_with_a_failing_verdict_is_not_installable() {
         let (handled, fx) = step(&mut m, HudEvent::Validated { tag: tag_of(&fx[0]), sha, verdict });
         assert_eq!(handled, Handled::Yes);
         assert_eq!(fx, [HudEffect::Notice(Notice::Refused { sha, reason })]);
-        assert_eq!(m.entries().len(), 1);
+        assert_eq!(m.entries().len(), 2);
         assert!(!m.busy());
     }
 
@@ -625,7 +627,7 @@ fn a_validated_with_a_failing_verdict_is_not_installable() {
     r.install(&flagged("org.example.hud", "1.0.0", "bad"), Source::Address, 1);
     r.install(&flagged("org.example.hud", "1.0.0", "newer"), Source::Address, 1);
     assert!(r.lines(mark).iter().all(|l| !l.starts_with("write")));
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
 }
 
 // ---- what a listing reads, and what it trusts ----
@@ -680,7 +682,7 @@ fn a_pack_on_disk_that_no_longer_loads_is_listed_but_not_selectable() {
     r.refresh_selecting("org.example.old");
     assert_eq!(r.entry("org.example.old").loadable, Err(Unloadable::NewerFormat));
     assert_eq!(r.m.selected(), "org.example.old");
-    assert_eq!(r.m.resolved(), BUILTIN_CLASSIC);
+    assert_eq!(r.m.resolved(), BUILTIN_DEFAULT);
     assert_eq!(r.send(HudEvent::Selected { id: "org.example.old".into() }), Handled::No);
     assert!(r.selections.is_empty());
 }
@@ -709,7 +711,7 @@ fn a_pack_is_listed_only_if_its_name_its_index_entry_and_its_bytes_agree() {
     index.insert("org.example.swapped".to_string(), record(&swapped, Source::Address));
     r.files.insert(index_path(2), index_bytes(&index).to_vec());
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, "org.example.good"]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.good"]);
 }
 
 /// One id in two candidates: the higher version wins, and on a tie the earlier candidate.
@@ -836,7 +838,7 @@ fn a_refresh_takes_over_from_an_install_or_removal_that_never_finished() {
     let ack = HudEvent::Written { tag: owed, outcome: WriteOutcome::Done };
     assert_eq!(step(&mut r.m, ack).0, Handled::No);
     // Nothing was removed on the way: the disk still lists it.
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, "org.example.hud"]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.hud"]);
 }
 
 /// A Refresh that displaces an install ends it with a notice, whatever step it had reached: nothing
@@ -859,7 +861,7 @@ fn a_refresh_that_displaces_an_install_says_it_was_not_written() {
         r.refresh();
         assert_eq!(r.log[mark], HudEffect::Notice(not_written.clone()), "{step}: the notice leads");
         assert_eq!(r.notices, [not_written.clone()], "{step}");
-        assert_eq!(r.ids().len(), 1 + usize::from(listed), "{step}: the listing shows the disk");
+        assert_eq!(r.ids().len(), 2 + usize::from(listed), "{step}: the listing shows the disk");
     }
 
     // A drop file being read again before it is installed.
@@ -892,7 +894,7 @@ fn a_refresh_that_displaces_a_removal_says_it_is_incomplete() {
     assert_eq!(r.notices, [incomplete]);
     // The disk is as the half-done removal left it, and the listing says so.
     assert!(r.index_of(0).is_empty() && !r.index_of(1).is_empty());
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, id]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, id]);
     // The pack of the candidate it did rewrite is no longer named by anything: gone. The other is kept.
     assert!(!r.files.contains_key(&pack_path(0, sha)));
     assert!(r.files.contains_key(&pack_path(1, sha)));
@@ -977,7 +979,7 @@ fn an_index_that_could_not_be_read_is_never_overwritten() {
     let before = r.files[&index_path(0)].clone();
     r.unreadable.push(index_path(0));
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC], "what could not be read is not listed");
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC], "what could not be read is not listed");
     r.install(&b, Source::Address, 3);
     assert!(r.files.contains_key(&pack_path(1, Sha::of(&b))), "the install went to the next candidate");
     assert!(!r.files.contains_key(&pack_path(0, Sha::of(&b))));
@@ -985,7 +987,7 @@ fn an_index_that_could_not_be_read_is_never_overwritten() {
     // Once it reads again, its packages are back, and so is the winner by candidate order.
     r.unreadable.clear();
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, "org.example.a", "org.example.b"]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.a", "org.example.b"]);
 
     // An index that is simply not there is an empty candidate, which is writable.
     let mut r = Rig::new();
@@ -1008,7 +1010,7 @@ fn an_index_from_a_newer_build_or_garbage_is_listed_but_never_rewritten() {
     r.files.insert(index_path(0), newer.clone().into_bytes());
     r.files.insert(pack_path(0, Sha::of(&a)), a.clone());
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
     r.install(&b, Source::Address, 3);
     assert!(r.files.contains_key(&pack_path(1, Sha::of(&b))));
     assert_eq!(r.files[&index_path(0)], newer.as_bytes());
@@ -1037,6 +1039,32 @@ fn rig_with_index(text: String, a: &[u8]) -> Rig {
     r.files.insert(index_path(0), text.into_bytes());
     r.files.insert(pack_path(0, Sha::of(a)), a.to_vec());
     r
+}
+
+/// **A package of a newer HUD minor keeps the index writable.** Installing a 1.1 and a 1.2 package records their
+/// formats; the index read back (a restart) lists every package and still takes an install. It once read any record
+/// that was not "1.0" as an unsupported index, so the first newer package made every installed one vanish.
+#[test]
+fn installed_packages_of_every_supported_hud_format_survive_a_reread() {
+    let a = pack("org.example.a", "1.0.0");
+    let b = flagged("org.example.b", "1.0.0", "hud=1.1");
+    let c = flagged("org.example.c", "1.0.0", "hud=1.2");
+    let mut r = Rig::new();
+    r.refresh();
+    for (n, bytes) in [&a, &b, &c].into_iter().enumerate() {
+        r.install(bytes, Source::Drop, n as u64 + 1);
+    }
+    let index = r.index_of(0);
+    assert_eq!(index["org.example.b"].hud_format, "1.1");
+    assert_eq!(index["org.example.c"].hud_format, "1.2");
+
+    let mut again = Rig::new();
+    again.files = r.files.clone();
+    again.refresh();
+    assert_eq!(again.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.a", "org.example.b", "org.example.c"]);
+    let d = pack("org.example.d", "1.0.0");
+    again.install(&d, Source::Drop, 9);
+    assert!(again.index_of(0).contains_key("org.example.d"), "the re-read index is writable");
 }
 
 /// Every malformed current-contract index is preserved whole. Neither a partial interpretation
@@ -1071,7 +1099,7 @@ fn malformed_indexes_are_read_only_and_never_rewritten_or_reclaimed() {
     for text in edits {
         let mut r = rig_with_index(text.clone(), &a);
         r.refresh();
-        assert_eq!(r.ids(), [BUILTIN_CLASSIC], "{text}");
+        assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC], "{text}");
         r.install(&b, Source::Address, 3);
         assert_eq!(r.files[&index_path(0)], text.as_bytes(), "evidence is untouched");
         assert!(r.files.contains_key(&pack_path(0, Sha::of(&a))), "old blob is retained");
@@ -1102,7 +1130,7 @@ fn removal_reports_incomplete_when_an_unknown_candidate_may_retain_the_id() {
     let evidence = doc.to_string().into_bytes();
     r.files.insert(index_path(0), evidence.clone());
     r.refresh();
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC, "org.example.a"], "candidate one lists the HUD");
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC, "org.example.a"], "candidate one lists the HUD");
     assert_eq!(r.send(HudEvent::Removed { id: "org.example.a".into() }), Handled::Yes);
     assert_eq!(r.notices.last(), Some(&Notice::RemoveIncomplete { id: "org.example.a".into() }));
     assert_eq!(r.files[&index_path(0)], evidence);
@@ -1204,7 +1232,7 @@ fn a_fetch_is_offered_before_anything_is_written_and_installs_the_bytes_the_view
     assert_eq!(r.lines(mark), [format!("fetch {HUD_URL}"), format!("validate {}", sha.hex())]);
     assert!(r.m.busy(), "an offer is open work");
     assert!(r.files.keys().all(|p| !p.to_string_lossy().contains("packs/")), "nothing on disk yet: {:?}", r.files.keys());
-    assert_eq!(r.ids(), [BUILTIN_CLASSIC]);
+    assert_eq!(r.ids(), [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC]);
 
     let offer = r.m.offer().expect("a loadable fetch is offered");
     assert_eq!((offer.sha, offer.source, offer.meta.id.as_str(), offer.meta.version.as_str()), (sha, Source::Address, "org.example.hud", "1.2.0"));
@@ -1530,17 +1558,17 @@ fn revoked_hash_disables_every_install_source_and_survives_later_disk_listing() 
         // Cache first, then the installed pack: neither order may re-enable the selected hash.
         publish_catalog(&mut rig.m,registry_fixture(&bytes,true));
         rig.refresh_selecting("com.example.revoked");
-        assert_eq!(rig.m.resolved(),BUILTIN_CLASSIC);
-        assert_eq!(rig.m.selected(),BUILTIN_CLASSIC);
-        assert_eq!(rig.m.entries()[1].loadable,Err(Unloadable::Revoked));
+        assert_eq!(rig.m.resolved(),BUILTIN_DEFAULT);
+        assert_eq!(rig.m.selected(),BUILTIN_DEFAULT);
+        assert_eq!(rig.m.entries()[2].loadable,Err(Unloadable::Revoked));
         assert_eq!(rig.send(HudEvent::Selected {id:"com.example.revoked".into()}),Handled::No);
         rig.install(&bytes,source,20);
         assert_eq!(rig.notices.last(),Some(&Notice::Refused {sha,reason:Refusal::Unloadable(Unloadable::Revoked)}));
     }
     let mut rig=Rig::with(&[(&bytes,Source::Drop,&[0])]);rig.refresh_selecting("com.example.revoked");
     let fx=publish_catalog(&mut rig.m,registry_fixture(&bytes,true));
-    assert!(fx.contains(&HudEffect::Selection {id:BUILTIN_CLASSIC.into()}));
-    assert_eq!(rig.m.resolved(),BUILTIN_CLASSIC);
+    assert!(fx.contains(&HudEffect::Selection {id:String::new()}), "the setting is cleared, so the profile follows the default");
+    assert_eq!(rig.m.resolved(),BUILTIN_DEFAULT);
 }
 
 #[test]
@@ -1559,10 +1587,10 @@ fn registry_fetch_binds_download_bytes_and_manifest_before_offering_and_never_se
         } else {
             rig.run(answer);
             let offer=rig.m.offer().expect("validated offer");assert_eq!(offer.source,Source::Registry);
-            assert_eq!(rig.m.entries().len(),1,"confirmation must precede the first write");
+            assert_eq!(rig.m.entries().len(),2,"confirmation must precede the first write");
             rig.send(HudEvent::InstallOffer {sha,now:20});
-            assert_eq!(rig.m.entries()[1].trust,Trust::Registry);
-            assert_eq!(rig.m.selected(),BUILTIN_CLASSIC,"install is distinct from Use HUD");
+            assert_eq!(rig.m.entries()[2].trust,Trust::Registry);
+            assert_eq!(rig.m.selected(),BUILTIN_DEFAULT,"install is distinct from Use HUD");
             assert_eq!(rig.send(HudEvent::Selected {id:"com.example.registry".into()}),Handled::Yes);
         }
     }

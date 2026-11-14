@@ -239,12 +239,13 @@ pub fn ctrl_row_hit_rect() -> Rect {
     Rect::new(CTRL_RIGHT - w, CTRL_Y, w, CTRL_H)
 }
 
-/// The bottom tab pills' labels: Info always, Chapters only when the item has any; `None` is a
-/// tab the row does not carry.
+/// The bottom tab pills' labels: Info always, Chapters only when the item has any, then More (drawn only
+/// where a package places an `open_more` pill); `None` is a tab the row does not carry.
 pub(super) fn tab_labels(has_chapters: bool) -> [Option<&'static str>; HUD_TABS] {
     [
         Some(plx_platform::i18n::msg::widgets_player_info()),
         has_chapters.then(plx_platform::i18n::msg::widgets_player_chapters),
+        Some(plx_platform::i18n::msg::player_hud_more()),
     ]
 }
 
@@ -568,6 +569,8 @@ pub struct PlaybarLook {
     pub mark: MarkMode,
     /// The package's declared lane for the combined clock, when enabled.
     pub end_time_lane: Option<EndTimeLane>,
+    /// The remaining clock's ink: the secondary text ink unless the package names one (format 1.2).
+    pub remaining: [f32; 4],
 }
 
 impl Default for PlaybarLook {
@@ -581,6 +584,7 @@ impl Default for PlaybarLook {
             clocks: ClockMode::FollowHead,
             mark: MarkMode::AfterElapsed,
             end_time_lane: None,
+            remaining: theme::TEXT_SECONDARY,
         }
     }
 }
@@ -595,7 +599,7 @@ pub fn draw_playbar(p: Painter, bar: Playbar, measure: &dyn plx_machine::machine
 pub fn draw_playbar_look(p: Painter, bar: Playbar, look: PlaybarLook, measure: &dyn plx_machine::machine::Measure) {
     let e = hud_env();
     let white = look.fill;
-    let dim = theme::TEXT_SECONDARY;
+    let dim = look.remaining;
     let track = look.track_ink;
     let sx = look.track.x;
     let sw = look.track.w;

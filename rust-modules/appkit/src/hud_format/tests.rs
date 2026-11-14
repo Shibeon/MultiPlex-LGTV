@@ -921,7 +921,7 @@ pub(in crate::hud_format) fn corpus() -> Vec<Row> {
     add(row("command_in_the_wrong_case", r(r##""command": "open_tracks""##, r##""command": "Open_Tracks""##), &codes::E0301, &format!("{CENTER}/0/command")).near("open_tracks").only());
 
     // ----- HUD-E0401, 0402, 0403: the version gate answers alone, at /format -----
-    add(format_row("format_1_2_is_a_newer_minor", r##""1.2""##, &codes::E0402).message(REASON_NEWER));
+    add(format_row("format_1_3_is_a_newer_minor", r##""1.3""##, &codes::E0402).message(REASON_NEWER));
     add(format_row("format_1_9_is_a_newer_minor", r##""1.9""##, &codes::E0402).message(REASON_NEWER));
     add(format_row("format_1_10_is_a_newer_minor", r##""1.10""##, &codes::E0402).message(REASON_NEWER));
     add(format_row("format_2_0_is_a_newer_major", r##""2.0""##, &codes::E0403).message(REASON_NEWER));
@@ -943,7 +943,7 @@ pub(in crate::hud_format) fn corpus() -> Vec<Row> {
     add(row("format_missing", metadata(r##""format": "1.0","##, ""), &codes::E0401, "/hud/format").only());
     add(row(
         "a_newer_package_is_judged_by_its_version_alone",
-        edit(&metadata(r##""format": "1.0""##, r##""format": "1.2""##), r##""name": "Reference","##, r##""name": 6,"##),
+        edit(&metadata(r##""format": "1.0""##, r##""format": "1.3""##), r##""name": "Reference","##, r##""name": 6,"##),
         &codes::E0402,
         "/hud/format",
     )
@@ -1078,7 +1078,7 @@ mod invalid {
             let row = rows.into_iter().find(|r| r.label == label).expect(label);
             parse_checked(&row.bytes).findings
         };
-        let newer_minor = by_label("format_1_2_is_a_newer_minor");
+        let newer_minor = by_label("format_1_3_is_a_newer_minor");
         assert_eq!(newer_minor.len(), 1, "the version gate answers alone");
         assert_eq!(newer_minor[0].message, "Made for a newer MultiPlex");
         assert_eq!(newer_minor[0].message, REASON_NEWER);
@@ -1459,7 +1459,7 @@ mod commands {
             let found = judge(&valid_item(cmd, ""));
             assert!(found.is_empty(), "{}: {}", cmd.name, dump(&found));
         }
-        assert_eq!(schema::COMMANDS.len(), 10, "the ten commands of 1.0");
+        assert_eq!(schema::COMMANDS.len(), 11, "the ten commands of 1.0 and `exit` of 1.2");
     }
 
     #[test]
@@ -2313,7 +2313,7 @@ mod drift {
     /// Strings of a pattern, valid and (for the refusals) not.
     fn pattern_valid(pattern: Pattern) -> Vec<String> {
         match pattern {
-            Pattern::ReverseDns => vec!["com.example.hud".into(), "a.b".into(), schema::BUILTIN_CLASSIC_ID.into()],
+            Pattern::ReverseDns => vec!["com.example.hud".into(), "a.b".into(), schema::BUILTIN_CLASSIC_ID.into(), schema::BUILTIN_MULTIPLEX_ID.into()],
             Pattern::Semver => vec!["1.2.3".into(), "0.0.0".into()],
             Pattern::FormatVersion => vec!["1.0".into(), "12.34".into()],
             Pattern::SchemaUrl => vec!["https://plxnative.com/hud/schema/hud/1.0.json".into()],
@@ -2335,6 +2335,8 @@ mod drift {
                 "builtin:".into(),
                 "xbuiltin:classic".into(),
                 "builtin:classic ".into(),
+                "builtin:multiplex ".into(),
+                "builtin:MultiPlex".into(),
             ],
             Pattern::Semver => vec![common, "1.0".into(), "1.0.0-beta".into(), "01.0.0".into()],
             Pattern::FormatVersion => vec![common, "1".into(), "v1.0".into(), "1.0.0".into()],
@@ -2390,7 +2392,7 @@ mod drift {
             Ty::Asset => vec![s("glyph")],
             Ty::Face => {
                 let mut out = vec![s("glyph")];
-                out.extend(schema::BUILTIN_ICONS.iter().map(|(n, _)| J::Str(format!("builtin:{n}"))));
+                out.extend(schema::BUILTIN_ICONS.iter().map(|(n, _, _)| J::Str(format!("builtin:{n}"))));
                 out
             }
             Ty::Cond => {
@@ -2894,7 +2896,7 @@ mod drift {
     #[test]
     fn the_table_has_the_shape_the_spec_freezes() {
         assert_eq!(schema::all_nodes().len(), 26, "nodes");
-        assert_eq!(schema::COMMANDS.len(), 10, "commands");
+        assert_eq!(schema::COMMANDS.len(), 11, "commands");
         assert_eq!(schema::CONDITIONS.len(), 11, "conditions");
         assert_eq!(schema::all_nodes()[0].name, "hud");
         let mut names: Vec<&str> = schema::all_nodes().iter().map(|n| n.name).collect();
@@ -3284,7 +3286,7 @@ mod drift {
         unique("INK_TOKENS", schema::INK_TOKENS.iter().map(|(n, _)| *n).collect());
         unique("SIZE_RUNGS", schema::SIZE_RUNGS.iter().map(|(n, _)| *n).collect());
         unique("SPACE_TOKENS", schema::SPACE_TOKENS.iter().map(|(n, _)| *n).collect());
-        unique("BUILTIN_ICONS", schema::BUILTIN_ICONS.iter().map(|(n, _)| *n).collect());
+        unique("BUILTIN_ICONS", schema::BUILTIN_ICONS.iter().map(|(n, _, _)| *n).collect());
         unique("COMMANDS", schema::COMMANDS.iter().map(|c| c.name).collect());
         unique("CONDITIONS", schema::CONDITIONS.iter().map(|c| c.name).collect());
         unique("BINDINGS", schema::BINDINGS.iter().map(|b| b.name).collect());
@@ -3293,7 +3295,7 @@ mod drift {
         assert!(schema::SPACE_TOKENS.iter().all(|(n, _)| upper(n)));
         assert!(schema::BUILTIN_ICONS
             .iter()
-            .all(|(n, _)| n.chars().all(|c| c.is_ascii_lowercase() || c == '-')));
+            .all(|(n, _, _)| n.chars().all(|c| c.is_ascii_lowercase() || c == '-')));
         assert!(schema::COMMANDS
             .iter()
             .all(|c| c.name.chars().all(|ch| ch.is_ascii_lowercase() || ch == '_')));

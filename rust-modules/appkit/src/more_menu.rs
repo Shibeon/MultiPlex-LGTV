@@ -316,6 +316,7 @@ impl FormId for Action {
                 HudCommand::Seek(_) => 41,
                 HudCommand::OpenMore(_) => 42,
                 HudCommand::ToggleStats => 43,
+                HudCommand::Exit => 44,
             },
             Action::SetQuality(Quality::Auto) => 10,
             Action::SetQuality(Quality::Original) => 11,

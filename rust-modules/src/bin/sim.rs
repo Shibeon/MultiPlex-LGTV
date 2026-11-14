@@ -22,13 +22,13 @@
 //!   plxnative-sim [pms-host] [pms-port]
 //!   plxnative-sim --hud-lint <file> [--format text|json] [--lang all|<tag>]
 //!   plxnative-sim --hud-schema
-//!   plxnative-sim --hud-export builtin:classic
+//!   plxnative-sim --hud-export builtin:multiplex|builtin:classic
 //!
 //! The three `--hud-*` forms are the HUD plugin tools (`docs/hud-plugins.md`): they open no window,
 //! start no application and touch no instance root, and print to stdout and end the process.
 //! `--hud-lint` prints the findings of a package (text, one line each, or JSON), measured with the
 //! shipped fonts from `PLXNATIVE_APP_DIR`; `--hud-schema` prints the JSON Schema of the format this
-//! build writes; `--hud-export builtin:classic` prints the built-in HUD as a package. Exit codes of
+//! build writes; `--hud-export builtin:multiplex|builtin:classic` prints a built-in HUD as a package. Exit codes of
 //! `--hud-lint`: 0 no finding, 1 findings, 2 usage (bad arguments, an unreadable file, no fonts); the
 //! other two exit 0, or 2 for a bad argument. All of it is `plxnative_modules::hud_cli`.
 //! Environment:

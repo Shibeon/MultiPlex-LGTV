@@ -73,7 +73,12 @@ pub struct Package {
 }
 
 /// Latest HUD document version understood by the runtime and registry filter.
-pub const HUD_FORMAT: (u8, u8) = (1, 1);
+pub const HUD_FORMAT: (u8, u8) = (1, 2);
+
+/// Whether `text` is a HUD format this runtime reads: `HUD_FORMAT`'s major, at any minor up to its own.
+pub fn hud_format_supported(text: &str) -> bool {
+    (0..=HUD_FORMAT.1).any(|minor| text == format!("{}.{minor}", HUD_FORMAT.0))
+}
 
 impl Package {
     pub fn sha(&self) -> Sha {
@@ -98,7 +103,7 @@ impl Package {
             return false;
         };
         self.package_format == "1.0"
-            && (0..=HUD_FORMAT.1).any(|minor| self.hud_format == format!("{}.{minor}", HUD_FORMAT.0))
+            && hud_format_supported(&self.hud_format)
             && self.bytes <= pack_limit
             && self
                 .app

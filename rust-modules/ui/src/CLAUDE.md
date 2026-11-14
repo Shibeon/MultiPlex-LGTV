@@ -471,15 +471,23 @@ presentation in a design pass.
    `text_view::more_mark()` rather than a screen-local literal — the drift that caused this rule was
    two screens each holding their own copy. A tab pill reading "More" is a pill, not a text mark.
 
-3. **The default player HUD gets a state glyph, not a transport row.** No `<<` `||` `>>` `■` buttons. The
-   HUD keeps the small transport *state indicator* past the elapsed clock: a pause glyph while
-   paused, a seek spinner while the transport owns the busy signal, nothing at all while playing.
-   Transport is driven by REMOTE KEYS, which must genuinely work. Any `<<` / `>>` added must be a
-   small glyph in that same indicator slot at the clock's cap height — never a control, and never a
-   separate FF/REW entry in the default control row (`appkit/player_hud/state.rs`).
-   Previous/Next share the default disc row for an episode with a neighbour in its PlayQueue,
-   with no setting; the opt-in **Instant D-pad seeking** setting defaults to Off. Dedicated
-   FF/REW taps jump immediately; held keys use the shared scrub gesture.
+3. **The default player HUD has a transport row and a More pill.** MultiPlex fork, 2026-11-14: the owner chose
+   parity with the MultiPlex web player: a transport row (−N s / play-pause / +N s) and a More pill. The default
+   is the embedded `builtin:multiplex` package (format 1.2, `appkit/src/hud_format/fixtures/multiplex/`); the
+   earlier verdict's state-glyph HUD stays selectable as `builtin:classic`. What still holds from it:
+   - The row's discs are real focusable controls that issue the SAME commands the remote keys do
+     (`HudCommand::Seek` with the skip-interval setting, `TogglePlay`); N is that setting, never a
+     constant. No separate FF/REW or `■` control, and no control the keys cannot also reach.
+   - Transport is driven by REMOTE KEYS, which must genuinely work and are unchanged by the row.
+     Dedicated FF/REW taps jump immediately; held keys use the shared scrub gesture; the opt-in
+     **Instant D-pad seeking** setting defaults to Off.
+   - Focus travel between the head (back, Info), the bar, the row and the More pill is the shared
+     `FocusEngine`'s, never hand-routed (`screens/src/player/mod.rs`, `GROUP_HEAD`).
+   - Previous/Next, for an episode with a neighbour in its PlayQueue and with no setting, are rows of the
+     More menu in `builtin:multiplex` (the menu lists every command its row does not hold) and discs of
+     the row in `builtin:classic`, which also keeps the small state indicator past the elapsed clock (a
+     pause glyph while paused, a seek spinner while the transport owns the busy signal, nothing while
+     playing).
 
 4. **Failure read-outs are never red — the app does not scold.** A read-out's verdict (DS3) is inked `theme::TEXT_PRIMARY`: bright, because it is the line the eye lands on — a `Failed` read-out's verdict, and an `Empty` read-out's caption, which is not bold. Its body, the reason under it, is `theme::TEXT_SECONDARY`. Emphasis is ink only: never a warning colour, a rule, a capsule or a tint. A `Failed` verdict is bold `size::TITLE` (per the design system's `StatusOverlay` contract). Home, Library, sign-in and the player's failure read-outs share ONE placement: the verdict hangs
    from `FULL_ANCHOR_TOP` with the reason and action row stacked directly under it, and a 112 px

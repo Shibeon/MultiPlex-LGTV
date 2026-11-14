@@ -64,7 +64,7 @@ use plx_base::storage_worker::submit_retained;
 use plx_data::hudpacks::address::Address;
 use plx_data::hudpacks::{
     Candidate, Entry, FetchError, HudEffect, HudEvent, HudStore, Loc, Meta, Notice, ReadError, Setup, Sha, Tag,
-    Unloadable, Verdict, WriteOutcome, BUILTIN_CLASSIC,
+    Unloadable, Verdict, WriteOutcome, BUILTIN_CLASSIC, BUILTIN_DEFAULT, BUILTIN_MULTIPLEX,
 };
 use plx_net::net::{RequestFailure, Resp};
 use plx_data::hudpacks::catalog;
@@ -550,8 +550,10 @@ const FACES: &str = "faces";
 
 /// What the compile of the resolved selection is waiting on.
 enum Want {
-    /// Nothing to compile: the built-in.
+    /// Nothing to compile: the classic built-in, compiled at boot.
     Classic,
+    /// The MultiPlex built-in (the default), compiled at boot like classic.
+    Multiplex,
     /// Compile the package `sha` once its bytes arrive.
     Pack(Sha),
 }
@@ -620,6 +622,8 @@ pub(crate) struct HudDriver {
     /// recompiles classic, drops the staged pack and compiles the selection again.
     language: Option<&'static str>,
     classic: Option<LoadedHud>,
+    /// `builtin:multiplex` compiled in the tick's language: at boot, and again with a language change, like `classic`.
+    multiplex: Option<LoadedHud>,
     /// The compile of the last package that fit: (sha, language tag), and the result. One entry: the
     /// resolved selection is one package, and the language and the app version are fixed per process.
     compiled: Option<(Sha, &'static str, LoadedHud)>,
@@ -651,6 +655,37 @@ pub(crate) struct HudDriver {
 /// What the driver asks the Bridge to do with the selection: persist `id` for the seated profile.
 pub(crate) type Selection = String;
 
+/// **The two compiled built-ins** a started driver holds: what draws while nothing else is selected, and what draws
+/// in place of a package that cannot. Compiled outside any frame (boot, a language change).
+pub(crate) struct Builtins {
+    pub(crate) classic: LoadedHud,
+    pub(crate) multiplex: LoadedHud,
+}
+
+impl Builtins {
+    /// Both built-ins, compiled for `cx` with `measure`.
+    pub(crate) fn load(app_version: &str, cx: &LocaleContext, measure: &dyn Measure) -> Self {
+        Self {
+            classic: plx_appkit::player_hud::loaded::load_classic(app_version, cx, measure),
+            multiplex: plx_appkit::player_hud::loaded::load_multiplex(app_version, cx, measure),
+        }
+    }
+
+    /// The compile of [`BUILTIN_DEFAULT`]: what a profile that picked nothing draws.
+    pub(crate) fn default(&self) -> &LoadedHud {
+        if BUILTIN_DEFAULT == BUILTIN_CLASSIC { &self.classic } else { &self.multiplex }
+    }
+}
+
+/// [`BUILTIN_DEFAULT`] alone, compiled: what a run with no driver (a controlled replay or record run) draws.
+pub(crate) fn load_default(app_version: &str, cx: &LocaleContext, measure: &dyn Measure) -> LoadedHud {
+    if BUILTIN_DEFAULT == BUILTIN_CLASSIC {
+        plx_appkit::player_hud::loaded::load_classic(app_version, cx, measure)
+    } else {
+        plx_appkit::player_hud::loaded::load_multiplex(app_version, cx, measure)
+    }
+}
+
 impl HudDriver {
     pub(crate) fn new(runner: HudRunner) -> Self {
         Self {
@@ -662,6 +697,7 @@ impl HudDriver {
             started: false,
             language: None,
             classic: None,
+            multiplex: None,
             compiled: None,
             unfit: BTreeMap::new(),
             logged: BTreeSet::new(),
@@ -688,17 +724,19 @@ impl HudDriver {
     /// A started driver on an offline runner that runs each effect where it is started, with its files in `dir`: what a
     /// Bridge test puts in place of [`off`](Self::off) to see the commands the Settings page sends reach the store.
     #[cfg(test)]
-    pub(crate) fn started_in(dir: PathBuf, classic: LoadedHud, app_version: &str) -> Self {
+    pub(crate) fn started_in(dir: PathBuf, builtins: Builtins, app_version: &str) -> Self {
         let mut driver = Self::new(HudRunner::inline(app_version));
         driver.setup = Some(Setup { candidates: vec![Candidate { dir, volatile: false }], max_pack_bytes: MAX_ARTIFACT_BYTES });
-        driver.start(classic, app_version);
+        driver.start(builtins, app_version);
         driver
     }
 
-    /// Begin: keep the compiled classic as what draws until a package lands.
-    pub(crate) fn start(&mut self, classic: LoadedHud, app_version: &str) {
-        self.shown = Some(Arc::clone(&classic.compiled));
-        self.classic = Some(classic);
+    /// Begin: keep the compiled default built-in ([`BUILTIN_DEFAULT`]) as what draws until the selection resolves to
+    /// something else.
+    pub(crate) fn start(&mut self, builtins: Builtins, app_version: &str) {
+        self.shown = Some(Arc::clone(&builtins.default().compiled));
+        self.classic = Some(builtins.classic);
+        self.multiplex = Some(builtins.multiplex);
         self.runner.app_version = app_version.into();
         self.started = true;
         self.dirty = true;
@@ -861,7 +899,9 @@ impl HudDriver {
         let language = env.cx.language().tag();
         if self.language != Some(language) {
             if self.language.is_some() {
-                self.classic = Some(plx_appkit::player_hud::loaded::load_classic(env.app_version, env.cx, env.measure));
+                let builtins = Builtins::load(env.app_version, env.cx, env.measure);
+                self.classic = Some(builtins.classic);
+                self.multiplex = Some(builtins.multiplex);
             }
             self.language = Some(language);
             // A pack staged in the last language was fitted and priced in it: it starts again at the fit in this one, and is
@@ -893,6 +933,7 @@ impl HudDriver {
         self.dirty = false;
         match self.want() {
             Want::Classic => self.show(self.classic.clone()),
+            Want::Multiplex => self.show(self.multiplex.clone()),
             Want::Pack(sha) => {
                 let language = env.cx.language().tag();
                 if self.compiled.as_ref().is_some_and(|(s, l, _)| *s == sha && *l == language) {
@@ -900,7 +941,7 @@ impl HudDriver {
                     return self.show(hud);
                 }
                 if self.unfit.contains_key(&(sha, language)) || self.read_failed.contains(&sha) {
-                    return self.show(self.classic.clone());
+                    return self.show(self.fallback_hud());
                 }
                 if self.reading.as_ref().is_none_or(|r| r.sha != sha) && self.pending.as_ref().is_none_or(|p| p.sha != sha) {
                     self.reading = Some(self.begin_read(sha));
@@ -916,9 +957,25 @@ impl HudDriver {
         if resolved == BUILTIN_CLASSIC {
             return Want::Classic;
         }
+        if resolved == BUILTIN_MULTIPLEX {
+            return Want::Multiplex;
+        }
         match self.store.entries().into_iter().find(|e: &Entry| e.id == resolved).and_then(|e| e.sha) {
             Some(sha) => Want::Pack(sha),
-            None => Want::Classic,
+            None => Self::want_builtin(BUILTIN_DEFAULT),
+        }
+    }
+
+    /// The [`Want`] of a built-in id.
+    fn want_builtin(id: &str) -> Want {
+        if id == BUILTIN_CLASSIC { Want::Classic } else { Want::Multiplex }
+    }
+
+    /// What draws in place of a package that cannot: the default built-in ([`BUILTIN_DEFAULT`]).
+    fn fallback_hud(&self) -> Option<LoadedHud> {
+        match Self::want_builtin(BUILTIN_DEFAULT) {
+            Want::Multiplex => self.multiplex.clone(),
+            _ => self.classic.clone(),
         }
     }
 
@@ -1094,7 +1151,7 @@ impl HudDriver {
 mod tests {
     use super::*;
     use plx_appkit::hud_format::admit::Facts;
-    use plx_appkit::hud_format::{CLASSIC_PACKAGE, fixtures};
+    use plx_appkit::hud_format::{CLASSIC_PACKAGE, MULTIPLEX_PACKAGE, fixtures};
     use plx_appkit::player_hud::loaded::load_classic;
     use plx_base::fontcov::advances::ShippedMeasure;
     use plx_data::hudpacks::{Refusal, Source};
@@ -1115,6 +1172,10 @@ mod tests {
         price_package(&verified(text), measure, langs)
     }
     const REFERENCE_ID: &str = "com.plxnative.examples.reference";
+    /// The embedded bytes of [`BUILTIN_DEFAULT`]: what a profile that picked nothing, and a package that cannot, draws.
+    fn default_package() -> &'static [u8] {
+        if BUILTIN_DEFAULT == BUILTIN_CLASSIC { CLASSIC_PACKAGE } else { MULTIPLEX_PACKAGE }
+    }
     const APP: &str = "0.2.1";
 
     struct Dir(PathBuf);
@@ -1151,8 +1212,7 @@ mod tests {
         let mut driver = HudDriver::new(HudRunner::inline(APP));
         driver.setup = Some(dir.setup());
         driver.faces = Some(pkg_faces());
-        let classic = load_classic(APP, plx_platform::i18n::english(), &ShippedMeasure);
-        driver.start(classic, APP);
+        driver.start(Builtins::load(APP, plx_platform::i18n::english(), &ShippedMeasure), APP);
         driver
     }
 
@@ -1291,7 +1351,7 @@ mod tests {
         let mut driver = HudDriver::new(HudRunner::inline(APP).on_network(network));
         driver.setup = Some(dir.setup());
         driver.faces = Some(pkg_faces());
-        driver.start(load_classic(APP, plx_platform::i18n::english(), &ShippedMeasure), APP);
+        driver.start(Builtins::load(APP, plx_platform::i18n::english(), &ShippedMeasure), APP);
         driver
     }
 
@@ -1439,8 +1499,8 @@ mod tests {
 
         let mut other = driver(&dir);
         other.refresh(String::new());
-        assert!(settle(&mut other, &cx).is_empty(), "a profile that picked nothing draws classic");
-        assert_eq!(other.store().selected(), BUILTIN_CLASSIC);
+        assert!(settle(&mut other, &cx).is_empty(), "a profile that picked nothing draws the default built-in");
+        assert_eq!(other.store().selected(), BUILTIN_DEFAULT);
         assert!(entry(&other, REFERENCE_ID).is_some(), "though the package is installed for the household");
     }
 
@@ -1495,9 +1555,9 @@ mod tests {
         }
     }
 
-    /// A selected package that is gone or corrupt draws classic and the selection is kept.
+    /// A selected package that is gone or corrupt draws the default built-in and the selection is kept.
     #[test]
-    fn a_missing_or_corrupt_selected_package_draws_classic_and_keeps_the_selection() {
+    fn a_missing_or_corrupt_selected_package_draws_the_default_and_keeps_the_selection() {
         let cx = english();
         for damage in ["missing", "corrupt"] {
             let dir = Dir::new(damage);
@@ -1512,34 +1572,38 @@ mod tests {
             }
             let mut again = driver(&dir);
             again.refresh(REFERENCE_ID.to_string());
-            assert!(settle(&mut again, &cx).is_empty(), "{damage}: classic keeps drawing");
+            assert!(settle(&mut again, &cx).is_empty(), "{damage}: the default built-in keeps drawing");
             assert_eq!(again.store().selected(), REFERENCE_ID, "{damage}: the selection is kept");
-            assert_eq!(again.store().resolved(), BUILTIN_CLASSIC, "{damage}");
+            assert_eq!(again.store().resolved(), BUILTIN_DEFAULT, "{damage}");
         }
     }
 
-    /// A dropped file claiming `builtin:classic` is refused, nothing is written, and the built-in stays
-    /// selectable. The id literal is the one `appkit` accepts, which `data` cannot compare (it is above).
+    /// A dropped file claiming a built-in's id (`builtin:classic` or `builtin:multiplex`) is refused, nothing is written,
+    /// and the built-in stays selectable. The id literals are the ones `appkit` accepts, which `data` cannot compare (it is
+    /// above).
     #[test]
-    fn a_dropped_file_claiming_builtin_classic_is_refused_and_the_builtin_stays_selectable() {
+    fn a_dropped_file_claiming_a_builtin_id_is_refused_and_the_builtin_stays_selectable() {
         assert_eq!(BUILTIN_CLASSIC, plx_appkit::hud_format::schema::BUILTIN_CLASSIC_ID, "the two layers spell the built-in alike");
-        let dir = Dir::new("builtin-id");
-        let mut driver = driver(&dir);
-        let cx = english();
-        std::fs::write(dir.0.join("drop/imposter.plxhud"), CLASSIC_PACKAGE).unwrap();
-        driver.refresh(String::new());
-        settle(&mut driver, &cx);
-        let drops = driver.store().drops();
-        assert_eq!(drops.len(), 1);
-        assert_eq!(drops[0].status, Err(Refusal::BuiltinId));
-        driver.install_drop(drops[0].sha.unwrap(), 1);
-        settle(&mut driver, &cx);
-        assert!(driver.take_notices().iter().any(|n| matches!(n, Notice::Refused { reason: Refusal::BuiltinId, .. })));
-        assert!(!dir.0.join("packs").exists() && !dir.0.join("installed.json").exists(), "nothing was written");
-        let ids: Vec<_> = driver.store().entries().into_iter().map(|e| e.id).collect();
-        assert_eq!(ids, [BUILTIN_CLASSIC], "one built-in row, and the file made no second one");
-        driver.select(BUILTIN_CLASSIC.to_string());
-        assert_eq!(driver.take_selections(), [BUILTIN_CLASSIC]);
+        assert_eq!(BUILTIN_MULTIPLEX, plx_appkit::hud_format::schema::BUILTIN_MULTIPLEX_ID, "the two layers spell the built-in alike");
+        for (id, bytes) in [(BUILTIN_CLASSIC, CLASSIC_PACKAGE), (BUILTIN_MULTIPLEX, MULTIPLEX_PACKAGE)] {
+            let dir = Dir::new("builtin-id");
+            let mut driver = driver(&dir);
+            let cx = english();
+            std::fs::write(dir.0.join("drop/imposter.plxhud"), bytes).unwrap();
+            driver.refresh(String::new());
+            settle(&mut driver, &cx);
+            let drops = driver.store().drops();
+            assert_eq!(drops.len(), 1, "{id}");
+            assert_eq!(drops[0].status, Err(Refusal::BuiltinId), "{id}");
+            driver.install_drop(drops[0].sha.unwrap(), 1);
+            settle(&mut driver, &cx);
+            assert!(driver.take_notices().iter().any(|n| matches!(n, Notice::Refused { reason: Refusal::BuiltinId, .. })), "{id}");
+            assert!(!dir.0.join("packs").exists() && !dir.0.join("installed.json").exists(), "{id}: nothing was written");
+            let ids: Vec<_> = driver.store().entries().into_iter().map(|e| e.id).collect();
+            assert_eq!(ids, [BUILTIN_MULTIPLEX, BUILTIN_CLASSIC], "{id}: the two built-in rows, and the file made no third one");
+            driver.select(id.to_string());
+            assert_eq!(driver.take_selections(), [id]);
+        }
     }
 
     /// The reference with its info panel's text column no wider than English's kicker needs (a fixed-width column holds
@@ -1585,8 +1649,8 @@ mod tests {
         driver.select(REFERENCE_ID.to_string());
 
         let in_narrow = settle(&mut driver, &narrow);
-        assert_eq!(in_narrow.len(), 1, "classic, compiled for the new language, is the one hand-over");
-        assert_eq!((in_narrow[0].key.lang.as_str(), in_narrow[0].key.sha256), (narrow_tag, plx_base::sha256::sha256(CLASSIC_PACKAGE)));
+        assert_eq!(in_narrow.len(), 1, "the default built-in, compiled for the new language, is the one hand-over");
+        assert_eq!((in_narrow[0].key.lang.as_str(), in_narrow[0].key.sha256), (narrow_tag, plx_base::sha256::sha256(default_package())));
         assert!(driver.unfit(sha, narrow.language().tag()).is_some_and(|u| u.code == "HUD-E0601"));
         assert_eq!(driver.store().selected(), REFERENCE_ID, "the selection is kept");
         let lines = driver.take_log();
@@ -1926,11 +1990,14 @@ mod tests {
         install_reference(&dir, &mut driver, &cx);
         let asked = std::cell::Cell::new(0);
         let measure = Counting(&asked);
-        // the built-in is the selection, and a refresh reads it again
-        driver.select(BUILTIN_CLASSIC.to_string());
-        assert!(settle_with(&mut driver, &cx, &measure).is_empty(), "classic is already what draws");
+        // the default built-in is the selection, and a refresh reads it again; then the other built-in is picked
+        driver.select(BUILTIN_DEFAULT.to_string());
+        assert!(settle_with(&mut driver, &cx, &measure).is_empty(), "the default is already what draws");
         driver.refresh(String::new());
         assert!(settle_with(&mut driver, &cx, &measure).is_empty());
+        let other = if BUILTIN_DEFAULT == BUILTIN_CLASSIC { BUILTIN_MULTIPLEX } else { BUILTIN_CLASSIC };
+        driver.select(other.to_string());
+        assert_eq!(settle_with(&mut driver, &cx, &measure).len(), 1, "the other built-in, compiled at boot, is one hand-over");
         assert_eq!(asked.get(), 0, "no lint, no load: the text measure was not asked a thing");
         assert!(driver.price.is_none() && driver.reading.is_none() && driver.pending.is_none() && driver.compiled.is_none(), "no stage, no faces");
         assert!(driver.unfit.is_empty() && driver.take_log().is_empty());
@@ -2142,24 +2209,24 @@ mod tests {
     /// **The same when the pick goes back to classic**: classic is what draws, the old pack is not compiled and no
     /// `hud: fallback` line names `builtin:classic`.
     #[test]
-    fn a_pack_the_viewer_went_back_to_classic_from_is_dropped_at_every_stage() {
+    fn a_pack_the_viewer_went_back_to_the_default_from_is_dropped_at_every_stage() {
         for (stage, text, id) in staged_packs() {
-            let dir = Dir::new("back-to-classic");
+            let dir = Dir::new("back-to-default");
             let cx = english();
             let mut driver = driver(&dir);
             install(&dir, &mut driver, &cx, "old.plxhud", &text, id);
             wait_at(&mut driver, &cx, id, stage);
 
-            driver.select(BUILTIN_CLASSIC.to_string());
+            driver.select(BUILTIN_DEFAULT.to_string());
             let env = Env { measure: &ShippedMeasure, cx: &cx, app_version: APP, player: false };
             for _ in 0..20 {
-                assert!(driver.tick(&env).is_none(), "{stage:?}: classic is already what draws");
+                assert!(driver.tick(&env).is_none(), "{stage:?}: the default built-in is already what draws");
             }
             assert!(driver.pending.is_none() && driver.reading.is_none(), "{stage:?}: the old pack is dropped");
             assert!(driver.compiled.is_none() && driver.unfit.is_empty(), "{stage:?}: it compiled nothing and was refused nothing");
-            let classic = driver.classic.as_ref().map(|c| Arc::clone(&c.compiled));
-            assert!(driver.shown.as_ref().zip(classic.as_ref()).is_some_and(|(shown, classic)| Arc::ptr_eq(shown, classic)), "{stage:?}: classic is shown");
-            assert!(driver.take_log().is_empty(), "{stage:?}: no fallback line, for the old pack or for classic");
+            let default = driver.fallback_hud().map(|c| c.compiled);
+            assert!(driver.shown.as_ref().zip(default.as_ref()).is_some_and(|(shown, default)| Arc::ptr_eq(shown, default)), "{stage:?}: the default is shown");
+            assert!(driver.take_log().is_empty(), "{stage:?}: no fallback line, for the old pack or for the built-in");
         }
     }
 
@@ -2168,7 +2235,7 @@ mod tests {
     /// came with the answer IS kept, because it is the process's and not the pack's.
     #[test]
     fn a_read_in_flight_across_a_pick_lands_as_nothing_but_keeps_the_price_model() {
-        for (found, wanted) in [(true, MINIMAL_ID), (false, MINIMAL_ID), (true, BUILTIN_CLASSIC), (false, BUILTIN_CLASSIC)] {
+        for (found, wanted) in [(true, MINIMAL_ID), (false, MINIMAL_ID), (true, BUILTIN_DEFAULT), (false, BUILTIN_DEFAULT)] {
             let dir = Dir::new("read-in-flight");
             let cx = english();
             let mut driver = driver(&dir);

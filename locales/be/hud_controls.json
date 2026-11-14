@@ -1,5 +1,9 @@
 {
+  "player.hud.exit": "Назад",
+  "player.hud.more": "Яшчэ",
   "player.hud.play_pause": "Прайграванне / Паўза",
+  "player.hud.seek_back_caption": "−{seconds} с",
+  "player.hud.seek_forward_caption": "+{seconds} с",
   "player.hud.skip_back": "Назад",
   "player.hud.skip_forward": "Наперад",
   "player.up_next.seconds_left": "Наступная серыя · {seconds} с"

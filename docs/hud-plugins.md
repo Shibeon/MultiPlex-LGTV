@@ -399,8 +399,12 @@ Other subsystems the plan touches
 - D14. **Storage is per install and never shared between flavours**, for the session file's reason (F39):
   a debug build's unreviewed sideload must never reach stable.
 - D15. **The HUD choice is a `Profile` setting** with an install-wide fallback key (F32). A missing or
-  invalid selection falls back to `builtin:classic` for that playback; after a sign-out the profile key is
-  gone (F32) and the fallback, default `builtin:classic`, applies. The selection is compiled when it becomes the
+  invalid selection falls back to the default built-in (`builtin:multiplex` since format 1.2; it was
+  `builtin:classic`) for that playback; after a sign-out the profile key is gone (F32) and the fallback, the
+  default built-in, applies. When the store falls back because the selected package was removed or revoked, it
+  CLEARS the profile setting (`""`) rather than writing the default's id, so the profile follows the default
+  built-in. Legacy: before `builtin:multiplex`, that fallback wrote `builtin:classic` into the setting, and a profile
+  that holds it from then keeps classic as if it had chosen it, until the viewer picks again. The selection is compiled when it becomes the
   resolved selection, on the first tick no player is up (the Settings page's Select, or a seat change), never at
   install (an install only runs `admit`); playback draws whatever is compiled and never waits for a compile to start.
 - D16. **Registry: a Git repository for submission, a static content-addressed index for TVs.** TVs never
@@ -453,7 +457,8 @@ Every member's original bytes are preserved, including JSON key order.
 The manifest owns `package_format`, `id`, `version`, `name`, `author`, `license` and
 `hud: {format, entry}`. Optional fields are `resources`, `notices`, `app` and `$schema`.
 `package_format` and `hud.format` independently start at `"1.0"`. `id` is reverse-DNS, with
-`builtin:classic` reserved for the embedded package. External installation refuses that reserved id.
+`builtin:classic` and `builtin:multiplex` reserved for the embedded packages. External installation refuses those
+reserved ids.
 `version` is the plugin's semver. `resources` maps logical ids to package-root-relative file paths.
 `notices` lists UTF-8 legal text members. Each member has exactly one inventory owner, every inventory
 path exists, every resource is used by the HUD, and additional archive members are rejected.
@@ -463,7 +468,7 @@ logical resource ids. Icon and face roles validate their resources as the existi
 Identity and resource inventory have one owner in the manifest. Strict parsing rejects unknown and
 duplicate keys in both documents, using the shared duplicate-preserving JSON reader. The schema URLs
 are `https://plxnative.com/hud/schema/manifest/1.0.json` and
-`https://plxnative.com/hud/schema/hud/1.0.json` or `https://plxnative.com/hud/schema/hud/1.1.json`. Each optional `$schema` must agree with its document.
+`https://plxnative.com/hud/schema/hud/1.0.json`, `https://plxnative.com/hud/schema/hud/1.1.json` or `https://plxnative.com/hud/schema/hud/1.2.json`. Each optional `$schema` must agree with its document.
 
 The initial archive profile is STORE-only. Entries and central records are in ascending ASCII path order.
 ZIP flags, compression, disk numbers, comments, extras and internal attributes are zero. Version-needed
@@ -586,7 +591,7 @@ collapses as `Item::absent` does, so classic's Chapters pill exists only with ch
 `2 x CONTROL_GAP`, `player_hud.rs:724-727`), `widget` (`disc`
 through `TransportButton`, `pill` through `TabPill` labelled by the command's app string, `button`
 through `widgets::Button`), `size` (px), `rest` (`film` today's, `bare` glyph only, `solid` the focused
-colours at rest; `custom` is refused because format 1.0 defines no keys for its inks), `focus` (`accent` today's, `ring`: rest face plus the white
+colours at rest, `plate` (format 1.2) a dark opaque plate under the white glyph; `custom` is refused because format 1.0 defines no keys for its inks), `focus` (`accent` today's, `ring`: rest face plus the white
 focus ring), `face` (optional: the command's classic glyph when absent). A pair that draws one face twice (`solid` with `accent`) is rejected. Faces: an asset
 or `builtin:<icon>`; `toggle_play` takes `{playing, paused}`; `previous` takes `{default, restart}` (the `restart` face is still required and
 parsed, because published packages carry it and format 1.0 is frozen, but the app never selects it any more:
@@ -638,6 +643,7 @@ Each maps to an action the app already performs; the performer is shared with th
 | `from_beginning` | - | seeks to 0 and resumes (F17) | always | none |
 | `go_to_detail` | - | leaves playback and opens the item's page (`info_panel::detail_rk`, F17) | the playing item has a ratingKey | none |
 | `toggle_stats` | - | `more_menu::Action::ToggleStats` (F16) | always | none |
+| `exit` (1.2) | - | leaves playback, the app's `exit_player`, as Back does from the bare picture | always | Back |
 
 - `seek.by`: a literal has a static face, so no ladder-keyed map is needed, and a new rung on the app's
   ladder can never invalidate a published package. `"setting"` follows the viewer's Skip interval (F14);
@@ -796,8 +802,10 @@ seconds on the primary button instead of the legacy ten-second clock.
 3. `version` is the plugin's semver and orders updates of one id.
 4. Optional `app.min` and `app.max` constrain the app release.
 
-Package format remains at 1.0. The runtime supports HUD formats 1.0 and 1.1. HUD 1.1 adds
-`playbar.end_time_width` and Classic declares 1.1. The published HUD 1.0 schema stays frozen.
+Package format remains at 1.0. The runtime supports HUD formats 1.0, 1.1 and 1.2. HUD 1.1 adds
+`playbar.end_time_width` and Classic declares 1.1. HUD 1.2 adds what the MultiPlex web player's layout needs
+(section "HUD format 1.2 and the MultiPlex default", below) and `builtin:multiplex` declares it. The published HUD
+1.0 and 1.1 schemas stay frozen.
 The SDK/report/catalog protocols remain at integer 1, and plugin semver is independent.
 
 `--hud-info` and the SDK manifest advertise exact `supported_formats` pairs, distinct manifest/HUD
@@ -807,9 +815,60 @@ and SDK manifest. Package and HUD versions remain independent without duplicate 
 Decided at install and at selection, never per frame: an unsupported major, or a minor above the app's, is
 rejected ("Made for a newer MultiPlex" / "Uses an older HUD format"). Strict parsing makes that mandatory: an
 older app cannot know whether an unknown key is cosmetic. An app update that drops a major keeps the files
-and marks them unloadable; a selected HUD that becomes unloadable falls back to `builtin:classic` with one
-`hud: fallback` event-log line. Playback never fails because of a HUD. A package that does not fit the TV's current
+and marks them unloadable; a selected HUD that becomes unloadable falls back to the default built-in
+(`builtin:multiplex`) with one `hud: fallback` event-log line. Playback never fails because of a HUD. A package that does not fit the TV's current
 language is unloadable in that language only (Text fit).
+
+## HUD format 1.2 and the MultiPlex default
+
+MultiPlex fork, 2026-11-14: the owner chose parity with the MultiPlex web player for the default HUD
+(`rust-modules/ui/src/CLAUDE.md`, product idiom 3). It is the embedded package `builtin:multiplex`
+(`appkit/src/hud_format/fixtures/multiplex/`, packed to `fixtures/multiplex.plxhud`; a test pins the two equal and
+`plxnative-sim --hud-export builtin:multiplex` prints the bytes). It is the selection of a profile that chose
+nothing and the fallback for a package that cannot draw; `builtin:classic` stays compiled at boot beside it and
+selectable in Settings > Player HUD, where the two rows read "MultiPlex" and "Classic" and neither has a removal row.
+
+What format 1.2 adds, each refused with `E0107` in a 1.0 or 1.1 package:
+
+- the command `exit` (Commands, above): the head's round back disc;
+- the bindings `title.name` (the item's own name), `title.subtitle` (an episode's "Show · S1 · E4", else the year)
+  and `clock.now` (the wall clock in the TV's 12/24-hour format). The app fills `clock.now` once a frame from the
+  live wall clock only for a package that binds it (`Compiled::declares_clock`), and never in a recording or a
+  controlled replay, which has no wall clock (`app/clock.rs`): a capture under the replay clock draws no clock;
+- a facts row's `stream` list (`resolution`, `dynamic_range`, `stream_mode`, `audio_codec`): the stream pills from the
+  theme's `STREAM_*` tokens, the resolution solid amber and the other three on one dark neutral ground (the dynamic
+  range rimmed, the mode plain, the audio codec under a quieter rim standing for the web player's dashed pill). Each
+  pill is one pass (`widgets::BadgeStyle::Solid` or `Rimmed`, `Painter::rect_rimmed_w`) and one label, and the cost
+  model counts it as one draw op and one glyph run;
+- an item's `caption`: a disc that draws its interval under its glyph (`−10s` / `+10s`, from the Skip interval
+  setting through `seek` with `by: "setting"`), which the cost model counts as one glyph run;
+- the icons `builtin:chevron-left`, `builtin:plus`, `builtin:skip-back` and `builtin:skip-forward`
+  (`schema::BUILTIN_ICONS` carries the format each glyph arrived in, so the 1.0 and 1.1 schemas do not list them);
+- the rest face `plate` (`widgets::TransportRest::Plate`, `theme::CONTROL_PLATE_FILL`): the film's plate and rim in
+  the dark, nearly opaque idle fill under the white glyph, the web player's resting discs. A value newer than its
+  key is gated like a key (`schema::ENUM_VALUES_SINCE`: `E0107` in an older package, absent from the older schemas);
+- `playbar.remaining`: the remaining clock's ink (keyable), the secondary text ink when omitted;
+- the label of `open_more`: "More" (`player_hud_more`) in a 1.2 package, the web player's "+ More" pill. A 1.0 or 1.1
+  package keeps "Options" (`widgets_menu_options`), so its fitted widths do not move.
+
+Head controls (an item that is not in the transport row and not a tab: the back and Info discs) form their own
+focus group, `GROUP_HEAD`, which the shared `FocusEngine` reaches with Up from the bar, seated on the head control
+nearest the bar (MultiPlex's Info disc) unless one is remembered; Up and Down walk the head's stacked controls (Down
+from the back chevron is the Info disc, a stop of its own), Down off the lowest leaves for the bar, and they press at
+once, like the tabs. A tab-band `open_more` pill (the "+ More" pill under the row) is a tab slot. The captions' band treats a head
+control as standing above the room they lift into, not as one they keep clear of (`Compiled::band_extents`).
+
+Every state of `builtin:multiplex` is within its class's ceilings in every language
+(`lint_cost::every_state_of_multiplex_is_within_its_class`; `--hud-lint` on the fixture reports no error), so it is a
+worked example a package may copy. To get there the compact states (no section open, Up Next, Skip) carry the head,
+the bar with its clocks, the three transport discs and More, and the stream pills live in the Info section, which the
+ⓘ disc beside the title opens; the ceilings were not moved.
+
+Known deviations from the web player, each a limit of the format or of the cost ceilings today: the stream pills are
+behind the ⓘ disc instead of under the title (four pills over a compact state's draw-op ceiling); the audio pill is
+rimmed, not dashed; the elapsed and remaining clocks sit under the bar's ends rather than beside it
+(`playbar.clocks: "ends"`); the play disc has no warm glow ring at rest; the picture has a bottom scrim only (the
+format has no top one).
 
 ## Text fit: the app is the enforcement point
 
@@ -835,7 +894,7 @@ three places:
    package is never shown unpriced, so if they cannot be read it falls back like any other refusal (the log code is
    `faces`).
 
-A package that fails on the TV does not load in that language: playback uses `builtin:classic`, and one `hud: fallback`
+A package that fails on the TV does not load in that language: playback uses the default built-in (`builtin:multiplex`), and one `hud: fallback`
 event-log line per package, language and cause names the package, the language and the code: the first fit error,
 `HUD-E1401` from the price pass, `faces` when the price model cannot be read, a load refusal (`parse`, `states`), `utf8`,
 or `read` for a pack that could not be read. Settings > Player HUD marks the package's row with the reason for every one
@@ -1646,7 +1705,7 @@ this session, no network).
   standby}, and drop the old primary. A key is never removed from the app before a release that accepts its successor
   has shipped.
 - Revocation: a revoked hash disables the matching package from every source, sideloads of the same bytes
-  included; the fallback is `builtin:classic` and Settings says why. It does not stop an author who changes a
+  included; the fallback is the default built-in and Settings says why. It does not stop an author who changes a
   byte; the invariants are the protection there.
 - What a package can do is bounded by the command vocabulary: no account write, no setting change, no network,
   no delete, no macro (Commands). Attack surface: the strict JSON parser and the SVG subset check (Rust) before

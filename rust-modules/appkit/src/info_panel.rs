@@ -102,6 +102,8 @@ pub(crate) struct InfoContent<'a> {
     pub genres: &'a [String],
     pub audio: &'a [metadata::Stream],
     pub subs: &'a [metadata::Stream],
+    /// the item the session is playing, for the stream pills' picture facts (HDR, Dolby Vision)
+    pub playing: Option<&'a metadata::PlayingItem>,
 }
 
 /// The playing item's [`InfoContent`], or `None` when nothing playing has a name to show.
@@ -138,6 +140,7 @@ pub(crate) fn info_content<'a>(meta: metadata::MetadataView<'a>) -> Option<InfoC
         genres: d.map(|x| x.genres.as_slice()).unwrap_or(&[]),
         audio,
         subs,
+        playing: meta.playing(),
     })
 }
 
@@ -149,6 +152,8 @@ pub(crate) struct FactsShape<'a> {
     pub order: &'a [&'a str],
     /// `content_rating`, `audio_format`, `cc`, `sdh`, `ad`, in drop-priority order
     pub badges: &'a [&'a str],
+    /// `resolution`, `dynamic_range`, `stream_mode`, `audio_codec`: the stream pills, after the badges
+    pub stream: &'a [&'a str],
     pub genres_max: usize,
     pub playback_fact: bool,
     pub ink: [f32; 4],
@@ -185,6 +190,7 @@ pub(crate) fn info_chips(
         )
     });
     let now_fact = now_fact.flatten();
+    let facts = if shape.stream.is_empty() { None } else { stream_facts(ps, c.playing) };
     let mut chips = ChipRow::new();
     let mut meta = Vec::new();
     for part in shape.order {
@@ -220,7 +226,70 @@ pub(crate) fn info_chips(
             _ => {}
         }
     }
+    for pill in shape.stream {
+        if let Some((label, kind)) = stream_pill(pill, &facts) {
+            chips.push(Chip::stream(label, kind, measure));
+        }
+    }
     chips
+}
+
+/// **What the playing stream is, for the stream pills** (`facts.stream`): read once per row off the
+/// resolved route and the playing item, the same reads [`playback_now`] composes. `None` while nothing
+/// resolved is streaming (a pending play still describes the previous item, see [`playback_now`]).
+pub(crate) struct StreamFacts {
+    /// the picture's height class, `fmt::resolution` of the stream's raster
+    resolution: Option<String>,
+    /// `DV`, `HDR` or `SDR`: what the television is SHOWN (`route::hdr_picture`)
+    dynamic_range: &'static str,
+    /// Direct Play, Direct Stream or Converting (no codec: the pill is short)
+    mode: String,
+    /// the audio codec the stream declares, as the app names codecs (`metadata::friendly_codec`)
+    audio: Option<String>,
+}
+
+/// The stream facts of `ps` playing `item`, or `None` when nothing resolved is streaming.
+pub(crate) fn stream_facts(ps: &plx_media::route::PlaybackSession, item: Option<&metadata::PlayingItem>) -> Option<StreamFacts> {
+    use plx_media::route;
+    if !route::has_url(ps) || route::play_pending() {
+        return None;
+    }
+    let (transcoding, remux) = (route::is_transcoding(ps), route::is_remux(ps));
+    let (w, h) = route::stream_raster(ps);
+    let keeps_video = !transcoding || remux;
+    let dynamic_range = match item {
+        Some(i) if keeps_video && i.dovi.present => "DV",
+        Some(i) if route::hdr_picture(i.hdr, transcoding, remux) => "HDR",
+        _ => "SDR",
+    };
+    let mode = if !transcoding {
+        plx_platform::i18n::msg::widgets_playback_direct_play()
+    } else if remux {
+        plx_platform::i18n::msg::widgets_playback_direct_stream()
+    } else {
+        plx_platform::i18n::msg::widgets_playback_converting()
+    };
+    let acodec = route::stream_acodec(ps);
+    Some(StreamFacts {
+        resolution: plx_ui::fmt::resolution("", w, h),
+        dynamic_range,
+        mode: mode.to_string(),
+        audio: (!acodec.is_empty()).then(|| metadata::friendly_codec(&acodec)),
+    })
+}
+
+/// One stream pill by its `facts.stream` name, with the look it takes; `None` for a fact the stream
+/// does not state.
+fn stream_pill(pill: &str, facts: &Option<StreamFacts>) -> Option<(String, crate::chip_row::StreamPill)> {
+    use crate::chip_row::StreamPill;
+    let s = facts.as_ref()?;
+    match pill {
+        "resolution" => s.resolution.clone().map(|r| (r, StreamPill::Resolution)),
+        "dynamic_range" => Some((s.dynamic_range.to_owned(), StreamPill::DynamicRange)),
+        "stream_mode" => Some((s.mode.clone(), StreamPill::Mode)),
+        "audio_codec" => s.audio.clone().map(|a| (a, StreamPill::Audio)),
+        _ => None,
+    }
 }
 
 // ---- helpers ----

@@ -43,6 +43,16 @@ pub const GROUP_SECTION: GroupId = GroupId(4);
 /// An open Chapters section's strip: the cards of the `cards::Shelf` the renderer paints (`strip`), addressed
 /// `ELEM_CHAPTER_BASE + index`. Registered by the screen while that section is open.
 pub const GROUP_STRIP: GroupId = GroupId(5);
+/// **The head's controls** (format 1.2): every control a package places outside the replaced row that is no
+/// tab and no section action, in declared order ([`head_controls`]), addressed [`head_elem`]. The MultiPlex
+/// HUD's back chevron and its Info disc beside the title. A package with none (classic) has no such group.
+/// Id 6 is the player screen's own repair card (`GROUP_REPAIR`), so the head takes 7.
+pub const GROUP_HEAD: GroupId = GroupId(7);
+
+/// **The most head controls a layout's report holds** ([`HudGeometry::head`]): the elements
+/// `ELEM_HEAD_BASE..ELEM_HEAD_BASE + MAX_HEAD_ITEMS`, below the section range. The report holds the first
+/// `MAX_HEAD_ITEMS` a package places; a tail past them has no stop.
+pub const MAX_HEAD_ITEMS: usize = 8;
 
 /// **The most controls a layout can place in the control row**: the format's bound on one segment
 /// ([`crate::hud_format::schema::MAX_SEGMENT_ITEMS`]), so a row a package can write is a row the report
@@ -50,8 +60,9 @@ pub const GROUP_STRIP: GroupId = GroupId(5);
 /// the compiler reports a row wider than this as a finding rather than dropping its tail.
 pub const MAX_ROW_ITEMS: usize = crate::hud_format::schema::MAX_SEGMENT_ITEMS;
 
-/// How many tabs the bottom row can hold: Info, then Chapters.
-pub(super) const HUD_TABS: usize = 2;
+/// How many tabs the bottom row can hold: Info, then Chapters, then More (format 1.2: an `open_more` pill
+/// outside the row, the MultiPlex HUD's "+ More").
+pub(crate) const HUD_TABS: usize = 3;
 
 /// Where the control row hangs: its right edge, its top and its height. The stand-ins that take
 /// the row's place (Skip, Up Next) land on exactly these or the transport visibly jumps when a
@@ -92,6 +103,12 @@ pub struct HudGeometry {
     /// disc of the row opens has none (that disc is a stop of the row, `items`), so this is the one report the tab
     /// group, the pointer's tab stops and the travel order ([`super::travel::order`]) all read.
     pub tabs: [Option<Rect>; HUD_TABS],
+    /// What a press of tab `i` performs (its control's command), `None` for a tab the row does not carry.
+    pub tab_acts: [Option<HudCommand>; HUD_TABS],
+    /// Head control `i` ([`head_controls`]) at the rect it is drawn at, `None` past the last.
+    pub head: [Option<Rect>; MAX_HEAD_ITEMS],
+    /// What a press of head control `i` performs.
+    pub head_acts: [Option<HudCommand>; MAX_HEAD_ITEMS],
     /// **The caption band this layout occupies** (`docs/hud-plugins.md`, "Captions: the band a HUD
     /// occupies"), the ONE value every caption reader takes: the same in every slot and every state, so
     /// a caption does not move with the focus or the offer. Classic's is the compact row's top
@@ -119,6 +136,9 @@ impl HudGeometry {
             tab_row: Rect::default(),
             title: Rect::default(),
             tabs: [None; HUD_TABS],
+            tab_acts: [None; HUD_TABS],
+            head: [None; MAX_HEAD_ITEMS],
+            head_acts: [None; MAX_HEAD_ITEMS],
             band,
             open_height: 0.0,
         }
@@ -265,6 +285,17 @@ pub fn section_buttons(state: &CompiledState) -> impl Iterator<Item = &ControlRe
     state.controls.iter().filter(|c| c.is_action)
 }
 
+/// **The head's controls** ([`GROUP_HEAD`]), in the order the state places them: every control outside the
+/// replaced row that is neither a tab ([`CompiledState::tab_slot`]) nor a section action.
+pub fn head_controls(state: &CompiledState) -> impl Iterator<Item = &ControlRect> {
+    state.controls.iter().filter(|c| state.is_head(c))
+}
+
+/// The element head control `i` is addressed by.
+pub const fn head_elem(i: u32) -> u32 {
+    super::state::ELEM_HEAD_BASE + i
+}
+
 /// What a press of an open section's button `i` performs, `None` past the last button.
 pub fn section_command(state: &CompiledState, i: usize) -> Option<HudCommand> {
     section_buttons(state).nth(i)?.act
@@ -284,6 +315,9 @@ pub fn opener_elem(state: &CompiledState, section: Section) -> Option<u32> {
     if c.is_action {
         let ordinal = section_buttons(state).position(|item| item.id == c.id)?;
         return Some(section_elem(u32::try_from(ordinal).ok()?));
+    }
+    if let Some(ordinal) = head_controls(state).position(|item| item.id == c.id) {
+        return Some(head_elem(u32::try_from(ordinal).ok()?));
     }
     match c.widget {
         Widget::Pill => Some(ELEM_TAB_BASE + section.tab() as u32),

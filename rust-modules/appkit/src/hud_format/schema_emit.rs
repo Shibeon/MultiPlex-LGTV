@@ -273,9 +273,11 @@ impl Emitter {
 
     /// A single face: a built-in glyph, or the id of an asset (declared in `assets`: lint's).
     fn face_name(&self) -> Value {
+        let version = self.version;
         let builtin: Vec<String> = schema::BUILTIN_ICONS
             .iter()
-            .map(|(n, _)| format!("{}{n}", schema::BUILTIN_FACE_PREFIX))
+            .filter(|(_, _, since)| *since <= version)
+            .map(|(n, _, _)| format!("{}{n}", schema::BUILTIN_FACE_PREFIX))
             .collect();
         one_of(vec![
             string_enum(builtin.iter().map(String::as_str)),
@@ -443,7 +445,10 @@ impl Emitter {
             ]),
             Ty::Text { .. } => object([("type", text("string"))]),
             Ty::Pattern(pattern) => string_pattern(pattern.regex()),
-            Ty::Enum(names) => string_enum(names.iter().copied()),
+            Ty::Enum(names) => {
+                let version = self.version;
+                string_enum(names.iter().copied().filter(|n| schema::enum_value_since(n) <= version))
+            }
             Ty::EnumList(names) => object([
                 ("type", text("array")),
                 ("items", string_enum(names.iter().copied())),

@@ -998,7 +998,8 @@ impl Walker {
                     return self.wrong_type(&ty, json, pointer);
                 };
                 if names.contains(&s.as_str()) {
-                    return Some(Val::Name(s.clone()));
+                    let since = schema::enum_value_since(s);
+                    return self.since_gate(since, &format!("the value `{}`", clip(s)), pointer).then(|| Val::Name(s.clone()));
                 }
                 self.unknown_name(&codes::E0201, pointer, "name", s, names);
                 None
@@ -1490,12 +1491,14 @@ impl Walker {
 
     fn face_single(&mut self, face: &str, pointer: &str) -> Option<Val> {
         if let Some(icon) = face.strip_prefix(schema::BUILTIN_FACE_PREFIX) {
-            if schema::builtin_icon(icon).is_some() {
-                return Some(Val::Name(face.to_owned()));
+            if let Some(since) = schema::builtin_icon_since(icon) {
+                return self.since_gate(since, &format!("the icon `{}`", clip(face)), pointer).then(|| Val::Name(face.to_owned()));
             }
+            let format = self.format;
             let all: Vec<String> = schema::BUILTIN_ICONS
                 .iter()
-                .map(|(n, _)| format!("{}{n}", schema::BUILTIN_FACE_PREFIX))
+                .filter(|(_, _, since)| *since <= format)
+                .map(|(n, _, _)| format!("{}{n}", schema::BUILTIN_FACE_PREFIX))
                 .collect();
             let near = nearest(clip(face), &all);
             self.report_near(
@@ -2495,7 +2498,7 @@ mod tests {
         let missing = edit(MINIMAL, &[(r#""format": "1.0","#, ""), other_mistake]);
         refuses(&missing, &codes::E0401, "/hud/format");
 
-        for newer_minor in ["1.2", "1.7", "1.255", "1.99999999999999999999999"] {
+        for newer_minor in ["1.3", "1.7", "1.255", "1.99999999999999999999999"] {
             let text = with_format(&format!(r#""format": "{newer_minor}""#));
             let finding = refuses(&text, &codes::E0402, "/hud/format");
             assert_eq!(finding.message, REASON_NEWER, "{newer_minor}");
@@ -2792,6 +2795,31 @@ mod tests {
             )],
         );
         refuses(&none, &codes::E0106, "/layout/block/0/cells/0");
+    }
+
+    /// A built-in glyph that arrived in 1.2 (`builtin:plus`) is `E0107` in a 1.0 package, at the face, as a newer key or
+    /// command is; a 1.0 glyph is not.
+    #[test]
+    fn a_builtin_icon_newer_than_the_declared_format_is_e0107() {
+        let face = |icon: &str| edit(MINIMAL, &[(r#""size": 52 }"#, &format!(r#""size": 52, "face": "builtin:{icon}" }}"#))]);
+        assert!(parse_text(&face("more")).findings.is_empty());
+        for icon in ["chevron-left", "plus", "skip-back", "skip-forward"] {
+            assert_eq!(schema::builtin_icon_since(icon), Some(schema::V1_2), "{icon}");
+            refuses(&face(icon), &codes::E0107, &format!("{ITEM_AT}/face"));
+        }
+    }
+
+    /// An enum VALUE newer than its key (`rest: "plate"`, 1.2) is `E0107` in an older package.
+    #[test]
+    fn an_enum_value_newer_than_the_declared_format_is_e0107() {
+        let rest = |r: &str| edit(MINIMAL, &[(r#""size": 52 }"#, &format!(r#""size": 52, "rest": "{r}", "focus": "ring" }}"#))]);
+        assert!(parse_text(&rest("bare")).findings.is_empty());
+        for (value, since) in schema::ENUM_VALUES_SINCE {
+            assert!(*since > schema::V1_0, "{value}");
+            assert_eq!(schema::enum_value_since(value), *since);
+        }
+        assert_eq!(schema::enum_value_since("plate"), schema::V1_2);
+        refuses(&rest("plate"), &codes::E0107, &format!("{ITEM_AT}/rest"));
     }
 
     /// A node and a field that arrived in format 1.1, built by hand to exercise a required key.

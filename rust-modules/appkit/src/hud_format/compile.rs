@@ -113,7 +113,19 @@ pub struct AppLabels {
     pub go_to_movie: String,
     /// Other command labels used by declared pills/buttons, all measured in this compile's language.
     pub commands: Vec<(&'static str, String)>,
+    /// **Every wall-clock time the `clock.now` text can show** in this language's 12/24-hour format (a sample
+    /// per hour at minutes whose digits differ), measured so the clock's room is its widest string and app
+    /// text never elides (D10).
+    pub clock_samples: Vec<String>,
 }
+
+/// The [`AppLabels::commands`] key of a format 1.2 package's root `open_more` label ("More"); 1.0 and 1.1 keep
+/// `open_more`'s "Options".
+const OPEN_MORE_1_2: &str = "open_more@1.2";
+
+/// The minutes [`AppLabels::clock_samples`] takes at each hour: every tens digit a clock shows, each beside a
+/// different units digit, so the widest of a proportional face's digits is in some sample.
+const CLOCK_SAMPLE_MINUTES: [i32; 6] = [0, 18, 27, 36, 45, 59];
 
 impl AppLabels {
     /// **The app's own strings in the language `cx` names**: the one constructor of [`AppLabels`], over the
@@ -143,10 +155,16 @@ impl AppLabels {
                 ("tracks_audio", msg::widgets_tracks_audio_in(cx).to_owned()),
                 ("tracks_subtitles", msg::widgets_tracks_subtitles_in(cx).to_owned()),
                 ("open_more", msg::widgets_menu_options_in(cx).to_owned()),
+                // format 1.2's More pill ("+ More"); a 1.0 or 1.1 package keeps "Options", the width it was fitted at
+                (OPEN_MORE_1_2, msg::player_hud_more_in(cx).to_owned()),
+                ("exit", msg::player_hud_exit_in(cx).to_owned()),
                 ("more_quality", msg::widgets_menu_quality_in(cx).to_owned()),
                 ("more_speed", msg::widgets_menu_speed_in(cx).to_owned()),
                 ("toggle_stats", msg::widgets_menu_stats_in(cx).to_owned()),
             ],
+            clock_samples: (0..24)
+                .flat_map(|hour| CLOCK_SAMPLE_MINUTES.iter().filter_map(move |&minute| cx.time_of_day([hour, minute])))
+                .collect(),
         }
     }
 
@@ -244,6 +262,8 @@ pub enum Rest {
     Film,
     Bare,
     Solid,
+    /// the dark opaque plate (format 1.2): the MultiPlex web player's resting disc
+    Plate,
     Custom,
 }
 
@@ -378,6 +398,8 @@ pub struct ControlRect {
     pub band: String,
     /// the section a `toggle_section` opens (`info`, `chapters`)
     pub section: Option<String>,
+    /// a disc's app read-out under its glyph (`caption`, format 1.2; only a `seek` has one)
+    pub caption: bool,
 }
 
 /// The scrub bar's rects: the track, and the pointer grab band around it (the lowest stop, #162).
@@ -449,6 +471,8 @@ pub enum DrawOp {
         ink: Live<Rgba>,
         order: Vec<String>,
         badges: Vec<String>,
+        /// the stream pills (format 1.2), in order: `resolution`, `dynamic_range`, `stream_mode`, `audio_codec`
+        stream: Vec<String>,
         genres_max: u32,
         playback_fact: bool,
     },
@@ -463,6 +487,8 @@ pub enum DrawOp {
         /// where the two clocks stand on the clock line under the track (decor: I4, I5, I10)
         clock_rects: ClockRects,
         mark: MarkMode,
+        /// the remaining clock's ink (`remaining`, format 1.2), or `None` for the secondary text ink
+        remaining: Option<Live<Rgba>>,
     },
     /// The chapters strip: cards at `pitch`, each laid out as `template` is at card 0. `visible` is the most cards its
     /// Shelf paints at rest (`strip::Geometry::most_painted_at_rest`, a function of the row's style alone, never of the
@@ -554,9 +580,10 @@ pub struct Contributor {
 ///
 /// - `draw_ops`: one per op, except a strip (its cards' ops: [`DrawOp::Strip::visible`], the most cards its Shelf
 ///   paints at rest, x the template, plus the focus ring; an upper bound where a card's `item.*` condition would drop
-///   an op) and the Up Next offer (two pills, plus the still and the caption it draws).
+///   an op), the Up Next offer (two pills, plus the still and the caption it draws) and a facts row's stream pills
+///   (format 1.2: one more per pill, its capsule).
 /// - `glyph_runs`: one per text; the playbar's two clocks; a facts row's chips; a pill's or button's
-///   label; the Up Next offer's two labels and caption; the Skip pill's label.
+///   label; a captioned disc's caption; the Up Next offer's two labels and caption; the Skip pill's label.
 /// - `texture_bytes`: 4 bytes per pixel of every image (a strip's per card the Shelf paints, Up Next's still) and
 ///   every glyph a disc or an icon cell draws (`size` squared).
 /// - `blended_px`: the area, rounded per rect, of every translucent fill: the scrim, a ground or rule
@@ -736,10 +763,26 @@ impl CompiledState {
             items: [None; crate::player_hud::geometry::MAX_ROW_ITEMS],
             tab_row: self.tab_row,
             title: shown.title,
-            tabs: [self.tab("info"), self.tab("chapters")],
+            tabs: [None; crate::player_hud::geometry::HUD_TABS],
+            tab_acts: [None; crate::player_hud::geometry::HUD_TABS],
+            head: [None; crate::player_hud::geometry::MAX_HEAD_ITEMS],
+            head_acts: [None; crate::player_hud::geometry::MAX_HEAD_ITEMS],
             band: self.band,
             open_height: self.open_height(),
         };
+        for c in &self.controls {
+            if let Some(slot) = self.tab_slot(c) {
+                // the first pill of a slot is its tab, as the format names one opener per section
+                if g.tabs[slot].is_none() {
+                    g.tabs[slot] = Some(c.rect);
+                    g.tab_acts[slot] = c.act;
+                }
+            }
+        }
+        for (i, c) in crate::player_hud::geometry::head_controls(self).take(crate::player_hud::geometry::MAX_HEAD_ITEMS).enumerate() {
+            g.head[i] = Some(c.rect);
+            g.head_acts[i] = c.act;
+        }
         if let Some(bar) = self.playbar {
             g.grab = bar.grab;
             g.playbar = bar.track;
@@ -785,14 +828,31 @@ impl CompiledState {
         self.bands.iter().map(|(_, r)| r.y).reduce(f32::min).map_or(0.0, |top| (SCR_H - top).max(0.0))
     }
 
-    /// **The tab of `section`: the PILL of the `toggle_section` control that opens it.** A section a DISC opens (the
-    /// reference's) has no tab: that disc is a stop of the row group and is pressed as one, so reporting it here too
-    /// would register a second stop at the same rect for the hit map to prefer.
-    fn tab(&self, section: &str) -> Option<Rect> {
-        self.controls
-            .iter()
-            .find(|c| !c.is_action && c.widget == Widget::Pill && c.command == "toggle_section" && c.section.as_deref() == Some(section))
-            .map(|c| c.rect)
+    /// **The tab slot `c` is, if it is a tab**: the PILL of the `toggle_section` control that opens a section (Info
+    /// 0, Chapters 1), or an `open_more` pill outside the replaced row (More 2, format 1.2). A section a DISC opens
+    /// (the reference's) has no tab: that disc is a stop of the row group (or of the head) and is pressed as one, so
+    /// reporting it here too would register a second stop at the same rect for the hit map to prefer.
+    pub fn tab_slot(&self, c: &ControlRect) -> Option<usize> {
+        if c.is_action || c.widget != Widget::Pill {
+            return None;
+        }
+        match (c.command.as_str(), c.section.as_deref()) {
+            ("toggle_section", Some("info")) => Some(0),
+            ("toggle_section", Some("chapters")) => Some(1),
+            ("open_more", _) if !self.in_row(c) => Some(2),
+            _ => None,
+        }
+    }
+
+    /// Is `c` one of the replaced row's controls ([`CompiledState::row_ids`])?
+    fn in_row(&self, c: &ControlRect) -> bool {
+        self.row_ids.iter().any(|id| id.as_deref() == Some(c.id.as_str()))
+    }
+
+    /// **Is `c` a head control** ([`crate::player_hud::geometry::GROUP_HEAD`])? Outside the replaced row, no
+    /// tab and no section action: the controls a package stands beside its title (format 1.2).
+    pub fn is_head(&self, c: &ControlRect) -> bool {
+        !c.is_action && !self.in_row(c) && self.tab_slot(c).is_none()
     }
 
     /// **The extents the caption band counts** in this state, each with the node that drew it: interactive
@@ -804,9 +864,16 @@ impl CompiledState {
     /// [`CompiledState::standin`]), drawn or not, so they are named by the node that owns them. The bar is
     /// `playbar` (the last playbar cell: each overwrites the one before), which also counts under `block`
     /// for every earlier playbar cell.
+    ///
+    /// A head control ([`Self::is_head`], format 1.2: the back chevron and the Info disc beside the title at the top of
+    /// the MultiPlex HUD) does not count under `controls`: the captions lift above the transport, into the room between
+    /// it and the head, so a control standing over that room is not one they keep clear of.
     pub(crate) fn band_extents(&self, block: bool) -> impl Iterator<Item = BandExtent<'_>> {
         let mut out = Vec::new();
         for (i, c) in self.controls.iter().enumerate() {
+            if !block && self.is_head(c) {
+                continue;
+            }
             out.push(BandExtent { top: c.rect.y, rect: c.rect, what: "control", pointer: self.control_pointer(i) });
         }
         let bar_op = self.ops.iter().rposition(|op| matches!(op, DrawOp::Playbar { .. }));
@@ -911,6 +978,8 @@ pub struct Compiled {
     /// does a playbar of the package declare the finish-time lane (`playbar.end_time_width`, HUD format 1.1)?
     /// Read once, here, by [`Compiled::declares_end_time`]
     end_time: bool,
+    /// does a text of the package show the wall clock (`clock.now`, HUD format 1.2)? [`Compiled::declares_clock`]
+    clock: bool,
 }
 
 /// Which dimensions of a compile the package names.
@@ -938,6 +1007,7 @@ impl Default for Compiled {
             findings: Vec::new(),
             assets: Vec::new(),
             end_time: false,
+            clock: false,
         }
     }
 }
@@ -967,6 +1037,12 @@ impl Compiled {
     /// compute anything the HUD would not draw.
     pub fn declares_end_time(&self) -> bool {
         self.end_time
+    }
+
+    /// **Does a text of the package show the wall clock** (`clock.now`)? The app supplies the time
+    /// ([`HudModel::now`](crate::player_hud::model::HudModel::now)) only to a HUD that draws it.
+    pub fn declares_clock(&self) -> bool {
+        self.clock
     }
 
     /// Every state, in `reach`'s order (valuation by valuation, breadth first from the root).
@@ -1083,6 +1159,7 @@ pub fn compile(package: &Package, measure: &dyn Measure, ctx: CompileCtx) -> Com
         });
     }
     let end_time = states_declare_end_time(&states);
+    let clock = states.iter().flat_map(|s| &s.ops).any(|op| matches!(op, DrawOp::Text { bind, .. } if bind == "clock.now"));
     let mut compiled = Compiled {
         states,
         named: Named { chapters: layout.named_chapters, episode: layout.named_pair, real_episode: layout.named_episode, paused: frame.paused },
@@ -1093,6 +1170,7 @@ pub fn compile(package: &Package, measure: &dyn Measure, ctx: CompileCtx) -> Com
         findings,
         assets: package.assets.clone(),
         end_time,
+        clock,
     };
     let band = compiled
         .compact_band_extents()
@@ -1527,6 +1605,7 @@ impl<'e, 'p> Env<'e, 'p> {
         match o.get("rest").and_then(Val::as_str).unwrap_or_else(|| default_name("item", "rest")) {
             "bare" => Rest::Bare,
             "solid" => Rest::Solid,
+            "plate" => Rest::Plate,
             "custom" => Rest::Custom,
             _ => Rest::Film,
         }
@@ -1552,6 +1631,7 @@ impl<'e, 'p> Env<'e, 'p> {
             Some(crate::player_hud::command::HudCommand::OpenTracks(crate::player_hud::command::TrackTab::Subtitles)) => "tracks_subtitles",
             Some(crate::player_hud::command::HudCommand::OpenMore(crate::player_hud::command::MorePage::Quality)) => "more_quality",
             Some(crate::player_hud::command::HudCommand::OpenMore(crate::player_hud::command::MorePage::Speed)) => "more_speed",
+            _ if command == "open_more" && self.package.format >= super::schema::V1_2 => OPEN_MORE_1_2,
             _ => command,
         };
         self.labels.of(key, section, self.v.episode)
@@ -1643,6 +1723,12 @@ impl<'e, 'p> Env<'e, 'p> {
         match o.get("bind").and_then(Val::as_str) {
             Some("label.chapters") => Some(&self.labels.tab_chapters),
             Some("label.info") => Some(&self.labels.tab_info),
+            // the clock's room is its widest time in this language's format
+            Some("clock.now") => {
+                let (size, bold) = (self.size_px(o, "size"), self.live_bold(o).base);
+                self.labels.clock_samples.iter().map(String::as_str)
+                    .max_by(|a, b| self.measure.width_str(a, size, bold).total_cmp(&self.measure.width_str(b, size, bold)))
+            }
             _ => None,
         }
     }
@@ -1964,6 +2050,7 @@ impl<'e, 'p> Env<'e, 'p> {
                 ink: self.live_ink(o, "ink"),
                 order: names(self.list(o, "order")),
                 badges: names(self.list(o, "badges")),
+                stream: names(self.list(o, "stream")),
                 genres_max: self.num(o, "genres_max").map_or(0, |n| n.max(0.0) as u32),
                 playback_fact: o.get("playback_fact").and_then(Val::as_bool).unwrap_or(false),
             }),
@@ -1991,6 +2078,7 @@ impl<'e, 'p> Env<'e, 'p> {
                         track, clock_size, clock_mode, self.num(o, "end_time_width"), self.measure,
                     ),
                     mark: if self.name(o, "mark") == Some("busy_only") { MarkMode::BusyOnly } else { MarkMode::AfterElapsed },
+                    remaining: o.get("remaining").map(|v| self.live(v, |v| self.rgba(v))),
                 });
             }
             "segment" => {
@@ -2017,6 +2105,8 @@ impl<'e, 'p> Env<'e, 'p> {
     }
 
     fn push_control(&self, ctl: &Ctl<'_>, rect: Rect, is_action: bool, out: &mut Out) {
+        // the package's flag (format 1.2), not app text
+        let caption = ctl.o.get("caption").and_then(Val::as_bool).unwrap_or(false);
         let c = ControlRect {
             id: ctl.id.to_owned(),
             command: ctl.command.to_owned(),
@@ -2030,6 +2120,7 @@ impl<'e, 'p> Env<'e, 'p> {
             rect,
             band: out.band.clone(),
             section: ctl.o.get("section").and_then(Val::as_str).map(str::to_owned),
+            caption,
         };
         out.controls.push(c.clone());
         out.control_origins.push(ctl.o.pointer.clone());
@@ -2559,7 +2650,11 @@ fn weigh(op: &DrawOp) -> Contributor {
         DrawOp::Image { rect, .. } => c.texture_bytes = 4 * area(*rect),
         DrawOp::Icon { rect, .. } => c.texture_bytes = 4 * area(*rect),
         DrawOp::Rule { rect, ink } => c.blended_px = if translucent(ink) { area(*rect) } else { 0 },
-        DrawOp::Facts { order, badges, .. } => c.glyph_runs = order.len() + badges.len(),
+        DrawOp::Facts { order, badges, stream, .. } => {
+            c.glyph_runs = order.len() + badges.len() + stream.len();
+            // each stream pill (format 1.2) also paints its capsule, one pass apiece (`BadgeStyle::Solid` or `Rimmed`)
+            c.draw_ops += stream.len();
+        }
         DrawOp::Playbar { track, track_ink, .. } => {
             c.glyph_runs = 2;
             c.blended_px = if translucent(track_ink) { area(*track) } else { 0 };
@@ -2580,7 +2675,11 @@ fn weigh(op: &DrawOp) -> Contributor {
         DrawOp::Control(ctl) => {
             c.blended_px = plate(ctl);
             match ctl.widget {
-                Widget::Disc => c.texture_bytes = 4 * (ctl.rect.h * ctl.rect.h).round() as u64,
+                Widget::Disc => {
+                    c.texture_bytes = 4 * (ctl.rect.h * ctl.rect.h).round() as u64;
+                    // a captioned disc (format 1.2's skip discs) draws its interval as a line of text
+                    c.glyph_runs = usize::from(ctl.caption);
+                }
                 Widget::Pill | Widget::Button => {
                     c.glyph_runs = 1;
                     if ctl.face != Face::default() {

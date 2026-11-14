@@ -114,6 +114,13 @@ pub enum Icon {
     /// nothing beside it is a play triangle. So the row keeps `PlayStart` and the disc takes this,
     /// and the divergence is the point rather than drift — see [`Icon::PlayStart`].
     Restart,
+    /// Counter-clockwise circular arrow — **the player transport's skip-back disc** (the MultiPlex
+    /// HUD's `seek` back by the viewer's Skip interval, whose caption names the interval). Drawn like
+    /// [`Icon::Restart`] but its own mark: that one is the detail hero's, and a retune of either must
+    /// not restyle the other surface.
+    SkipBack,
+    /// Clockwise circular arrow, [`Icon::SkipBack`] reflected — the skip-forward disc.
+    SkipForward,
     /// A play triangle knocked out of a landscape frame — the detail hero's Trailer disc and
     /// the item menu's Play Trailer row. One path, evenodd knockout, same construction as
     /// [`Icon::CheckCircleFill`].
@@ -352,6 +359,8 @@ fn src(id: Icon) -> &'static str {
         Icon::Rewind => include_str!("../../../assets/icons/rewind.svg"),
         Icon::FastForward => include_str!("../../../assets/icons/fast-forward.svg"),
         Icon::Restart => include_str!("../../../assets/icons/restart.svg"),
+        Icon::SkipBack => include_str!("../../../assets/icons/skip-back.svg"),
+        Icon::SkipForward => include_str!("../../../assets/icons/skip-forward.svg"),
         Icon::Trailer => include_str!("../../../assets/icons/trailer.svg"),
         Icon::Info => include_str!("../../../assets/icons/info.svg"),
         Icon::Alert => include_str!("../../../assets/icons/alert.svg"),

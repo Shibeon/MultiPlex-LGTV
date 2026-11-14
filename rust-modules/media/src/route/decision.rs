@@ -7209,6 +7209,25 @@ pub fn stream_video(ps: &PlaybackSession) -> Option<crate::player::recovery::Str
         height: u32::try_from(height).unwrap_or(0),
     })
 }
+/// **The picture the stream carries, `(width, height)`, for the player's resolution pill**: the
+/// source raster on a route that keeps the video (a direct play, a codec-preserving remux), else that
+/// raster held to the encode contract's ceiling (the rung a conversion was asked for). `0` on an axis
+/// nobody stated. Pure over the session; no lock, so a per-frame read is fine.
+pub fn stream_raster(ps: &PlaybackSession) -> (i64, i64) {
+    let (_, w, h) = ps.cur_src;
+    if !is_transcoding(ps) || is_remux(ps) {
+        return (w, h);
+    }
+    let held = |src: i64, cap: i64| match (src, cap) {
+        (0, c) => c,
+        (s, 0) => s,
+        (s, c) => s.min(c),
+    };
+    match ps.cur_contract.ceiling {
+        Some(c) => (held(w, c.max_w), held(h, c.max_h)),
+        None => (w, h),
+    }
+}
 /// direct-play source video fps for the Load esInfo (0 = unknown/transcode → omit)
 pub fn stream_fps(ps: &PlaybackSession) -> f64 {
     ps.stream_fps

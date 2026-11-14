@@ -758,7 +758,8 @@ pub(crate) fn player_requests(
     let mut performed = PlayerRequestOutcome::default();
     let cursor_target = back_cursor_target(pages);
     // Accepted user intent always wins the frame, even if its terminal effect was queued later.
-    let auto_retired = reqs.iter().any(|r| matches!(r, PlayerReq::Exit | PlayerReq::CancelAutoSkip(_)));
+    let auto_retired = reqs.iter().any(|r| matches!(r, PlayerReq::Exit
+        | PlayerReq::Command(plx_appkit::player_hud::command::HudCommand::Exit) | PlayerReq::CancelAutoSkip(_)));
     let auto_blocked = reqs.iter().any(|r| matches!(r, PlayerReq::Exit | PlayerReq::SeekTo(_)
         | PlayerReq::Transport(_) | PlayerReq::Command(_) | PlayerReq::ArmControlRow | PlayerReq::StandIn | PlayerReq::CancelAutoSkip(_)));
     for req in reqs {
@@ -855,6 +856,11 @@ pub(crate) fn player_requests(
             // The engine's press on the control row, committed on its spring-back: the dip
             // already played, so this performs at once (the pointer's `ArmControlRow` above dips
             // here and performs from the loop's commit frame, through the same two functions).
+            // A control that leaves playback (`exit`, format 1.2) is the BACK escape's ritual, not a HUD action.
+            PlayerReq::Command(plx_appkit::player_hud::command::HudCommand::Exit) => {
+                performed.exiting = true;
+                exit_player(player, pa, repause_at, refresh_hubs, pages);
+            }
             PlayerReq::Command(command) => {
                 perform_hud_command(command, player, pa, repause_at, now, refresh_hubs, pages, bridge)
             }
@@ -1462,6 +1468,11 @@ pub(crate) fn perform_hud_command(
             }
         }
         HudCommand::ToggleStats => crate::app::diagnostics::toggle(),
+        // the BACK escape's own ritual (a row disc that leaves, pressed through `activate_player_row`)
+        HudCommand::Exit => {
+            exit_player(player, pa, repause_at, refresh_hubs, pages);
+            return;
+        }
     }
     if let Some(player) = super::bridge::player_mut(pages) {
         player.hud.extend(now, HUD_LINGER_MS);

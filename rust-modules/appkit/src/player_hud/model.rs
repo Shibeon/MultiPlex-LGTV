@@ -39,6 +39,9 @@ pub struct HudModel {
     pub is_episode: bool,
     /// The projected local wall-clock finish time, supplied by the app for this frame.
     pub end_time: Option<[i32; 2]>,
+    /// The local wall-clock time `[hour, minute]`, supplied by the app for this frame (a `clock.now`
+    /// text shows it); `None` when the clock is unknown. The HUD reads no clock.
+    pub now: Option<[i32; 2]>,
     /// `plx_media::player::TX.scrub_ns.load(Relaxed)`: the live scrub preview's target, -1 when no
     /// scrub is in progress.
     pub scrub_ns: i64,
@@ -96,6 +99,7 @@ impl Default for HudModel {
             marker_prefs: Default::default(), playback_id: 0, advancing: false, seeking: false, covered: false, skip_progress: None,
             is_episode: false,
             end_time: None,
+            now: None,
             scrub_ns: -1,
             playpos_ns: 0,
             seek_display_ns: -1,

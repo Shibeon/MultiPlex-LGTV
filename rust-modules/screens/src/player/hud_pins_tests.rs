@@ -3295,3 +3295,116 @@ mod sections {
         assert!(run.screen().draw_slot() == stand_in, "the stand-in is back once the section is gone");
     }
 }
+
+// ---- builtin:multiplex: the head, the transport row and the More pill (format 1.2) ------------------------------
+//
+// The default package stands its back chevron over its Info disc beside the title (`GROUP_HEAD`), the bar under them,
+// the −N / play-pause / +N discs under the bar and the More pill (a tab slot) at the bottom. These walk the real
+// dispatcher and the shared FocusEngine on it.
+
+mod multiplex {
+    use super::*;
+    use plx_appkit::player_hud::command::{MorePage, SeekBy, SeekDir};
+    use plx_appkit::player_hud::geometry::{head_elem, GROUP_HEAD, GROUP_ROW, GROUP_SCRUB, GROUP_TABS};
+    use plx_appkit::player_hud::ELEM_TAB_BASE;
+
+    impl Run {
+        fn group_now(&mut self) -> u32 {
+            self.screen().hud.nav.focus.region()
+        }
+        fn held_now(&self) -> Option<u32> {
+            self.d.input.engine.current(InputOwner::Entry(self.id)).map(|k| k.elem)
+        }
+        fn asked_now(&mut self) -> Vec<PlayerReq> {
+            std::mem::take(&mut self.rig.reqs)
+        }
+    }
+
+    fn run() -> Run {
+        Run::boot_in(Occupant::Plain, plx_appkit::player_hud::loaded::multiplex_for_test(), true)
+    }
+
+    /// The head's controls in the compiled order: the back chevron first, the Info disc second.
+    const EXIT: u32 = 0;
+    const INFO: u32 = 1;
+
+    /// **Up from the bar reaches the head**, on the control nearest it (the Info disc); Up again climbs to the back
+    /// chevron, Down from the chevron comes back to the Info disc (a stop of its own), and Down off the Info disc
+    /// leaves the head for the bar.
+    #[test]
+    fn up_from_the_bar_reaches_the_head_and_up_and_down_walk_its_stacked_controls() {
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let mut run = run();
+        run.step('U'); // the first key raises the transport
+        assert_eq!(run.group_now(), GROUP_SCRUB.0, "the raised transport stands on the bar");
+        run.step('U');
+        assert_eq!((run.group_now(), run.held_now()), (GROUP_HEAD.0, Some(head_elem(INFO))), "Up from the bar: the Info disc");
+        run.step('U');
+        assert_eq!(run.held_now(), Some(head_elem(EXIT)), "Up from the Info disc: the back chevron");
+        run.step('D');
+        assert_eq!(run.held_now(), Some(head_elem(INFO)), "Down from the chevron: the Info disc");
+        run.step('D');
+        assert_eq!(run.group_now(), GROUP_SCRUB.0, "Down off the head: the bar");
+    }
+
+    /// OK on the Info disc asks `toggle_section(info)`, and the page opens it.
+    #[test]
+    fn ok_on_the_info_disc_opens_the_info_section() {
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let mut run = run();
+        run.walk("UU");
+        assert_eq!(run.held_now(), Some(head_elem(INFO)));
+        run.step('K');
+        assert_eq!(run.asked_now(), vec![PlayerReq::Command(HudCommand::ToggleSection(Section::Info))]);
+        assert_eq!(run.screen().hud.sections.iter().collect::<Vec<_>>(), vec![Section::Info]);
+    }
+
+    /// OK on the back chevron asks `exit`, the app's leave-playback (`exit_player`), as Back does from the picture.
+    #[test]
+    fn ok_on_the_back_chevron_leaves_playback() {
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let mut run = run();
+        run.walk("UUU");
+        assert_eq!(run.held_now(), Some(head_elem(EXIT)));
+        run.step('K');
+        assert_eq!(run.asked_now(), vec![PlayerReq::Command(HudCommand::Exit)]);
+    }
+
+    /// Down from the bar is the transport row; Down again is the More pill (the tab slot an `open_more` pill outside
+    /// the row takes), whose OK opens the player menu at its root.
+    #[test]
+    fn down_reaches_the_row_then_the_more_pill_which_opens_the_menu() {
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let mut run = run();
+        run.walk("DD");
+        assert_eq!(run.group_now(), GROUP_ROW.0, "Down from the bar: the transport row");
+        run.step('D');
+        assert_eq!((run.group_now(), run.held_now()), (GROUP_TABS.0, Some(ELEM_TAB_BASE + 2)), "Down from the row: the More pill");
+        run.step('K');
+        assert_eq!(run.asked_now(), vec![PlayerReq::Command(HudCommand::OpenMore(MorePage::Root))]);
+    }
+
+    /// The transport row's discs are the remote's own commands: the row seats on play-pause and OK asks it; the
+    /// discs either side of it are −N and +N (the Skip interval setting), enabled once the duration is known (the
+    /// idle rig has none, so they are read off the live row with one).
+    #[test]
+    fn the_row_discs_ask_the_seek_and_play_commands_the_keys_perform() {
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let mut run = run();
+        run.walk("DD");
+        run.step('K');
+        assert_eq!(run.asked_now(), vec![PlayerReq::Command(HudCommand::TogglePlay)], "the row seats on play-pause");
+        let page = run.screen();
+        let play = page.row_primary();
+        assert_eq!(page.row_command(play - 1), None, "no duration, no seek");
+        page.model.duration_ns = 600_000_000_000;
+        assert_eq!(page.row_command(play - 1), Some(HudCommand::Seek(SeekBy::Setting(SeekDir::Back))));
+        assert_eq!(page.row_command(play), Some(HudCommand::TogglePlay));
+        assert_eq!(page.row_command(play + 1), Some(HudCommand::Seek(SeekBy::Setting(SeekDir::Forward))));
+    }
+}

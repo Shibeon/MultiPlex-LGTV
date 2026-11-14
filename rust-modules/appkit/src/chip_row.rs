@@ -58,6 +58,32 @@ pub enum ChipKind {
     Run { parts: Vec<String>, lead_dot: bool, size: c_int, bold: c_int, col: [f32; 4] },
     /// An outlined capability badge ([`meta_badge`]) saying this.
     Badge(String),
+    /// One of the player's stream pills, styled by what it is about.
+    Stream(String, StreamPill),
+}
+
+/// **What a stream pill is about**, which picks its look (`facts.stream`, the MultiPlex HUD's technical
+/// row): the resolution the one solid amber capsule, the other three on one dark ground (the dynamic range
+/// rimmed, the stream mode plain, the audio codec under a quieter rim). Each is one pass and one label. The
+/// look is the ONE place the four differ.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StreamPill {
+    Resolution,
+    DynamicRange,
+    Mode,
+    Audio,
+}
+
+impl StreamPill {
+    /// The shared badge leaf's style for this pill.
+    pub fn style(self) -> BadgeStyle {
+        match self {
+            StreamPill::Resolution => BadgeStyle::Solid { fill: theme::STREAM_RES_FILL, ink: theme::STREAM_RES_INK },
+            StreamPill::DynamicRange => BadgeStyle::Rimmed { fill: theme::STREAM_PILL_FILL, rim: theme::STREAM_PILL_RIM, ink: theme::STREAM_PILL_INK },
+            StreamPill::Mode => BadgeStyle::Solid { fill: theme::STREAM_PILL_FILL, ink: theme::STREAM_PILL_INK },
+            StreamPill::Audio => BadgeStyle::Rimmed { fill: theme::STREAM_PILL_FILL, rim: theme::STREAM_PILL_RIM_QUIET, ink: theme::STREAM_PILL_INK },
+        }
+    }
 }
 
 impl Chip {
@@ -100,6 +126,12 @@ impl Chip {
         let w = badge_w(&label, None, measure);
         Self { kind: ChipKind::Badge(label), w }
     }
+
+    /// A stream pill ([`StreamPill`]): the badge leaf's width, its look by kind.
+    pub fn stream(label: String, pill: StreamPill, measure: &dyn plx_machine::machine::Measure) -> Self {
+        let w = badge_w(&label, None, measure);
+        Self { kind: ChipKind::Stream(label, pill), w }
+    }
 }
 
 /// How much a chip matters to the fit. They all share one rung: the row is built in order of
@@ -109,8 +141,9 @@ impl Chip {
 pub const CHIP_PRIORITY: u8 = 1;
 
 /// The most chips the row can hold: one per kind it can show — the item's meta run, the live
-/// playback fact, the rating, the premium-audio tag, CC, SDH and AD.
-pub const MAX_CHIPS: usize = 7;
+/// playback fact, the rating, the premium-audio tag, CC, SDH and AD, then the four stream pills
+/// (resolution, dynamic range, stream mode, audio codec: [`StreamPill`]).
+pub const MAX_CHIPS: usize = 11;
 
 /// **The chip row: every candidate chip and its [`Item`], in priority order** — the input of
 /// `HStack::fit` (issue #26). Fixed storage, because the card draws ~60 times a second and a row
@@ -152,7 +185,7 @@ impl ChipRow {
         }
         let item = Item::new(chip.w).priority(CHIP_PRIORITY);
         self.items[self.n] = match chip.kind {
-            ChipKind::Badge(_) => item.after(theme::space::XS),
+            ChipKind::Badge(_) | ChipKind::Stream(..) => item.after(theme::space::XS),
             ChipKind::Run { .. } => item,
         };
         self.chips[self.n] = Some(chip);
@@ -184,6 +217,9 @@ pub fn draw_chip_row(
             }
             ChipKind::Badge(label) => {
                 meta_badge(p, placed.x, my, label, measure);
+            }
+            ChipKind::Stream(label, pill) => {
+                badge(p, placed.x, my, label, None, pill.style(), measure);
             }
         }
     }
