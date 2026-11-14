@@ -46,8 +46,13 @@ pub struct PlayerReadout {
     start_queued: bool,
     /// This television did not take a speed session's PCM; latched until the app restarts.
     speed_unsupported: bool,
-    /// The next direct-play seek must be a full reload, because it carries a speed change.
+    /// The next direct-play seek must be a full reload, because it carries a speed change or a change
+    /// of who decodes the sound for the audio mode ([`ReadoutEvent::AudioDecodeReloadArmed`]).
     rate_reload: bool,
+    /// The titles (server, ratingKey) whose decode for the audio mode fell behind this process: the
+    /// television decodes them again until the app restarts (`player::sync_audio_mode_decode`).
+    /// Grows by one per title the safety net fired on, which is the whole of its growth.
+    mode_decode_refused: Vec<(plx_plex::plex::ServerId, String)>,
     /// The viewer's playback speed in thousandths (1000 = 1x).
     play_rate_permille: i32,
     /// The feed's raw observations from the last ingestion.
@@ -176,6 +181,12 @@ pub struct Presentation {
 /// value to store, so a transition that touches several members is one event.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReadoutEvent {
+    /// Who decodes the sound for the audio mode is to change (the app for a mode, or the television
+    /// again): the next seek, to where the viewer is, is the full reload that rebuilds the Load.
+    AudioDecodeReloadArmed,
+    /// The app's decode for the audio mode fell behind on this title: the television decodes it
+    /// again for the life of the process, through the same one-shot reload.
+    AudioDecodeRefused { sid: plx_plex::plex::ServerId, rating_key: String },
     /// The pump derived this frame's state.
     StateDerived(PlaybackState),
     /// The pipeline drained to its end of stream.
@@ -285,6 +296,7 @@ impl PlayerReadout {
         start_queued: false,
         speed_unsupported: false,
         rate_reload: false,
+        mode_decode_refused: Vec::new(),
         play_rate_permille: RATE_NORMAL,
         raw: FeedRaw::IDLE,
         seek_epoch: 0,
@@ -314,6 +326,11 @@ impl PlayerReadout {
     pub fn ended(&self) -> bool { self.ended }
     pub fn start_queued(&self) -> bool { self.start_queued }
     pub fn speed_unsupported(&self) -> bool { self.speed_unsupported }
+    /// The safety net took the decode for the audio mode away from this title
+    /// ([`ReadoutEvent::AudioDecodeRefused`]).
+    pub fn mode_decode_refused(&self, sid: plx_plex::plex::ServerId, rating_key: &str) -> bool {
+        self.mode_decode_refused.iter().any(|(s, rk)| *s == sid && rk == rating_key)
+    }
     pub fn rate_reload(&self) -> bool { self.rate_reload }
     pub fn play_rate_permille(&self) -> i32 { self.play_rate_permille }
     pub fn raw(&self) -> &FeedRaw { &self.raw }
@@ -465,6 +482,13 @@ impl PlayerReadout {
             ReadoutEvent::RateSelected { permille } => self.play_rate_permille = permille,
             ReadoutEvent::RateReloadArmed => self.rate_reload = true,
             ReadoutEvent::RateReloadTaken => self.rate_reload = false,
+            ReadoutEvent::AudioDecodeReloadArmed => self.rate_reload = true,
+            ReadoutEvent::AudioDecodeRefused { sid, rating_key } => {
+                if !self.mode_decode_refused(sid, &rating_key) {
+                    self.mode_decode_refused.push((sid, rating_key));
+                }
+                self.rate_reload = true;
+            }
             ReadoutEvent::SpeedRefused => {
                 self.speed_unsupported = true;
                 self.play_rate_permille = RATE_NORMAL;
@@ -689,6 +713,28 @@ mod tests {
         r.step(ReadoutEvent::RateReloadTaken);
         assert!(!r.rate_reload());
         assert_eq!(r.play_rate_permille(), 1250, "taking the reload keeps the speed");
+    }
+
+    /// The safety net's memory: per title (server and ratingKey), for the life of the process (a new
+    /// item and a session's reset keep it), once per title, and it arms the reload that lands on the
+    /// television's decoder.
+    #[test]
+    fn a_refused_audio_decode_is_remembered_per_title_and_arms_one_reload() {
+        let (a, b) = (plx_plex::plex::ServerId::from_raw(0), plx_plex::plex::ServerId::from_raw(1));
+        let refused = || ReadoutEvent::AudioDecodeRefused { sid: a, rating_key: "7".into() };
+        let mut r = stepped(&[refused()]);
+        assert!(r.mode_decode_refused(a, "7") && r.rate_reload());
+        assert!(!r.mode_decode_refused(b, "7"), "a ratingKey names an item only within one server");
+        assert!(!r.mode_decode_refused(a, "8"));
+        r.step(ReadoutEvent::RateReloadTaken);
+        r.step(ReadoutEvent::NewItem);
+        r.step(refused());
+        assert!(r.mode_decode_refused(a, "7"), "kept across items");
+        assert_eq!(r.mode_decode_refused.len(), 1, "one entry per title");
+        let mut armed = stepped(&[ReadoutEvent::AudioDecodeReloadArmed]);
+        assert!(armed.rate_reload(), "a change of who decodes is the same one-shot full reload");
+        armed.step(ReadoutEvent::RateReloadTaken);
+        assert!(!armed.rate_reload());
     }
 
     #[test]

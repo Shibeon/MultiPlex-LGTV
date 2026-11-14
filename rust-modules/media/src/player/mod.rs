@@ -2012,16 +2012,82 @@ pub(super) fn publish_audio_choice(ps: &crate::route::PlaybackSession, pa: &mut 
     pa.feed_command(FeedCommand::SelectAudio { idx: ps.readout().audio_choice() });
 }
 
-/// **Whether the More menu offers the audio mode** for the playback on screen: the Feed engine's
-/// demuxer said this session decodes the audio in the app and feeds the PCM it holds
+/// **Whether the More menu offers the audio mode** for the playback on screen, on the Feed engine:
+/// its demuxer said this session decodes the audio in the app and feeds the PCM it holds
 /// (`FeedRaw::app_pcm_audio`: an app-decoded codec, `ff_pcm::PcmDecoder`, or a speed session,
-/// `SpeedDecoder`). Everywhere else (the television decodes the compressed track, a receiver takes
-/// the bitstream, the URI engine fetches the file itself) no sample passes through the app and the
-/// entry is not shown at all; the saved mode is kept and has no effect there. A value of the
-/// session's readout, sampled once a tick, so the entry follows a reload (a track switch, a speed)
-/// live, and a read with no IO.
+/// `SpeedDecoder`), or the app could decode the compressed track for a mode
+/// (`route::ModeDecodeFacts::available`: the profile's "Decode for audio modes" on, the set's own
+/// speakers or Bluetooth, and no safety-net refusal on this title), in which case picking a mode
+/// reloads the playback at its position with the app decoding ([`sync_audio_mode_decode`]).
+/// Everywhere else (the television decodes and the profile keeps it so, a receiver may take the
+/// bitstream, the URI engine fetches the file itself) no sample passes through the app and the entry
+/// is not shown at all; the saved mode is kept and has no effect there. Values of the session's
+/// readout and the live preference cells, sampled once a tick, so the entry follows a reload (a
+/// track switch, a speed, a sound output read) live, and a read with no IO.
 pub fn audio_mode_offered(ps: &crate::route::PlaybackSession) -> bool {
-    ps.attempt_view().backend() == Some(attempt_view::Backend::Feed) && ps.readout().raw().app_pcm_audio
+    ps.attempt_view().backend() == Some(attempt_view::Backend::Feed)
+        && (ps.readout().raw().app_pcm_audio || crate::route::mode_decode_facts(ps).available())
+}
+
+/// What [`sync_audio_mode_decode`] does this tick. PURE: the decision table of the switch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ModeDecodeStep {
+    /// Nothing: the Load already decodes as the rule wants, or nothing is playing to reload.
+    Keep,
+    /// Reload at the viewer's position so the Load decodes as the rule now wants (a mode turned on or
+    /// off, the profile's choice changed, the output read said the set's speakers are not in use).
+    Reload,
+    /// The decode is behind (`FeedRaw::mode_decode_behind`): refuse it to this title for the life of
+    /// the process and reload with the television decoding.
+    FallBack,
+}
+
+/// The switch's table: `playing` (the session has started and no full reload is armed yet),
+/// `decoding` (this Load decodes for the mode, `FeedRaw::mode_decode`), `behind` (its audio lane fell
+/// behind), `wanted` ([`crate::route::audio_mode_decode`]). PURE.
+pub(crate) fn mode_decode_step(playing: bool, decoding: bool, behind: bool, wanted: bool) -> ModeDecodeStep {
+    if !playing {
+        ModeDecodeStep::Keep
+    } else if decoding && behind {
+        ModeDecodeStep::FallBack
+    } else if decoding != wanted {
+        ModeDecodeStep::Reload
+    } else {
+        ModeDecodeStep::Keep
+    }
+}
+
+/// **Keep who decodes the sound in step with the audio mode**, once a tick from the pump: a change of
+/// the rule's answer ([`crate::route::audio_mode_decode`]) is a reload at the viewer's position, the
+/// same full reload a speed change is (the Load fixes compressed or PCM audio for its whole session),
+/// and the safety net ([`ModeDecodeStep::FallBack`]) takes the decode away from a title whose decode
+/// fell behind, so the television's decoder plays it again and a mode never mutes or stalls the sound.
+pub(crate) fn sync_audio_mode_decode(ps: &mut crate::route::PlaybackSession, pa: &mut adapter::PlayerAdapter) {
+    let raw = *ps.readout().raw();
+    // Only on a session that has started and has no seek of its own in flight: the reload this asks
+    // for is a seek, and until its new Load is playing the raw facts are the old Load's.
+    let playing = is_started(ps) == Some(true) && !ps.readout().rate_reload() && !ps.readout().seeking()
+        && ps.attempt_view().backend() == Some(attempt_view::Backend::Feed);
+    let wanted = playing && crate::route::audio_mode_decode(ps);
+    match mode_decode_step(playing, raw.mode_decode, raw.mode_decode_behind, wanted) {
+        ModeDecodeStep::Keep => {}
+        ModeDecodeStep::Reload => {
+            log(&format!(
+                "audio mode: reload at the viewer's position, {} decodes the sound",
+                if wanted { "the app" } else { "the television" }
+            ));
+            ps.step_readout(readout::ReadoutEvent::AudioDecodeReloadArmed);
+            let target = intended_pos_ns(ps).max(0);
+            request_seek(ps, pa, target);
+        }
+        ModeDecodeStep::FallBack => {
+            log("audio mode: the app's decode fell behind; the television decodes this title until the app restarts");
+            let (sid, rating_key) = (crate::route::cur_sid(ps), crate::route::cur_rk(ps));
+            ps.step_readout(readout::ReadoutEvent::AudioDecodeRefused { sid, rating_key });
+            let target = intended_pos_ns(ps).max(0);
+            request_seek(ps, pa, target);
+        }
+    }
 }
 
 /// The viewer's audio mode as the feed carries it.
@@ -4940,6 +5006,156 @@ mod audio_mode_offer_tests {
         let mut ps = feed_session(true);
         ps.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw { app_pcm_audio: false, ..FeedRaw::IDLE }));
         assert!(!audio_mode_offered(&ps), "a switch to a track the TV decodes takes the entry away");
+    }
+
+    /// Puts the profile's audio mode and decode choice back as a test found them.
+    struct RestorePrefs(plx_plex::plex::session::AudioMode, plx_plex::plex::session::AudioModeDecode);
+    impl RestorePrefs {
+        fn set(mode: plx_plex::plex::session::AudioMode, decode: plx_plex::plex::session::AudioModeDecode) -> Self {
+            let saved = Self(crate::route::audio_mode(), crate::route::audio_mode_decode_choice());
+            crate::route::restore_audio_mode(mode);
+            crate::route::restore_audio_mode_decode(decode);
+            saved
+        }
+    }
+    impl Drop for RestorePrefs {
+        fn drop(&mut self) {
+            crate::route::restore_audio_mode(self.0);
+            crate::route::restore_audio_mode_decode(self.1);
+        }
+    }
+
+    /// A Feed session feeding `codec` compressed, whose last sound-output read said `output`.
+    fn compressed_session(codec: &str, output: plx_playback_contract::feed::SoundOutput) -> crate::route::PlaybackSession {
+        let mut ps = feed_session(false);
+        crate::route::set_stream_acodec_for_test(&mut ps, codec);
+        ps.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw { sound_output: output, ..FeedRaw::IDLE }));
+        ps
+    }
+
+    /// **The entry is offered where the app COULD decode for a mode**, and taken away live: a track
+    /// the television decodes is offered the mode while the profile lets the app decode it and the
+    /// sound plays on the set itself (or nothing has been read yet); not on an output a receiver may
+    /// take the bitstream from, not with the profile's decode off, not for a codec the app has no
+    /// decoder for, and not on a title the safety net refused.
+    #[test]
+    fn the_audio_mode_is_offered_where_the_app_could_decode_the_track() {
+        use plx_playback_contract::feed::SoundOutput;
+        use plx_plex::plex::session::{AudioMode, AudioModeDecode};
+        let _serial = plx_base::testlock::serial();
+        let _prefs = RestorePrefs::set(AudioMode::Off, AudioModeDecode::On);
+        for codec in ["aac", "ac3", "eac3", "dca", "opus"] {
+            assert!(audio_mode_offered(&compressed_session(codec, SoundOutput::Local)), "{codec}");
+            assert!(audio_mode_offered(&compressed_session(codec, SoundOutput::Unknown)), "{codec}: not read yet");
+            assert!(!audio_mode_offered(&compressed_session(codec, SoundOutput::NotLocal)), "{codec}: a receiver may decode");
+        }
+        assert!(!audio_mode_offered(&compressed_session("mp2", SoundOutput::Local)), "no decoder for it");
+        let mut ps = compressed_session("ac3", SoundOutput::Local);
+        ps.step_readout(readout::ReadoutEvent::AudioDecodeRefused {
+            sid: crate::route::cur_sid(&ps), rating_key: crate::route::cur_rk(&ps),
+        });
+        assert!(!audio_mode_offered(&ps), "the safety net took it from this title");
+        crate::route::restore_audio_mode_decode(AudioModeDecode::Off);
+        assert!(!audio_mode_offered(&compressed_session("ac3", SoundOutput::Local)), "the profile keeps the TV decoding");
+        // an output read that comes back as a receiver takes the entry away on the next sample
+        crate::route::restore_audio_mode_decode(AudioModeDecode::On);
+        let mut ps = compressed_session("eac3", SoundOutput::Local);
+        assert!(audio_mode_offered(&ps));
+        ps.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw { sound_output: SoundOutput::NotLocal, ..FeedRaw::IDLE }));
+        assert!(!audio_mode_offered(&ps));
+    }
+
+    /// **The switch's table**: nothing while not playing; the safety net before anything else once the
+    /// decode fell behind; a reload whenever who decodes differs from who should.
+    #[test]
+    fn the_decode_switch_reloads_on_a_change_and_falls_back_when_behind() {
+        for decoding in [false, true] {
+            for behind in [false, true] {
+                for wanted in [false, true] {
+                    assert_eq!(mode_decode_step(false, decoding, behind, wanted), ModeDecodeStep::Keep);
+                    let step = mode_decode_step(true, decoding, behind, wanted);
+                    let expected = if decoding && behind {
+                        ModeDecodeStep::FallBack
+                    } else if decoding != wanted {
+                        ModeDecodeStep::Reload
+                    } else {
+                        ModeDecodeStep::Keep
+                    };
+                    assert_eq!(step, expected, "decoding={decoding} behind={behind} wanted={wanted}");
+                }
+            }
+        }
+    }
+
+    /// **Turning a mode on reloads at the viewer's position, and the safety net does the same and
+    /// remembers the title**: the reload is a seek to where the viewer is, marked as the full reload
+    /// that rebuilds the Load, and the next Load it captures declares the lossy PCM for the mode (and
+    /// back to the compressed track once the title is refused).
+    #[test]
+    fn a_mode_change_and_the_fallback_reload_where_the_viewer_is() {
+        use plx_play_feed::shared::{FEED_SHARED, FEED_TX};
+        use plx_playback_contract::feed::SoundOutput;
+        use plx_plex::plex::session::{AudioMode, AudioModeDecode};
+        use std::sync::atomic::Ordering::Relaxed;
+        let _serial = plx_base::testlock::serial();
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                crate::player::reset_session_for_test();
+                FEED_SHARED.reset_session();
+                FEED_TX.reset();
+            }
+        }
+        let _restore = Restore;
+        let _prefs = RestorePrefs::set(AudioMode::Off, AudioModeDecode::On);
+        crate::player::reset_session_for_test();
+        FEED_SHARED.reset_session();
+        FEED_TX.reset();
+        let mut pa = adapter::PlayerAdapter::new_fed(unsafe { plx_base::task::MainThread::assume() });
+        let mut ps = crate::route::PlaybackSession::IDLE;
+        let attempt = crate::route::RouteStartAttempt::fixture();
+        ps.begin_attempt_view(attempt, attempt_view::Backend::Feed);
+        crate::route::set_stream_acodec_for_test(&mut ps, "ac3");
+        FEED_TX.started.store(true, Relaxed);
+        FEED_SHARED.seen_frame.store(true, Relaxed);
+        FEED_SHARED.playpos_ns.store(42_000_000_000, Relaxed);
+        assert!(ps.ingest_feed_facts(attempt, plx_play_feed::feed_pump::native_feed_facts()));
+        assert_eq!(is_started(&ps), Some(true));
+        let sample = |ps: &mut crate::route::PlaybackSession, mode_decode: bool, behind: bool| {
+            ps.step_readout(readout::ReadoutEvent::FactsIngested(FeedRaw {
+                sound_output: SoundOutput::Local, mode_decode, mode_decode_behind: behind, ..FeedRaw::IDLE
+            }));
+        };
+        sample(&mut ps, false, false);
+
+        sync_audio_mode_decode(&mut ps, &mut pa);
+        assert_eq!(FEED_TX.seek_to_ns.load(Relaxed), -1, "mode Off: the television keeps decoding");
+        assert!(!crate::route::audio_mode_decode_for_feed_load(&ps));
+
+        crate::route::restore_audio_mode(AudioMode::Night);
+        assert!(crate::route::audio_mode_decode_for_feed_load(&ps), "the next Load decodes for the mode");
+        sync_audio_mode_decode(&mut ps, &mut pa);
+        assert_eq!(FEED_TX.seek_to_ns.load(Relaxed), 42_000_000_000, "a seek to the viewer's own position");
+        assert_eq!(seek_pending(&ps), Some(42_000_000_000));
+        assert!(ps.readout().rate_reload(), "the full reload that rebuilds the Load");
+        sync_audio_mode_decode(&mut ps, &mut pa);
+        assert_eq!(seek_pending(&ps), Some(42_000_000_000), "one reload, not one a tick");
+
+        // the reload is taken and its Load decodes for the mode; then the decode falls behind
+        assert!(take_pending_seek(&mut ps, &mut pa).is_some());
+        ps.step_readout(readout::ReadoutEvent::RateReloadTaken);
+        FEED_TX.seek_to_ns.store(-1, Relaxed);
+        ps.step_readout(readout::ReadoutEvent::SeekAbandoned);
+        sample(&mut ps, true, false);
+        sync_audio_mode_decode(&mut ps, &mut pa);
+        assert_eq!(FEED_TX.seek_to_ns.load(Relaxed), -1, "decoding as wanted: nothing to do");
+        sample(&mut ps, true, true);
+        sync_audio_mode_decode(&mut ps, &mut pa);
+        assert_eq!(FEED_TX.seek_to_ns.load(Relaxed), 42_000_000_000, "the fallback reloads where the viewer is");
+        assert!(ps.readout().rate_reload());
+        assert!(ps.readout().mode_decode_refused(crate::route::cur_sid(&ps), &crate::route::cur_rk(&ps)));
+        assert!(!crate::route::audio_mode_decode_for_feed_load(&ps), "the next Load feeds the compressed track");
+        assert_eq!(crate::route::audio_mode(), AudioMode::Night, "the saved mode is kept");
     }
 
     /// The saved mode reaches the feed as the same three modes, Off by default.

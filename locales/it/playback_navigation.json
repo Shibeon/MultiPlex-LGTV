@@ -14,5 +14,9 @@
   "settings.playback.audio_mode.copy": "La modalità notte livella il volume: scene forti più basse, dialoghi sommessi più alti. Voci chiare mette in risalto i dialoghi. Nessun effetto se il televisore o un ricevitore decodifica l’audio.",
   "settings.playback.audio_mode.off": "Disattivato",
   "settings.playback.audio_mode.night": "Modalità notte",
-  "settings.playback.audio_mode.voice": "Voci chiare"
+  "settings.playback.audio_mode.voice": "Voci chiare",
+  "settings.playback.audio_mode_decode": "Decodifica per le modalità audio",
+  "settings.playback.audio_mode_decode.copy": "Con una modalità audio attiva, l'app decodifica da sé l'audio perché la modalità valga sulla maggior parte dei film. L'audio diventa stereo, senza Atmos. Mai verso un ricevitore.",
+  "settings.playback.audio_mode_decode.on": "Attivo",
+  "settings.playback.audio_mode_decode.off": "Disattivo"
 }

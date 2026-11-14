@@ -199,9 +199,50 @@ pub(crate) fn lossy_row_enabled(row: &AppDecoded, policy: AppLossy) -> bool {
         }
 }
 
-/// The [`APP_DECODED`] entry covering the stream whose `avcodec_get_name` is `name`.
+/// The [`APP_DECODED`] entry covering the stream whose `avcodec_get_name` is `name`, else its
+/// [`MODE_DECODED`] one: the demuxer's one lookup of an app decoder. A lossy row of either decodes only
+/// where the Load declared the lossy PCM for it, so finding a row here decides nothing by itself.
 pub fn app_decoded_by_ffmpeg_name(name: &str) -> Option<&'static AppDecoded> {
-    APP_DECODED.iter().find(|c| c.codecs.contains(&name))
+    APP_DECODED.iter().chain(MODE_DECODED).find(|c| c.codecs.contains(&name))
+}
+
+/// **The codecs the app decodes ONLY so that an audio mode can act on them** (the profile's
+/// `AudioModeDecode` On and a mode other than Off; the rule is `plx_media::route::audio_mode_decode`):
+/// the compressed tracks the television decodes itself. Never a planner row, never a policy row
+/// ([`AppLossy`] does not see them, so neither `appdecodelossy` nor the failed-open ladder puts them
+/// in force): they are decoded only while the viewer asks for a mode, to the lossy rows' one shape
+/// (stereo 48 kHz S16, `ff_pcm::STEREO_48K`). DTS is the mode set too, through its [`APP_DECODED`] row
+/// ([`mode_decodes_codec`]). Unmeasured on the set (`measured: None`): the pump's safety net falls back
+/// to the television's decoder when the decode does not keep up (`player::audio_mode_decode_behind`).
+/// E-AC-3's Atmos (JOC) objects are not rendered by FFmpeg's `eac3`: its bed is decoded and mixed
+/// down, so a mode on an Atmos track plays it as stereo without Atmos (the Settings hint says so).
+pub const MODE_DECODED: &[AppDecoded] = &[
+    AppDecoded { id: "aac", codecs: &["aac"], decoders: &["aac"], lossy: true, measured: None },
+    AppDecoded { id: "ac3", codecs: &["ac3"], decoders: &["ac3"], lossy: true, measured: None },
+    AppDecoded { id: "eac3", codecs: &["eac3"], decoders: &["eac3"], lossy: true, measured: None },
+    AppDecoded { id: "opus", codecs: &["opus"], decoders: &["opus"], lossy: true, measured: None },
+];
+
+/// Whether the app can decode `codec` (any spelling, [`audio_codec_id`]) for an audio mode: a
+/// [`MODE_DECODED`] row, or DTS, whose decode the app already has ([`APP_DECODED`]).
+pub fn mode_decodes_codec(codec: &str) -> bool {
+    let id = audio_codec_id(codec);
+    id == "dts" || MODE_DECODED.iter().any(|r| r.id == id)
+}
+
+/// **The sound outputs a decode for an audio mode may play through**, by the name the settings
+/// service gives them (`tv::sound`): the television's own speakers and Bluetooth, the two outputs the
+/// app's PCM was filmed on (`plx_play_feed::pcm_lead::PCM_LEAD_BY_OUTPUT`), and where nothing is
+/// passed through: the set renders PCM there whatever it is fed. Every other output (HDMI ARC/eARC,
+/// optical, a wired line out, LG Sound Sync) can carry the compressed bitstream to a receiver, and
+/// which of them does (the set's digital output setting) is not read here: the app never decodes for
+/// a mode there, so a receiver keeps the surround bitstream.
+pub const MODE_DECODE_OUTPUTS: [&str; 2] = ["tv_speaker", "bt_soundbar"];
+
+/// Whether the sound output named `output` lets the app decode for an audio mode
+/// ([`MODE_DECODE_OUTPUTS`]). PURE.
+pub fn mode_decode_output_ok(output: &str) -> bool {
+    MODE_DECODE_OUTPUTS.contains(&output)
 }
 
 /// The channel ceiling of the PCM path: `pcmInfo.channelMode` has `mono` and `stereo` (and
@@ -2617,6 +2658,34 @@ mod tests {
         assert!(all.iter().all(|id| audio_codec_id(id) == *id), "an id is its own canonical spelling");
     }
 
+    /// The mode set: lossy rows that no policy sees, the codecs the television decodes, and DTS through
+    /// its own row; only the two filmed local outputs.
+    #[test]
+    fn the_mode_decoded_rows_are_lossy_and_out_of_every_policy() {
+        for r in MODE_DECODED {
+            assert!(r.lossy && r.measured.is_none(), "{}", r.id);
+            assert!(!APP_DECODED.iter().any(|a| a.id == r.id), "{}: one row per codec", r.id);
+            for policy in [AppLossy::Off, AppLossy::Measured, AppLossy::All] {
+                let caps = Caps { app_lossy: policy, ..Caps::assumed() };
+                assert!(!caps.app_may_decode_lossy(r.id), "{}: never a policy row", r.id);
+            }
+            assert!(BASELINE_AUDIO.contains(&r.id) || r.id == "aac" || r.id == "opus", "{}", r.id);
+        }
+        assert!(!Caps::assumed().with_app_lossy().app_lossy_in_force.contains("ac3"), "appdecodelossy leaves them alone");
+        for c in ["aac", "ac3", "eac3", "opus", "dts", "dca"] {
+            assert!(mode_decodes_codec(c), "{c}");
+        }
+        for c in ["flac", "truehd", "mp3", "pcm", "wma", ""] {
+            assert!(!mode_decodes_codec(c), "{c}");
+        }
+        assert!(mode_decode_output_ok("tv_speaker") && mode_decode_output_ok("bt_soundbar"));
+        for o in ["external_arc", "external_optical", "lineout", "headphone", "tv_external_speaker", ""] {
+            assert!(!mode_decode_output_ok(o), "{o}");
+        }
+        assert_eq!(app_decoded_by_ffmpeg_name("dts").map(|r| r.id), Some("dts"), "DTS keeps its own row");
+        assert_eq!(app_decoded_by_ffmpeg_name("eac3").map(|r| r.id), Some("eac3"));
+    }
+
     /// "Derived from the bundled decoder list": every decoder the table names is enabled in
     /// `ci/build-ffmpeg.sh`, the one list the shipped FFmpeg is built from.
     #[test]
@@ -2629,7 +2698,7 @@ mod tests {
             .flat_map(|l| l.trim_end_matches('\\').split(','))
             .collect();
         assert!(enabled.contains(&"flac"), "the parse found the decoder list: {enabled:?}");
-        for c in APP_DECODED {
+        for c in APP_DECODED.iter().chain(MODE_DECODED) {
             assert!(!c.decoders.is_empty() && !c.codecs.is_empty(), "{}", c.id);
             for d in c.decoders {
                 assert!(enabled.contains(d), "{}: decoder {d} is not in ci/build-ffmpeg.sh's --enable-decoder list", c.id);

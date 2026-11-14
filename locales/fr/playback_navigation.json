@@ -14,5 +14,9 @@
   "settings.playback.audio_mode.copy": "Le mode nuit égalise le volume : scènes fortes adoucies, dialogues discrets rehaussés. Voix renforcées met les dialogues en avant. Sans effet quand le téléviseur ou un ampli décode le son.",
   "settings.playback.audio_mode.off": "Désactivé",
   "settings.playback.audio_mode.night": "Mode nuit",
-  "settings.playback.audio_mode.voice": "Voix renforcées"
+  "settings.playback.audio_mode.voice": "Voix renforcées",
+  "settings.playback.audio_mode_decode": "Décodage pour les modes audio",
+  "settings.playback.audio_mode_decode.copy": "Quand un mode audio est actif, l'app décode elle-même le son pour que le mode s'applique à la plupart des films. Le son passe alors en stéréo, sans Atmos. Jamais vers un ampli.",
+  "settings.playback.audio_mode_decode.on": "Activé",
+  "settings.playback.audio_mode_decode.off": "Désactivé"
 }

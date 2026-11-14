@@ -787,10 +787,23 @@ something.
   limiter. A change of mode crossfades through dry over 20 ms out and 20 ms in, and the centre lift
   ramps its downmix gains over 20 ms (`speed_audio::CentreLift`, the same channels lifted or not; off
   again it is bit-identical to `downmix_by_mask`), falling back to the dry block on a non-finite result.
-  Where the TV or a receiver decodes the sound (every native AAC/AC3/EAC3/Opus/DTS track, passthrough, the
-  URI engine) no sample passes through the app: the demuxer publishes that as `FeedRaw::app_pcm_audio`
-  (`DemuxEffect::AppPcmAudio`, per open), `player::audio_mode_offered` reads it from the readout, and the
-  More menu lists no Audio mode row at all there; the saved mode is kept and has no effect.
+  A native AAC/AC3/EAC3/DTS/Opus track is decoded by the app too, but only while a mode is on and the
+  profile's "Decode for audio modes" (`AudioModeDecode`, default On) allows it, on the set's speakers or
+  Bluetooth (`devcaps::MODE_DECODED`, `MODE_DECODE_OUTPUTS`; `route::audio_mode_decode` is the rule, a pure
+  table over `route::ModeDecodeFacts`). The Load then declares the lossy decode's stereo 48 kHz PCM, so a
+  surround track is mixed down (Voice lifting its centre in that mix) and E-AC-3 Atmos objects are lost.
+  The Load fixes PCM or compressed audio for its session, so turning a mode on or off is a full reload at
+  the viewer's position (`player::sync_audio_mode_decode`, the speed change's one-shot reload). The Load
+  thread reads the sound output after the Load returns (`OpenStream::probe_sound_output`,
+  `FeedRaw::sound_output`); any output but the set's own (ARC, optical: a receiver may take the
+  bitstream) or no answer takes the decode back. The safety net: a mode-decode session whose audio lane
+  stays short beside a healthy video lane (`native_executor::mode_decode_short`, 1.5 s) or whose PCM
+  the pipeline did not take latches `FeedRaw::mode_decode_behind`, and the pump refuses the decode to
+  that title for the life of the process and reloads with the television decoding. Where the app
+  neither decodes nor could (the profile's decode Off, a receiver, the URI engine, a refused title) no
+  sample passes through it: `player::audio_mode_offered` reads `FeedRaw::app_pcm_audio` and the rule's
+  `available`, and the More menu lists no Audio mode row at all there; the saved mode is kept and has no
+  effect.
 - **A Load that declares `"audio":"PCM"` on one of LG's audio stacks has its audio fed later than the
   picture it belongs with, by an amount the stack decides; a set with no lead (`adecsink` on 2016/2017, not
   determined; Realtek; MStar; an unknown stack) gets none at all** (#1086, #1088, #1092, #1093; FLAC and every other app-decoded codec (a DTS the app decodes under the lossy gate

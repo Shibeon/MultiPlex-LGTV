@@ -82,7 +82,11 @@ impl PayloadFacts {
 
     pub fn capture(ps: &route::PlaybackSession) -> Self {
         Self {
-            pcm: route::stream_pcm(ps),
+            // The app's own decode (FLAC, ALAC, LPCM, a lossy row in force), else the lossy decode's
+            // shape when the track is decoded for the viewer's audio mode.
+            pcm: route::stream_pcm(ps).or_else(|| {
+                route::audio_mode_decode_for_feed_load(ps).then_some(Ok(route::PcmFormat::STEREO_48K))
+            }),
             max_raster: route::sink_max_raster(ps),
             fps: route::stream_fps(ps),
             dovi: route::stream_dovi(ps),
@@ -113,6 +117,12 @@ impl FeedOpenRequest {
         } else {
             route::stream_achannels(ps)
         };
+        // A decode for the viewer's audio mode (`route::audio_mode_decode`): the same answer the
+        // payload's PCM above took.
+        let mode_decode = route::audio_mode_decode_for_feed_load(ps);
+        if mode_decode {
+            plx_base::eventlog::log(&format!("route: {audio_codec} decoded in the app for the audio mode"));
+        }
         let source = plx_plex::plex::StreamUrl::parse(&url);
         let (video_bytes, audio_bytes) = super::aq_caps();
         let (video_lead_ms, audio_lead_ms) = super::feed_leads_ms();
@@ -132,7 +142,9 @@ impl FeedOpenRequest {
                 path: source.path,
                 video_codec: route::stream_vcodec(ps),
                 audio_codec,
-                pcm_is_lossy: route::stream_pcm_is_lossy(ps),
+                pcm_is_lossy: route::stream_pcm_is_lossy(ps) || mode_decode,
+                mode_decode,
+                probe_sound_output: probe_sound_output(ps),
                 audio_channels,
                 feed_payload,
                 payload_options,
@@ -168,6 +180,18 @@ impl FeedOpenRequest {
     pub fn into_stream(self) -> plx_playback_contract::feed::OpenStream {
         self.stream
     }
+}
+
+/// **Whether this Load's thread reads the sound output** (`OpenStream::probe_sound_output`): the track
+/// is one the app could decode for an audio mode on this Load, the output aside, and either nothing
+/// has been read yet or a mode is on (an output that changed since is then seen at this Load). Not
+/// for a title the safety net took the decode from, nor with the profile's decode off. MAIN THREAD.
+fn probe_sound_output(ps: &route::PlaybackSession) -> bool {
+    use plx_playback_contract::feed::SoundOutput;
+    let facts = route::ModeDecodeFacts { feed: true, output: SoundOutput::Unknown, ..route::mode_decode_facts(ps) };
+    facts.available()
+        && (route::mode_decode_facts(ps).output == SoundOutput::Unknown
+            || route::audio_mode() != plx_plex::plex::session::AudioMode::Off)
 }
 
 /// Whether the `dvnonode` diagnostic holds back the `DolbyHdrInfo` node of a Load that declares one

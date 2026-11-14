@@ -36,7 +36,7 @@
 //! frozen top-level keys: no pick in this module ever writes one.
 use super::plan::{supported_quality, Quality, QUALITY_LADDER};
 use plx_plex::plex::session::{
-    MarkerSkipMode, IntroSkipPref, CreditsSkipPref, DolbyVisionMode, DolbyVisionModePref, InstantDpadSeeking, InstantDpadSeekingPref, UriEngine, UriEnginePref, AudioMode, AudioModePref, effective, own_prefs, persist_profile_pref, AudioEnhancementsPref, DeckPress, DeckPressPref, DirectPlayMode,
+    MarkerSkipMode, IntroSkipPref, CreditsSkipPref, DolbyVisionMode, DolbyVisionModePref, InstantDpadSeeking, InstantDpadSeekingPref, UriEngine, UriEnginePref, AudioMode, AudioModePref, AudioModeDecode, AudioModeDecodePref, effective, own_prefs, persist_profile_pref, AudioEnhancementsPref, DeckPress, DeckPressPref, DirectPlayMode,
     DirectPlayModePref, HdrOverlayBrightness, HdrOverlayBrightnessPref, NextEpisodeMode, NextEpisodeModePref, Preferences, ProfilePrefs, ProfilePrefsRecord,
     ProfileSetting, ProfileWrite, QualityPref, Row, Setting, SkipInterval, SkipIntervalPref, SubtitlePosition,
     SubtitlePositionPref, SubtitleSize, SubtitleSizePref, SubtitleTone, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, UnderPosters,
@@ -143,7 +143,7 @@ macro_rules! packed_by_index {
         }
     )*};
 }
-packed_by_index!(MarkerSkipMode = 1, DolbyVisionMode = 0, InstantDpadSeeking = 0, UriEngine = 0, AudioMode = 0, NextEpisodeMode = 0, SkipInterval = 1, DeckPress = 0, SubtitleSize = 1, SubtitlePosition = 0, SubtitleTone = 0, HdrOverlayBrightness = 1);
+packed_by_index!(MarkerSkipMode = 1, DolbyVisionMode = 0, InstantDpadSeeking = 0, UriEngine = 0, AudioMode = 0, AudioModeDecode = 0, NextEpisodeMode = 0, SkipInterval = 1, DeckPress = 0, SubtitleSize = 1, SubtitlePosition = 0, SubtitleTone = 0, HdrOverlayBrightness = 1);
 
 impl Packed for DirectPlayMode {
     const SEED: u16 = 0;
@@ -235,6 +235,7 @@ impl Packed for AudioEnhancements {
 live_cell!(pub(super) INSTANT_DPAD_SEEKING: InstantDpadSeeking, "instant D-pad seeking");
 live_cell!(pub(super) URI_ENGINE: UriEngine, "playback engine");
 live_cell!(pub(super) AUDIO_MODE: AudioMode, "audio mode");
+live_cell!(pub(super) AUDIO_MODE_DECODE: AudioModeDecode, "audio decode for a mode");
 live_cell!(pub(super) INTRO_SKIP: MarkerSkipMode, "intro skip");
 live_cell!(pub(super) CREDITS_SKIP: MarkerSkipMode, "credits skip");
 live_cell!(pub(super) DOLBY_VISION_MODE: DolbyVisionMode, "Dolby Vision mode");
@@ -338,6 +339,7 @@ live_setting!(DirectPlayModePref, DIRECT_PLAY_MODE, "direct play mode");
 live_setting!(InstantDpadSeekingPref, INSTANT_DPAD_SEEKING, "instant D-pad seeking");
 live_setting!(UriEnginePref, URI_ENGINE, "playback engine");
 live_setting!(AudioModePref, AUDIO_MODE, "audio mode");
+live_setting!(AudioModeDecodePref, AUDIO_MODE_DECODE, "audio decode for a mode");
 live_setting!(IntroSkipPref, INTRO_SKIP, "intro skip");
 live_setting!(CreditsSkipPref, CREDITS_SKIP, "credits skip");
 live_setting!(DolbyVisionModePref, DOLBY_VISION_MODE, "Dolby Vision mode");
@@ -404,6 +406,7 @@ pub const LIVE_ROWS: &[LiveRow] = &[
     LiveRow::of::<InstantDpadSeekingPref>(),
     LiveRow::of::<UriEnginePref>(),
     LiveRow::of::<AudioModePref>(),
+    LiveRow::of::<AudioModeDecodePref>(),
     LiveRow::of::<DolbyVisionModePref>(),
     LiveRow::of::<IntroSkipPref>(),
     LiveRow::of::<CreditsSkipPref>(),
@@ -794,6 +797,7 @@ choices! {
     InstantDpadSeeking => InstantDpadSeekingPref,
     UriEngine => UriEnginePref,
     AudioMode => AudioModePref,
+    AudioModeDecode => AudioModeDecodePref,
     DolbyVision => DolbyVisionModePref,
     IntroSkip => IntroSkipPref,
     CreditsSkip => CreditsSkipPref,
@@ -933,6 +937,10 @@ pub fn restore_audio_mode(mode: AudioMode) { restore_live::<AudioModePref>(mode)
 /// **Pick an audio mode: one optimistic operation, on the main thread** (see [`How::Optimistic`]): the
 /// viewer hears it while choosing. The player's More menu and Settings both write it here; `reply`
 /// (Settings) learns whether the write was durable.
+/// Whether the seated profile lets the app decode a compressed track while an audio mode is on
+/// (`AudioModeDecode`; the rule that reads it is [`super::audio_mode_decode`]).
+pub fn audio_mode_decode_choice() -> AudioModeDecode { AudioModeDecodePref::live() }
+pub fn restore_audio_mode_decode(choice: AudioModeDecode) { restore_live::<AudioModeDecodePref>(choice) }
 pub fn select_audio_mode(mode: AudioMode, reply: Option<Sender<bool>>) {
     choose::<AudioModePref>(mode, How::Optimistic(reply));
 }

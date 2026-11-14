@@ -5,7 +5,7 @@ mod marker_access;
 pub(crate) use marker_access::MarkerAccessRunner;
 use plx_media::route::{choose, Choice, How};
 use plx_plex::plex::account::{PreferenceError, PreferenceRequest};
-use plx_plex::plex::session::{IntroSkipPref, CreditsSkipPref, DolbyVisionModePref, InstantDpadSeekingPref, UriEnginePref, AudioModePref, DeckPressPref, DirectPlayModePref, HdrOverlayBrightnessPref, NextEpisodeModePref, QualityPref,
+use plx_plex::plex::session::{IntroSkipPref, CreditsSkipPref, DolbyVisionModePref, InstantDpadSeekingPref, UriEnginePref, AudioModePref, AudioModeDecodePref, DeckPressPref, DirectPlayModePref, HdrOverlayBrightnessPref, NextEpisodeModePref, QualityPref,
     SkipIntervalPref, SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, UnderPostersPref};
 use plx_screens::registry::{AccountPreferenceReply, PreferenceCmd};
 use std::sync::mpsc::Sender;
@@ -22,6 +22,7 @@ fn choose_setting(choice: Choice, reply: Sender<bool>) {
         Choice::InstantDpadSeeking(v) => choose::<InstantDpadSeekingPref>(v, How::settings::<InstantDpadSeekingPref>(reply)),
         Choice::UriEngine(v) => choose::<UriEnginePref>(v, How::settings::<UriEnginePref>(reply)),
         Choice::AudioMode(v) => choose::<AudioModePref>(v, How::settings::<AudioModePref>(reply)),
+        Choice::AudioModeDecode(v) => choose::<AudioModeDecodePref>(v, How::settings::<AudioModeDecodePref>(reply)),
         Choice::DolbyVision(v) => choose::<DolbyVisionModePref>(v, How::settings::<DolbyVisionModePref>(reply)),
         Choice::SkipInterval(v) => choose::<SkipIntervalPref>(v, How::settings::<SkipIntervalPref>(reply)),
         Choice::DeckPress(v) => choose::<DeckPressPref>(v, How::settings::<DeckPressPref>(reply)),

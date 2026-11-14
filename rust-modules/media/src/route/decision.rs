@@ -7386,6 +7386,87 @@ pub fn stream_pcm_is_lossy(ps: &PlaybackSession) -> bool {
     ps.attempt_caps().app_decodes_lossy_track(&ps.stream_acodec, channels, rate, forced_direct_play(ps))
 }
 
+/// **The facts the audio-mode decode rule reads** ([`audio_mode_decode`]), gathered from the session by
+/// [`mode_decode_facts`] so the rule itself is a table ([`ModeDecodeFacts::available`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ModeDecodeFacts {
+    /// The seated profile's `AudioModeDecode` (Settings > Playback).
+    pub decode: plx_plex::plex::session::AudioModeDecode,
+    /// The Feed engine plays it: the only one whose demuxer decodes audio.
+    pub feed: bool,
+    /// At 1x: a speed session's audio is the app's already (`SpeedDecoder`).
+    pub normal_rate: bool,
+    /// A whole file the demuxer reads (not a trailer preview, not segmented HLS: the speed's own rule,
+    /// `player::speed_offer`).
+    pub plain_source: bool,
+    /// The fed track's codec is one the app can decode for a mode (`devcaps::mode_decodes_codec`).
+    pub codec: bool,
+    /// The track is the app's already ([`stream_pcm`]: FLAC, ALAC, LPCM, a lossy row in force).
+    pub app_pcm: bool,
+    /// The last read of the sound output (`FeedRaw::sound_output`).
+    pub output: plx_playback_contract::feed::SoundOutput,
+    /// The safety net took the decode away from this title (`PlayerReadout::mode_decode_refused`).
+    pub refused: bool,
+}
+
+impl ModeDecodeFacts {
+    /// **Whether the app could decode this track for an audio mode**, whatever the mode is: the
+    /// More menu offers the mode on it ([`crate::player::audio_mode_offered`]) and, with a mode on, the
+    /// Load declares PCM for it ([`audio_mode_decode`]). An output not read yet is no refusal: the
+    /// first decode's Load thread reads it, and an output that is not the set's own takes the decode
+    /// back at once (`player::sync_audio_mode_decode`). PURE.
+    pub fn available(&self) -> bool {
+        self.decode == plx_plex::plex::session::AudioModeDecode::On
+            && self.feed
+            && self.normal_rate
+            && self.plain_source
+            && self.codec
+            && !self.app_pcm
+            && self.output != plx_playback_contract::feed::SoundOutput::NotLocal
+            && !self.refused
+    }
+
+    /// Whether, with the viewer's `mode`, the Load decodes this track in the app. PURE.
+    pub fn wanted(&self, mode: AudioMode) -> bool {
+        mode != AudioMode::Off && self.available()
+    }
+}
+
+/// The session's [`ModeDecodeFacts`], with the seated profile's `AudioModeDecode`. MAIN THREAD.
+pub fn mode_decode_facts(ps: &PlaybackSession) -> ModeDecodeFacts {
+    ModeDecodeFacts {
+        decode: audio_mode_decode_choice(),
+        feed: ps.attempt_view().backend() == Some(crate::player::attempt_view::Backend::Feed),
+        normal_rate: ps.readout().play_rate_permille() == plx_playback_contract::RATE_NORMAL,
+        plain_source: !is_preview(ps) && !is_segmented_hls(ps),
+        codec: plx_platform::devcaps::mode_decodes_codec(&ps.stream_acodec),
+        app_pcm: stream_pcm(ps).is_some(),
+        output: ps.readout().raw().sound_output,
+        refused: ps.readout().mode_decode_refused(ps.cur_sid, &ps.cur_rk),
+    }
+}
+
+/// **Whether this session's Load decodes its compressed track in the app for the viewer's audio
+/// mode** (the seated profile's mode and `AudioModeDecode`; [`ModeDecodeFacts::wanted`]). The Load
+/// then declares the lossy decode's PCM, stereo 48 kHz ([`PcmFormat::STEREO_48K`]): a surround track
+/// is mixed down (the PCM input names nothing wider, `devcaps::PCM_MAX_CHANNELS`), Voice lifting its
+/// centre in that mix, and an E-AC-3 track's Atmos objects are not rendered. MAIN THREAD.
+pub fn audio_mode_decode(ps: &PlaybackSession) -> bool {
+    mode_decode_facts(ps).wanted(audio_mode())
+}
+
+/// Test-only: the codec the session's Load feeds, as a plan would install it.
+#[cfg(any(test, feature = "test-support"))]
+pub fn set_stream_acodec_for_test(ps: &mut PlaybackSession, codec: &str) {
+    ps.stream_acodec = codec.into();
+}
+
+/// [`audio_mode_decode`] for the Feed Load being captured (`player::feed_open`), before its attempt is
+/// the one on screen: the Feed is the engine by construction there. MAIN THREAD.
+pub fn audio_mode_decode_for_feed_load(ps: &PlaybackSession) -> bool {
+    ModeDecodeFacts { feed: true, ..mode_decode_facts(ps) }.wanted(audio_mode())
+}
+
 /// PURE half of [`stream_pcm`]: the carried track must be the same codec, with a stated rate and
 /// one or two channels. The rate is declared as `devcaps::pcm_load_rate` names it: a table rate is
 /// itself (bit-exact, `bits` 16 iff PMS says `bitDepth` is 1..=16, else 32), and every rate above the
@@ -7410,6 +7491,64 @@ pub(crate) fn pcm_format_of(audio: Option<&CarriedAudio>, codec: &str) -> Result
     let source_rate = a.sample_rate as u32;
     let bits = if source_rate != sample_rate || !(1..=16).contains(&a.bit_depth) { 32 } else { 16 };
     Ok(PcmFormat { sample_rate, bits, channels: a.channels as u32, source_rate })
+}
+
+#[cfg(test)]
+mod mode_decode_rule_tests {
+    use super::*;
+    use plx_playback_contract::feed::SoundOutput;
+    use plx_plex::plex::session::AudioModeDecode;
+
+    fn facts() -> ModeDecodeFacts {
+        ModeDecodeFacts {
+            decode: AudioModeDecode::On, feed: true, normal_rate: true, plain_source: true, codec: true,
+            app_pcm: false, output: SoundOutput::Local, refused: false,
+        }
+    }
+
+    /// **The decision table**: mode × codec × output (a receiver may take the bitstream) × the profile's
+    /// choice × engine, and the rest of the rule. The app decodes for the mode only with a mode on, the
+    /// choice On, the Feed at 1x on a whole file, a codec it can decode that is not already its own,
+    /// the set's own output (or one not read yet), and no safety-net refusal on the title. "Available"
+    /// is the same rule without the mode: what the More menu offers the mode on.
+    #[test]
+    fn the_app_decodes_for_a_mode_only_where_every_fact_allows_it() {
+        for mode in AudioMode::LADDER {
+            for codec in [true, false] {
+                for output in [SoundOutput::Unknown, SoundOutput::Local, SoundOutput::NotLocal] {
+                    for decode in AudioModeDecode::LADDER {
+                        for feed in [true, false] {
+                            let f = ModeDecodeFacts { codec, output, decode, feed, ..facts() };
+                            let available = codec && output != SoundOutput::NotLocal
+                                && decode == AudioModeDecode::On && feed;
+                            assert_eq!(f.available(), available, "{f:?}");
+                            assert_eq!(f.wanted(mode), available && mode != AudioMode::Off, "{mode:?} {f:?}");
+                        }
+                    }
+                }
+            }
+        }
+        for (what, f) in [
+            ("a speed session decodes its own audio", ModeDecodeFacts { normal_rate: false, ..facts() }),
+            ("a trailer or segmented HLS is not a whole file", ModeDecodeFacts { plain_source: false, ..facts() }),
+            ("FLAC is the app's already", ModeDecodeFacts { app_pcm: true, ..facts() }),
+            ("the safety net refused this title", ModeDecodeFacts { refused: true, ..facts() }),
+        ] {
+            assert!(!f.available() && !f.wanted(AudioMode::Night) && !f.wanted(AudioMode::Voice), "{what}");
+        }
+        assert!(facts().wanted(AudioMode::Night) && facts().wanted(AudioMode::Voice));
+        assert!(!facts().wanted(AudioMode::Off), "Off never decodes: the television keeps its bitstream");
+    }
+
+    /// The session's facts: an idle session plays nothing the rule could decode, and the profile's
+    /// choice and the readout's output reach the facts as they are.
+    #[test]
+    fn the_session_facts_read_the_codec_engine_and_output() {
+        let ps = PlaybackSession::IDLE;
+        let f = mode_decode_facts(&ps);
+        assert!(!f.feed && !f.codec && !f.refused && f.output == SoundOutput::Unknown && f.normal_rate);
+        assert!(!audio_mode_decode(&ps) && !audio_mode_decode_for_feed_load(&ps), "nothing to decode");
+    }
 }
 
 #[cfg(test)]

@@ -221,7 +221,32 @@ pub fn resolve_on_load_thread(plan: PcmLead) -> Option<i64> {
     if let Some(line) = resolved.log_line() {
         plx_base::eventlog::log(&line);
     }
+    // The read the lead made answers a pending probe too: one bus call per Load at most.
+    note_sound_output(resolved.output.as_deref());
     Some(resolved.ns)
+}
+
+/// Settle a pending sound-output probe (`OpenStream::probe_sound_output`) with the answer `output`
+/// of a read already made (`None`: no answer). Nothing when no probe is pending.
+fn note_sound_output(output: Option<&str>) {
+    use std::sync::atomic::Ordering;
+    if !crate::shared::FEED_SHARED.sound_output_probe.swap(false, Ordering::AcqRel) {
+        return;
+    }
+    let verdict = plx_playback_contract::feed::SoundOutput::of_read(output, plx_platform::devcaps::mode_decode_output_ok);
+    crate::shared::FEED_SHARED.sound_output.store(verdict.code(), Ordering::Release);
+    plx_base::eventlog::log(&format!(
+        "audio mode: sound output {} -> {verdict:?} for a decode in the app", output.unwrap_or("unreadable")
+    ));
+}
+
+/// After the Load returned, on its Load thread: read the sound output for a probe the lead's own
+/// read did not already answer. Blocks for one bus call (`tv::sound::output`), off the frame thread
+/// and after the start, so the picture does not wait for it.
+pub fn probe_sound_output_after_load() {
+    if crate::shared::FEED_SHARED.sound_output_probe.load(std::sync::atomic::Ordering::Acquire) {
+        note_sound_output(plx_platform::tv::sound::output().as_deref());
+    }
 }
 
 /// The plan for a Load that declared `audio` on a set whose audio stack is `stack`, given the dev

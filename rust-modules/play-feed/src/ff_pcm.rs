@@ -1,6 +1,8 @@
 //! Audio decoded in the app and fed as PCM: the lossless FLAC, ALAC and integer LPCM, and DTS, MP3, Vorbis
 //! and TrueHD, the lossy entries, converted to stereo 48 kHz S16 and only where the attempt decodes the track in
-//! the app (`Caps::app_decodes_lossy_track`; `devcaps::APP_DECODED` is the set). One converter, [`PcmConverter`],
+//! the app (`Caps::app_decodes_lossy_track`; `devcaps::APP_DECODED` is the set); and AAC, AC-3, E-AC-3 and
+//! Opus (`devcaps::MODE_DECODED`), the same lossy shape, only while the viewer's audio mode asks for it
+//! (`route::audio_mode_decode`). One converter, [`PcmConverter`],
 //! serves both: lossy it downmixes, resamples to 48 kHz and writes S16; lossless above the PCM input's table it
 //! resamples to the table's top and writes S32.
 //!
