@@ -5648,6 +5648,8 @@ mod screen_input_publication_tests {
         grant::reset_for_test();
         let mut bridge = Bridge::for_test(|| 0);
         assert!(!bridge.capture_screen_inputs());
+        // The build fact the Privacy & data page reads: captured, never resolved by the screen.
+        assert_eq!(bridge.views().inputs.telemetry_absent, !plx_telemetry::telemetry::sender::configured());
         let stored = bridge.screen_inputs.session.clone();
         let grants = bridge.screen_inputs.grants.clone();
         let profile = bridge.screen_inputs.profile.clone();
@@ -5679,6 +5681,7 @@ mod screen_input_publication_tests {
         assert!(!bridge.views().inputs.settled);
         assert!(bridge.views().inputs.profile.user.is_none());
         assert!(bridge.views().inputs.grants.offers.is_empty());
+        assert!(!bridge.views().inputs.telemetry_absent, "a controlled host captures no build fact: every row is shown");
     }
 }
 

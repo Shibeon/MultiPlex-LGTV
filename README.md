@@ -16,7 +16,8 @@ with this app here, not to the original project.
   installs beside PlxNative rather than replacing it.
 - The device name Plex sees: "MultiPlex (LG TV)".
 - No optional reporting: this fork's builds carry no crash-report or analytics destination, so
-  nothing is sent and the first-run question about reports is not asked.
+  nothing is sent, the first-run question about reports is not asked, and Settings → Privacy &
+  data lists only the privacy policy and Delete all local data.
 
 MultiPlex features (themes, My list, Watch together, ...) are being brought over step by step.
 

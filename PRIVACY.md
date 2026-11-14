@@ -146,7 +146,7 @@ what tells a problem that hit many people apart from one television that hit it 
 account, your television or anything about you, and it is never sent with product analytics.
 Settings shows it while crash reports are on. Turning crash reports off, or signing out, deletes
 the local identifier; enabling them later creates a new one. Reports already sent keep the old
-identifier, so copy it down first if you intend to ask for their deletion.
+identifier.
 
 While crash reports are on, PlxNative also sends one small **session record** for each stretch of
 use, even when nothing crashed, so that crash-free sessions can be counted per release: the start

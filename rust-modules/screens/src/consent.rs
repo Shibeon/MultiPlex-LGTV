@@ -45,7 +45,6 @@ use super::registry::{alert_index, band_index, word, AppFx, ConsentCmd, LoopReq,
 
 // ---- the words -------------------------------------------------------------------------------
 
-use super::legal::CONTACT_EMAIL;
 
 /// Should the app put the sign-in's question on screen?
 ///
@@ -1518,8 +1517,8 @@ fn preview() -> String {
 /// against another, which is why the guard is a test
 /// (`both_privacy_policy_doors_open_the_same_document`) rather than a comment asking the next
 /// editor to change two places.
-/// The Analytics ID document — the identifier itself, what it is attached to, and the one process
-/// that can act on a deletion request.
+/// The Analytics ID document — the identifier itself, what it is attached to, and how it ends. It
+/// names no contact: this fork publishes no address for privacy requests.
 ///
 /// **It reads the STORED consent rather than the draft.** The draft is what the toggles currently
 /// show, which may be an answer the person has not committed yet; the identifier that has actually
@@ -1531,8 +1530,8 @@ fn preview() -> String {
 /// ever turned back on, so "off" really does mean the old handle is gone.
 fn analytics_id_document() -> String {
     match consent::current().and_then(|c| c.install_id).as_deref() {
-        Some(id) => plx_platform::i18n::msg::settings_consent_analytics_present(CONTACT_EMAIL, id),
-        None => plx_platform::i18n::msg::settings_consent_analytics_absent(CONTACT_EMAIL),
+        Some(id) => plx_platform::i18n::msg::settings_consent_analytics_present(id),
+        None => plx_platform::i18n::msg::settings_consent_analytics_absent().to_string(),
     }
 }
 
@@ -1548,8 +1547,8 @@ fn analytics_id_document() -> String {
 /// owed the reason.
 fn errors_id_document() -> String {
     match consent::current().and_then(|c| c.errors_id).as_deref() {
-        Some(id) => plx_platform::i18n::msg::settings_consent_errors_present(CONTACT_EMAIL, id),
-        None => plx_platform::i18n::msg::settings_consent_errors_absent(CONTACT_EMAIL),
+        Some(id) => plx_platform::i18n::msg::settings_consent_errors_present(id),
+        None => plx_platform::i18n::msg::settings_consent_errors_absent().to_string(),
     }
 }
 

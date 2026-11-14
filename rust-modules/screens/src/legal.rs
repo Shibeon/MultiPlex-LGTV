@@ -24,11 +24,6 @@ use super::registry::word;
 
 
 
-/// **The one contact address the application prints**, on the Privacy & data page's two
-/// identifier documents only (`screens::consent` imports it); no Legal document names it.
-/// `every_document_prints_only_the_one_contact_address` scans the documents for stray `@`s.
-pub const CONTACT_EMAIL: &str = "support@plxnative.com";
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Page {
     Privacy,
@@ -600,25 +595,14 @@ mod tests {
         }
     }
 
-    /// **No document may print an address other than [`CONTACT_EMAIL`].** Written against the
-    /// personal address these pages used to carry: a support address that reaches only some of
-    /// the screens is worse than none, because the reader cannot tell which one is current. The
-    /// scan is for `@` rather than for the old address, so the NEXT stray address fails too.
+    /// **No document prints an e-mail address.** This fork publishes no contact address (the
+    /// upstream's was removed); a security report goes through GitHub Security Advisories, which
+    /// the Security contact page names. The scan is for `@` rather than for any one address, so
+    /// a stray address of any kind fails.
     #[test]
-    fn every_document_prints_only_the_one_contact_address() {
+    fn no_document_prints_an_email_address() {
         for page in Page::ALL {
-            let local_len = CONTACT_EMAIL.find('@').expect("CONTACT_EMAIL has a local part");
-            for (i, _) in page.body().match_indices('@') {
-                let tail = i
-                    .checked_sub(local_len)
-                    .map(|start| &page.body()[start..])
-                    .unwrap_or("");
-                assert!(
-                    tail.starts_with(CONTACT_EMAIL),
-                    "{:?} prints an address that is not CONTACT_EMAIL",
-                    page.title()
-                );
-            }
+            assert!(!page.body().contains('@'), "{:?} prints an address", page.title());
         }
     }
 

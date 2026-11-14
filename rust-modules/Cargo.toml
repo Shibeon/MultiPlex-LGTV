@@ -278,9 +278,9 @@ plx_screens = { path = "screens" }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 # raw socket/libc FFI for the stream module (correct constants + struct layouts)
 libc = "0.2"
-# XXH3-64 of every written frame of the demo-video dump (`src/dev/framedump.rs`, the `frames.tsv`
-# column `tools/site_video.py` reads). Optional, and pulled by `hostsim` alone: no television or
-# shipping build compiles it.
+# XXH3-64 of every written frame of the frame-dump simulator (`src/dev/framedump.rs`'s `frames.tsv`
+# column), built by `make site-video-sim` for hud-simulator.yml. Optional, and pulled by `hostsim`
+# alone: no television or shipping build compiles it.
 xxhash-rust = { version = "0.8", default-features = false, features = ["xxh3"], optional = true }
 # JSON parsing for the pms module (replaces the C's hand-rolled string scrape)
 # std exposes the writer API used to bound manifest encoding before any filesystem write.
