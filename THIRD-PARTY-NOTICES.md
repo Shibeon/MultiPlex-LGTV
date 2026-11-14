@@ -188,6 +188,13 @@ The path data `M5 13l4 4L19 7` on a 24×24 grid is identical to Heroicons v1
 `optimized/outline/check.svg` (confirmed against upstream). *Modified*: stroke width 2 → 3,
 stroke colour set to white.
 
+**MultiPlex web app** — the `home`, `movie` and `tv` icons (`assets/icons/home.svg`,
+`movie.svg`, `tv.svg`), used by the top bar so this client matches the other MultiPlex clients.
+The path data is copied unchanged from the MultiPlex web app's icon set (`apps/web/src/ui.tsx`),
+which is distributed under the **MIT** licence (`licenses/MIT.txt`). Where that path data
+originally comes from was **not established**. *Modified*: wrapped as standalone SVG files with a
+white fill; the arc flags of `tv.svg` were written out in full for the SVG parser.
+
 The remaining icons in the application are original work by the PlxNative author. See section 4
 for a trademark note that applies to some of them.
 

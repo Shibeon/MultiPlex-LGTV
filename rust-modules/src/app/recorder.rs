@@ -280,7 +280,10 @@ fn session_app_fingerprint_probe_only() {
     ] {
         let header: Value = serde_json::from_str(manifest).unwrap();
         assert_eq!(header["schema"].as_u64(), Some(3));
-        assert_eq!(header["state_fp"].as_u64(), Some(fp_prior));
+        // A fixture is on the prior profile or on the V6 one a current recording carries
+        // (MultiPlex re-recorded its anchors after its own behaviour changes); replay reads both.
+        let fp = header["state_fp"].as_u64();
+        assert!(fp == Some(fp_prior) || fp == Some(prospective_fp_v6), "{fp:?}");
     }
 }
 
@@ -2810,8 +2813,10 @@ mod fixture_preflight_tests {
             let dir = root.join(name);
             let manifest = std::fs::read_to_string(dir.join("manifest.json")).unwrap();
             let segment = std::fs::read(dir.join("rec-0000.jsonl")).unwrap();
-            let mut recording = Recording::parse(&manifest, &[segment.as_slice()], FP_PRIOR).unwrap();
-            let initial = super::super::bootstrap::Initial::decode(recording.header.init_data.clone(), recording.header.init_hash)
+            let fingerprint = serde_json::from_str::<Value>(&manifest).unwrap()["state_fp"].as_u64().unwrap();
+            let mut recording = Recording::parse(&manifest, &[segment.as_slice()], fingerprint).unwrap();
+            let initial = super::super::bootstrap::Initial::decode_profile(recording.header.init_data.clone(),
+                recording.header.init_hash, fingerprint)
                 .expect("recorded initial state must retain its canonical hash");
             // Host unit tests omit the simulator feature; this check covers the wire preflight.
             recording.header.features = features();

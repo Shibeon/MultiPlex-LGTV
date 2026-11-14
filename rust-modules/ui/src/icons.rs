@@ -250,6 +250,13 @@ pub enum Icon {
     /// ("= Date added v"); it says "ordered by", not "filter". The Design System's own `sort.svg`
     /// byte for byte (`M4 7L20 7M7 12L17 12M10 17L14 17`, stroke 2.2, round caps), so it has no third-party entry.
     Sort,
+    /// The house — the top bar's Home destination, beside its label. MultiPlex's own mark (the web
+    /// app's `home` icon, same path), so the native bar and the other MultiPlex clients read alike.
+    Home,
+    /// The film strip — the top bar's Movies destination. MultiPlex's `movie` icon.
+    Movie,
+    /// The television set — the top bar's TV Shows destination. MultiPlex's `tv` icon.
+    Tv,
 }
 
 /// **Where a mark's INK sits inside its 24-unit viewBox**, as `(left, right)` fractions — and
@@ -370,6 +377,9 @@ fn src(id: Icon) -> &'static str {
         Icon::ServerSlash => include_str!("../../../assets/icons/server-slash.svg"),
         Icon::CircleSlash => include_str!("../../../assets/icons/circle-slash.svg"),
         Icon::Sort => include_str!("../../../assets/icons/sort.svg"),
+        Icon::Home => include_str!("../../../assets/icons/home.svg"),
+        Icon::Movie => include_str!("../../../assets/icons/movie.svg"),
+        Icon::Tv => include_str!("../../../assets/icons/tv.svg"),
     }
 }
 

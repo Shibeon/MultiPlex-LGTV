@@ -745,8 +745,8 @@ fn owned_search_walks_the_shared_strip_to_the_chip_and_back_to_the_field() {
         "◀ walks the pills to the profile chip and stops there rather than wrapping");
 
     frame(&mut d, &mut rig, AppArg::Search, tick(10), script_key(Key::Right, tick(10)));
-    assert_eq!(d.focus().map(|key| key.elem), Some(base),
-        "▶ walks back onto the FIRST pill, the one it left");
+    assert_eq!(d.focus().map(|key| key.elem), Some(base + 3),
+        "▶ walks back onto the FIRST pill — Search, MultiPlex's leading pill — the one it left");
 
     frame(&mut d, &mut rig, AppArg::Search, tick(11), script_key(Key::Down, tick(11)));
     assert_eq!(d.focus(), Some(field), "▼ off the bar lands on the field, whatever pill it was on");
@@ -1044,17 +1044,15 @@ fn owned_search_content_probe_reports_zone_row_col_pill_and_card_as_focus_moves(
     assert!(back_on_field.contains(" row=-1 col=-1 "), "the field carries no shelf position: {back_on_field}");
 
     // Up again, from the field itself, reaches the shared strip's Search pill — the same
-    // transition `tests/keytable.json`'s Search "up" row records. With no library tabs seeded
-    // here the strip holds only Home (index 0), Watchlist (index 1) and Search (index 2), so the
-    // pill lands at 2 rather than the real 5-slot device's 4 — the field is a POSITION, not a fixed constant,
-    // and this asserts it moved off -1 onto the strip's own answer rather than hardcoding a
-    // count this test's fixture does not seed.
+    // transition `tests/keytable.json`'s Search "up" row records. The strip leads with Search
+    // (index 0), then Home and Watchlist (no library tabs seeded here); the field is a POSITION,
+    // not a fixed constant, and this asserts it moved off -1 onto the strip's own answer.
     frame(&mut d, &mut rig, AppArg::Search, tick(20), script_key(Key::Up, tick(20)));
     for i in 21..30 { frame(&mut d, &mut rig, AppArg::Search, tick(i), vec![]); }
     let on_strip = content_probe(&d, &rig);
     assert!(on_strip.contains("zone=Strip"), "Up from the field must reach the shared strip: {on_strip}");
-    assert!(on_strip.contains(" row=-1 col=-1 recent=-1 pill=2 card=0 "),
-        "the Search pill (Home, Watchlist, Search — no library tabs seeded here) sits at index 2, off this screen's own groups: {on_strip}");
+    assert!(on_strip.contains(" row=-1 col=-1 recent=-1 pill=0 card=0 "),
+        "the Search pill (Search, Home, Watchlist — no library tabs seeded here) sits at index 0, off this screen's own groups: {on_strip}");
 }
 
 /// OK on a Collections-shelf tile asks for the COLLECTION page with the hit's identity, and the

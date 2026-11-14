@@ -41,7 +41,7 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             .iter()
             .map(|member| member.elem)
             .collect::<Vec<_>>(),
-        vec![base + 4, base, base + 1, base + 2, plx_ui::widgets::TAB_KEY_WATCHLIST, base + 3]
+        vec![base + 4, base + 3, base, base + 1, base + 2, plx_ui::widgets::TAB_KEY_WATCHLIST]
     );
     let seat = |d: &mut Dispatcher<AppHost>, elem| {
         d.emit(
@@ -56,7 +56,7 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
     };
     seat(&mut d, base);
     frame(&mut d, &mut rig, AppArg::Library, tick(80), vec![]);
-    for i in 81..86 {
+    for i in 81..85 {
         frame(
             &mut d,
             &mut rig,
@@ -64,19 +64,29 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             tick(i),
             script_key(Key::Left, tick(i)),
         );
+        // MultiPlex's strip leads with Search, so the first ◀ off Home lands on it.
+        let expected = if i == 81 { base + 3 } else { base + 4 };
         assert_eq!(
             d.focus(),
             Some(FocusKey {
                 entry,
-                elem: base + 4
+                elem: expected
             }),
-            "the profile chip is the left end, not a wrapping stop"
+            "Search leads the pills and the profile chip is the left end, not a wrapping stop"
         );
     }
     assert!(
         content_probe(&d, &rig).contains("pill=-1"),
         "the profile chip is not a remembered pill"
     );
+    frame(
+        &mut d,
+        &mut rig,
+        AppArg::Library,
+        tick(85),
+        script_key(Key::Right, tick(85)),
+    );
+    assert_eq!(d.focus(), Some(FocusKey { entry, elem: base + 3 }));
     frame(
         &mut d,
         &mut rig,
@@ -126,7 +136,7 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             .strip
             .iter()
             .position(|member| member.elem == search.elem),
-        Some(5),
+        Some(1),
         "Search's displayed slot is not its stable control identity"
     );
     rig.take_library_reqs();

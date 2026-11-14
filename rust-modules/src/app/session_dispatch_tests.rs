@@ -22,7 +22,7 @@ fn browse_tab_generation_is_owned_and_chrome_never_replays_a_stale_shape() {
     rig.capture_views(&mut pages);
     rig.capture_chrome(&mut pages);
     let before = rig.chrome.labels();
-    assert!(before.faces.iter().any(|face| matches!(face, plx_ui::widgets::TabFace::Label(l) if l == "TV Shows")));
+    assert!(before.faces.iter().any(|face| matches!(face, plx_ui::widgets::TabFace::Label(l) | plx_ui::widgets::TabFace::IconLabel(_, l) if l == "TV Shows")));
     let before_gen = before.generation;
 
     rig.stores.browse.borrow_mut().run_for_test(
@@ -31,14 +31,14 @@ fn browse_tab_generation_is_owned_and_chrome_never_replays_a_stale_shape() {
     rig.capture_chrome(&mut pages);
     let changed = rig.chrome.labels();
     assert!(changed.generation > before_gen);
-    assert!(!changed.faces.iter().any(|face| matches!(face, plx_ui::widgets::TabFace::Label(l) if l == "TV Shows")));
+    assert!(!changed.faces.iter().any(|face| matches!(face, plx_ui::widgets::TabFace::Label(l) | plx_ui::widgets::TabFace::IconLabel(_, l) if l == "TV Shows")));
     let changed_gen = changed.generation;
 
     rig.capture_views(&mut pages);
     rig.capture_chrome(&mut pages);
     assert_eq!(rig.chrome.labels().generation, changed_gen,
         "capturing again must not republish the owner's old tab generation");
-    assert!(!rig.chrome.labels().faces.iter().any(|face| matches!(face, plx_ui::widgets::TabFace::Label(l) if l == "TV Shows")));
+    assert!(!rig.chrome.labels().faces.iter().any(|face| matches!(face, plx_ui::widgets::TabFace::Label(l) | plx_ui::widgets::TabFace::IconLabel(_, l) if l == "TV Shows")));
     plx_plex::plex::reset_servers_for_test();
 }
 

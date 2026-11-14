@@ -385,10 +385,13 @@ fn first_run_consent_over_the_picker_does_not_flip_mounts_every_frame() {
         plx_telemetry::telemetry::consent::install(c);
     }
     // The first-run consent surface is a Settings-family screen: its `Screen::name()` is "settings".
+    // A build with no reporting destination (MultiPlex's, `input::maybe_ask_consent`) never asks,
+    // so it mounts the consent surface zero times; either way it mounts it at most once.
+    let asks = usize::from(plx_telemetry::telemetry::sender::configured());
     let named = |w: &str| mounts.iter().filter(|(_, n)| *n == w).count();
     assert_eq!(
         (named("profiles"), named("settings"), unmounts),
-        (1, 1, 0),
+        (1, asks, 0),
         "(frame, screen) mounts {mounts:?}; {unmounts} unmounts; coldopen lines {cold:?}",
     );
     // The perpetual dip is invisible to the mount count above (the redundant `Root` used to keep

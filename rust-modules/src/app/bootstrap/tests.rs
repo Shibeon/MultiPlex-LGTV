@@ -200,8 +200,10 @@ fn committed_replay_initials_remain_canonical_and_hash_bound() {
         let manifest: serde_json::Value = serde_json::from_str(manifest).unwrap();
         let value = manifest["init"]["data"].clone();
         let expected_hash = manifest["init"]["hash"].as_u64().unwrap();
-        Initial::from_value(value.clone()).unwrap_or_else(|error| panic!("{name}: {error}"));
-        let decoded = Initial::decode(value, expected_hash)
+        // A fixture names its own profile: the prior flat session, or the V6 codec envelope a
+        // current recording carries. Replay decodes either through `decode_profile`.
+        let fingerprint = manifest["state_fp"].as_u64().unwrap();
+        let decoded = Initial::decode_profile(value, expected_hash, fingerprint)
             .unwrap_or_else(|error| panic!("{name}: {error}"));
         assert_eq!(decoded.hash(), expected_hash, "{name}");
     }

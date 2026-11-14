@@ -15,18 +15,17 @@ pub(crate) enum Pill {
     Search,
 }
 
-/// The strip's destination keys in strip order: Home, one key per type pill, the Watchlist
-/// bookmark, Search. The one
+/// The strip's destination keys in strip order — MultiPlex's: Search first, then Home, one key
+/// per type pill, the Watchlist. The one
 /// place that order is written; `refresh` publishes it and the pill maps below read it, so no
 /// map assumes which index Search holds.
 fn strip_keys(directory: DirectoryView<'_>) -> Vec<u32> {
-    let mut keys = vec![widgets::TAB_KEY_HOME];
+    let mut keys = vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME];
     keys.extend((0..directory.tab_count()).filter_map(|i| directory.tab_kind(i)).map(|kind| match kind {
         SecKind::Movie => widgets::TAB_KEY_MOVIES,
         SecKind::Show => widgets::TAB_KEY_SHOWS,
     }));
     keys.push(widgets::TAB_KEY_WATCHLIST);
-    keys.push(widgets::TAB_KEY_SEARCH);
     keys
 }
 
@@ -114,10 +113,10 @@ impl ChromeSnapshot {
         if strip_changed {
             self.keys = strip_keys(directory);
             self.faces = self.keys.iter().map(|&key| match key {
-                widgets::TAB_KEY_HOME => TabFace::Label(plx_platform::i18n::msg::browse_chrome_home().into()),
-                widgets::TAB_KEY_MOVIES => TabFace::Label(plx_platform::i18n::msg::browse_kind_movies().into()),
-                widgets::TAB_KEY_SHOWS => TabFace::Label(plx_platform::i18n::msg::browse_kind_tv_shows().into()),
-                widgets::TAB_KEY_WATCHLIST => TabFace::Icon(Icon::Bookmark),
+                widgets::TAB_KEY_HOME => TabFace::IconLabel(Icon::Home, plx_platform::i18n::msg::browse_chrome_home().into()),
+                widgets::TAB_KEY_MOVIES => TabFace::IconLabel(Icon::Movie, plx_platform::i18n::msg::browse_kind_movies().into()),
+                widgets::TAB_KEY_SHOWS => TabFace::IconLabel(Icon::Tv, plx_platform::i18n::msg::browse_kind_tv_shows().into()),
+                widgets::TAB_KEY_WATCHLIST => TabFace::IconLabel(Icon::Bookmark, plx_platform::i18n::msg::watchlist_page_title().into()),
                 _ => TabFace::Icon(Icon::Search),
             }).collect();
             self.widths = widgets::tab_widths(&self.faces, measure);
@@ -310,21 +309,21 @@ mod tests {
             profile_generation: Some(plx_plex::plex::session::current_gen()), ..Default::default()
         };
         snapshot.refresh(&plx_ui::fixture::FixtureMeasure, directory.view());
-        assert_eq!(snapshot.keys, vec![widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
-            widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_SEARCH]);
+        assert_eq!(snapshot.keys, vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
+            widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST]);
         let words: Vec<&str> = snapshot.faces.iter().filter_map(|face| match face {
-            TabFace::Label(word) => Some(word.as_str()),
+            TabFace::Label(word) | TabFace::IconLabel(_, word) => Some(word.as_str()),
             TabFace::Icon(_) => None,
         }).collect();
         assert_eq!(&words[..3], &["Home", "Movies", "TV Shows"]);
-        assert_eq!(snapshot.faces.last(), Some(&TabFace::Icon(Icon::Search)));
-        assert_eq!(snapshot.faces[snapshot.faces.len() - 2], TabFace::Icon(Icon::Bookmark),
-            "the Watchlist bookmark sits just before Search");
+        assert_eq!(snapshot.faces.first(), Some(&TabFace::Icon(Icon::Search)), "MultiPlex's bar leads with Search");
+        assert_eq!(snapshot.faces.last(), Some(&TabFace::IconLabel(Icon::Bookmark, "Watchlist".into())),
+            "the Watchlist closes the destinations, with its mark and its name");
         let mut members = Vec::new();
         snapshot.members(0, None, 0.0, &mut members);
         assert_eq!(members.iter().map(|member| member.elem).collect::<Vec<_>>(),
-            vec![widgets::TAB_KEY_CHIP, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
-                widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_SEARCH]);
+            vec![widgets::TAB_KEY_CHIP, widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
+                widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST]);
     }
 
     #[test]
@@ -363,12 +362,12 @@ mod tests {
     fn pill_maps_follow_the_published_strip_keys() {
         let directory = directory(&[SecKind::Movie, SecKind::Show]);
         let view = directory.view();
-        assert_eq!(strip_keys(view), vec![widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
-            widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_SEARCH]);
-        assert_eq!(pill_of(view, Pill::Watchlist), Some(3));
-        assert_eq!(pill_of(view, Pill::Search), Some(4));
-        assert_eq!(pill_at(view, 3), Pill::Watchlist);
-        assert_eq!(pill_at(view, 4), Pill::Search);
+        assert_eq!(strip_keys(view), vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME,
+            widgets::TAB_KEY_MOVIES, widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST]);
+        assert_eq!(pill_of(view, Pill::Search), Some(0));
+        assert_eq!(pill_of(view, Pill::Watchlist), Some(4));
+        assert_eq!(pill_at(view, 0), Pill::Search);
+        assert_eq!(pill_at(view, 4), Pill::Watchlist);
     }
 
     #[test]

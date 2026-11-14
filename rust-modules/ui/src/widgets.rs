@@ -6758,6 +6758,11 @@ const TAB_ICON_PILL_W: f32 = TAB_PILL_H;
 /// The mark inside it, at 1.15× the strip's own type rung (BODY 28 → 32) — the design system's
 /// `--btn-icon-ratio`, the same ratio every icon-and-label control in the app uses.
 const TAB_ICON_D: f32 = 32.0;
+/// The leading mark of a [`TabFace::IconLabel`] pill: the label's own BODY rung (28), so the glyph
+/// sits on the word's line at the word's weight rather than standing over it like a lone mark.
+const TAB_GLYPH_D: f32 = theme::size::BODY as f32;
+/// Mark → word air inside an icon-and-label pill (the design system's `--btn-icon-gap`, 10 px).
+const TAB_GLYPH_GAP: f32 = 10.0;
 /// The strip's control keys, by destination identity. A destination is looked up by its key, never
 /// by its position among the captured faces: Search is always `+3` and the profile chip `+4`,
 /// whatever type pills sit between Home and Search.
@@ -7704,6 +7709,10 @@ thread_local! {
 pub enum TabFace {
     Label(String),
     Icon(crate::icons::Icon),
+    /// A mark LEADING its word — the MultiPlex bar's destinations (house + Home, film + Movies,
+    /// set + TV Shows, bookmark + My list): one pill, the glyph at [`TAB_GLYPH_D`] then
+    /// [`TAB_GLYPH_GAP`] then the label, the pill's [`TAB_PILL_PAD`] on both outer ends.
+    IconLabel(crate::icons::Icon, String),
 }
 
 /// The shared strip's captured faces, in pill order (Home first, Search's mark last), as the
@@ -7720,11 +7729,12 @@ pub struct TabLabels<'a> {
 /// snapshot, so this renderer never reconstructs vocabulary from app globals.
 fn tab_metrics_from(faces: &[TabFace], measure: impl Fn(&std::ffi::CStr) -> f32) -> (Vec<CString>, Vec<f32>) {
     let words: Vec<CString> = faces.iter().map(|face| match face {
-        TabFace::Label(label) => CString::new(label.as_str()).unwrap_or_default(),
+        TabFace::Label(label) | TabFace::IconLabel(_, label) => CString::new(label.as_str()).unwrap_or_default(),
         TabFace::Icon(_) => CString::default(),
     }).collect();
     let widths = faces.iter().zip(&words).map(|(face, word)| match face {
         TabFace::Label(_) => measure(word) + 2.0 * TAB_PILL_PAD,
+        TabFace::IconLabel(..) => measure(word) + 2.0 * TAB_PILL_PAD + TAB_GLYPH_D + TAB_GLYPH_GAP,
         TabFace::Icon(_) => TAB_ICON_PILL_W,
     }).collect();
     (words, widths)
@@ -8130,6 +8140,22 @@ impl StripRender {
                     TabFace::Label(_) => {
                         paint_inked(cp, &ink, |fm, sm| {
                             TabPill::new(words[i].as_ptr(), theme::size::BODY, r)
+                                .inked(&ink, fm, sm)
+                                .ink_only()
+                                .draw(&env, p);
+                        });
+                    }
+                    // The mark leads at the pill's own pad; the word is laid in the rest of the
+                    // pill exactly as a plain label pill lays it (its pad on both ends), so the
+                    // word's centring rule is the one `TabPill` already owns.
+                    TabFace::IconLabel(icon, _) => {
+                        let d = TAB_GLYPH_D;
+                        let ir = Rect::new(r.x + TAB_PILL_PAD, r.y + (r.h - d) * 0.5, d, d);
+                        let lead = d + TAB_GLYPH_GAP;
+                        let wr = Rect::new(r.x + lead, r.y, r.w - lead, r.h);
+                        paint_inked(cp, &ink, |fm, sm| {
+                            crate::icons::draw(p, *icon, ir, TabPill::mixed_ink(fm, sm));
+                            TabPill::new(words[i].as_ptr(), theme::size::BODY, wr)
                                 .inked(&ink, fm, sm)
                                 .ink_only()
                                 .draw(&env, p);
