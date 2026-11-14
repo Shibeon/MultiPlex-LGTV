@@ -22,7 +22,7 @@ transfer with no television and no router in the room.
 
 # The exposed surface, deliberately tiny
 
-For the life of a session `lab.plxnative.com:<port>` is a port on the public internet that reaches
+For the life of a session `<lab host>:<port>` is a port on the public internet that reaches
 this process. The public surface is two authenticated TV routes: diagnostic upload and a held
 command poll. The only enqueue/status routes are loopback-only, so the session secret in the `.ipk`
 cannot be used by the television (or anybody at its network vantage point) to create commands.
@@ -31,7 +31,7 @@ subprocess. The whole server stays small enough to read end to end.
 
 # Why a self-signed certificate is the stronger choice here
 
-The alternative is a CA-issued certificate for `lab.plxnative.com`, which means ACME plumbing, a
+The alternative is a CA-issued certificate for the lab host name, which means ACME plumbing, a
 renewal story and a private key living on a laptop. Instead each session generates its own
 certificate and the app pins its public key (`CURLOPT_PINNEDPUBLICKEY`, checked by libcurl
 independently of CA verification). The device then trusts exactly one key rather than the
@@ -79,7 +79,9 @@ SESSION_FILE = os.path.join(HOME, "session.json")
 UPLOAD_DIR = os.path.join(HOME, "uploads")
 SERVER_LOG = os.path.join(HOME, "receiver.log")
 
-DEFAULT_HOST = "lab.plxnative.com"
+# The public DNS name that resolves to this Mac's router: `--hostname`, else $PLX_LAB_HOST. There is no
+# built-in default: the fork runs no lab host of its own.
+DEFAULT_HOST = os.environ.get("PLX_LAB_HOST", "")
 DEFAULT_PORT = 39443
 """The FIXED external port. Fixed so the app needs no discovery: the endpoint is a constant of the
 lab build, and the only thing that changes per session is the credential."""
@@ -750,6 +752,9 @@ def cmd_start(args) -> int:
         print("a session is already listening — one at a time. `plxnative-lab stop` first.",
               file=sys.stderr)
         return 1
+    if not args.hostname:
+        print("no lab host name: pass --hostname or set PLX_LAB_HOST", file=sys.stderr)
+        return 2
     os.makedirs(HOME, exist_ok=True)
     os.chmod(HOME, 0o700)
     shutil.rmtree(UPLOAD_DIR, ignore_errors=True)
@@ -902,7 +907,7 @@ def cmd_clear(args) -> int:
 
 
 def _dns_matches(st: dict) -> bool | None:
-    """Does `lab.plxnative.com` actually resolve to the address the router says it has?
+    """Does the lab host name actually resolve to the address the router says it has?
 
     The one cheap check that the whole path exists BEFORE a tester spends a rented lab hour on it.
     `None` when either half is unknown (no UPnP, no DNS) rather than a confident `False`.
@@ -1074,7 +1079,7 @@ def selftest(_args) -> int:
             fails.append(name)
 
     with tempfile.TemporaryDirectory() as tmp:
-        cert, pin = make_cert(tmp, "lab.plxnative.com")
+        cert, pin = make_cert(tmp, "lab.example.net")
         check("certificate + SPKI pin", pin.startswith("sha256//") and len(pin) > 50, pin)
         # the pin is what the app will compare against: recomputing it from the cert must agree
         check("pin is stable", spki_pin(cert) == pin)
@@ -1227,7 +1232,8 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True, parser_class=lambda **kw: argparse.ArgumentParser(parents=[common], **kw))
 
     s = sub.add_parser("start", help="generate a session, listen, and map the port")
-    s.add_argument("--hostname", default=DEFAULT_HOST)
+    s.add_argument("--hostname", default=DEFAULT_HOST,
+                   help="public DNS name of the receiver (default: $PLX_LAB_HOST); required")
     s.add_argument("--port", type=int, default=DEFAULT_PORT, help="the FIXED external port")
     s.add_argument("--local-port", type=int, default=0, help="0 = an ephemeral local port")
     s.add_argument("--no-upnp", action="store_true", help="assume the mapping already exists")
