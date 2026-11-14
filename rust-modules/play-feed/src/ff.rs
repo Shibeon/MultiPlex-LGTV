@@ -6738,6 +6738,9 @@ pub fn demux(
                         if let Some(dec) = pcm_dec.as_mut() {
                             dec.reset_stream();
                         }
+                        if let Some(dec) = speed_dec.as_mut() {
+                            dec.reset_stream();
+                        }
                         if let Some(batch) = pcm_batch.as_mut() {
                             batch.clear();
                         }

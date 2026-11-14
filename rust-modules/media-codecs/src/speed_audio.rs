@@ -130,60 +130,20 @@ pub fn downmix(fmt: SampleFormat, planar: bool, channels: usize, frames: usize, 
 pub fn downmix_by_mask(
     fmt: SampleFormat, planar: bool, mask: u64, channels: usize, frames: usize, planes: &[&[u8]],
 ) -> Vec<[f32; 2]> {
-    downmix_by_mask_lifted(fmt, planar, mask, channels, frames, planes, false).0
-}
-
-/// The layout FFmpeg gives a count when the stream states none (`av_channel_layout_default`), for
-/// the counts whose centre [`downmix`] already assumes at index 2: 3.0, 4.0, 5.0, 5.1, 6.1, 7.1.
-fn default_mask(channels: usize) -> u64 {
-    match channels {
-        3 => 0x7,
-        4 => 0x107,
-        5 => 0x37,
-        6 => 0x3f,
-        7 => 0x13f,
-        8 => 0x63f,
-        _ => 0,
-    }
-}
-
-/// [`downmix_by_mask`], with the audio mode's **centre lift** when `lift` is set (Voice, the
-/// desktop client's `pan` chain): the front centre at +3 dB and every other mixed channel at -3 dB,
-/// before the same scaling that keeps a full-scale signal on every channel from clipping, so the
-/// dialogue stands 6 dB further out of the mix. Returns the frames and whether a centre was lifted
-/// (`false` without `lift`, and for a source that has no centre, which then mixes exactly as
-/// [`downmix_by_mask`] does). A layout the mask does not name is read as FFmpeg's default for its
-/// count when lifting, the order [`downmix`] assumes.
-pub fn downmix_by_mask_lifted(
-    fmt: SampleFormat, planar: bool, mask: u64, channels: usize, frames: usize, planes: &[&[u8]], lift: bool,
-) -> (Vec<[f32; 2]>, bool) {
-    let named = mask != 0 && mask.count_ones() as usize == channels;
-    let mask = if !named && lift { default_mask(channels) } else { mask };
-    let lifted = lift && mask & AV_CH_FRONT_CENTER != 0 && mask.count_ones() as usize == channels;
     if mask == 0 || mask.count_ones() as usize != channels {
-        return (downmix(fmt, planar, channels, frames, planes), false);
+        return downmix(fmt, planar, channels, frames, planes);
     }
     // One (left, right) coefficient pair per channel, in the mask's ascending-bit order, scaled so
     // the louder side's coefficients sum to 1: a full-scale signal on every channel cannot clip.
-    let mut gains: Vec<[f32; 2]> = (0..64)
-        .filter(|b| mask >> b & 1 == 1)
-        .map(|b| {
-            let g = role_gain(b);
-            match (lifted, b) {
-                (false, _) => g,
-                (true, 2) => [g[0] * std::f32::consts::SQRT_2, g[1] * std::f32::consts::SQRT_2],
-                (true, _) => [g[0] * std::f32::consts::FRAC_1_SQRT_2, g[1] * std::f32::consts::FRAC_1_SQRT_2],
-            }
-        })
-        .collect();
+    let mut gains: Vec<[f32; 2]> = (0..64).filter(|b| mask >> b & 1 == 1).map(role_gain).collect();
     let peak = gains.iter().map(|g| g[0]).sum::<f32>().max(gains.iter().map(|g| g[1]).sum::<f32>());
     if peak <= 0.0 {
-        return (downmix(fmt, planar, channels, frames, planes), false);
+        return downmix(fmt, planar, channels, frames, planes);
     }
     for g in &mut gains {
         *g = [g[0] / peak, g[1] / peak];
     }
-    let mixed = (0..frames)
+    (0..frames)
         .map(|i| {
             let (mut l, mut r) = (0.0f32, 0.0f32);
             for (ch, g) in gains.iter().enumerate() {
@@ -196,8 +156,142 @@ pub fn downmix_by_mask_lifted(
             }
             [l, r]
         })
-        .collect();
-    (mixed, lifted)
+        .collect()
+}
+
+/// The stereo coefficients [`downmix`] gives each channel of a stream whose layout is not named, by
+/// count: the fronts at 1, a centre at index 2 (3 channels and up) at -3 dB to both sides, the
+/// surrounds at 3/4 (5.0) or 4/5 (6 channels and up) at -3 dB toward their side, everything else (an
+/// LFE, a quad's or a 3/1's fourth channel, a 7.1's sides) dropped. Not yet scaled.
+fn count_gains(channels: usize) -> Vec<[f32; 2]> {
+    const M3DB: f32 = std::f32::consts::FRAC_1_SQRT_2;
+    let mut g = vec![[0.0f32; 2]; channels];
+    if channels >= 2 {
+        g[0] = [1.0, 0.0];
+        g[1] = [0.0, 1.0];
+    }
+    if channels >= 3 {
+        g[2] = [M3DB, M3DB];
+    }
+    let surrounds = match channels {
+        5 => Some((3, 4)),
+        n if n >= 6 => Some((4, 5)),
+        _ => None,
+    };
+    if let Some((l, r)) = surrounds {
+        g[l] = [M3DB, 0.0];
+        g[r] = [0.0, M3DB];
+    }
+    g
+}
+
+/// Scale a coefficient table so the louder side's coefficients sum to 1 (a full-scale signal on every
+/// channel cannot clip); `None` for a table that mixes nothing.
+fn normalised(mut gains: Vec<[f32; 2]>) -> Option<Vec<[f32; 2]>> {
+    let peak = gains.iter().map(|g| g[0]).sum::<f32>().max(gains.iter().map(|g| g[1]).sum::<f32>());
+    if peak <= 0.0 {
+        return None;
+    }
+    for g in &mut gains {
+        *g = [g[0] / peak, g[1] / peak];
+    }
+    Some(gains)
+}
+
+/// How long the centre lift takes to come in or go out, the audio mode's own crossfade time
+/// (`audio_mode::FADE_S`): a step of the coefficients would be a click.
+const LIFT_FADE_S: f32 = 0.020;
+
+/// **The audio mode's centre lift, faded** (Voice on a source with a centre, the desktop client's
+/// `pan` chain): the front centre at +3 dB and every other mixed channel at -3 dB, before the same
+/// scaling [`downmix_by_mask`] does, so the dialogue stands 6 dB further out of the mix.
+///
+/// **The lifted and the unlifted mix use the SAME channels**; only their gains differ: a named
+/// layout is mixed by role ([`role_gain`]) both ways, an unnamed one by count ([`count_gains`],
+/// exactly [`downmix`]'s channel set) both ways. Turning the lift on or off moves every coefficient
+/// linearly between the two tables over [`LIFT_FADE_S`] of the source's own frames, so the step from
+/// one mix to the other (the fronts about -2.2 dB, the centre about +3.8 dB on 5.1) is a 20 ms ramp,
+/// not a click; the audio mode's dry/wet crossfade downstream cannot hide it, because its "dry" is
+/// already this mix. Kept per stream (a converter, a speed decoder). With the lift off and its fade
+/// finished, the mix is [`downmix_by_mask`]'s own, bit for bit.
+#[derive(Clone, Debug, Default)]
+pub struct CentreLift {
+    /// Where the coefficients are between the unlifted (0) and the lifted (1) table.
+    t: f32,
+}
+
+impl CentreLift {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// How far the lift is in (0 out, 1 in).
+    pub fn position(&self) -> f32 {
+        self.t
+    }
+
+    /// Mix `frames` frames to stereo with the centre lifted toward `lift`, `rate` being the frames'
+    /// own rate. Returns the frames and whether this block's mix is heading for a lifted centre
+    /// (`lift` and the source has a centre to lift; a source without one mixes exactly as
+    /// [`downmix_by_mask`], and the fade is dropped).
+    #[allow(clippy::too_many_arguments)]
+    pub fn downmix(
+        &mut self, fmt: SampleFormat, planar: bool, mask: u64, channels: usize, frames: usize, planes: &[&[u8]],
+        rate: u32, lift: bool,
+    ) -> (Vec<[f32; 2]>, bool) {
+        let named = mask != 0 && mask.count_ones() as usize == channels;
+        let (base, centre) = if named {
+            let bits: Vec<u32> = (0..64).filter(|b| mask >> b & 1 == 1).collect();
+            let centre = bits.iter().position(|b| *b == 2);
+            (bits.into_iter().map(role_gain).collect::<Vec<_>>(), centre)
+        } else {
+            (count_gains(channels), (channels >= 3).then_some(2))
+        };
+        let Some(centre) = centre else {
+            self.t = 0.0;
+            return (downmix_by_mask(fmt, planar, mask, channels, frames, planes), false);
+        };
+        if !lift && self.t <= 0.0 {
+            return (downmix_by_mask(fmt, planar, mask, channels, frames, planes), false);
+        }
+        let lifted: Vec<[f32; 2]> = base.iter().enumerate()
+            .map(|(ch, g)| {
+                let k = if ch == centre { std::f32::consts::SQRT_2 } else { std::f32::consts::FRAC_1_SQRT_2 };
+                [g[0] * k, g[1] * k]
+            })
+            .collect();
+        let (Some(g0), Some(g1)) = (normalised(base), normalised(lifted)) else {
+            self.t = 0.0;
+            return (downmix_by_mask(fmt, planar, mask, channels, frames, planes), false);
+        };
+        let target = if lift { 1.0 } else { 0.0 };
+        let step = 1.0 / (LIFT_FADE_S * rate.max(1) as f32).max(1.0);
+        let mut gains = vec![[0.0f32; 2]; g0.len()];
+        let mut set = |t: f32, gains: &mut Vec<[f32; 2]>| {
+            for ((g, a), b) in gains.iter_mut().zip(&g0).zip(&g1) {
+                *g = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+            }
+        };
+        set(self.t, &mut gains);
+        let mut mixed = Vec::with_capacity(frames);
+        for i in 0..frames {
+            if self.t != target {
+                self.t = if target > self.t { (self.t + step).min(1.0) } else { (self.t - step).max(0.0) };
+                set(self.t, &mut gains);
+            }
+            let (mut l, mut r) = (0.0f32, 0.0f32);
+            for (ch, g) in gains.iter().enumerate() {
+                if g[0] == 0.0 && g[1] == 0.0 {
+                    continue;
+                }
+                let s = if planar { fmt.read(planes[ch], i) } else { fmt.read(planes[0], i * channels + ch) };
+                l += s * g[0];
+                r += s * g[1];
+            }
+            mixed.push([l, r]);
+        }
+        (mixed, lift)
+    }
 }
 
 /// `AV_CH_FRONT_CENTER`, the bit the centre lift looks for.

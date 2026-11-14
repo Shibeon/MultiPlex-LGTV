@@ -15,6 +15,8 @@ pub struct SpeedDecoder {
     logged: bool,
     /// The viewer's audio mode, on the stereo 48 kHz S16 this decoder feeds ([`Self::set_audio_mode`]).
     mode: crate::audio_mode::AudioModeStage,
+    /// The centre lift of the mix-down, faded (`crate::speed_audio::CentreLift`).
+    lift: crate::speed_audio::CentreLift,
 }
 
 impl SpeedDecoder {
@@ -45,12 +47,19 @@ impl SpeedDecoder {
         Some(SpeedDecoder {
             ctx, frame, audio: crate::speed_audio::SpeedAudio::new(permille), logged: false,
             mode: crate::audio_mode::AudioModeStage::new(crate::speed_audio::OUT_RATE, 2),
+            lift: crate::speed_audio::CentreLift::new(),
         })
     }
 
     /// The audio mode for every AU decoded from now on (`crate::audio_mode`).
     pub fn set_audio_mode(&mut self, mode: plx_playback_contract::feed::AudioProcessing) {
         self.mode.set_mode(mode);
+    }
+
+    /// A seek inside the stream: the audio mode's level history belongs to the old position, so it
+    /// goes (`AudioModeStage::reset`); the mode, its crossfade and the centre lift's fade stay.
+    pub fn reset_stream(&mut self) {
+        self.mode.reset();
     }
 
     /// What the audio mode did to this stream (`crate::audio_mode::AudioModeReport`).
@@ -92,8 +101,8 @@ impl SpeedDecoder {
                         vec![std::slice::from_raw_parts(*ext, nb * width * channels)]
                     };
                     let mask = frame_channel_mask(f);
-                    let (stereo, lifted) = crate::speed_audio::downmix_by_mask_lifted(
-                        sf, planar, mask, channels, nb, &planes, self.mode.wants_centre_lift(),
+                    let (stereo, lifted) = self.lift.downmix(
+                        sf, planar, mask, channels, nb, &planes, rate, self.mode.wants_centre_lift(),
                     );
                     self.mode.set_centre_lifted(lifted);
                     let first = aus.len();
@@ -111,6 +120,14 @@ impl SpeedDecoder {
 
 impl Drop for SpeedDecoder {
     fn drop(&mut self) {
+        // one line a stream the audio mode touched, as `ff_pcm::PcmDecoder` logs its own
+        let mode = self.mode.report();
+        if mode.frames > 0 {
+            plx_base::eventlog::log(&format!(
+                "speed: audio mode {:?}: {} frames, {} samples limited, {} restarts",
+                self.mode.mode(), mode.frames, mode.limited, mode.restarts
+            ));
+        }
         unsafe {
             let mut c = self.ctx;
             avcodec_free_context(&mut c);

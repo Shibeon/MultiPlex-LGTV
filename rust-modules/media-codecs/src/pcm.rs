@@ -102,9 +102,10 @@ pub struct PcmConverter {
     output: Vec<[f64; 2]>,
     report: ConvertReport,
     /// The audio mode asks the lossy mix-down to lift the centre (Voice), and whether the last block
-    /// it mixed had one to lift ([`speed_audio::downmix_by_mask_lifted`]).
+    /// it mixed had one to lift ([`speed_audio::CentreLift`], which fades the lift in and out).
     centre_lift: bool,
     lifted: bool,
+    lift: speed_audio::CentreLift,
 }
 
 impl PcmConverter {
@@ -120,6 +121,7 @@ impl PcmConverter {
             report: ConvertReport::default(),
             centre_lift: false,
             lifted: false,
+            lift: speed_audio::CentreLift::new(),
         }
     }
 
@@ -196,7 +198,7 @@ impl PcmConverter {
         match self.shape {
             Shape::Lossy => {
                 let (stereo, lifted) =
-                    speed_audio::downmix_by_mask_lifted(fmt, planar, mask, channels, frames, planes, self.centre_lift);
+                    self.lift.downmix(fmt, planar, mask, channels, frames, planes, rate, self.centre_lift);
                 self.lifted = lifted;
                 self.input.extend(stereo.iter().map(|f| [f64::from(f[0]), f64::from(f[1])]));
             }
