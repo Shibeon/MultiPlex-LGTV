@@ -1129,6 +1129,12 @@ pub const DIAG_NETWORK_MEAN: [f32; 4] = AMBER_300;
 pub const DIAG_SWEEP_CURSOR: [f32; 4] = COOL_0;
 /// Section divider hairline.
 pub const HAIRLINE: [f32; 4] = with_a(WHITE, 0.10);
+/// A CARDED table's section plate (`TableView::carded`, the Settings root): the MultiPlex web app's
+/// settings cards, a white film one notch under [`HEADER_CHIP_FILL`] so the focus pill inside it
+/// still owns the brightest plate on the page.
+pub const TABLE_CARD_FILL: [f32; 4] = with_a(WHITE, 0.05);
+/// That plate's 2 px edge: the hairline's weight, so the card reads as a container, not a control.
+pub const TABLE_CARD_RIM: [f32; 4] = HAIRLINE;
 /// A glass container's **perimeter line** — the design system's `--glass-rim`, one notch under the
 /// tiles' own [`CARD_SHEEN`] (.22) because a sheet's edge is quieter than a card's.
 ///
