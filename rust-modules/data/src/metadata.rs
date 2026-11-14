@@ -1682,6 +1682,10 @@ pub struct Detail {
     /// tone-mapping (a Plex Pass server feature; see docs/plex-pass-audit.md). Any weaker
     /// combination shows nothing.
     pub hdr: bool,
+    /// The format [`Self::hdr`] collapses ([`HdrKind`]), handed on to the [`PlayingItem`] built from
+    /// this record. Absent from the wire when SDR, so a recording made before it re-serializes.
+    #[serde(default, skip_serializing_if = "HdrKind::is_sdr")]
+    pub hdr_kind: HdrKind,
     /// The video stream's Dolby Vision layering. [`Self::hdr`] answers "should the facts row warn
     /// about tone mapping"; this answers the harder one the PLAY path needs — whether the base
     /// layer alone is a correct picture, i.e. whether direct play is honest for this file. Read by
@@ -2358,6 +2362,7 @@ fn fetch_detail(client: &'static plx_plex::plex::Client, sid: plx_plex::plex::Se
         aspect_ratio: 0.0,
         video: None,
         hdr: false,
+        hdr_kind: Default::default(),
         dovi: Dovi::default(),
         art: it.art.clone(),
         thumb: it.thumb.clone(),
@@ -2461,6 +2466,41 @@ fn crew_credits(it: &plx_plex::plex::Metadata) -> Vec<Cast> {
     out
 }
 
+/// **The video stream's HDR format**, as the web player names it (`packages/core/src/playback.ts`,
+/// `hdrKind`): Dolby Vision when the stream carries a DOVI record, else the transfer characteristic
+/// (`colorTrc`), PQ (`smpte2084`) as HDR10 and HLG (`arib-std-b67`) as HLG, else none. The player's
+/// dynamic-range pill names it; [`Streams::hdr`] is `!= Sdr`, the same test it always was.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum HdrKind {
+    #[default]
+    Sdr,
+    Hdr10,
+    Hlg,
+    DolbyVision,
+}
+
+impl HdrKind {
+    /// The format of a video stream whose transfer is `color_trc` and whose DOVI flag is `dovi_present`.
+    pub fn of(color_trc: &str, dovi_present: bool) -> HdrKind {
+        match color_trc {
+            _ if dovi_present => HdrKind::DolbyVision,
+            "smpte2084" => HdrKind::Hdr10,
+            "arib-std-b67" => HdrKind::Hlg,
+            _ => HdrKind::Sdr,
+        }
+    }
+
+    pub fn is_hdr(self) -> bool {
+        self != HdrKind::Sdr
+    }
+
+    /// `!is_hdr`, by reference: [`Detail::hdr_kind`]'s serde skip, so a recording made before the
+    /// field existed (and every SDR item) re-serializes byte for byte.
+    pub fn is_sdr(&self) -> bool {
+        !self.is_hdr()
+    }
+}
+
 /// Convert a part's Stream[] into (audio, subs, video_fps, video_is_hdr, dovi) — the ONE
 /// plex::Stream → Stream mapping (the detail parse and the playing-tracks store both use it).
 /// HDR is the video stream's transfer characteristic (PQ or HLG) or a Dolby Vision flag — the
@@ -2483,12 +2523,14 @@ pub struct Streams {
     /// the video track's `frameRate` (0 = unknown) — feeds the Load esInfo
     pub fps: f64,
     pub hdr: bool,
+    /// the format `hdr` collapses ([`HdrKind`])
+    pub hdr_kind: HdrKind,
     pub dovi: Dovi,
 }
 
 fn convert_streams(streams: &[plx_plex::plex::Stream]) -> Streams {
     let (mut audio, mut subs, mut fps) = (Vec::new(), Vec::new(), 0.0);
-    let mut hdr = false;
+    let mut hdr_kind = HdrKind::Sdr;
     let mut dovi = Dovi::default();
     let mut video: Option<Stream> = None;
     for s in streams {
@@ -2523,8 +2565,7 @@ fn convert_streams(streams: &[plx_plex::plex::Stream]) -> Streams {
                 fps = s.frame_rate; // e.g. 23.976 — for the Load esInfo
                                     // PQ (HDR10) or HLG transfer, or Dolby Vision — the dev PMS sends
                                     // colorTrc=smpte2084 on its HDR10 items (probed live 2026-08-11)
-                hdr = matches!(s.color_trc.as_str(), "smpte2084" | "arib-std-b67")
-                    || s.dovi_present != 0;
+                hdr_kind = HdrKind::of(&s.color_trc, s.dovi_present != 0);
                 // NB a Profile 5 file sends NO colorTrc at all (verified live 2026-08-21: the
                 // dev server's one P5 item omits the field), so `dovi_present` is the only
                 // thing that makes it read as HDR — and the layering fields below are the only
@@ -2572,7 +2613,8 @@ fn convert_streams(streams: &[plx_plex::plex::Stream]) -> Streams {
         subs,
         video,
         fps,
-        hdr,
+        hdr: hdr_kind.is_hdr(),
+        hdr_kind,
         dovi,
     }
 }
@@ -2609,6 +2651,26 @@ mod convert_streams_tests {
         assert!(!s.audio[1].can_normalize_loudness);
         assert!(!s.video.expect("video track").can_normalize_loudness);
     }
+
+    /// The video track's transfer and DOVI flag name the HDR format the panel shows
+    /// (`smpte2084` HDR10, `arib-std-b67` HLG, DOVI over either), not only whether it is HDR.
+    #[test]
+    fn convert_streams_names_the_hdr_kind() {
+        let kind = |trc: &str, dovi: i64| {
+            let wire = [plx_plex::plex::Stream {
+                stream_type: 1,
+                color_trc: trc.into(),
+                dovi_present: dovi,
+                ..Default::default()
+            }];
+            let s = convert_streams(&wire);
+            (s.hdr_kind, s.hdr)
+        };
+        assert_eq!(kind("smpte2084", 0), (HdrKind::Hdr10, true));
+        assert_eq!(kind("arib-std-b67", 0), (HdrKind::Hlg, true));
+        assert_eq!(kind("smpte2084", 1), (HdrKind::DolbyVision, true));
+        assert_eq!(kind("bt709", 0), (HdrKind::Sdr, false));
+    }
 }
 
 /// parse an item's Media[0].Part[0].Stream[] into d.audio / d.subs (the About footer), plus that
@@ -2638,6 +2700,7 @@ fn parse_streams(it: &plx_plex::plex::Metadata, d: &mut Detail) {
         d.subs = s.subs;
         d.video = s.video;
         d.hdr = s.hdr;
+        d.hdr_kind = s.hdr_kind;
         d.dovi = s.dovi;
         if s.fps > 0.0 {
             d.video_fps = s.fps;
@@ -2700,6 +2763,8 @@ pub struct PlayingItem {
     /// (`convert_streams`' `hdr`). The SOURCE's fact, not the picture's: a server re-encode to SDR
     /// keeps it true, so the HDR overlay dim also asks the route (`route::overlay_gain`).
     pub hdr: bool,
+    /// The format [`Self::hdr`] collapses ([`HdrKind`]): the player's dynamic-range pill names it.
+    pub hdr_kind: HdrKind,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -2723,6 +2788,7 @@ impl PlayingItem {
             markers: Vec::new(),
             chapters: Vec::new(),
             hdr: false,
+            hdr_kind: Default::default(),
         }
     }
 }
@@ -2772,6 +2838,7 @@ fn cached_playing(state: &MetadataState, sid: plx_plex::plex::ServerId, rk: &str
             markers: d.markers.clone(),
             chapters: d.chapters.clone(),
             hdr: d.hdr,
+            hdr_kind: d.hdr_kind,
         })
 }
 
@@ -2884,7 +2951,7 @@ fn playing_item_of(
     let st = media
         .and_then(|m| m.part.first().map(|p| convert_streams(&p.stream)))
         .unwrap_or_default();
-    let (audio, subs, video_fps, dovi, hdr) = (st.audio, st.subs, st.fps, st.dovi, st.hdr);
+    let (audio, subs, video_fps, dovi, hdr, hdr_kind) = (st.audio, st.subs, st.fps, st.dovi, st.hdr, st.hdr_kind);
     let show_rk = it
         .as_ref()
         .map(|it| it.grandparent_rating_key.clone())
@@ -2911,6 +2978,7 @@ fn playing_item_of(
         markers,
         chapters,
         hdr,
+        hdr_kind,
     }
 }
 

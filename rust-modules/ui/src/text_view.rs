@@ -99,6 +99,7 @@ pub struct TextView<'a> {
     align: HAlign,
     max_lines: usize,                      // 0 = unlimited
     break_long_words: bool, // preserve oversized words by wrapping at UTF-8 character boundaries
+    hard_breaks: bool, // a newline starts a new line ([`TextView::hard_breaks`]); off: it is a space
     trailing: Option<(&'a str, [f32; 4])>, // inline run after the last line when truncated (e.g. "MORE")
     /// Inline BOLD run before the first word (e.g. the detail hero's `S2, E3 · Laura:` episode
     /// prefix). The mirror of [`TextView::trailing`], and it has to be part of the view rather than a
@@ -145,6 +146,7 @@ impl<'a> TextView<'a> {
             align: HAlign::Left,
             max_lines: 0,
             break_long_words: false,
+            hard_breaks: false,
             trailing: None,
             lead: None,
             lead_bold: true,
@@ -213,6 +215,14 @@ impl<'a> TextView<'a> {
     /// for app-owned route names and reading copy; media titles retain their usual elision.
     pub fn break_long_words(mut self) -> Self {
         self.break_long_words = true;
+        self
+    }
+    /// A newline in the text is a HARD BREAK: each of its lines starts a line of its own and wraps on its own
+    /// (the player's playback details panel, whose notes run one to a line). Opt in for app-owned text only:
+    /// without it a newline is whitespace like any other, which is what a server's text needs (a PMS summary's
+    /// line breaks were laid out for no column of this app, and the views that show one wrap it as one paragraph).
+    pub fn hard_breaks(mut self, on: bool) -> Self {
+        self.hard_breaks = on;
         self
     }
 
@@ -382,6 +392,7 @@ impl<'a> TextView<'a> {
         (width as i32).hash(&mut h);
         self.max_lines.hash(&mut h);
         self.break_long_words.hash(&mut h);
+        self.hard_breaks.hash(&mut h);
         // the lead run narrows line 0, so two views differing only in it wrap differently
         self.lead.map(|(r, _)| r).unwrap_or("").hash(&mut h);
         if let Some(measure) = self.measure {
@@ -418,11 +429,16 @@ impl<'a> TextView<'a> {
         // property, which includes it — so the standard glue character silently did nothing.
         // `detail`'s people column is the case: the atoms of "Starring A B, C D" are the PEOPLE,
         // and a break inside one puts a surname alone on the next line.
-        let words: Vec<&str> = self
-            .text
-            .split(|c: char| c.is_whitespace() && c != '\u{a0}')
-            .filter(|w| !w.is_empty())
-            .collect();
+        // With `hard_breaks`, a newline is a hard break: the words of each line of the text, and which word
+        // starts a new one. Without, the whole text is one paragraph and a newline is whitespace.
+        let mut words: Vec<&str> = Vec::new();
+        let mut hard: Vec<bool> = Vec::new();
+        let paragraphs: Vec<&str> = if self.hard_breaks { self.text.split('\n').collect() } else { vec![self.text] };
+        for paragraph in paragraphs {
+            let start = words.len();
+            words.extend(paragraph.split(|c: char| c.is_whitespace() && c != '\u{a0}').filter(|w| !w.is_empty()));
+            hard.extend((start..words.len()).map(|i| i == start && start > 0));
+        }
         let mut lines: Vec<String> = Vec::new();
         let mut cur = String::new();
         let mut i = 0;
@@ -438,6 +454,13 @@ impl<'a> TextView<'a> {
             }
         };
         while i < words.len() {
+            if word_offset == 0 && hard[i] && !cur.is_empty() {
+                lines.push(std::mem::take(&mut cur));
+                if self.max_lines > 0 && lines.len() == self.max_lines {
+                    break;
+                }
+                continue;
+            }
             let word = &words[i][word_offset..];
             if self.break_long_words && cur.is_empty() && self.measure(word) > avail(lines.len()) {
                 // Keep progress even in a degenerate column narrower than one glyph. The final
@@ -1121,6 +1144,25 @@ mod tests {
 
     fn lines_of(view: &TextView, w: f32) -> Vec<String> {
         view.wrap(w).lines.iter().map(|l| l.to_string_lossy().into_owned()).collect()
+    }
+
+    /// **With `hard_breaks`, a newline is a hard break**: each line of the text starts a line of its own and wraps
+    /// on its own (the player's playback details panel lists its notes one to a line), `max_lines` counts the lines
+    /// it makes and the cut elides the last one kept; an empty line between two adds nothing. Without it (every
+    /// other view: a server's summary) a newline is whitespace, as it always was.
+    #[test]
+    fn a_newline_starts_a_new_line_and_each_wraps_on_its_own() {
+        let _serial = plx_base::testlock::serial();
+        let soft = TextView::new("one two\nthree four five", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx);
+        assert_eq!(lines_of(&soft, 400.0), vec!["one two three four five"], "off by default: a newline is a space");
+        let view = TextView::new("one two\nthree four five\n\nsix", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx).hard_breaks(true);
+        assert_eq!(lines_of(&view, 200.0), vec!["one two", "three four five", "six"]);
+        assert_eq!(lines_of(&view, 100.0), vec!["one two", "three four", "five", "six"]);
+        let cut = TextView::new("one two\nthree four five\nsix", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx).hard_breaks(true).max_lines(2);
+        assert_eq!(lines_of(&cut, 200.0).len(), 2);
+        assert_eq!(lines_of(&cut, 200.0)[0], "one two");
+        let plain = TextView::new("one two three", theme::size::CAPTION, theme::TEXT_PRIMARY).with_measure(&TenPx);
+        assert_eq!(lines_of(&plain, 200.0), vec!["one two three"], "no newline, no change");
     }
 
     /// An Arabic or Hebrew paragraph in a left-aligned column draws RIGHT-aligned (its start is its

@@ -273,6 +273,11 @@ pub enum Icon {
     /// Two sliders — the top bar's Settings mark, at its right end. MultiPlex's `settings` icon
     /// (same path), so Settings reads alike on every MultiPlex client.
     Tune,
+    /// A dot between two pairs of arcs — the "multichannel sound" mark the player's stream pills
+    /// lead a Dolby / DTS audio label with. MultiPlex's own `SurroundMark` (the web player's
+    /// `apps/web/src/playerui.tsx`, same circle and arcs, moved 4 units down from its 24x16 box
+    /// into the 24-unit square), so the pill reads alike on every MultiPlex client.
+    Surround,
 }
 
 /// **Where a mark's INK sits inside its 24-unit viewBox**, as `(left, right)` fractions — and
@@ -401,6 +406,7 @@ fn src(id: Icon) -> &'static str {
         Icon::Movie => include_str!("../../../assets/icons/movie.svg"),
         Icon::Tv => include_str!("../../../assets/icons/tv.svg"),
         Icon::Tune => include_str!("../../../assets/icons/tune.svg"),
+        Icon::Surround => include_str!("../../../assets/icons/surround.svg"),
     }
 }
 

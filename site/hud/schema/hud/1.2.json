@@ -399,7 +399,7 @@
         },
         "stream": {
           "default": [],
-          "description": "The stream pills, after the badges: what THIS session's stream is (the picture's resolution as a solid amber pill, its dynamic range outlined, Direct Play or a conversion on the neutral fill, the audio codec dashed). An ordered subset; a fact the stream does not state draws no pill.",
+          "description": "The stream pills, after the badges: what THIS session's stream is, the web player's way (the picture's resolution as a solid amber pill, its dynamic range outlined, `Transcoding` on the neutral fill while the server re-encodes the picture and nothing otherwise, the sound as codec and channels in one pill). A pill the TV cannot verify wears the dashed unsure rim and a small `?`; a Dolby or DTS sound leads with the surround mark. An ordered subset; a fact the stream does not state draws no pill.",
           "items": {
             "enum": [
               "resolution",
@@ -410,6 +410,12 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "w": {
+          "description": "The room the run is fitted in, in px, in place of the band's free width. With `w` the run HUGS the chips it draws: the start-aligned cells after it in its band close up behind its last chip (the MultiPlex stream pills and their ⓘ disc). Absent: `fill`.",
+          "maximum": 1920,
+          "minimum": 1,
+          "type": "integer"
         }
       },
       "required": [
@@ -3311,7 +3317,14 @@
             "item.title",
             "title.name",
             "title.subtitle",
-            "clock.now"
+            "clock.now",
+            "label.video",
+            "label.audio",
+            "stream.video_source",
+            "stream.video_output",
+            "stream.audio_source",
+            "stream.audio_output",
+            "stream.notes"
           ],
           "type": "string"
         },

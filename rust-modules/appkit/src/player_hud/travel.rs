@@ -85,6 +85,23 @@ impl Order {
         }
     }
 
+    /// Does the state have a stop in `group`?
+    pub fn has(&self, group: GroupId) -> bool {
+        self.groups().contains(&group)
+    }
+
+    /// **Two groups link to each other as if they were neighbours**, `a` Down to `b` when it stands above it and Up
+    /// otherwise, and back; nothing unless both have a stop. The modal arm's part of [`Order::links`]: over a modal
+    /// page only the head and the tabs stay on screen around it, and they must still reach each other.
+    pub fn link_pair(&self, a: GroupId, b: GroupId, out: &mut Vec<Link>) {
+        let at = |g: GroupId| self.groups().iter().position(|x| *x == g);
+        if let (Some(ia), Some(ib)) = (at(a), at(b)) {
+            let (down, up) = if ia < ib { (a, b) } else { (b, a) };
+            out.push(Link { from: down, dir: Dir::Down, to: up });
+            out.push(Link { from: up, dir: Dir::Up, to: down });
+        }
+    }
+
     /// **Each group links to its neighbours**: Down to the one below, Up to the one above. Appends to `out`.
     pub fn links(&self, out: &mut Vec<Link>) {
         for pair in self.groups().windows(2) {
@@ -319,6 +336,20 @@ mod tests {
             assert!(out.contains(&want), "{want:?} missing from {out:?}");
         }
         assert_eq!((order.top(), order.bottom()), (Some(GROUP_ROW), Some(GROUP_TABS)));
+    }
+
+    /// Two groups link as neighbours whatever stands between them, the upper one Down and the lower one Up, and not
+    /// at all when either has no stop (classic: no head).
+    #[test]
+    fn a_pair_links_by_its_order_and_only_when_both_are_present() {
+        let link = |from, dir, to| Link { from, dir, to };
+        let order = order(&classic_for_test(), 0, ControlSlot::Discs(Controls { previous: false, next: false }), false, false);
+        let mut out = Vec::new();
+        order.link_pair(GROUP_TABS, GROUP_ROW, &mut out);
+        assert_eq!(out, [link(GROUP_ROW, Dir::Down, GROUP_TABS), link(GROUP_TABS, Dir::Up, GROUP_ROW)], "past the bar between them");
+        out.clear();
+        order.link_pair(GROUP_HEAD, GROUP_TABS, &mut out);
+        assert!(out.is_empty() && !order.has(GROUP_HEAD), "classic has no head: {out:?}");
     }
 
     /// `rising-tabs` compiles its tabs ABOVE the page an open section draws, so the order has the tabs first.

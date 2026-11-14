@@ -58,6 +58,13 @@ uniform highp vec4 u_pill2;
 // flat chip when the frame behind it is unknown. It is the same lamp as u_rimcol, so it takes that
 // colour and only the falloff is its own.
 uniform vec4 u_glow;
+// A DASHED RIM — `(period px, dash px)`, 0 disables it and the branch below costs nothing. The web
+// player's unsure stream pill is `outline: dashed`; drawing that as one quad per dash would be some
+// thirty draws a pill, so the rim itself is cut along its own perimeter. The arc length is taken in
+// the top-right quadrant the box folds into (top side, corner arc, right side), and the period is
+// stretched so a whole number of dashes fits that quarter with one centred on each axis: the fold
+// mirrors the pattern, so a dash sits across every seam instead of doubling or vanishing there.
+uniform highp vec2 u_dash;
 // Which arc governs a point already folded into that quadrant — `(centre, radius)`. The outline is
 // SMOOTH, so at each hand-over the two arcs agree on the distance and on the normal both, and there
 // is no seam to place: the test is simply which side of the tangency direction the point falls on,
@@ -163,6 +170,20 @@ void main(){
   // Dividing by the output alpha cancels the blend's own multiply, so `u_rimcol.a` is the weight
   // the line lands at, over any fill. Opaque callers are bit-identical: a == 1.
   float rimShape = smoothstep(-u_rimw - 0.75, -u_rimw + 0.75, d) * (1.0 - smoothstep(-0.5, 0.5, d));
+  if (u_dash.x > 0.5) {
+    highp vec2 q = abs(p);
+    highp vec2 c = max(hsz - vec2(rad), vec2(0.0));
+    highp float arc = rad * 1.5707963;
+    highp float s;
+    if (q.x > c.x && q.y > c.y) s = c.x + rad * atan(q.x - c.x, q.y - c.y);
+    else if (hsz.y - q.y < hsz.x - q.x) s = q.x;
+    else s = c.x + arc + (c.y - q.y);
+    highp float quarter = c.x + arc + c.y;
+    highp float n = max(floor(quarter / u_dash.x + 0.5), 1.0);
+    highp float per = quarter / n;
+    highp float off = abs(fract(s / per + 0.5) - 0.5) * per - u_dash.y * 0.5 * (per / u_dash.x);
+    rimShape *= 1.0 - smoothstep(-0.5, 0.5, off);
+  }
   float rim = rimShape * u_rimcol.a;
   if (u_rimtop > 0.001) {
     // +y is DOWN here (v_uv runs top to bottom), so the top edge's normal is (0,-1) and this is 1

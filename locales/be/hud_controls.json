@@ -6,5 +6,16 @@
   "player.hud.seek_forward_caption": "+{seconds} с",
   "player.hud.skip_back": "Назад",
   "player.hud.skip_forward": "Наперад",
+  "player.stream.app_audio": "дэкадуецца MultiPlex і перадаецца на тэлевізар у PCM",
+  "player.stream.audio": "Гук",
+  "player.stream.output": "Выхад: {value}",
+  "player.stream.server_audio": "гук пераўтвораны серверам",
+  "player.stream.source": "Крыніца: {value}",
+  "player.stream.to_sdr": "крыніца {source}, пераўтворана ў SDR",
+  "player.stream.transcode_note": "сервер пераўтварае відэа для гэтага тэлевізара",
+  "player.stream.transcoding": "Перакадаванне",
+  "player.stream.tv_audio": "дэкадуецца тэлевізарам або перадаецца як ёсць на рэсівер",
+  "player.stream.unsure_note": "элементы са знакам «?» нельга праверыць на гэтым тэлевізары: вырашае тэлевізар або рэсівер",
+  "player.stream.video": "Відэа",
   "player.up_next.seconds_left": "Наступная серыя · {seconds} с"
 }

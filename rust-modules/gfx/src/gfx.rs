@@ -694,6 +694,8 @@ static mut LOC_RIMTOP: c_int = 0;
 static mut LOC_PILL1: c_int = 0;
 static mut LOC_PILL2: c_int = 0;
 static mut LOC_GLOW: c_int = 0;
+/// The dashed rim's `(period, dash)` — see `shaders/fs_src.frag` and [`draw_rect_dashed`].
+static mut LOC_DASH: c_int = 0;
 
 static mut APROG: c_uint = 0;
 static mut AL_RECT: c_int = 0;
@@ -1205,6 +1207,7 @@ pub fn init_gl() {
         LOC_PILL1 = glGetUniformLocation(PROG, c"u_pill1".as_ptr());
         LOC_PILL2 = glGetUniformLocation(PROG, c"u_pill2".as_ptr());
         LOC_GLOW = glGetUniformLocation(PROG, c"u_glow".as_ptr());
+        LOC_DASH = glGetUniformLocation(PROG, c"u_dash".as_ptr());
         glUniform2f(LOC_SCREEN, SCR_W, SCR_H);
 
         let mut vbo: c_uint = 0;
@@ -1438,6 +1441,7 @@ unsafe fn pill_off() {
         glUniform4f(LOC_PILL1, 0.0, 0.0, 0.0, 0.0);
         glUniform4f(LOC_PILL2, 0.0, 0.0, 0.0, 0.0);
         glUniform4f(LOC_GLOW, 0.0, 0.0, 0.0, 0.0);
+        glUniform2f(LOC_DASH, 0.0, 0.0);
     }
 }
 
@@ -1459,6 +1463,7 @@ unsafe fn pill_on(pill: Option<&PillArgs>, glow: Option<&GlowArgs>) {
             Some(g) => glUniform4f(LOC_GLOW, g[0], g[1], g[2], g[3]),
             None => glUniform4f(LOC_GLOW, 0.0, 0.0, 0.0, 0.0),
         }
+        glUniform2f(LOC_DASH, 0.0, 0.0);
     }
 }
 
@@ -1750,6 +1755,48 @@ pub fn draw_rect_shaped(
         glUniform1f(LOC_RGB_CAP, rgb_cap);
         pill_on(pill, glow);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4, ext);
+    }
+}
+
+/// A rounded rect `fill`ed and RIMMED in `rimcol`, the rim cut into dashes along its perimeter —
+/// `dash = [period px, dash px]` (`shaders/fs_src.frag`'s `u_dash`). One pass, like
+/// [`draw_rect_sheened`]: the dashes are the rim's own coverage, not a quad apiece. The dash is
+/// cleared again after the draw, as every other PROG path clears it (uniforms persist per program).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_rect_dashed(
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radius: f32,
+    fill: *const f32,
+    rimw: f32,
+    rimcol: *const f32,
+    rgb_cap: f32,
+    dash: [f32; 2],
+) {
+    if culled(x, y, w, h) || gate(Class::Rect, x, y, w, h) {
+        return;
+    }
+    unsafe {
+        use_prog(PROG);
+        let aa = AA_BLEED;
+        let ext = set_rect(LOC_RECT, x - aa, y - aa, w + 2.0 * aa, h + 2.0 * aa);
+        glUniform2f(LOC_SIZE, w + 2.0 * aa, h + 2.0 * aa);
+        glUniform1f(LOC_PAD, aa);
+        glUniform1f(LOC_RADIUS, radius);
+        glUniform1f(LOC_RADR, radius);
+        glUniform4fv(LOC_COLTOP, 1, fill);
+        glUniform4fv(LOC_COLBOT, 1, fill);
+        glUniform1f(LOC_FOCUS, 0.0);
+        glUniform1f(LOC_RIMW, rimw);
+        glUniform4fv(LOC_RIMCOL, 1, rimcol);
+        glUniform1f(LOC_RIMTOP, 0.0);
+        glUniform1f(LOC_RGB_CAP, rgb_cap);
+        pill_off();
+        glUniform2f(LOC_DASH, dash[0], dash[1]);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4, ext);
+        glUniform2f(LOC_DASH, 0.0, 0.0);
     }
 }
 
@@ -9209,7 +9256,7 @@ mod tests {
         assert!(fill + rim > 0.97, "uncapped, the dimmed ring is near full brightness");
         assert_eq!((fill + rim).min(gain), 0.5, "capped, it is the gain");
         let src = include_str!("gfx.rs");
-        let draws = ["pub fn draw_rect(", "pub fn draw_rrect(", "pub fn draw_rrect_sheened(", "pub fn draw_rect_shaped("];
+        let draws = ["pub fn draw_rect(", "pub fn draw_rrect(", "pub fn draw_rrect_sheened(", "pub fn draw_rect_shaped(", "pub fn draw_rect_dashed("];
         for d in draws {
             let at = src.find(d).expect(d);
             let body = &src[at..at + src[at..].find("\n}\n").unwrap()];

@@ -36,6 +36,7 @@ pub mod seek_jump;
 mod sections;
 pub mod state;
 pub mod strip;
+pub mod trail;
 pub mod travel;
 use plx_gfx::gfx::{delete_tex, upload_rgba};
 use plx_machine::machine::Measure;
