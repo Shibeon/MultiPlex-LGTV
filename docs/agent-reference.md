@@ -187,7 +187,8 @@ the pinned Sentry Native cross-build), and `sshpass` (Homebrew; deploy/run use y
   swap growth, each run of a pair 1.35-1.55x slower than alone). Three at once was not measured and
   is expected to swap on 16 GB. A third caller waits and gets EVERY holder's pid/worktree/start time
   printed every 60 s rather than silently sharing the CPU/RAM. The slot files are
-  `~/.cache/multiplex/check.lock` (slot 0, the historical path) and `check.lock.1`; the default is two
+  `~/.cache/plxnative/check.lock` (slot 0, the historical path, kept through the rename so a checkout
+  from before it queues on the same files) and `check.lock.1`; the default is two
   slots on a host with at least 8 cores and 14 GiB of RAM and one otherwise, `PLX_CHECK_SLOTS=N`
   overrides it (`1` is the old one-at-a-time lock), `PLX_CHECK_LOCK=off` bypasses the lock, a second run from the SAME checkout waits for the first
   whatever the slot count (`check.lock.wt-<hash of the resolved checkout root>`, taken before the gate and

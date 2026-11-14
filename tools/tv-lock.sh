@@ -677,8 +677,11 @@ preflight_note() {
   else
     [ -n "$sd" ] && [ -n "$dd" ] || return 0
     # `fuser` on each install's own binary, never `pidof multiplex`: both binaries carry that name, so
-    # a name-scoped test matches BOTH and answers in an order busybox does not promise.
-    out="$(run_bounded "$secs" ssh_tv "for d in '$sd' '$dd'; do printf '%s ' \"\$(fuser \$d/multiplex 2>/dev/null || echo NONE)\"; done; echo; netstat -an 2>/dev/null | grep -c 'ESTABLISHED.*:22 \|:22 .*ESTABLISHED'; $(luna_probe fg com.webos.applicationManager/getForegroundAppInfo)$(luna_probe vol com.webos.service.audio/getVolume)$(luna_probe power com.webos.service.tvpower/power/getPowerState)")"
+    # a name-scoped test matches BOTH and answers in an order busybox does not promise. An install
+    # made before the plxnative -> multiplex rename still runs `$d/plxnative`, so both names are read,
+    # by two calls, so the name that is absent cannot cost the answer for the other (an `fuser` given
+    # an operand it cannot stat may give up on the whole command).
+    out="$(run_bounded "$secs" ssh_tv "for d in '$sd' '$dd'; do p=\$(echo \$(fuser \$d/multiplex 2>/dev/null; fuser \$d/plxnative 2>/dev/null)); printf '%s ' \"\${p:-NONE}\"; done; echo; netstat -an 2>/dev/null | grep -c 'ESTABLISHED.*:22 \|:22 .*ESTABLISHED'; $(luna_probe fg com.webos.applicationManager/getForegroundAppInfo)$(luna_probe vol com.webos.service.audio/getVolume)$(luna_probe power com.webos.service.tvpower/power/getPowerState)")"
     rc=$?
     if [ "$rc" = 124 ]; then
       warn "UNKNOWN (the pre-flight read timed out after ${secs}s) — nobody vouches that the television is idle; treat it as possibly in use"

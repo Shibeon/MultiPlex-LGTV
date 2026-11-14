@@ -44,6 +44,10 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 COMMON_DIR=$(cd "$ROOT" 2>/dev/null && git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || COMMON_DIR=""
 if [ -n "$COMMON_DIR" ]; then MAIN=$(dirname "$COMMON_DIR"); else MAIN="$ROOT"; fi
 LABEL=com.multiplex.build-gc
+# The label before the plxnative -> multiplex rename: an agent loaded under it would keep running
+# beside the renamed one, so install and --uninstall both boot it out and remove its plist.
+LEGACY_LABEL=com.plxnative.build-gc
+LEGACY_PLIST="$HOME/Library/LaunchAgents/$LEGACY_LABEL.plist"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 SCRIPT="$MAIN/tools/build-gc.sh"
 
@@ -82,6 +86,15 @@ if [ "$(uname -s 2>/dev/null)" != "Darwin" ]; then
   fi
   exit 0
 fi
+
+remove_legacy_agent() {
+  launchctl bootout "$DOMAIN/$LEGACY_LABEL" >/dev/null 2>&1 || true
+  if [ -f "$LEGACY_PLIST" ]; then
+    rm -f "$LEGACY_PLIST"
+    echo "install-disk-watch: removed the pre-rename agent $LEGACY_PLIST"
+  fi
+}
+remove_legacy_agent
 
 if [ -n "$UNINSTALL" ]; then
   launchctl bootout "$DOMAIN" "$PLIST" >/dev/null 2>&1 || true

@@ -1585,8 +1585,8 @@ print-disk-entries: ; @printf '%s\n' $(DISK_ENTRIES)
 # is a cold 412k-line rustc build (~1 GB RSS), swap hit 9-15 GB, and one run took 60
 # minutes (`cargo test --lib` build 26m33 vs. a normal ~1-2 min, hostsim build 17m37) —
 # where a lone run is ~10 min. Queuing through `tools/check-lock.py`'s machine-wide
-# flocks (`~/.cache/multiplex/check.lock` and `check.lock.1` by default, shared by every
-# worktree) is strictly faster for everyone: the kernel releases a lock the moment a
+# flocks (`~/.cache/plxnative/check.lock` and `check.lock.1` by default, the pre-rename path so
+# checkouts before the rename share it, shared by every worktree) is strictly faster for everyone: the kernel releases a lock the moment a
 # holder dies, so there is nothing to clean up by hand. Two at once is the measured
 # optimum (2026-10-06: a pair finishes in 0.67-0.76 of the back-to-back time, 5-6 GB
 # peak, no swap growth); a third waits. `PLX_CHECK_SLOTS=1` restores one at a time,
