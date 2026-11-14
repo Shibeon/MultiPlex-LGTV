@@ -10,10 +10,12 @@ use plx_ui::Rect;
 /// — the deleted legacy Search renderer's own `FIELD`/`CONTENT_TOP` this replaces.
 ///
 /// The MultiPlex web app's search capsule: a pill from the left margin to the screen's middle (the
-/// web field ends about half way across), its plate drawn by `page_header::draw_field_plate`.
+/// web field ends about half way across), its plate drawn by `page_header::draw_field_plate`. Its
+/// top stands where every other page's head does ([`plx_ui::page_header::TOP`], the Library's and My
+/// list's title block), so the capsule keeps the same air under the nav bar.
 pub const FIELD: Rect = Rect {
     x: MARGIN_X,
-    y: 138.0,
+    y: plx_ui::page_header::TOP,
     w: SCR_W * 0.5 - MARGIN_X,
     h: 80.0,
 };

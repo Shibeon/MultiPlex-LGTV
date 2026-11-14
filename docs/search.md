@@ -105,7 +105,7 @@ placeholder is chrome nobody is editing, so it supplies no insertion point of it
 (owner-reported 2026-09-03; `field.rs`'s blank branch feeds `run_layout` a `caret_w` of zero rather
 than the placeholder's own measured width).
 
-### Focus is ink only — two bright endpoints, never a fill
+### Focus never fills — a rim and two bright ink endpoints
 
 For one day (2026-09-03, issue 22) the field had THREE visual states, not two: idle and editing
 drew no plate, but **focused-but-not-yet-editing** lit up with a flat `theme::ACCENT`/
@@ -122,7 +122,8 @@ changes.
 
 The field NEVER fills on focus. Since the MultiPlex web redesign (step 5, 2026-11) it does stand
 on a plate, the web app's search capsule: `page_header::draw_field_plate` paints a pill from the
-left margin to the screen's middle (`layout::FIELD`) in `theme::FIELD_PLATE_FILL`, the header chip's
+left margin to the screen's middle (`layout::FIELD`, its top at `page_header::TOP`, where every
+other page's head stands under the nav bar) in `theme::FIELD_PLATE_FILL`, the header chip's
 .07 white film, the same at rest and hot, under a 2px rim that crosses from
 `theme::FIELD_PLATE_RIM` to `theme::FIELD_PLATE_RIM_HOT` (pure white) on the `hot` spring — the web
 field's own focused edge. The words sit inside the pill's round ends (`FIELD_INSET`) at
