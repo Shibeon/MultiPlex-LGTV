@@ -2,7 +2,8 @@
   {
     "name": "stable",
     "app_id": "app.multiplex.native",
-    "object_id": "plxstate.stable"
+    "object_id": "mpxstate.stable",
+    "legacy_object_id": "plxstate.stable"
   },
   {
     "name": "debug",

@@ -659,13 +659,17 @@ impl plx_platform::storage::keymanager::Rpc for Db8 {
         match uri {
             "luna://com.palm.db/get" => {
                 self.gets += 1;
-                Ok(
-                    serde_json::json!({"returnValue":true,"results":self.record.iter().cloned().collect::<Vec<_>>()}),
-                )
+                // One record, answered only to its own id, as DB8 does.
+                Ok(serde_json::json!({"returnValue":true,"results":self
+                    .record
+                    .iter()
+                    .filter(|r| r["_id"] == payload["ids"][0])
+                    .cloned()
+                    .collect::<Vec<_>>()}))
             }
             "luna://com.palm.db/put" => {
                 let mut next = payload["objects"][0].clone();
-                if let Some(current) = &self.record {
+                if let Some(current) = self.record.as_ref().filter(|r| r["_id"] == next["_id"]) {
                     assert_eq!(
                         next["_rev"], current["_rev"],
                         "real coordinator must CAS the loaded DB8 revision"
@@ -675,7 +679,7 @@ impl plx_platform::storage::keymanager::Rpc for Db8 {
                 next["_rev"] = serde_json::json!(self.puts);
                 self.record = Some(next);
                 Ok(
-                    serde_json::json!({"returnValue":true,"results":[{"id":"plxstate.stable","rev":self.puts}]}),
+                    serde_json::json!({"returnValue":true,"results":[{"id":"mpxstate.stable","rev":self.puts}]}),
                 )
             }
             _ => panic!("ACL-tier scenario must not bypass DB8 or invoke a Keymanager RPC"),
@@ -1220,12 +1224,20 @@ mod published_06 {
         }
     }
 
+    /// The helper as it stands once its first connection is set up: a record of this install's
+    /// own kept under the stable install's pre-0.11 id (the 0.6.6 fixture) has been carried over
+    /// to the current one (`Backend::adopt_legacy_record`). That copy is not one of the reads and
+    /// writes these tests count, so the counts start after it.
     fn helper(record: Option<Value>) -> plx_platform::storage::backend::Backend<Db8> {
-        plx_platform::storage::backend::Backend::new(
+        let mut b = plx_platform::storage::backend::Backend::new(
             Db8 { record, ..Default::default() },
             state::Flavor::Stable,
             "app.multiplex.native.storage".into(),
-        )
+        );
+        b.adopt_legacy_record();
+        b.rpc.puts = 0;
+        b.rpc.gets = 0;
+        b
     }
 
     fn boot(

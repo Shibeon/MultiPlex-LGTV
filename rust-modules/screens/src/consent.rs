@@ -1123,7 +1123,14 @@ pub fn offered_preview(which: u8, telemetry_absent: bool) -> u8 {
 }
 
 impl PreviewPage {
+    #[cfg(test)]
     pub fn new(entry: EntryId, which: u8) -> Self {
+        Self::for_build(entry, which, false)
+    }
+
+    /// A preview for this build: `telemetry_absent` is `ScreenInputs::telemetry_absent`, which
+    /// picks the privacy policy ([`super::legal::privacy_policy`]) and its sub-line.
+    pub fn for_build(entry: EntryId, which: u8, telemetry_absent: bool) -> Self {
         let kind = PreviewKind::ALL[(which & 0x0f) as usize % PreviewKind::ALL.len()];
         let (crumb, word) = if which & FIRST_RUN_CRASH != 0 {
             (plx_platform::i18n::msg::settings_consent_crash_title(), word::CONSENT)
@@ -1141,6 +1148,7 @@ impl PreviewPage {
                 plx_platform::i18n::msg::settings_consent_analytics_id(),
                 plx_platform::i18n::msg::settings_consent_analytics_subtitle(),
             ),
+            PreviewKind::Policy if telemetry_absent => (plx_platform::i18n::msg::settings_consent_policy(), plx_platform::i18n::msg::settings_legal_privacy_subtitle_local()),
             PreviewKind::Policy => (plx_platform::i18n::msg::settings_consent_policy(), plx_platform::i18n::msg::settings_consent_policy_subtitle()),
             PreviewKind::Crash => (
                 plx_platform::i18n::msg::settings_consent_crash_document(),
@@ -1154,7 +1162,7 @@ impl PreviewPage {
         let text = match kind {
             PreviewKind::ErrorsId => errors_id_document(),
             PreviewKind::AnalyticsId => analytics_id_document(),
-            PreviewKind::Policy => super::legal::privacy_policy().to_string(),
+            PreviewKind::Policy => super::legal::privacy_policy(telemetry_absent).to_string(),
             PreviewKind::Crash => localize_placeholders(&preview_crash()),
             PreviewKind::Usage => localize_placeholders(&preview_usage()),
         };

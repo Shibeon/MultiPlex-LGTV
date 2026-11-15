@@ -60,8 +60,8 @@ pub const SEGMENT_BYTES: usize = 2 * 1024 * 1024;
 pub const CAP_BYTES: usize = 64 * 1024 * 1024;
 
 /// Only this application's runtime namespace, never the target named by recplay or a header.
-/// The pre-rename `plxnative-*` names are not listed here: `plx_base::paths::remove_legacy_runtime_files`
-/// removes them at boot and in the same Delete-all sweep.
+/// No `plxnative-*` name is listed here: those are PlxNative's (`com.beb.plxnative`), which writes
+/// them in the same `/tmp`, and are never removed (`docs/two-installs.md` §6.8).
 /// Caller must first consume the active Writer. remove_dir_all does not follow directory
 /// symlinks; the explicit symlink branch also handles dangling links as owned entries.
 ///

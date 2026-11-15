@@ -164,7 +164,7 @@ fn both_privacy_policy_doors_open_the_same_document() {
     // `screens` — which is the same distinction `screens::family`'s own test module documents
     // for the identical trap. The absolute form is what `ci/check-deps.sh`'s `sibling` gate
     // greps for; this is the same call, unrewritten in every other respect.
-    assert_eq!(page.text, super::super::legal::privacy_policy());
+    assert_eq!(page.text, super::super::legal::privacy_policy(false));
 }
 
 // ---- first run: the answers are the action row, not table rows ------------------------

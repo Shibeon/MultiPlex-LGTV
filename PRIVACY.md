@@ -14,8 +14,9 @@ MultiPlex is based on PlxNative, which could send optional crash reports to Sent
 product analytics to PostHog. MultiPlex releases are built without either destination: no Sentry or
 PostHog address or key is in the app, so it cannot send a crash report, an error report, a sign-in
 problem report or an analytics event, and it never asks whether you want to. Settings → Privacy &
-data shows a privacy policy and Delete all local data, and no reporting switch. The release workflow
-checks the packaged app for a Sentry or PostHog key before publishing it.
+data shows this policy, in the app's language, and Delete all local data, and no reporting switch;
+the sign-in screen offers no report to send. The release workflow checks the packaged app for a
+Sentry or PostHog key before publishing it.
 
 When MultiPlex crashes or stops responding, it writes what happened to a crash log on the
 television, where it stays (see below).

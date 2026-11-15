@@ -546,6 +546,50 @@
     "value": "Removing MultiPlex removes the application, but webOS gives an application no way to run code as it is removed, so anything kept outside the application’s own directory can survive. Your sign-in is deliberately kept there so that reinstalling does not sign you out. Your optional-reporting answers and their Crash report ID and Analytics ID are kept with that sign-in, so that a decision you have already made is not put to you again after a reinstall. Your app language preference is also kept there. Use Delete all local data BEFORE uninstalling if you want nothing of MultiPlex left on this television.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.privacy.uninstall_body"
   },
+  "settings.legal.privacy.subtitle_local": {
+    "value": "How MultiPlex handles your data and what it connects to.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.responsible_body_local": {
+    "value": "The MultiPlex project is responsible only for the data MultiPlex stores on this television. MultiPlex sends nothing to its developer: it has no account system, no server and no crash-report or analytics service of its own.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.no_reports": {
+    "value": "NO CRASH REPORTS AND NO ANALYTICS",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.no_reports_body": {
+    "value": "This build of MultiPlex contains no crash-report or analytics service, so it never sends a crash report, a sign-in problem report or a usage event, and never asks whether you want to. When the app crashes or stops responding, it writes what happened to a crash log on this television, where it stays until the television restarts.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.plex_hosts_body": {
+    "value": "Every request to a Plex service carries the app’s identity: the name MultiPlex and its version, the platform webOS and the television’s webOS version, the device name MultiPlex (LG TV), the app’s client identifier (a random identifier created on this television, which Plex uses to list it among your devices), the app’s language and, once you are signed in, the Plex account token of the profile in use.\n\nplex.tv: signing in with the code shown on screen, your account details and Plex features, the list of your servers and how to reach them, and the Home profiles on your account, switching between them and their pictures.\n\nclients.plex.tv: your account’s audio and subtitle language preferences, read and, when you change them in MultiPlex, saved.\n\ndiscover.provider.plex.tv (Plex’s catalog): your Watchlist (reading it, and adding or removing a title when you ask), a title’s catalog details and your watched state for it, a person’s page and credits, and the Continue Watching artwork described above.\n\nmetadata.provider.plex.tv (Plex’s metadata service), read only: when you open a season of a show, that season’s episodes as Plex announces them, so the ones not yet on your server can be shown (the request carries the season’s Plex catalog identifier and the app’s language); and, when you search, what you typed, to find people by name.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.other": {
+    "value": "OTHER CONNECTIONS",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.other_body": {
+    "value": "If you install a player HUD package from an address, MultiPlex downloads the package from that address (a GitHub repository name you type is fetched from github.com), and sends nothing else to it. MultiPlex makes no other connection: no advertising, no update check and no analytics.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.local_body_local": {
+    "value": "MultiPlex stores your Plex account token and a separate token for each server you use. For every profile you have switched to on this television, it also keeps that profile’s own server access token(s) and, for a PIN-protected profile, a one-way check computed from that PIN rather than the PIN itself. It also keeps the app’s client identifier, the addresses and identifiers of those servers, the profile names and pictures on your account (pictures and other downloaded artwork are cached as bounded files for reuse across restarts), your Home library choices, your recent searches, your playback quality, Direct Play and app language preferences, any player HUD packages you installed, and local technical logs: an event log and an error-output log, each emptied every time the app launches, a crash log that is kept until the television restarts, a marker recording how much of the crash log has already been read, and a bounded storage status snapshot. It keeps no bookmark of its own for where you stopped watching: playback position is held by your Plex Media Server. Delete all local data in Settings signs out and removes MultiPlex data from this television.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.retention_body_local": {
+    "value": "Different things here have different lifetimes, so this is stated for each. Your sign-in, the servers registered with it and their tokens, every profile’s own cached server access token(s) and PIN check, cached profile pictures and other downloaded artwork, and your answers about unencrypted connections are removed when you sign out. Switching between the profiles of one Plex account is not a sign-out and keeps all of it, including the server access token(s) and PIN check cached for a profile you are not currently using, so that profile can be switched to again with no internet. The event log and the error-output log are emptied every time the app launches, the crash log is kept until the television restarts (the television clears its temporary storage then), and the storage snapshot is replaced when its bounded status changes. Delete all local data removes all of it. The app language preference belongs to this television and is kept when you sign out; Delete all local data resets it.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.processing_body_local": {
+    "value": "MultiPlex’s developer processes none of it. Plex processes what its own services receive under Plex’s Privacy Policy. A Plex Media Server you connect to may be located anywhere and is operated by whoever runs it, not by MultiPlex’s developer.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
+  "settings.legal.privacy.uninstall_body_local": {
+    "value": "Removing MultiPlex removes the application, but webOS gives an application no way to run code as it is removed, so anything kept outside the application’s own directory can survive. Your sign-in is deliberately kept there so that reinstalling does not sign you out, and so is your app language preference. Use Delete all local data BEFORE uninstalling if you want nothing of MultiPlex left on this television.",
+    "description": "In-app privacy policy of a build with no reporting destination compiled in (every MultiPlex release), aligned with PRIVACY.md."
+  },
   "settings.legal.ffmpeg.body": {
     "value": "This software uses libraries from the FFmpeg project under the LGPLv2.1. FFmpeg is copyright (c) the FFmpeg developers; MultiPlex does not own FFmpeg.\n\nThe FFmpeg libraries are unmodified and loaded dynamically, and may be replaced with an interface-compatible build. The complete corresponding FFmpeg 9.0 source, exact configure line and build script are published with every MultiPlex release.",
     "description": "Settings, account, onboarding or privacy UI: settings.legal.ffmpeg.body"

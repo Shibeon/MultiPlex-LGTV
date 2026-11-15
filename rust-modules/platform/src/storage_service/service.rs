@@ -90,7 +90,14 @@ pub fn run() -> Result<(), ErrorCode> {
                 if wire::write_frame(&mut stream, &response).is_err() {
                     continue;
                 }
-                if db8 { wire::failure::clear(); }
+                if db8 {
+                    // Once per helper process: carry a pre-rename record of this install's own
+                    // over to its current DB8 id (never PlxNative's, which shares the old stable
+                    // id). Best effort; whatever it leaves in the failure slot is not this
+                    // request's, so the slot is cleared after it.
+                    backend.adopt_legacy_record();
+                    wire::failure::clear();
+                }
                 let reply = match wire::read_frame::<Request>(&mut stream) {
                     Ok(request) if db8 => backend.dispatch(request),
                     Ok(_) => Response::Error {

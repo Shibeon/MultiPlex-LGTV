@@ -17,7 +17,11 @@ pub const LEDGER_CAPACITY: usize = 16;
 
 // Install identities come from the packaging manifest via `build_support/install_identities.rs`,
 // called from each package's build.rs (the platform crate and the storage helper).
-// Compatibility: plxstate.stable/debug are live DB8 keys and must never change. The allowlist
+// MultiPlex 0.11.0 moved the stable record from plxstate.stable to mpxstate.stable: DB8 ids are
+// global across kinds, and PlxNative (com.beb.plxnative), which may be installed beside MultiPlex,
+// keeps its own state under plxstate.stable. `Flavor::legacy_object_id` names the old id, read once
+// by `Backend::adopt_legacy_record` and adopted only when the object there is MultiPlex's own kind.
+// Compatibility: plxstate.debug is a live DB8 key and must never change. The allowlist
 // landed in 6f78842e (2026-09-17), before nightly in 1c96bb7e (2026-09-19). Nightly now uses
 // plxstate.night (14 bytes): on webOS 4.10.2, the earlier 16-byte ID failed get with -995
 // (generated base64 ID), and the 18-byte ID failed put with -3968 ("Invalid _id length").
@@ -402,6 +406,26 @@ impl CanonicalState {
         if state.flavor != flavor {
             return Err(StateError::FlavorMismatch);
         }
+        state.validate()?;
+        Ok(state)
+    }
+
+    /// Decode a record kept under `flavor`'s pre-rename id ([`Flavor::legacy_object_id`]) and
+    /// readdress it to the current one. Everything but the id is kept exactly; the result passes
+    /// the same validation [`Self::decode`] applies.
+    pub fn decode_legacy(bytes: &[u8], flavor: Flavor) -> Result<Self, StateError> {
+        let legacy = flavor.legacy_object_id().ok_or(StateError::IdCollision)?;
+        if bytes.len() > MAX_ENCODED_BYTES {
+            return Err(StateError::EncodedTooLarge);
+        }
+        let mut state: Self = serde_json::from_slice(bytes).map_err(|_| StateError::Invalid)?;
+        if state.flavor != flavor {
+            return Err(StateError::FlavorMismatch);
+        }
+        if state.id != legacy {
+            return Err(StateError::IdCollision);
+        }
+        state.id = flavor.object_id().into();
         state.validate()?;
         Ok(state)
     }
@@ -1039,7 +1063,12 @@ mod tests {
 
     #[test]
     fn exact_ids_and_key_names() {
-        assert_eq!(Flavor::Stable.object_id().as_bytes(), b"plxstate.stable");
+        // MultiPlex's stable record is not PlxNative's: DB8 ids are global across kinds, and
+        // PlxNative (com.beb.plxnative) keeps its own state under `plxstate.stable`.
+        assert_eq!(Flavor::Stable.object_id().as_bytes(), b"mpxstate.stable");
+        assert_eq!(Flavor::Stable.legacy_object_id(), Some("plxstate.stable"));
+        assert_eq!(Flavor::Debug.legacy_object_id(), None);
+        assert_eq!(Flavor::Nightly.legacy_object_id(), None);
         assert_eq!(Flavor::Debug.object_id().as_bytes(), b"plxstate.debug");
         assert_eq!(Flavor::Nightly.object_id().as_bytes(), b"plxstate.night");
         assert_eq!(Flavor::Stable.object_id().len(), 15);
