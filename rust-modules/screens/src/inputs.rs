@@ -30,13 +30,19 @@ pub struct ScreenInputs {
     /// report and no identifier document: a choice that changes nothing is not offered. False
     /// (every row shown) for a host that does not capture it, which is what a keyed build shows.
     pub telemetry_absent: bool,
+    /// The watching profile is a managed Plex Home member
+    /// (`plx_plex::plex::session::Session::profile_is_managed` over [`Self::session`] and
+    /// [`Self::profile`], captured with them). A managed profile is offered no Watchlist: no Home
+    /// hero disc, no Detail More-menu row, no hold-menu row (the owner's decision, shared with the
+    /// web app). False (everything offered) for a host that does not capture it.
+    pub managed: bool,
 }
 impl Default for ScreenInputs {
     fn default() -> Self {
         Self { session: Arc::new(Session::default()), settled: false, visible_generation: 0, revision: 0,
             profile: Arc::new(CurrentProfile { user: None, generation: 0, stamp: String::new() }),
             current_server: ServerId::UNSET, servers: Default::default(), grants: Arc::new(GrantInputs::default()),
-            grant_generation: 0, resolution_offered: false, telemetry_absent: false }
+            grant_generation: 0, resolution_offered: false, telemetry_absent: false, managed: false }
     }
 }
 impl ScreenInputs {
@@ -49,6 +55,7 @@ impl ScreenInputs {
             && self.servers == other.servers
             && self.resolution_offered == other.resolution_offered
             && self.telemetry_absent == other.telemetry_absent
+            && self.managed == other.managed
             && self.grant_generation == other.grant_generation
             && self.profile.generation == other.profile.generation
             && self.profile.stamp == other.profile.stamp
@@ -81,14 +88,17 @@ pub(crate) fn capture_fixture() -> ScreenInputs {
         .map(|facts| (facts.machine_id.clone(), sid))).collect();
     let settled = session::peek_settled();
     let stored = settled.clone().unwrap_or_else(session::peek);
+    let profile = session::current_snapshot();
+    let managed = stored.profile_is_managed(profile.user.as_ref());
     ScreenInputs { grants: Arc::new(GrantInputs { offers: grant::offers(),
         choices: grant::choices(&stored.prefs.plaintext_consent, &stored.account_token),
         connected: grant::granted_machines() }), session: stored, settled: settled.is_some(),
         visible_generation: session::visible_generation(),
         revision: { let (cache, profile) = session::screen_input_revision(); cache.wrapping_add(profile) },
-        profile: session::current_snapshot(),
+        profile,
         current_server: plx_plex::plex::current_server(), servers: Arc::new(servers), grant_generation: grant::revision(),
-        resolution_offered: plx_platform::tv::device::ui_resolution_offered(), telemetry_absent: false }
+        resolution_offered: plx_platform::tv::device::ui_resolution_offered(), telemetry_absent: false,
+        managed }
 }
 
 /// Immutable publications for legacy fixture contexts that outlive their helper call.

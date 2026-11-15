@@ -32,8 +32,12 @@ The bar's keys are built in `app/chrome.rs` (`strip_keys`) from the profile the 
 `false` whenever the roster cannot prove it) leaves `TAB_KEY_WATCHLIST` out, so focus travels the
 shorter strip through the `FocusEngine` with nothing routed by hand. Whatever still asks for the page
 on such a profile, the `/tmp/multiplex-watchlist` boot target included, goes through
-`bridge::nav_tab`, which lands on Home. The Home and Detail bookmark discs, the hold-menu rows and the
-catalog page are not the tab and are unchanged.
+`bridge::nav_tab`, which lands on Home. The other affordances go too, on the same answer captured
+into the screen inputs (`ScreenInputs::managed`): the Home hero has no bookmark disc (the row is Play
+and Info, and a focus left on the disc reconciles to Play), the Detail More menu has no Watchlist row,
+and the application hands a hold menu no Watchlist face (`Bridge::watchlist_offered`). Neither page
+hands the feed a title, so no list read and no record resolve is made on their behalf. The catalog
+page is unchanged.
 
 ## Wire facts (redacted: no ids, tokens or addresses)
 

@@ -419,8 +419,9 @@ impl Bridge {
 
     /// Read the list once for a page that needs membership (a Detail page, a menu) when nobody has:
     /// `Idle` only, so a failed or empty read is never retried per frame.
+    /// Never for a managed Plex Home profile, which is offered no Watchlist ([`Self::watchlist_offered`]).
     pub(crate) fn watchlist_open_if_idle(&mut self) {
-        if self.stores.watchlist.view().status() == Status::Idle {
+        if self.watchlist_offered() && self.stores.watchlist.view().status() == Status::Idle {
             self.stores.watchlist.run_with_input(WatchlistCmd::Open, &Self::watchlist_input());
             plx_machine::idle::invalidate();
         }
@@ -433,6 +434,7 @@ impl Bridge {
     pub(crate) fn watchlist_face(
         &self, hex: Option<[u8; 12]>, kind: plx_data::watchlist::model::Kind, from_episode: bool,
     ) -> Option<plx_screens::item_menu::watchlist::Face> {
+        if !self.watchlist_offered() { return None; }
         let hex = hex?;
         let view = self.stores.watchlist.view();
         if matches!(view.status(), Status::NoAccount | Status::Failed(_)) {
@@ -453,6 +455,8 @@ impl Bridge {
     pub(crate) fn watchlist_card_face(
         &self, item: &plx_data::pms::PmsMovie,
     ) -> Option<plx_screens::item_menu::watchlist::Face> {
+        // Before the record resolve below: a managed profile asks for nothing on the row's behalf.
+        if !self.watchlist_offered() { return None; }
         let (kind, known, from_episode) = item.watchlist_subject()?;
         let rk = if from_episode { item.show_rk.as_str() } else { item.rk.as_str() };
         let hex = known.or_else(|| {

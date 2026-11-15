@@ -1567,6 +1567,8 @@ impl Bridge {
         if self.screen_cache_revision.map(|r| r.1) != Some(before.1) {
             next.profile = session::current_snapshot();
         }
+        // The same answer the top bar reads (`ChromeSnapshot::managed`), over the pair just captured.
+        next.managed = next.session.profile_is_managed(next.profile.user.as_ref());
         let key = (grant::revision(), before.0);
         next.current_server = self.client_keys.current();
         let same_servers = self.client_keys.iter().filter_map(|(sid, _)| self.client_keys.facts(sid)
@@ -2507,6 +2509,14 @@ fn start_jobs(&mut self, jobs: Vec<plx_data::stores::StoreJob>) -> usize {
     /// (`ChromeSnapshot::managed`), for a reader outside the bar that names a strip index.
     pub(crate) fn profile_managed(&self) -> bool {
         self.chrome.managed()
+    }
+
+    /// **Is the watching profile offered the Watchlist at all?** Not a managed Plex Home member
+    /// (`ScreenInputs::managed`, the owner's decision shared with the web app): such a profile has
+    /// no My list tab, no hero disc, no Detail More-menu row and no hold-menu row, and nothing reads
+    /// the list or resolves a record on their behalf.
+    pub(crate) fn watchlist_offered(&self) -> bool {
+        !self.screen_inputs.managed
     }
 
     /// A fresh Hubs publication captured from this owner's store, for a caller that must not read

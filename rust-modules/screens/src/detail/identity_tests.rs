@@ -50,6 +50,10 @@ fn test_store() -> &'static mut plx_data::stores::metadata::MetadataStore {
     TEST_METADATA.with(|cell| unsafe { &mut *cell.get() })
 }
 
+impl crate::registry::ScreenInputsLike for TestHost {
+    fn screen_inputs<'a>(_cx: &Cx<'a, Self>) -> &'a crate::registry::ScreenInputs { crate::inputs::empty_fixture() }
+}
+
 impl crate::registry::MetadataLike for TestHost {
     fn metadata<'a>(_cx: &Cx<'a, Self>) -> plx_data::metadata::MetadataView<'a> {
         test_store().view()
@@ -90,7 +94,7 @@ fn body(entry: EntryId, rk: &str) -> DetailScreen {
         related: plx_ui::cards::Shelf::new(entry, plx_ui::cards::RowStyle::HOME), collection: plx_ui::cards::Shelf::new(entry, plx_ui::cards::RowStyle::HOME),
         extras: plx_ui::cards::Shelf::new(entry, plx_ui::cards::RowStyle::EPISODE),
         cast: plx_ui::cards::Shelf::new(entry, plx_ui::cards::RowStyle::CAST), tabs: TabStrip::new(), season_pop: CtlPop::new(),
-        ctl_pop: CtlPop::new(), watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None,
+        ctl_pop: CtlPop::new(), watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None, no_watchlist: false,
         season_metrics: season::Metrics::new(), about_rows: about::Rows::new(),
         ground: AmbientWash::flat(theme::SURFACE_APP), selected: None, spin_ms: 0.0,
         spin_phase: plx_machine::motion::Phase::default(),
