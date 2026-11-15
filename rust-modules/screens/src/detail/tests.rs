@@ -90,7 +90,7 @@ pub(super) fn managed_inputs(managed: bool) {
 
 impl crate::registry::ScreenInputsLike for TestHost {
     fn screen_inputs<'a>(_cx: &Cx<'a, Self>) -> &'a crate::registry::ScreenInputs {
-        TEST_INPUTS.with(|cell| cell.get()).unwrap_or_else(crate::inputs::empty_fixture)
+        TEST_INPUTS.with(|cell| cell.get()).unwrap_or_else(crate::registry::empty_fixture)
     }
 }
 

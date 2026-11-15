@@ -51,7 +51,7 @@ fn test_store() -> &'static mut plx_data::stores::metadata::MetadataStore {
 }
 
 impl crate::registry::ScreenInputsLike for TestHost {
-    fn screen_inputs<'a>(_cx: &Cx<'a, Self>) -> &'a crate::registry::ScreenInputs { crate::inputs::empty_fixture() }
+    fn screen_inputs<'a>(_cx: &Cx<'a, Self>) -> &'a crate::registry::ScreenInputs { crate::registry::empty_fixture() }
 }
 
 impl crate::registry::MetadataLike for TestHost {
