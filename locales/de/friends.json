@@ -1,0 +1,35 @@
+{
+  "friends.page.title": "Freunde",
+  "friends.page.lead": "Was deine Plex-Freunde geschaut haben.",
+  "friends.filter.all": "Alle",
+  "friends.share.label": "Teilen, was ich schaue",
+  "friends.share.on": "An",
+  "friends.share.off": "Aus",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Aktualisierung fehlgeschlagen",
+  "friends.live.heading": "Läuft gerade",
+  "friends.live.watching": "{name} schaut",
+  "friends.live.paused": "{name} · pausiert",
+  "friends.day.today": "Heute",
+  "friends.day.yesterday": "Gestern",
+  "friends.day.earlier": "Früher",
+  "friends.post.movie": "{name} hat geschaut",
+  "friends.post.episode": "{name} hat eine Folge geschaut von",
+  "friends.post.episodes": {
+    "one": "{name} hat {count} Folge geschaut von",
+    "other": "{name} hat {count} Folgen geschaut von"
+  },
+  "friends.ago.now": "gerade eben",
+  "friends.ago.minutes": {
+    "one": "vor {count} Min.",
+    "other": "vor {count} Min."
+  },
+  "friends.ago.hours": {
+    "one": "vor {count} Std.",
+    "other": "vor {count} Std."
+  },
+  "friends.ago.at": "um {time}",
+  "friends.empty.none": "Deine Freunde haben noch nichts geschaut",
+  "friends.empty.no_account": "Melde dich mit einem Plex-Konto an, um deine Freunde zu sehen",
+  "friends.empty.unreachable": "Die Aktivität deiner Freunde konnte nicht geladen werden"
+}

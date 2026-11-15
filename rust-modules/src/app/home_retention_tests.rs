@@ -406,7 +406,7 @@ fn library_publishes_the_actual_container_strip() {
     let base = plx_ui::dispatch::STRIP_BASE;
     assert_eq!(dispatcher.nav.tabs.strip.iter().map(|member| member.elem).collect::<Vec<_>>(),
         vec![base + 3, base, base + 1, base + 2, plx_ui::widgets::TAB_KEY_WATCHLIST,
-            plx_ui::widgets::TAB_KEY_SETTINGS, plx_ui::widgets::TAB_KEY_CHIP]);
+            plx_ui::widgets::TAB_KEY_FRIENDS, plx_ui::widgets::TAB_KEY_SETTINGS, plx_ui::widgets::TAB_KEY_CHIP]);
     assert_eq!(dispatcher.nav.tabs.strip_fallback, Some(base));
     plx_plex::plex::reset_servers_for_test();
 }

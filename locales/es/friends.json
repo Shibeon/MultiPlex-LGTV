@@ -1,0 +1,38 @@
+{
+  "friends.page.title": "Amigos",
+  "friends.page.lead": "Lo que han visto tus amigos de Plex.",
+  "friends.filter.all": "Todos",
+  "friends.share.label": "Compartir lo que veo",
+  "friends.share.on": "Sí",
+  "friends.share.off": "No",
+  "friends.share.pending": "…",
+  "friends.share.failed": "No se pudo actualizar",
+  "friends.live.heading": "Viendo ahora",
+  "friends.live.watching": "{name} está viendo",
+  "friends.live.paused": "{name} · en pausa",
+  "friends.day.today": "Hoy",
+  "friends.day.yesterday": "Ayer",
+  "friends.day.earlier": "Antes",
+  "friends.post.movie": "{name} vio",
+  "friends.post.episode": "{name} vio un episodio de",
+  "friends.post.episodes": {
+    "one": "{name} vio {count} episodio de",
+    "many": "{name} vio {count} episodios de",
+    "other": "{name} vio {count} episodios de"
+  },
+  "friends.ago.now": "ahora mismo",
+  "friends.ago.minutes": {
+    "one": "hace {count} min",
+    "many": "hace {count} min",
+    "other": "hace {count} min"
+  },
+  "friends.ago.hours": {
+    "one": "hace {count} h",
+    "many": "hace {count} h",
+    "other": "hace {count} h"
+  },
+  "friends.ago.at": "a las {time}",
+  "friends.empty.none": "Tus amigos aún no han visto nada",
+  "friends.empty.no_account": "Inicia sesión con una cuenta de Plex para ver a tus amigos",
+  "friends.empty.unreachable": "No se pudo cargar la actividad de tus amigos"
+}

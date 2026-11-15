@@ -750,6 +750,7 @@ mod tests {
             "NO CRASH REPORTS AND NO ANALYTICS",
             "plex.tv:",
             "clients.plex.tv",
+            "community.plex.tv",
             "discover.provider.plex.tv",
             "metadata.provider.plex.tv",
             "what you typed",
@@ -773,7 +774,7 @@ mod tests {
             for gone in ["Sentry", "PostHog"] {
                 assert!(!text.contains(gone), "{}: the no-reporting policy names {gone}", language.tag());
             }
-            for host in ["clients.plex.tv", "discover.provider.plex.tv", "metadata.provider.plex.tv", "github.com"] {
+            for host in ["clients.plex.tv", "community.plex.tv", "discover.provider.plex.tv", "metadata.provider.plex.tv", "github.com"] {
                 assert!(text.contains(host), "{}: the no-reporting policy omits {host}", language.tag());
             }
         }

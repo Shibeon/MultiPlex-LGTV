@@ -93,6 +93,14 @@ pub mod discover;
 // The plex.tv Watchlist (discover provider): `impl AccountClient`, contract frozen in watchlist.rs.
 pub mod watchlist;
 
+// The plex.tv community service (`community.plex.tv` GraphQL): the friends' activity feed and the
+// account's "share what I watch" privacy switch. `impl AccountClient`, on `account::community()`.
+pub mod community;
+
+// What is playing on a server right now (`/status/sessions`, owner only): who, what, how far and
+// whether paused, and deliberately nothing about the device, the address or the stream.
+pub mod live;
+
 // The store keys of the two app-baked deck-card images (Plex's cover, our composite): pure
 // builders and parsers, so the screen that names a key and the worker that bakes it share one shape.
 pub mod artwork;

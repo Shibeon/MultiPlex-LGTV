@@ -845,8 +845,10 @@ pub fn draw_title_noted(p: Painter, top: f32, title: &CStr, count: Option<&CStr>
     }
     let mut placed = HStack::new(&items[..stacked], 0.0, Align::Leading(TEXT_X0)).placed();
     let title_x = placed.next().map_or(TEXT_X0, |span| span.x);
-    let count_span = count_c.and(placed.next());
-    let note_span = note_c.and(placed.next());
+    // `and_then`, not `and`: a span is taken only for a part that is there (an eager `and` took the
+    // note's span for a missing count, so a note with no count was never drawn).
+    let count_span = count_c.and_then(|_| placed.next());
+    let note_span = note_c.and_then(|_| placed.next());
     let title_y = plx_gfx::text::text_vcenter_y(TITLE_SIZE, 1, cy);
     p.text(t.as_ptr(), title_x, title_y, TITLE_SIZE, theme::CONTROL_IDLE_INK, 0, 1);
     if let (Some(c), Some(span)) = (count_c, count_span) {

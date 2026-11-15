@@ -233,7 +233,7 @@ fn date_value(date: [i32; 3], today: Option<[i32; 3]>) -> Option<String> {
     let [year, month, day] = date;
     let (month, day) = (u8::try_from(month).ok()?, u8::try_from(day).ok()?);
     if let Some(today) = today {
-        match civil_days(today) - civil_days(date) {
+        match plx_base::civil::days_from_civil(today) - plx_base::civil::days_from_civil(date) {
             0 => return Some(msg::under_posters_value_today().to_owned()),
             1 => return Some(msg::under_posters_value_yesterday().to_owned()),
             _ => {}
@@ -241,16 +241,6 @@ fn date_value(date: [i32; 3], today: Option<[i32; 3]>) -> Option<String> {
         if year == today[0] { return current().month_day(month, day, MonthWidth::Medium); }
     }
     current().month_year(year, month)
-}
-
-/// Days since 1970-01-01 of a proleptic Gregorian date (Hinnant's `days_from_civil`): the one
-/// arithmetic "Yesterday" needs, across month and year ends alike.
-fn civil_days([year, month, day]: [i32; 3]) -> i64 {
-    let y = i64::from(year) - i64::from(month <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let doy = (153 * ((i64::from(month) + 9) % 12) + 2) / 5 + i64::from(day) - 1;
-    era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468
 }
 
 #[cfg(test)]

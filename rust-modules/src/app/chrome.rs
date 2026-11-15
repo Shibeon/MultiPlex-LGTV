@@ -12,17 +12,20 @@ pub(crate) enum Pill {
     Home,
     Section(SecKind),
     Watchlist,
+    /// The Friends page, after My list.
+    Friends,
     Search,
 }
 
 /// The strip's keys in strip order — MultiPlex's bar: Search first, then Home, one key per type
-/// pill, the Watchlist ("My list"), then a divider, Settings and the profile chip at the right end.
+/// pill, the Watchlist ("My list"), the Friends page, then a divider, Settings and the profile chip at the right end.
 /// The one place that order is written; `refresh` publishes it and the pill maps below read it, so
 /// no map assumes which index anything holds.
 ///
 /// `managed` is the watching profile's [`Session::profile_is_managed`]: a managed Plex Home
-/// profile has no My list pill (the owner's decision, shared with the web app), so the bar goes
-/// from the last type pill straight to the divider. Focus travel needs nothing of its own for it:
+/// profile has no My list pill and no Friends pill (the owner's decision, shared with the web app:
+/// a managed profile has no friends of its own), so the bar goes from the last type pill straight to
+/// the divider. Focus travel needs nothing of its own for it:
 /// the strip's members are these keys, so the `FocusEngine` simply has one stop fewer.
 ///
 /// [`Session::profile_is_managed`]: plx_plex::plex::session::Session::profile_is_managed
@@ -32,7 +35,7 @@ fn strip_keys(directory: DirectoryView<'_>, managed: bool) -> Vec<u32> {
         SecKind::Movie => widgets::TAB_KEY_MOVIES,
         SecKind::Show => widgets::TAB_KEY_SHOWS,
     }));
-    if !managed { keys.push(widgets::TAB_KEY_WATCHLIST); }
+    if !managed { keys.extend([widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_FRIENDS]); }
     keys.extend([widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
     keys
 }
@@ -48,6 +51,7 @@ fn pill_in(i: usize, keys: &[u32]) -> Pill {
         Some(widgets::TAB_KEY_MOVIES) => Pill::Section(SecKind::Movie),
         Some(widgets::TAB_KEY_SHOWS) => Pill::Section(SecKind::Show),
         Some(widgets::TAB_KEY_WATCHLIST) => Pill::Watchlist,
+        Some(widgets::TAB_KEY_FRIENDS) => Pill::Friends,
         Some(widgets::TAB_KEY_SEARCH) => Pill::Search,
         _ => Pill::Home,
     }
@@ -65,6 +69,7 @@ fn pill_index(pill: Pill, keys: &[u32]) -> Option<usize> {
         Pill::Section(SecKind::Movie) => widgets::TAB_KEY_MOVIES,
         Pill::Section(SecKind::Show) => widgets::TAB_KEY_SHOWS,
         Pill::Watchlist => widgets::TAB_KEY_WATCHLIST,
+        Pill::Friends => widgets::TAB_KEY_FRIENDS,
         Pill::Search => widgets::TAB_KEY_SEARCH,
     };
     keys.iter().position(|&k| k == key)
@@ -152,6 +157,7 @@ impl ChromeSnapshot {
                 widgets::TAB_KEY_MOVIES => TabFace::IconLabel(Icon::Movie, plx_platform::i18n::msg::browse_kind_movies().into()),
                 widgets::TAB_KEY_SHOWS => TabFace::IconLabel(Icon::Tv, plx_platform::i18n::msg::browse_kind_tv_shows().into()),
                 widgets::TAB_KEY_WATCHLIST => TabFace::IconLabel(Icon::Bookmark, plx_platform::i18n::msg::watchlist_page_title().into()),
+                widgets::TAB_KEY_FRIENDS => TabFace::IconLabel(Icon::Crowd, plx_platform::i18n::msg::friends_page_title().into()),
                 widgets::TAB_KEY_DIVIDER => TabFace::Divider,
                 widgets::TAB_KEY_SETTINGS => TabFace::Icon(Icon::Tune),
                 widgets::TAB_KEY_CHIP => TabFace::Avatar,
@@ -273,23 +279,26 @@ mod tests {
         };
         snapshot.refresh(&plx_ui::fixture::FixtureMeasure, directory.view());
         assert_eq!(snapshot.keys, vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
-            widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS,
-            widgets::TAB_KEY_CHIP]);
+            widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_FRIENDS, widgets::TAB_KEY_DIVIDER,
+            widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
         let words: Vec<&str> = snapshot.faces.iter().filter_map(|face| match face {
             TabFace::Label(word) | TabFace::IconLabel(_, word) => Some(word.as_str()),
             _ => None,
         }).collect();
-        assert_eq!(words, ["Home", "Movies", "TV Shows", "My list"]);
+        assert_eq!(words, ["Home", "Movies", "TV Shows", "My list", "Friends"]);
         assert_eq!(snapshot.faces.first(), Some(&TabFace::Icon(Icon::Search)), "MultiPlex's bar leads with Search");
         assert_eq!(snapshot.faces[4], TabFace::IconLabel(Icon::Bookmark, "My list".into()),
-            "My list closes the destinations, with its mark and its name");
-        assert_eq!(&snapshot.faces[5..], &[TabFace::Divider, TabFace::Icon(Icon::Tune), TabFace::Avatar],
+            "My list follows the types, with its mark and its name");
+        assert_eq!(snapshot.faces[5], TabFace::IconLabel(Icon::Crowd, "Friends".into()),
+            "the Friends page closes the destinations");
+        assert_eq!(&snapshot.faces[6..], &[TabFace::Divider, TabFace::Icon(Icon::Tune), TabFace::Avatar],
             "then a divider, Settings and the profile chip at the right end");
         let mut members = Vec::new();
         snapshot.members(0, None, 0.0, &mut members);
         assert_eq!(members.iter().map(|member| member.elem).collect::<Vec<_>>(),
             vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
-                widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP],
+                widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_FRIENDS, widgets::TAB_KEY_SETTINGS,
+                widgets::TAB_KEY_CHIP],
             "the divider is no stop, and the chip is the bar's last");
     }
 
@@ -297,13 +306,14 @@ mod tests {
     fn every_projected_pill_round_trips_by_stable_section_identity() {
         use plx_data::stores::browse::SecKind::{Movie, Show};
         let keys = [widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES, widgets::TAB_KEY_SHOWS,
-            widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_SEARCH];
+            widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_FRIENDS, widgets::TAB_KEY_SEARCH];
         assert_eq!(pill_in(0, &keys), Pill::Home);
         assert_eq!(pill_in(1, &keys), Pill::Section(Movie));
         assert_eq!(pill_in(2, &keys), Pill::Section(Show));
         assert_eq!(pill_in(3, &keys), Pill::Watchlist);
-        assert_eq!(pill_in(4, &keys), Pill::Search);
-        assert_eq!(pill_in(5, &keys), Pill::Home);
+        assert_eq!(pill_in(4, &keys), Pill::Friends);
+        assert_eq!(pill_in(5, &keys), Pill::Search);
+        assert_eq!(pill_in(6, &keys), Pill::Home);
         for i in 0..keys.len() {
             assert_eq!(pill_index(pill_in(i, &keys), &keys), Some(i));
         }
@@ -330,9 +340,11 @@ mod tests {
         let directory = directory(&[SecKind::Movie, SecKind::Show]);
         let view = directory.view();
         assert_eq!(strip_keys(view, false), vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME,
-            widgets::TAB_KEY_MOVIES, widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_DIVIDER,
-            widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
+            widgets::TAB_KEY_MOVIES, widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_FRIENDS,
+            widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
         assert_eq!(pill_of(view, false, Pill::Search), Some(0));
+        assert_eq!(pill_of(view, false, Pill::Friends), Some(5));
+        assert_eq!(pill_at(view, false, 5), Pill::Friends);
         assert_eq!(pill_of(view, false, Pill::Watchlist), Some(4));
         assert_eq!(pill_at(view, false, 0), Pill::Search);
         assert_eq!(pill_at(view, false, 4), Pill::Watchlist);
@@ -351,8 +363,8 @@ mod tests {
                 tile("u-adult", "Adult", false, false)], ..Default::default() })
     }
 
-    /// **A managed Plex Home profile's bar has no My list** (the owner's decision, the web app's
-    /// too): the last type pill is followed by the divider, Settings and the chip. The bar of the
+    /// **A managed Plex Home profile's bar has no My list and no Friends** (the owner's decision, the
+    /// web app's too): the last type pill is followed by the divider, Settings and the chip. The bar of the
     /// owner and of a full member keeps it, and a switch between them rebuilds the strip although
     /// no library changed.
     #[test]
@@ -364,8 +376,9 @@ mod tests {
         assert!(snapshot.managed(), "the restricted tile is a managed profile");
         assert_eq!(snapshot.keys, vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
             widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
-        assert!(!snapshot.faces.iter().any(|face| matches!(face, TabFace::IconLabel(Icon::Bookmark, _))),
-            "no My list face either");
+        assert!(!snapshot.faces.iter().any(|face| matches!(face, TabFace::IconLabel(Icon::Bookmark | Icon::Crowd, _))),
+            "no My list or Friends face either");
+        assert_eq!(pill_of(directory.view(), true, Pill::Friends), None, "no Friends pill to select or travel to");
         let mut members = Vec::new();
         snapshot.members(0, None, 0.0, &mut members);
         assert_eq!(members.iter().map(|member| member.elem).collect::<Vec<_>>(),
@@ -387,6 +400,7 @@ mod tests {
         let (profile, saved) = household("u-kid", 4);
         snapshot.refresh_with_profile(&plx_ui::fixture::FixtureMeasure, directory.view(), Some((&profile, &saved)));
         assert!(!snapshot.keys.contains(&widgets::TAB_KEY_WATCHLIST), "switching back to the managed profile drops it again");
+        assert!(!snapshot.keys.contains(&widgets::TAB_KEY_FRIENDS), "and the Friends pill with it");
         assert_eq!(snapshot.faces.len(), snapshot.keys.len());
     }
 

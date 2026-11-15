@@ -38,6 +38,12 @@ reach them; the Home profiles on your account, switching between them, and their
 **clients.plex.tv.** Your account's audio and subtitle preferences (languages and automatic
 selection), read and, when you change them in MultiPlex, saved.
 
+**community.plex.tv** (Plex's community service). When the Friends page is shown, your friends'
+watch activity (who watched which title, and when) and your account's "Share what I watch"
+setting, read. The setting is changed only when you press its switch on that page, never on its
+own. Both requests carry the identity above. Nothing is read from it for a managed Home profile,
+which has no Friends page.
+
 **discover.provider.plex.tv** (Plex's catalog). Your Watchlist (reading it, and adding or removing a
 title when you ask), a title's catalog details and your watched state for it, a person's page and
 credits, and Continue Watching artwork as described below.
@@ -67,7 +73,11 @@ by changing the app’s language. MultiPlex’s developer does not receive these
 features, MultiPlex communicates directly with the Plex Media Servers you select: on your home
 network, over the internet, or through Plex's relay when a server can only be reached that way.
 Those requests are handled by the selected server and its operator. Artwork from outside your
-server (posters, cast photos) is fetched by your server, not by the television.
+server (posters, cast photos) is fetched by your server, not by the television. On the Friends page,
+your friends' pictures, and Plex's catalog posters of titles none of your servers holds, are
+fetched only through a server you own, never through a server someone shares with you (without
+one, a friend's initial is drawn instead), and "Watching now" reads what plays on the servers you
+own.
 
 **An address you type for a player HUD.** If you install a player HUD package from an address, the
 app downloads the package from that address (a GitHub repository name you type is fetched from

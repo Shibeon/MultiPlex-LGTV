@@ -951,7 +951,7 @@ impl RecommendedScreen {
             fx.push(Fx::App(AppFx::Library(req)));
             return Handled::Yes;
         }
-        use plx_ui::widgets::{TAB_KEY_CHIP, TAB_KEY_HOME, TAB_KEY_MOVIES, TAB_KEY_SEARCH, TAB_KEY_SHOWS, TAB_KEY_WATCHLIST};
+        use plx_ui::widgets::{TAB_KEY_CHIP, TAB_KEY_FRIENDS, TAB_KEY_HOME, TAB_KEY_MOVIES, TAB_KEY_SEARCH, TAB_KEY_SHOWS, TAB_KEY_WATCHLIST};
         use crate::registry::HomeTab;
         let req = match elem {
             TAB_KEY_HOME => Some(LibraryReq::Tab(HomeTab::Home)),
@@ -959,6 +959,7 @@ impl RecommendedScreen {
             TAB_KEY_SHOWS => Some(LibraryReq::Tab(HomeTab::Shows)),
             TAB_KEY_SEARCH => Some(LibraryReq::Tab(HomeTab::Search)),
             TAB_KEY_WATCHLIST => Some(LibraryReq::Tab(HomeTab::Watchlist)),
+            TAB_KEY_FRIENDS => Some(LibraryReq::Tab(HomeTab::Friends)),
             TAB_KEY_CHIP => Some(LibraryReq::Account),
             _ => None,
         };

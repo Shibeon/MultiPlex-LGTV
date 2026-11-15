@@ -20,6 +20,7 @@ pub mod metadata; // item detail data layer (detail page): full metadata + seaso
 pub mod person; // person/actor page data layer: the header handed in by the cast row + /library/people/{id}/media
 pub mod pms; // the Home catalog: hubs merged across every source
 pub mod sortfacts; // one name and one direction wording per sort fact, for the Library's and the Watchlist's Sort & Filter panels
+pub mod community; // the Friends page: the friends' activity feed cut into posts and days, its filter row and relative times
 pub mod upcoming; // the Detail strip's upcoming episodes: announced by the metadata provider, not on the server yet
 pub mod subsearch; // the player's subtitle search & download: agent search, install, install poll
 pub mod together; // Watch Together: invitation codes, session keys, the Lamport sync rule and the session machine (pure)

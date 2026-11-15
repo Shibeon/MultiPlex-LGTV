@@ -1,0 +1,35 @@
+{
+  "friends.page.title": "Vrienden",
+  "friends.page.lead": "Wat je Plex-vrienden hebben gekeken.",
+  "friends.filter.all": "Alle",
+  "friends.share.label": "Delen wat ik kijk",
+  "friends.share.on": "Aan",
+  "friends.share.off": "Uit",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Bijwerken mislukt",
+  "friends.live.heading": "Nu aan het kijken",
+  "friends.live.watching": "{name} kijkt",
+  "friends.live.paused": "{name} · gepauzeerd",
+  "friends.day.today": "Vandaag",
+  "friends.day.yesterday": "Gisteren",
+  "friends.day.earlier": "Eerder",
+  "friends.post.movie": "{name} keek",
+  "friends.post.episode": "{name} keek een aflevering van",
+  "friends.post.episodes": {
+    "one": "{name} keek {count} aflevering van",
+    "other": "{name} keek {count} afleveringen van"
+  },
+  "friends.ago.now": "zojuist",
+  "friends.ago.minutes": {
+    "one": "{count} min geleden",
+    "other": "{count} min geleden"
+  },
+  "friends.ago.hours": {
+    "one": "{count} uur geleden",
+    "other": "{count} uur geleden"
+  },
+  "friends.ago.at": "om {time}",
+  "friends.empty.none": "Je vrienden hebben nog niets gekeken",
+  "friends.empty.no_account": "Log in met een Plex-account om je vrienden te zien",
+  "friends.empty.unreachable": "De activiteit van je vrienden kon niet worden geladen"
+}

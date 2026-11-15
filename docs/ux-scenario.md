@@ -177,9 +177,10 @@ focusable. At the left margin, outside the group, sits the **profile chip** (§5
 **UP from the hero reaches the bar**, landing on the Home pill (UP from any page that wears the bar
 lands on that page's own pill); LEFT and RIGHT then walk the whole band — **chip → Home → Movies →
 TV Shows → … → Search**. DOWN leaves the bar: back to the hero action row from the chip, or into the
-shelves from a pill. The bar is worn by Home, the Library family (the grid, its Collections page and
-its Recommended page), the Watchlist and Search, and by nothing else — the detail, person, player and
-onboarding screens have none, which is why moving to or from them fades the whole screen rather than
+shelves from a pill. The bar is worn by exactly the pages whose `ScreenArg::chrome()` is
+`Chrome::TabBar` (`screens/src/registry.rs`): today Home, the Library family (the grid, its
+Collections page and its Recommended page), the Watchlist, Friends and Search — the detail, person,
+player and onboarding screens have none, which is why moving to or from them fades the whole screen rather than
 just the page.
 
 **Below the hero**, the shelves.

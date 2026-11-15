@@ -40,7 +40,7 @@ fn press_settings(w: &mut World, page: &AppArg, name: &str) {
     assert!(w.on(page), "a surface over the page, not a replacement of it");
 }
 
-/// The divider between My list and Settings is drawn and never a stop: Left from Settings lands on
+/// The divider between the Friends pill and Settings is drawn and never a stop: Left from Settings lands on
 /// the pill before it, Right on the chip after it.
 fn settings_neighbours(w: &mut World) {
     w.press(Key::Right);
@@ -48,7 +48,7 @@ fn settings_neighbours(w: &mut World) {
     w.press(Key::Left);
     assert_eq!(w.elem(), Some(TAB_KEY_SETTINGS), "and Left from the chip is Settings again");
     w.press(Key::Left);
-    assert_eq!(w.elem(), Some(plx_ui::widgets::TAB_KEY_WATCHLIST), "Left from Settings skips the divider to My list");
+    assert_eq!(w.elem(), Some(plx_ui::widgets::TAB_KEY_FRIENDS), "Left from Settings skips the divider to Friends");
     w.press(Key::Right);
     assert_eq!(w.elem(), Some(TAB_KEY_SETTINGS), "premise: back on Settings");
 }

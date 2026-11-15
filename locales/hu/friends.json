@@ -1,0 +1,35 @@
+{
+  "friends.page.title": "Barátok",
+  "friends.page.lead": "Amit a Plex-barátaid néztek.",
+  "friends.filter.all": "Mind",
+  "friends.share.label": "Megosztom, mit nézek",
+  "friends.share.on": "Be",
+  "friends.share.off": "Ki",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Nem sikerült frissíteni",
+  "friends.live.heading": "Most nézik",
+  "friends.live.watching": "{name} nézi",
+  "friends.live.paused": "{name} · szüneteltetve",
+  "friends.day.today": "Ma",
+  "friends.day.yesterday": "Tegnap",
+  "friends.day.earlier": "Korábban",
+  "friends.post.movie": "{name} megnézte",
+  "friends.post.episode": "{name} megnézett egy részt ebből:",
+  "friends.post.episodes": {
+    "one": "{name} megnézett {count} részt ebből:",
+    "other": "{name} megnézett {count} részt ebből:"
+  },
+  "friends.ago.now": "az imént",
+  "friends.ago.minutes": {
+    "one": "{count} perce",
+    "other": "{count} perce"
+  },
+  "friends.ago.hours": {
+    "one": "{count} órája",
+    "other": "{count} órája"
+  },
+  "friends.ago.at": "{time}-kor",
+  "friends.empty.none": "A barátaid még nem néztek semmit",
+  "friends.empty.no_account": "Jelentkezz be Plex-fiókkal a barátaid megtekintéséhez",
+  "friends.empty.unreachable": "Nem sikerült betölteni a barátaid tevékenységét"
+}

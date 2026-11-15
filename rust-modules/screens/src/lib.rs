@@ -31,6 +31,7 @@ pub mod item_menu;
 pub mod library;
 pub mod search;
 pub mod family;
+pub mod friends; // the Friends page (the web app's Amis)
 pub mod legal;
 pub mod login;
 pub mod onboard;

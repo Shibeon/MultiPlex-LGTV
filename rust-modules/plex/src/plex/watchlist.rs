@@ -173,7 +173,9 @@ plx_base::devtrig::latched_flag!(
     /// creates it and relaunches; `/tmp` does not survive a reboot, and `tools/tv-session.sh up` and
     /// `tests/run.py` sweep every `multiplex-*` trigger, so any agent run turns it off again. **No agent
     /// creates this file unless the owner asks for it in that session** (AGENTS.md;
-    /// `.claude/hooks/watchlist-live-guard.py` refuses a command that would).
+    /// `.claude/hooks/watchlist-live-guard.py` refuses a command that would). It also covers the
+    /// community privacy write ([`account_write_gate`]): one switch for every write a debug build
+    /// could send to the real account.
     fn live_armed = "watchlist-live";
 );
 #[cfg(not(feature = "devtriggers"))]
@@ -200,6 +202,20 @@ fn permit_write(method: &str, devtriggers_build: bool, armed: bool, live: bool) 
         return Err(WatchlistError::Refused);
     }
     Ok(())
+}
+
+/// **The one account-write failsafe, for every plex.tv write this app can send**: the Watchlist's
+/// add/remove `PUT`s (here) and the community service's privacy mutation
+/// (`community.rs`, `updatePrivacy`: "share what I watch"). Both are writes to the household's real
+/// plex.tv account, so both answer to the SAME rule and the SAME owner's switch ([`live_armed`],
+/// `multiplex-watchlist-live`, which `.claude/hooks/watchlist-live-guard.py` keeps agents from
+/// creating): a `devtriggers` build sends one only while the loopback stand-in is armed (which then
+/// takes it) or the owner turned the switch on; a release build always sends. `Ok(live)` says
+/// whether it goes out ONLY because of the switch (the log line's `LIVE` tag).
+pub(super) fn account_write_gate() -> Result<bool, WatchlistError> {
+    let dev = cfg!(feature = "devtriggers");
+    let (armed, live) = (stand_in_armed(), live_armed());
+    permit_write("PUT", dev, armed, live).map(|()| dev && live && !armed)
 }
 
 /// Was the LAST write this process tried refused by the dev-build failsafe? Set by a refusal,
