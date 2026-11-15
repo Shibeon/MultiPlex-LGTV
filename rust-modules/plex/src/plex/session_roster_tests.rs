@@ -609,3 +609,14 @@ fn a_stored_profile_behind_a_pin_is_reported_as_protected() {
     assert!(unknown.active_profile_is_protected());
     assert!(home("u-nobody").active_profile_is_protected());
 }
+
+/// A managed member's `restricted` flag survives the persisted roster, and an unmanaged tile writes
+/// exactly the bytes a build without the field wrote (it is skipped while false).
+#[test]
+fn the_managed_flag_round_trips_and_is_absent_while_false() {
+    let managed = HomeUserRef { uuid: "u-kid".into(), restricted: true, ..Default::default() };
+    let back: HomeUserRef = serde_json::from_slice(&serde_json::to_vec(&managed).unwrap()).unwrap();
+    assert!(back.restricted);
+    let plain = serde_json::to_string(&HomeUserRef { uuid: "u-adult".into(), ..Default::default() }).unwrap();
+    assert!(!plain.contains("restricted"), "{plain}");
+}

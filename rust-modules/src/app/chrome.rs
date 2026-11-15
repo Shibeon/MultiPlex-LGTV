@@ -127,8 +127,7 @@ impl ChromeSnapshot {
             let account = if let Some((_, saved)) = captured { saved.account(current.as_ref()) }
                 else { plx_plex::plex::session::peek().account(current.as_ref()) };
             self.thumb = current.map(|user| user.thumb).unwrap_or_default();
-            let initial = account.name.as_deref().and_then(|name| name.chars().next())
-                .map(|c| c.to_uppercase().to_string()).unwrap_or_default();
+            let initial = account.name.as_deref().map(plx_ui::widgets::initial_of).unwrap_or_default();
             self.initial = std::ffi::CString::new(initial).unwrap_or_default();
             self.profile_generation = Some(generation);
         }

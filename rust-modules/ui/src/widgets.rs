@@ -363,6 +363,15 @@ pub enum Art<'a> {
         key: &'a str,
         res: (c_int, c_int),
     },
+    /// A Plex Home member's picture on the profile picker. A [`Art::Thumb`] in every respect but
+    /// one: an EMPTY key is a member plex.tv sent no picture for, which is absence (the absent
+    /// ground, uncounted, under the initial the picker draws with [`avatar_initial`]), where an
+    /// empty `Thumb` key is a card with no picture that a driver must fail fast on.
+    Avatar {
+        sid: u16,
+        key: &'a str,
+        res: (c_int, c_int),
+    },
     /// A credit's headshot (the Cast & Crew shelf). Distinct from [`Art::Thumb`] because a
     /// missing headshot is ROUTINE here — the server has one for most actors and for few crew —
     /// and an empty circle beside named circles reads as a broken image rather than as a person
@@ -382,6 +391,7 @@ impl Art<'_> {
             Self::Still(Some(m)) => (m.owner, m.src, still_key(m), 1),
             Self::Thumb { sid, key, .. } => (key.as_ptr() as usize, *sid, *key, 2),
             Self::Person { sid, key, .. } => (key.as_ptr() as usize, *sid, *key, 3),
+            Self::Avatar { sid, key, .. } => (key.as_ptr() as usize, *sid, *key, 4),
             Self::Poster(None) | Self::Still(None) => return None,
         };
         let mut hash = std::collections::hash_map::DefaultHasher::new();
@@ -745,7 +755,7 @@ pub fn art_uv(art: &Art, tw: f32, th: f32, r: Rect) -> [f32; 4] {
 pub fn art_crop(art: &Art) -> crate::Crop {
     match art {
         Art::Person { .. } => crate::Crop::Headshot,
-        Art::Poster(_) | Art::Still(_) | Art::Thumb { .. } => crate::Crop::Centre,
+        Art::Poster(_) | Art::Still(_) | Art::Thumb { .. } | Art::Avatar { .. } => crate::Crop::Centre,
     }
 }
 
@@ -800,7 +810,9 @@ pub fn card_art_request<'a>(art: &Art<'a>) -> Option<(u16, &'a str, c_int, c_int
     Some(match art {
         Art::Poster(m) => { let m = (*m)?; (m.src, m.thumb, POSTER_RES.0, POSTER_RES.1) }
         Art::Still(m) => { let m = (*m)?; (m.src, still_key(&m), STILL_RES.0, STILL_RES.1) }
-        Art::Thumb { sid, key, res } | Art::Person { sid, key, res } => (*sid, *key, res.0, res.1),
+        Art::Thumb { sid, key, res } | Art::Person { sid, key, res } | Art::Avatar { sid, key, res } => {
+            (*sid, *key, res.0, res.1)
+        }
     })
 }
 
@@ -929,6 +941,20 @@ pub fn card_named_led(p: Painter, frame: Rect, art: Art, fan_name: Option<&str>,
                 if let Some(name) = fan_name {
                     crate::collection_tile::draw_fan_name(pa, frame, r, name);
                 }
+            } else {
+                crate::placeholder::ground(p, crate::placeholder::Reason::CardGround, key, r, rad);
+            }
+        }
+        Art::Avatar { key, .. } => {
+            let ArtImage { tex: t, w: tw, h: th, .. } = image;
+            if t != 0 {
+                if shown < 1.0 { crate::placeholder::ground_under(p, r, rad); }
+                pa.tex_carded(t, art_uv(&art, tw, th, r), r, rad, theme::TINT_WHITE, f);
+            } else if key.is_empty() {
+                // A member plex.tv sent no picture for: ABSENCE, not a wait — the never-sentinel
+                // ground `Art::Person` wears for a person with no headshot (`person_ground`),
+                // uncounted, under the initial the caller draws (`avatar_initial`).
+                absent_card(p, r, rad);
             } else {
                 crate::placeholder::ground(p, crate::placeholder::Reason::CardGround, key, r, rad);
             }
@@ -1238,6 +1264,52 @@ pub fn corner_mark(p: Painter, card: Rect, rad: f32, icon: crate::icons::Icon) {
     );
     crate::icons::draw(p, icon, tick, theme::TILE_MARK_INK);
 }
+
+/// **A name's initial**: its first letter, upper-cased (a letter whose upper case is two, `ß`, keeps
+/// both), or `""` for a blank name. The ONE derivation every avatar that stands in a letter for a
+/// missing picture uses — the profile picker's tiles ([`avatar_initial`]) and the top bar's profile
+/// chip — so the two never disagree about the same person.
+pub fn initial_of(name: &str) -> String {
+    name.trim_start().chars().next().map(|c| c.to_uppercase().collect()).unwrap_or_default()
+}
+
+/// **The initial on a circular avatar that has no picture**: [`initial_of`] `name`, centred on
+/// `avatar` (the drawn rect), as the web app's profile face does when a member has no thumb. The
+/// ground under it is [`Art::Avatar`]'s absent one for an empty key, never a loading placeholder;
+/// this only adds the letter, so an avatar with a picture never calls it. A blank `name` draws
+/// nothing.
+pub fn avatar_initial(p: Painter, avatar: Rect, name: &str) {
+    let initial = initial_of(name);
+    if initial.is_empty() { return; }
+    let Ok(run) = CString::new(initial) else { return };
+    Label::new(run.as_ptr(), theme::size::HERO, theme::TEXT_SECONDARY)
+        .bold()
+        .h(HAlign::Center)
+        .draw(p, avatar);
+}
+
+/// **A badge on a circular avatar**: `icon` on a small disc standing on the avatar's lower-right
+/// rim, the profile picker's padlock for a PIN-protected profile (the web app's `.profile-lock`:
+/// a 1.9rem disc inset 0.2rem from the corner of an 8rem face). `avatar` is the rect actually
+/// drawn (the SCALED one while the avatar is popped), so the badge rides the pop; its size is
+/// quantized to 4px for the same reason the tick's is.
+pub fn avatar_badge(p: Painter, avatar: Rect, icon: crate::icons::Icon) {
+    let d = ((avatar.w * AVATAR_BADGE_RATIO) / 4.0).round() * 4.0;
+    let ins = avatar.w * AVATAR_BADGE_INSET;
+    let disc = Rect::new(avatar.x + avatar.w - ins - d, avatar.y + avatar.h - ins - d, d, d);
+    p.shadow(disc, d * 0.5, d * TICK_SHADOW_BLUR, d * TICK_SHADOW_DY, theme::TILE_MARK_SHADOW);
+    p.rrect(disc, d * 0.5, d * 0.5, theme::AVATAR_BADGE_FILL);
+    let g = (d * AVATAR_BADGE_GLYPH / 2.0).round() * 2.0;
+    let glyph = Rect::new(disc.x + (d - g) * 0.5, disc.y + (d - g) * 0.5, g, g);
+    crate::icons::draw(p, icon, glyph, theme::TILE_MARK_INK);
+}
+
+/// [`avatar_badge`]'s disc as a fraction of the avatar's width (1.9rem on an 8rem face).
+const AVATAR_BADGE_RATIO: f32 = 1.9 / 8.0;
+/// Its inset from the avatar's bounding corner (0.2rem on 8rem).
+const AVATAR_BADGE_INSET: f32 = 0.2 / 8.0;
+/// Its glyph as a fraction of the disc.
+const AVATAR_BADGE_GLYPH: f32 = 0.5;
 
 /// Person-glyph box as a fraction of a headshot tile — the [`Art::Person`] fallback's one ratio.
 /// Deliberately TIGHTER than [`DISC_ICON_RATIO`] (0.54, the ratio every disc *control* glyph uses,
@@ -2749,7 +2821,7 @@ fn profile_avatar(p: Painter, data: ProfileChipRead<'_>, chip_expand: f32, r: Re
     if !thumb_s.is_empty() {
         let (t, tw, th) = resolve_tex_wh_on(data.src, thumb_s, 128, 128, 0);
         if t != 0 {
-            // the same crop the profile picker's `Art::Thumb` avatars take, so one person's
+            // the same crop the profile picker's `Art::Avatar` avatars take, so one person's
             // picture is framed alike on the chip and on the picker
             let uv = r.cover_uv(tw, th, crate::Crop::Centre);
             p.tex_stroked(t, uv, r, d * 0.5, theme::TINT_WHITE, e);
@@ -9674,4 +9746,14 @@ fn button_progress_ring_uses_bounded_quadrants_and_leaves_the_default_face_uncha
     let plain = crate::draw_census::capture(|| make().draw(&Env::inert(), Painter::recording()));
     let zero = crate::draw_census::capture(|| make().progress_ring(0.0).draw(&Env::inert(), Painter::recording()));
     assert_eq!(plain, zero, "zero progress adds no geometry or alternate resting face");
+}
+
+#[cfg(test)]
+#[test]
+fn an_initial_is_the_first_letter_upper_cased_and_blank_for_no_name() {
+    assert_eq!(initial_of("demo"), "D");
+    assert_eq!(initial_of("  émile"), "É");
+    assert_eq!(initial_of("ßa"), "SS");
+    assert_eq!(initial_of(""), "");
+    assert_eq!(initial_of("   "), "");
 }

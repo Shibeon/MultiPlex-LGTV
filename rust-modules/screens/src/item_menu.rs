@@ -2,9 +2,10 @@
 //! opened by a press-and-hold on a card (or on the detail page's episode still / season tab).
 //!
 //! The reference is **Apple TV's card menu, not Plex's**: a panel anchored BESIDE the focused card
-//! (the card and the rest of the shelf stay where they are, visible behind it), rows of
-//! `[leading icon] [label]`, the focused row a filled light pill spanning the panel, and a hairline
-//! separator between the navigation actions and the state actions. Plex's own version is a
+//! (the card and the rest of the shelf stay where they are, visible behind it), headed by the
+//! title it is about (as the web app's card menu is), rows of `[leading icon] [label]`, the
+//! focused row a filled light pill spanning the panel, and a hairline separator between the
+//! navigation actions and the state actions. Plex's own version is a
 //! full-screen sheet; that is deliberately not what this is.
 //!
 //! It exists because OK on a Continue Watching tile can **resume immediately** (the Playback
@@ -67,7 +68,7 @@ use plx_ui::screen::{
     Activate, At, AxisMask, Dir, DrawFrame, EdgeRule, ElemKind, Focusable, GroupKind, GroupSpec,
     Hover, Placed, RenderStrategy, Screen, ScreenEvent, Scrim, Seat, Step, Stop,
 };
-use plx_ui::table::{Row, MENU_MAX_W, MENU_MIN_W};
+use plx_ui::table::{Row, Section, MENU_MAX_W, MENU_MIN_W};
 use plx_ui::widgets::PosterMark;
 use plx_ui::{theme, Rect};
 
@@ -356,7 +357,10 @@ fn build_card(
 ) -> ItemForm {
     let leaf = m.kind == 0 || m.kind == 3;
     let opens_details = from_deck && !deck_press.press_plays();
-    let mut sec = FormSection::new(""); // no header: the card behind the panel IS the title
+    // The title the menu is about heads it, as the web app's card menu does (`.menu-title`): the
+    // panel can stand over neighbouring cards, so it names its own. Server text, so it is exempt
+    // from the fit report and elided to the panel like any other server header.
+    let mut sec = FormSection::from_head(Section::new(card_title(m)).server_header());
 
     // ---- the deck card's own press, when OK no longer plays ----
     // First, so it is where the menu opens. It resumes when there is a resume point and the label
@@ -462,6 +466,16 @@ fn build_card(
         sec = watchlist::push_face(sec, face);
     }
     Form::new().section(sec)
+}
+
+/// The heading of a card's menu: the title the card stands for. An episode or a season is named by
+/// its show (the web app's `labels(item).title`), a movie, show or collection by its own title.
+fn card_title(m: &PmsMovie) -> String {
+    if (m.kind == 2 || m.kind == 3) && !m.show_title.is_empty() {
+        m.show_title.clone()
+    } else {
+        m.title.clone()
+    }
 }
 
 /// The state group every menu ends with: the watch-state row (or ROWS), then (for a leaf) Play from
@@ -578,9 +592,11 @@ fn build_catalog(
     rk: &str,
     guid: &str,
     member: plx_data::catalog::Membership,
+    title: &str,
 ) -> ItemForm {
     use self::hold::HoldRowId;
-    let mut sec = FormSection::new("");
+    // Headed by its title, as `build_card` is: the Watchlist's catalog hold is the same card menu.
+    let mut sec = FormSection::from_head(Section::new(title).server_header());
     for r in self::hold::rows_for(state, kind) {
         let (id, action) = match r.id {
             HoldRowId::GoToDetail => (ItemRow::GoToItem, Action::GoToItem(rk.to_string())),
@@ -751,7 +767,8 @@ impl ItemMenuScreen {
                 let kind = self.arg.catalog.as_ref().map_or(plx_data::watchlist::model::Kind::Movie, |c| c.kind);
                 // A Watchlist tile is on the list by definition; a face says otherwise.
                 let member = self.face.as_ref().map_or(plx_data::catalog::Membership::On, |f| f.member);
-                build_catalog(*state, kind, &self.arg.rk, guid, member)
+                let title = self.arg.catalog.as_ref().map_or("", |c| c.title.as_str());
+                build_catalog(*state, kind, &self.arg.rk, guid, member, title)
             }
             ItemMenuKind::Hero { rows, .. } => build_hero(rows),
         };
@@ -1193,7 +1210,7 @@ mod tests {
         let on = build_deck(&item(3, PosterMark::None), true, DeckPress::Details);
         assert_eq!(
             labels(&on),
-            ["Play", "Go to Episode", "—", "Mark as Watched", "Play from Start", "Remove from Deck"]
+            ["Play", "Go to Episode", "—", "Mark as Watched", "Play from Start", "Remove from Continue Watching"]
         );
         assert_eq!(
             on.ids(),
@@ -1210,7 +1227,7 @@ mod tests {
 
         // a movie: no navigation group at all, so no separator — not at the top, not under Play
         let movie = build_deck(&item(0, PosterMark::None), true, DeckPress::Details);
-        assert_eq!(labels(&movie), ["Play", "Mark as Watched", "Play from Start", "Remove from Deck"]);
+        assert_eq!(labels(&movie), ["Play", "Mark as Watched", "Play from Start", "Remove from Continue Watching"]);
         assert!(!movie.offers(ItemRow::GoToItem) && !movie.offers(ItemRow::GoToShow));
         assert!(!labels(&movie).iter().any(|l| l == "—"), "{:?}", labels(&movie));
 
@@ -1219,7 +1236,7 @@ mod tests {
         let mut orphan = item(3, PosterMark::None);
         orphan.show_rk.clear();
         let orphan = build_deck(&orphan, true, DeckPress::Details);
-        assert_eq!(labels(&orphan), ["Play", "Mark as Watched", "Play from Start", "Remove from Deck"]);
+        assert_eq!(labels(&orphan), ["Play", "Mark as Watched", "Play from Start", "Remove from Continue Watching"]);
 
         // an item with a resume point says so, in the hero pill's word
         let resuming = build_deck(&item(0, PosterMark::InProgress), true, DeckPress::Details);
@@ -1447,7 +1464,7 @@ mod tests {
                 "—",
                 "Mark as Watched",
                 "Play from Start",
-                "Remove from Deck"
+                "Remove from Continue Watching"
             ],
             "…and on the deck it is the LAST row, after the watched toggle"
         );
@@ -1632,7 +1649,7 @@ mod tests {
 
         // and no Related row offers the deck action: that shelf is not the Continue Watching deck
         let menu = build(&row(&movie("")), false);
-        assert!(!labels(&menu).iter().any(|l| l == "Remove from Deck"));
+        assert!(!labels(&menu).iter().any(|l| l == "Remove from Continue Watching"));
         assert!(!menu.offers(ItemRow::RemoveFromDeck));
     }
 
@@ -1646,7 +1663,7 @@ mod tests {
         let want = |l: &str| match l {
             "Mark as Watched" => Some(Write::Watched),
             "Mark as Unwatched" => Some(Write::Unwatched),
-            _ => None, // navigation, the separator, Play from Start, Remove from Deck
+            _ => None, // navigation, the separator, Play from Start, Remove from Continue Watching
         };
         for mark in [
             PosterMark::None,
@@ -2403,7 +2420,7 @@ mod tests {
             TileState::ServerOffline,
             TileState::Unknown,
         ] {
-            let menu = built(super::build_catalog(state, plx_data::watchlist::model::Kind::Movie, "42", "plex://movie/abc", plx_data::catalog::Membership::On));
+            let menu = built(super::build_catalog(state, plx_data::watchlist::model::Kind::Movie, "42", "plex://movie/abc", plx_data::catalog::Membership::On, "Synthetic title"));
             let go_detail = matches!(state, TileState::Available | TileState::ComingSoonMatched);
             assert_eq!(menu.ids(), vec![
                 if go_detail { ItemRow::GoToItem } else { ItemRow::GoToCatalog },
@@ -2442,7 +2459,7 @@ mod tests {
         use plx_data::watchlist::model::{Kind, TileState};
         let _guard = plx_platform::i18n::language_on_this_thread_for_test(plx_platform::i18n::Preference::En);
         let label = |kind| {
-            let menu = built(super::build_catalog(TileState::Available, kind, "42", "plex://movie/abc", plx_data::catalog::Membership::On));
+            let menu = built(super::build_catalog(TileState::Available, kind, "42", "plex://movie/abc", plx_data::catalog::Membership::On, "Synthetic title"));
             menu.0.table.sections.iter().flat_map(|s| s.rows.iter()).next().map(|r| r.label.to_string())
         };
         assert_ne!(label(Kind::Show), label(Kind::Movie));
@@ -2458,7 +2475,7 @@ mod tests {
         for language in SHIPPED {
             let _guard = language_on_this_thread_for_test(language);
             for state in [TileState::Available, TileState::ComingSoon] {
-                let mut menu = built(super::build_catalog(state, plx_data::watchlist::model::Kind::Movie, "1", "g", plx_data::catalog::Membership::On));
+                let mut menu = built(super::build_catalog(state, plx_data::watchlist::model::Kind::Movie, "1", "g", plx_data::catalog::Membership::On, "Synthetic title"));
                 menu.0.table.compact = true;
                 let name = format!("{} catalog {state:?}", language.tag());
                 let table = &menu.0.table;

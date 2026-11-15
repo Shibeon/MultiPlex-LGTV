@@ -229,6 +229,8 @@ pub enum Icon {
     KeyBadgeAlert,
     /// A lock, alert badge — plex.tv could not be reached securely (TLS).
     LockBadgeAlert,
+    /// A plain closed padlock — a PIN-protected profile on the picker (`widgets::avatar_badge`).
+    Lock,
     /// Two people, alert badge — a profile switch failed (`IncidentKind::ProfileSwitch`).
     PeopleBadgeAlert,
     /// One person, X badge — plex.tv refused the account token (`IncidentKind::Authorization`).
@@ -390,6 +392,7 @@ fn src(id: Icon) -> &'static str {
         Icon::GlobeBadgeQuestion => include_str!("../../../assets/icons/globe-badge-question.svg"),
         Icon::KeyBadgeAlert => include_str!("../../../assets/icons/key-badge-alert.svg"),
         Icon::LockBadgeAlert => include_str!("../../../assets/icons/lock-badge-alert.svg"),
+        Icon::Lock => include_str!("../../../assets/icons/lock.svg"),
         Icon::PeopleBadgeAlert => include_str!("../../../assets/icons/people-badge-alert.svg"),
         Icon::PersonBadgeXmark => include_str!("../../../assets/icons/person-badge-xmark.svg"),
         Icon::ServerBadgeMinus => include_str!("../../../assets/icons/server-badge-minus.svg"),

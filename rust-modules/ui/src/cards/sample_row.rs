@@ -219,7 +219,9 @@ impl SampleRow {
                     )
                 })
                 .hash(h),
-            Art::Thumb { sid, key, res } | Art::Person { sid, key, res } => (*sid, *key, res.0, res.1).hash(h),
+            Art::Thumb { sid, key, res } | Art::Person { sid, key, res } | Art::Avatar { sid, key, res } => {
+                (*sid, *key, res.0, res.1).hash(h)
+            }
         }
     }
 }
