@@ -321,26 +321,49 @@ stated; election does not alter your rights under the other arms.
 | — its in-tree mpmc channels (`library/std/src/sync/mpmc`) | in-tree | MIT OR Apache-2.0 | 2019 The Crossbeam Project Developers |
 | addr2line | 0.27.1 | Apache-2.0 OR MIT | The `addr2line` authors |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | Jonas Schievink, oyvindln |
+| aead | 0.6.1 | MIT OR Apache-2.0 | Copyright (c) 2019-2026 The RustCrypto Project Developers |
+| aes | 0.9.4 | MIT OR Apache-2.0 | Copyright (c) 2018-2024 The RustCrypto Project Developers |
+| aes-gcm | 0.11.1 | Apache-2.0 OR MIT | Copyright (c) 2019-2026 The RustCrypto Project Developers |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 | David Tolnay |
+| base16ct | 1.0.0 | Apache-2.0 OR MIT | Copyright (c) 2014 Steve "Sc00bz" Thomas (steve at tobtu dot com) |
 | bitflags | 2.13.0 | MIT OR Apache-2.0 | 2014 The Rust Project Developers |
 | bitstream-io | 4.10.0 | MIT/Apache-2.0 | 2017 Brian Langenberger |
+| block-buffer | 0.12.1 | MIT OR Apache-2.0 | Copyright (c) 2018-2025 The RustCrypto Project Developers |
 | bytemuck | 1.25.0 | Zlib OR Apache-2.0 OR MIT | 2019 Daniel "Lokathor" Gee |
 | byteorder-lite | 0.1.0 | Unlicense OR MIT | 2015 Andrew Gallant |
 | cfg-if | 1.0.4 | MIT OR Apache-2.0 | 2014 Alex Crichton |
 | chardetng | 1.0.0 | Apache-2.0 OR MIT | Mozilla Foundation |
+| cipher | 0.5.2 | MIT OR Apache-2.0 | Copyright (c) 2016-2025 RustCrypto Developers |
+| cmov | 0.5.4 | Apache-2.0 OR MIT | Copyright (c) 2022-2026 The RustCrypto Project Developers |
+| const-oid | 0.10.3 | Apache-2.0 OR MIT | Copyright (c) 2020-2026 The RustCrypto Project Developers |
+| cpubits | 0.1.1 | MIT OR Apache-2.0 | Copyright (c) 2023-2026 The RustCrypto Project Developers |
 | crc | 3.4.0 | MIT OR Apache-2.0 | 2017 crc-rs Developers |
 | crc-catalog | 2.5.0 | MIT OR Apache-2.0 | Akhil Velagapudi |
 | crc32fast | 1.5.0 | MIT OR Apache-2.0 | 2018 Sam Rijs, Alex Crichton and contributors |
+| crypto-bigint | 0.7.11 | Apache-2.0 OR MIT | Copyright (c) 2021-2026 The RustCrypto Project Developers |
+| crypto-common | 0.2.2 | MIT OR Apache-2.0 | Copyright (c) 2021-2026 RustCrypto Developers |
+| ctr | 0.10.1 | MIT OR Apache-2.0 | Copyright (c) 2018-2022 RustCrypto Developers |
+| ctutils | 0.4.8 | Apache-2.0 OR MIT | Copyright (c) 2025-2026 The RustCrypto Project Developers |
+| der | 0.8.3 | Apache-2.0 OR MIT | Copyright (c) 2020-2026 The RustCrypto Project Developers |
+| digest | 0.11.3 | MIT OR Apache-2.0 | Copyright (c) 2017-2025 RustCrypto Developers |
 | either | 1.18.0 | MIT OR Apache-2.0 | Copyright (c) 2015 (the upstream notice names no holder) |
+| elliptic-curve | 0.14.3 | Apache-2.0 OR MIT | Copyright (c) 2020-2026 RustCrypto Developers |
 | encoding_rs | 0.8.44 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Mozilla Foundation. Its encoding tables derive from the WHATWG Encoding Standard, whose data files are BSD-3-Clause (`licenses/WHATWG-BSD-3-Clause.txt`) |
 | equivalent | 1.0.3 | Apache-2.0 OR MIT | 2016–2023 The equivalent authors |
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 | The image-rs Developers |
+| ff | 0.14.0 | MIT/Apache-2.0 | Copyright (c) 2017 Sean Bowe |
 | flate2 | 1.1.9 | MIT OR Apache-2.0 | 2014-2026 Alex Crichton |
 | getrandom | 0.4.3 | MIT OR Apache-2.0 | 2018–2026 The rust-random Project Developers; 2014 The Rust Project Developers |
+| ghash | 0.6.0 | Apache-2.0 OR MIT | Copyright (c) 2019-2026 The RustCrypto Project Developers |
 | gimli | 0.34.0 | MIT OR Apache-2.0 | The `gimli` authors |
+| group | 0.14.0 | MIT/Apache-2.0 | Sean Bowe, Jack Grigg |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 | Amanieu d'Antras |
+| hkdf | 0.13.0 | MIT OR Apache-2.0 | Copyright (c) 2015-2018 Vlad Filippov |
+| hmac | 0.13.0 | MIT OR Apache-2.0 | Copyright (c) 2017 Artyom Pavlov |
+| hybrid-array | 0.4.15 | MIT OR Apache-2.0 | Copyright (c) 2022-2026 The RustCrypto Project Developers |
 | image | 0.25.10 | MIT OR Apache-2.0 | The image-rs Developers |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT | 2016–2017 The indexmap authors |
+| inout | 0.2.6 | MIT OR Apache-2.0 | Copyright (c) 2022-2025 The RustCrypto Project Developers |
 | itoa | 1.0.18 | MIT OR Apache-2.0 | David Tolnay |
 | libc | 0.2.191 and 0.2.189 | MIT OR Apache-2.0 | The Rust Project Developers |
 | memchr | 2.8.3 and 2.8.2 | Unlicense OR MIT | 2015 Andrew Gallant |
@@ -348,9 +371,15 @@ stated; election does not alter your rights under the other arms.
 | no_std_io2 | 0.9.4 | Apache-2.0 OR MIT | 2020-2021 Brendan Molloy |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 | 2014 The Rust Project Developers |
 | object | 0.39.1 | Apache-2.0 OR MIT | The `object` authors |
+| p256 | 0.14.0 | Apache-2.0 OR MIT | Copyright (c) 2020-2026 RustCrypto Developers |
 | png | 0.18.1 | MIT OR Apache-2.0 | 2015 nwin |
+| polyval | 0.7.3 | Apache-2.0 OR MIT | Copyright (c) 2019-2026 The RustCrypto Project Developers |
+| primefield | 0.14.0 | Apache-2.0 OR MIT | Copyright (c) 2024-2026 RustCrypto Developers |
+| primeorder | 0.14.0 | Apache-2.0 OR MIT | Copyright (c) 2020-2023 RustCrypto Developers |
+| rand_core | 0.10.1 | MIT OR Apache-2.0 | Copyright (c) 2018-2026 The Rand Project Developers |
 | rustc-demangle | 0.1.28 | MIT/Apache-2.0 | Alex Crichton |
 | scopeguard | 1.2.0 | MIT OR Apache-2.0 | 2016-2019 Ulrik Sverdrup "bluss" and scopeguard developers |
+| sec1 | 0.8.1 | Apache-2.0 OR MIT | Copyright (c) 2021-2026 The RustCrypto Project Developers |
 | serde | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay |
 | serde_core | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay |
 | serde_json | 1.0.154 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay |
@@ -358,6 +387,10 @@ stated; election does not alter your rights under the other arms.
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 | Copyright (c) 2017 Robert Grosse |
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT | 2019 Daniel "Lokathor" Gee |
 | typed-path | 0.13.0 | MIT OR Apache-2.0 | The typed-path authors |
+| typenum | 1.20.1 | MIT OR Apache-2.0 | Copyright (c) 2014 Paho Lurie-Gregg |
+| universal-hash | 0.6.1 | MIT OR Apache-2.0 | Copyright (c) 2019-2025 RustCrypto Developers |
+| wnaf | 0.14.1 | Apache-2.0 OR MIT | Copyright (c) 2026 RustCrypto Developers |
+| zeroize | 1.9.0 | Apache-2.0 OR MIT | Copyright (c) 2018-2026 The RustCrypto Project Developers |
 | zip | 9.2.2 | MIT | 2014 Mathijs van de Nes |
 | zune-core | 0.5.1 | MIT OR Apache-2.0 OR Zlib | The zune-image developers |
 | zune-jpeg | 0.5.15 | MIT OR Apache-2.0 OR Zlib | The zune-image developers |
@@ -397,6 +430,17 @@ stated; election does not alter your rights under the other arms.
 | pxfm | 0.1.29 | BSD-3-Clause OR Apache-2.0 | (c) Radzivon Bartoshyk |
 
 <!-- END GENERATED notices:apache -->
+
+**BSD-3-Clause** (`licenses/subtle-BSD-3-Clause.txt`, the package's complete upstream licence with
+its copyright notice) — the constant-time primitives under the Watch Together cryptography:
+
+<!-- BEGIN GENERATED notices:bsd (edit ci/third-party-crates.json, run python3 ci/gen-third-party-notices.py) -->
+
+| Package | Version | Declared licence | Copyright |
+|---|---|---|---|
+| subtle | 2.6.1 | BSD-3-Clause | Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence; (c) 2016-2024 Isis Agora Lovecruft. The complete upstream licence is preserved in `licenses/subtle-BSD-3-Clause.txt` |
+
+<!-- END GENERATED notices:bsd -->
 
 **ICU4X code and compiled locale data — Unicode-3.0** (`licenses/ICU4X.txt`).
 These packages provide locale parsing, plural selection, regional number/date formatting and
@@ -624,6 +668,7 @@ runtime notices listed below:
 | `licenses/libass-ISC.txt` | libass (§1.2), including its copyright notice |
 | `licenses/FreeType.txt` | FreeType's elected FTL and contributed module notices (§1.2) |
 | `licenses/HarfBuzz-Old-MIT.txt` | HarfBuzz and its copyright holders (§1.2) |
+| `licenses/subtle-BSD-3-Clause.txt` | subtle, complete upstream BSD-3-Clause licence with its copyright notice (§2.4) |
 | `licenses/libunibreak-Zlib.txt` | libunibreak, complete upstream licence with its copyright holders (§1.2) |
 
 `OFL.txt` (SIL Open Font License 1.1, for **Inter, Noto Sans CJK KR and the Noto Sans script faces** — §2.3) already ships at
@@ -633,7 +678,7 @@ script faces' differs by one URL line), and
 what differs between them (the copyright statement and the Reserved Font Name) is reproduced in
 §2.3 and carried inside each font's own name table.
 
-No BSD-3-Clause text is required because Apache-2.0 is elected for `moxcms` and `pxfm`. The full GPLv3 text is supplied at the package root as `LICENSE`; `LICENSING.md` states
+Apache-2.0 is elected for `moxcms` and `pxfm`, so their BSD-3-Clause arm needs no text; `subtle` is BSD-3-Clause only, and its licence is `licenses/subtle-BSD-3-Clause.txt`. The full GPLv3 text is supplied at the package root as `LICENSE`; `LICENSING.md` states
 the GPL-3.0-or-later election. Also retain `licenses/GCC-exception-3.1.txt` and
 `licenses/PlxNative-historical-MIT.txt`.
 

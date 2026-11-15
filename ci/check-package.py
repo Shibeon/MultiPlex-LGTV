@@ -1771,6 +1771,7 @@ NEEDED_LICENCES = {
     "FreeType.txt": "FreeType's elected FTL and its contributed modules",
     "HarfBuzz-Old-MIT.txt": "the bundled text shaper",
     "libunibreak-Zlib.txt": "the bundled Unicode line-breaking library",
+    "subtle-BSD-3-Clause.txt": "subtle — constant-time primitives under the Watch Together crypto",
 }
 for name, why in NEEDED_LICENCES.items():
     p = ROOT / "licenses" / name
