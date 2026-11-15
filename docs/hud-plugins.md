@@ -798,6 +798,11 @@ seconds on the primary button instead of the legacy ten-second clock.
 - The reference passes: it places everything but `open_tracks {tab: audio}`, which it reaches anyway because
   the track menu holds both tabs (F15): the fold treats `open_tracks` as ONE command whose tab is an opening
   address, so it folds only when neither tab is placed. `from_beginning` and `go_to_detail` fold into More.
+- A folded `open_tracks` lists TWO rows on More's root, one per tab (`more_menu::folded_rows`): Audio, which opens
+  the track menu on its Audio tab and is listed only when the playing item carries two or more audio tracks, then
+  Subtitles. The track menu draws no tab bar, so a single row opening the Subtitles tab hid the audio list behind an
+  unmarked LEFT press (`builtin:multiplex`, v0.11.0: "nothing to change the audio language"). The lint's M2 asks
+  for the room of both rows (`more_menu::fold_rows`).
 
 ## Versioning and mismatch behaviour
 

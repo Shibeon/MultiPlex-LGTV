@@ -39,7 +39,8 @@ use super::validate::{self, each_object};
 use super::{codes, pointer_index, pointer_push, Finding};
 
 /// A command the app folds into More's root when no reachable state places it, with the section it opens
-/// when it is `toggle_section` (the two sections are two rows; `open_tracks` is ONE row whatever its tab).
+/// when it is `toggle_section` (the two sections are two folds; `open_tracks` is ONE fold whatever its tab, which More lists as
+/// an Audio row and a Subtitles row, `more_menu::folded_rows`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Fold {
     pub command: &'static str,

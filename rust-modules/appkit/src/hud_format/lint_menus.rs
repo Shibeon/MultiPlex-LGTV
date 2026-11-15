@@ -68,9 +68,11 @@ pub(super) fn check(cx: &LangCtx<'_>, out: &mut Vec<Finding>) {
         for (_, variant) in state.state.skip_variants() {
             let here = StateCtx { key: state.key, state: variant };
             // More's root grows with the folded rows (R2), so its room is asked at every count from none up to
-            // the most the package folds: the rows a movie or a playback leaves out shorten the root, and each
+            // the most rows the package's folds list (`open_tracks` lists two, `more_menu::fold_rows`): the rows a
+            // movie or a playback leaves out shorten the root, and each
             // shorter root must still find its room
-            for folds in 0..=cx.compiled.folds().len() {
+            let most = cx.compiled.folds().iter().map(more_menu::fold_rows).sum::<usize>();
+            for folds in 0..=most {
                 for finding in findings(cx, &here, folds) {
                     if !out.iter().any(|f| f.code == finding.code && f.pointer == finding.pointer) {
                         out.push(finding);
