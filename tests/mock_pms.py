@@ -2877,11 +2877,12 @@ class DiscoverFixture:
             kind = {"1": "movie", "2": "show"}.get(q.get("type", ""))
             rows = [it for it in lib.items.values()
                     if it.get("guid") in want and (kind is None or it.get("type") == kind)]
-            # The demo's errored lookup: a row for the title with no usable key (neither held nor
-            # absent for the app), alongside the real answers for the rest of the batch.
+            # The demo's errored lookup: a row for the title whose key is not a number, so the app
+            # can neither open a copy nor call it absent (an EMPTY key would not do: the client drops
+            # such a row as unanswered, which reads absent), beside the real answers for the batch.
             bad = self.catalog[self.GARBLED_LOOKUP]
             if bad["guid"] in want and (kind is None or bad["kind"] == kind):
-                rows.append({"guid": bad["guid"], "type": bad["kind"], "title": bad["title"], "ratingKey": ""})
+                rows.append({"guid": bad["guid"], "type": bad["kind"], "title": bad["title"], "ratingKey": "garbled"})
             return j({"MediaContainer": {"size": len(rows), "Metadata": rows}})
         return None
 
