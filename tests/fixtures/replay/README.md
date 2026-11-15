@@ -701,3 +701,17 @@ settle, 1.5 s final settle); the new frame-0 and frame-1 hashes are exactly the 
 replay reported as `got`. `multiplex-rec check` accepted all three; only each `rec-0000.jsonl` was
 replaced (manifests unchanged, `anchor: true` kept); Targets and Resolve are SAME with every
 difference counter at zero on three consecutive runs, one of them at the CI window (960x540).
+
+The person page's credit rows (one `cards::Shelf` per credit kind, the library-matched row first)
+and the section air between stacked rows (`theme::space::SECTION`, `consts::SHELF_FOOT`) move the
+tree digest every frame folds: all three anchors diverged from their first graded frames with every
+named difference counter at zero (`1-boot-home-chip-grid` 381 of 393 frames, `6-settings-family`
+891 of 903, `12-filmography-detail-return` from f=8). The anchors were recorded afresh on the
+unchanged shape (`tests/focusfp.sh --rec --only 1,6,12` on the Linux simulator under Xvfb, 350 ms
+keys, 1 s boot settle, 1.5 s final settle). Flow 12's person page now measures its rows' headings
+and keeps each credit card's return key, so the closed alphabet gains "Available on MultiPlex",
+"Acting" and "Appearances" and the `credit/<row>/<catalog id>` key over the synthetic ids
+(`_sources.person_credit_rows`). `multiplex-rec check` accepted all three; only each
+`rec-0000.jsonl` was replaced (manifests unchanged, `anchor: true` kept); Targets and Resolve are
+SAME with every difference counter at zero on three consecutive runs, one of them at the CI window
+(960x540).
