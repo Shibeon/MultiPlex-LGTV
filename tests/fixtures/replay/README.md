@@ -745,3 +745,18 @@ recorded frame of these flows. On the committed head, `tests/replay_fixtures.py`
 simulator under Xvfb reports `3 fixtures, 6 replays, 0 failures` with every replay `verdict=SAME` and
 every difference counter zero at the CI window (`--window 960x540`) and at 1920x1080
 (`1-boot-home-chip-grid` 412 frames, `6-settings-family` 1014, `12-filmography-detail-return` 1039).
+
+The Friends page (the web app's *Amis*) adds `AppArg::Friends` to `ARG_SHAPE` and
+`FriendsScreen::SHAPE` to `SCREEN_SHAPES`, a SHAPE bump: `SCREEN_SHAPES_PIN` 0x1097_dde4_cf49_0664 →
+0xaffa_778c_f4f5_f3dc, the recorder's frozen vectors re-derived, `FP_PRIOR` 16966599510782656729 →
+7524794596150345573 and `FP_V6` 5721615536593523891 → 14417121799567616615. It also puts a Friends pill
+on the bar between My list and the divider, so the three flows' recorded text and tree move too, and
+flow 1 needs a sixth RIGHT to reach the chip (`tests/focusfp.sh`; the old five now stopped on
+Settings, which the flow's own route/focus assertion caught). The old anchors were observed being
+refused on the new build (`replay: REFUSED — invalid or incompatible recording`, all three, both
+modes). All three were recorded afresh (`tests/focusfp.sh --rec --only 1,6,12` on the Linux release
+simulator under Xvfb, 350 ms keys, 1 s boot settle, 1.5 s final settle). The closed alphabet gains the
+pill's label (`Friends`), which every flow now measures. Each recording passed `multiplex-rec check`
+and replaced its fixture through `tools/multiplex-rec rerecord` (anchor preserved). Targets and Resolve
+were SAME with every difference counter at zero at the CI window (`--window 960x540`) and at 1920x1080
+(`1-boot-home-chip-grid` 462 frames, `6-settings-family` 1059, `12-filmography-detail-return` 1052).
