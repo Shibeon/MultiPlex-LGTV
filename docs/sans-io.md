@@ -40,7 +40,7 @@ The write-ledger stamps are not used as list-read identities.
 Session now binds the actual `SessionMachine.state` (`attempt::Attempt`) to
 `transition` and `from_init` with `state_reads = immutable`. The structural
 read-only proof, not a getter-name exception, validates shared reads. The
-registry contains ten machines, four with strict writer contracts. Exact wall
+registry contains nine machines (the HUD `Catalog` machine left with the online catalog), four with strict writer contracts. Exact wall
 ports include the 17-line Catalog fetch/calendar worker adapter and Watchlist
 calendar capture in the app store adapter; neither exemption contains a
 machine. `ports.ini` is a new gate relative to the base, not a grown old list.
@@ -275,7 +275,7 @@ build scripts, generator/templates, manifests/configuration and locked graph. Th
 pipeline emits only unit enum variants in every configuration; strict catalogue/schema and
 ASCII variant validation permit new languages without a count/list pin. The same evidence
 pins the machine ID macro source and proves its concrete `u32` fields, not a `Copy` promise.
-Reviewed machine snapshots differ only in `NavOp::SelectTabWithChild`, i18n snapshots only in clock formatting/helpers; either
+Reviewed machine snapshots differ only in `NavOp::SelectTabWithChild`, i18n snapshots only in clock formatting/helpers and the hostsim environment variable names; either
 source changing requires review. No generator or Cargo/cache code executes in native CI.
 The certificate assumes ordinary Cargo/Rust/std/serde execution and no out-of-band output,
 compiler or external configuration overrides. It certifies values only, never locale contexts,
