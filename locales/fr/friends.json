@@ -1,0 +1,38 @@
+{
+  "friends.page.title": "Amis",
+  "friends.page.lead": "Ce que vos amis Plex ont regardé.",
+  "friends.filter.all": "Tous",
+  "friends.share.label": "Partager ce que je regarde",
+  "friends.share.on": "Activé",
+  "friends.share.off": "Désactivé",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Échec de la mise à jour",
+  "friends.live.heading": "En cours de lecture",
+  "friends.live.watching": "{name} regarde",
+  "friends.live.paused": "{name} · en pause",
+  "friends.day.today": "Aujourd’hui",
+  "friends.day.yesterday": "Hier",
+  "friends.day.earlier": "Plus tôt",
+  "friends.post.movie": "{name} a regardé",
+  "friends.post.episode": "{name} a regardé un épisode de",
+  "friends.post.episodes": {
+    "one": "{name} a regardé {count} épisode de",
+    "many": "{name} a regardé {count} épisodes de",
+    "other": "{name} a regardé {count} épisodes de"
+  },
+  "friends.ago.now": "à l’instant",
+  "friends.ago.minutes": {
+    "one": "il y a {count} min",
+    "many": "il y a {count} min",
+    "other": "il y a {count} min"
+  },
+  "friends.ago.hours": {
+    "one": "il y a {count} h",
+    "many": "il y a {count} h",
+    "other": "il y a {count} h"
+  },
+  "friends.ago.at": "à {time}",
+  "friends.empty.none": "Vos amis n’ont encore rien regardé",
+  "friends.empty.no_account": "Connectez-vous avec un compte Plex pour voir vos amis",
+  "friends.empty.unreachable": "Impossible de charger l’activité de vos amis"
+}

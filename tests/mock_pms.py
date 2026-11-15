@@ -3254,6 +3254,141 @@ def timeline_frame(entries):
     return out
 
 
+class CommunityFixture:
+    """plex.tv's community service, in memory: the Friends page's GraphQL (`POST /api`) on the same
+    listener as the plex.tv and Discover stand-ins (the app's `account::community()` follows the
+    Discover stand-in, so a mock boot never reaches `community.plex.tv`).
+
+    * `activityFeed(first:, types:[WATCH_HISTORY])`: four synthetic friends' watch history, dated
+      RELATIVE TO NOW so "today", "yesterday" and the older days always exist: a two-episode binge of
+      one show by one friend today (the web app's "N episodes of" post), movies held by the library
+      (OK opens the local copy, through the Discover fixture's guid binding) and catalog-only titles
+      (OK opens the catalog page). Absolute poster and avatar URLs point at the mock's own
+      `/_mock/community/...`, which `/photo/:/transcode` paints flat; nothing dials out.
+    * `userPrivacy { watchHistory }` and `updatePrivacy(input: { watchHistory: FRIENDS|PRIVATE })`:
+      the account's setting, in memory. The mutation is logged as a write (`note_write`).
+    * `GET /status/sessions` (the PMS side): two sessions on library items, one playing, one paused.
+      A real server's `Player` (device, address, product) rides along on purpose: the app must not
+      show any of it.
+
+    `POST /_mock/community {"feed": "default"|"empty"|"fail", "sessions": "default"|"none"|"forbidden",
+    "privacy": "FRIENDS"|"PRIVATE"}` switches the states the captures need.
+    """
+
+    FRIENDS = (
+        ("1001", "camille", "Camille"),
+        ("1002", "leo", "Léo"),
+        ("1003", "ines", "Inès"),
+        ("1004", "marc", None),  # no display name: the app falls back to the username
+    )
+    # (friend index, minutes ago, catalog title, season, episode, episode title)
+    HISTORY = (
+        (0, 20, "The Long Meridian", 1, 3, "Low Tide"),
+        (0, 65, "The Long Meridian", 1, 2, "Signal Fires"),
+        (1, 130, "Harbor Lights", None, None, None),
+        (2, 190, "Marrow Road", None, None, None),
+        (3, 26 * 60, "Quiet Orbit", 2, 1, "Perihelion"),
+        (0, 30 * 60, "Paper Kites", None, None, None),
+        (2, 3 * 24 * 60, "Copper Hollow", 1, 4, "The Ledger"),
+        (1, 4 * 24 * 60, "Salt and Cedar", None, None, None),
+        (3, 6 * 24 * 60, "Ember Rooms", None, None, None),
+    )
+
+    def __init__(self, discover):
+        self.discover = discover
+        self.lock = threading.Lock()
+        self.feed = "default"
+        self.sessions = "default"
+        self.privacy = "FRIENDS"
+        self.art_base = "http://127.0.0.1"
+
+    def configure(self, patch):
+        allowed = {"feed": ("default", "empty", "fail"), "sessions": ("default", "none", "forbidden"),
+                   "privacy": ("FRIENDS", "PRIVATE")}
+        for key, value in patch.items():
+            if key not in allowed or value not in allowed[key]:
+                return 400, {"error": f"unknown setting {key}={value!r}", "allowed": allowed}
+        with self.lock:
+            for key, value in patch.items():
+                setattr(self, key, value)
+            return 200, {"feed": self.feed, "sessions": self.sessions, "privacy": self.privacy}
+
+    def _image(self, kind, key):
+        return f"{self.art_base}/_mock/community/{kind}/{key}.png"
+
+    def _node(self, n, now):
+        who, minutes, title, season, episode, episode_title = self.HISTORY[n]
+        uid, username, display = self.FRIENDS[who]
+        c = next(c for c in self.discover.catalog if c["title"] == title)
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now - minutes * 60))
+        images = {"coverPoster": self._image("poster", c["hex"]), "coverArt": self._image("art", c["hex"])}
+        if season is None:
+            item = {"id": c["hex"], "title": c["title"], "type": c["kind"], "year": c["year"],
+                    "index": None, "key": f"/library/metadata/{c['hex']}", "images": images,
+                    "parent": None, "grandparent": None}
+        else:
+            ep = hashlib.md5(f"community-{c['hex']}-{season}-{episode}".encode()).hexdigest()[:24]
+            item = {"id": ep, "title": episode_title, "type": "episode", "year": c["year"], "index": episode,
+                    "key": f"/library/metadata/{ep}", "images": {"coverPoster": None, "coverArt": None},
+                    "parent": {"index": season},
+                    "grandparent": {"id": c["hex"], "title": c["title"], "key": f"/library/metadata/{c['hex']}",
+                                    "images": images}}
+        return {"id": f"activity-{n}", "date": stamp, "metadataItem": item,
+                "userV2": {"id": uid, "username": username, "displayName": display,
+                           "avatar": self._image("avatar", username)}}
+
+    def graphql(self, query, note_write):
+        """`(status, body)` for one GraphQL document, or None when it is none of the three."""
+        if "updatePrivacy" in query:
+            m = re.search(r"watchHistory:\s*(FRIENDS|PRIVATE)", query)
+            if not m:
+                return 400, {"errors": [{"message": "watchHistory must be FRIENDS or PRIVATE"}]}
+            note_write("POST", "/api", m.group(1).encode())
+            with self.lock:
+                self.privacy = m.group(1)
+            return 200, {"data": {"updatePrivacy": True}}
+        if "userPrivacy" in query:
+            with self.lock:
+                return 200, {"data": {"userPrivacy": {"watchHistory": self.privacy}}}
+        if "activityFeed" in query:
+            with self.lock:
+                mode = self.feed
+            if mode == "fail":
+                return 503, {"errors": [{"message": "unavailable"}]}
+            m = re.search(r"first:\s*(\d+)", query)
+            first = int(m.group(1)) if m else 20
+            nodes = [] if mode == "empty" else [self._node(n, int(time.time())) for n in range(len(self.HISTORY))]
+            return 200, {"data": {"activityFeed": {"nodes": nodes[:first]}}}
+        return None
+
+    def status_sessions(self, lib):
+        """`(status, body)` of `GET /status/sessions`: the owner's view of what plays now."""
+        with self.lock:
+            mode = self.sessions
+        if mode == "forbidden":
+            return 401, {"error": "Unauthorized"}
+        rows = []
+        if mode == "default":
+            items = sorted(lib.items.values(), key=lambda it: int(it["ratingKey"]))
+            movie = next((it for it in items if it.get("type") == "movie"), None)
+            episode = next((it for it in items if it.get("type") == "episode"), None)
+            for it, (name, state, frac) in ((movie, ("Camille", "playing", 0.4)), (episode, ("Léo", "paused", 0.7))):
+                if it is None:
+                    continue
+                row = {k: it[k] for k in ("ratingKey", "key", "type", "title", "grandparentTitle", "parentIndex",
+                                          "index", "thumb", "grandparentThumb", "duration") if k in it}
+                duration = int(it.get("duration", 0) or 5_400_000)
+                row["duration"] = duration
+                row["viewOffset"] = int(duration * frac)
+                row["User"] = {"id": "77", "title": name, "thumb": self._image("avatar", name.lower())}
+                # What a real server also sends, and the app must never show.
+                row["Player"] = {"state": state, "title": "Living Room TV", "address": "192.0.2.10",
+                                 "device": "webOS", "product": "Plex for LG", "machineIdentifier": "mock-player"}
+                row["Session"] = {"id": f"mock-session-{name}", "bandwidth": 8000, "location": "lan"}
+                rows.append(row)
+        return 200, {"MediaContainer": {"size": len(rows), "Metadata": rows}}
+
+
 class MockPms:
     def section_pad_hubs(self, key, kind, count, rows=12):
         """`count` synthetic hubs for `/hubs/sections/<key>` (#412), after the library's own.
@@ -3328,6 +3463,8 @@ class MockPms:
         self.lib = lib
         # The plex.tv Watchlist's Discover stand-in (see its class); held titles take library guids.
         self.discover = DiscoverFixture()
+        # plex.tv's community service (the Friends page), beside the Discover stand-in.
+        self.community = CommunityFixture(self.discover)
         if not isinstance(lib, CatalogLibrary):  # the demo catalog's recorded guids are pinned by fixtures
             self.discover.bind(lib)
         # `--home-hubs N` (#395): `/hubs` answers exactly N hubs; 0 keeps the library's own.
@@ -3675,6 +3812,30 @@ class MockPms:
                 current = {k: getattr(self, k) for k in allowed}
             return j(current)
 
+        if p == "/_mock/community":
+            if method != "POST":
+                return j({"error": "method not allowed"}, 405)
+            try:
+                patch = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                return j({"error": "invalid JSON body"}, 400)
+            if not isinstance(patch, dict):
+                return j({"error": "body must be a JSON object"}, 400)
+            status, obj = self.community.configure(patch)
+            return j(obj, status)
+        # The community GraphQL (the Friends page): `POST /api` with `{"query": ...}`.
+        if p == "/api" and method == "POST":
+            try:
+                query = json.loads(body or b"{}").get("query", "")
+            except (json.JSONDecodeError, AttributeError):
+                return j({"errors": [{"message": "invalid JSON body"}]}, 400)
+            answered = self.community.graphql(query if isinstance(query, str) else "", self.note_write)
+            if answered is None:
+                return j({"errors": [{"message": "unknown query"}]}, 400)
+            return j(answered[1], answered[0])
+        if p == "/status/sessions" and method == "GET":
+            status, obj = self.community.status_sessions(lib)
+            return j(obj, status)
         if p == "/_mock/discover":
             if method != "POST":
                 return j({"error": "method not allowed"}, 405)
@@ -4009,6 +4170,11 @@ class MockPms:
             lim = q.get("limit", "")
             return j(self.container(Hub=lib.search(q.get("query", ""), int(lim) if lim.isdigit() else 3,
                                                    include_collections=q.get("includeCollections") == "1")))
+        if p == "/photo/:/transcode":
+            # The community fixture's absolute poster, art and avatar URLs: flat, never fetched.
+            src_segs = [x for x in urllib.parse.urlsplit(q.get("url", "")).path.split("/") if x]
+            if src_segs[:2] == ["_mock", "community"]:
+                return (200, "image/png", flat_png(q.get("width", 250), q.get("height", 375), colour_for("/".join(src_segs))))
         if p == "/photo/:/transcode" and (hit := self.cw_art_photo(q, lib)) is not None:
             return hit
         if p == "/photo/:/transcode" and catalog:
@@ -4639,6 +4805,7 @@ def serve(port, seed=1, host="127.0.0.1", verbose=False, movies=48, rail_fixture
     account_ip = advertise_ip or ("127.0.0.1" if host in ("0.0.0.0", "::") else host)
     account_port = advertise_port or srv.server_address[1]
     pms.discover.art_base = f"http://{account_ip}:{account_port}"  # the host of a coverArt url
+    pms.community.art_base = pms.discover.art_base
     pms.account_resource = {
         "name": lib.friendly, "clientIdentifier": lib.machine, "provides": "server",
         "owned": True, "home": False, "ownerId": 1, "presence": True,

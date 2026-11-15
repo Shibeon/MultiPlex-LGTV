@@ -1677,3 +1677,22 @@ fn chips_draw_their_plates_at_rest() {
             "{:?}: its plate is drawn with no focus on the row", item.slot);
     }
 }
+
+/// **A note with no count pill is drawn** (the Friends page's lead line: a title and a note, no
+/// count). Both optional spans used to be taken from the stack with an eager `Option::and`, so a
+/// missing count still consumed the next span and the note had none to stand in.
+#[test]
+fn a_title_note_without_a_count_is_drawn_after_the_title() {
+    let runs = crate::draw_census::capture_runs(|| {
+        draw_title_noted(Painter::recording(), TOP, c"Friends", None, Some(c"What your friends watched."))
+    });
+    let texts: Vec<&str> = runs.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(texts, ["Friends", "What your friends watched."], "{runs:?}");
+    assert!(runs[1].at.x > runs[0].at.x, "the note stands after the title: {runs:?}");
+    // With a count the order is title, pill, note, as before.
+    let runs = crate::draw_census::capture_runs(|| {
+        draw_title_noted(Painter::recording(), TOP, c"My list", Some(c"3"), Some(c"1 not available yet"))
+    });
+    let texts: Vec<&str> = runs.iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(texts, ["My list", "3", "1 not available yet"]);
+}

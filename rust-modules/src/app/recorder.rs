@@ -216,8 +216,12 @@ const RESOLUTION_SHAPE: &str = "ProductResolutionV1{fo:Option<(entry:u32,elem:u3
 /// **My list's tiles carry their availability**: `SCREEN_SHAPES`' `WatchlistScreen` gains
 /// `avail:u32` per tile, so both frozen vectors and both numbers were re-derived again and the
 /// replay anchors re-recorded.
-pub(crate) const FP_PRIOR: u64 = 16966599510782656729;
-pub(crate) const FP_V6: u64 = 5721615536593523891;
+///
+/// **The Friends page** (the web app's *Amis*) joins the top bar: `ARG_SHAPE` gains
+/// `AppArg::Friends` and `SCREEN_SHAPES` gains `FriendsScreen::SHAPE`, so both frozen vectors and
+/// both numbers were re-derived once more and the replay anchors re-recorded.
+pub(crate) const FP_PRIOR: u64 = 7524794596150345573;
+pub(crate) const FP_V6: u64 = 14417121799567616615;
 
 pub(crate) fn state_fp() -> u64 {
     let mut shapes: Vec<&str> = APP_SHAPES.to_vec();

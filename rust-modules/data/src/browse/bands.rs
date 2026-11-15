@@ -411,21 +411,9 @@ const AFTER: &str = ">>";
 /// The inclusive operator `>=`, minus the `=` the query string supplies: the date probes'.
 const AT_LEAST: &str = ">";
 
-/// Days from 1970-01-01 to `date` in the proleptic Gregorian calendar (Howard Hinnant's
-/// `days_from_civil`): negative before 1970. Pure arithmetic, no zone and no `time_t`.
-fn days_from_civil(date: Day) -> i64 {
-    let [year, month, day] = date.map(i64::from);
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let day_of_year = (153 * (if month > 2 { month - 3 } else { month + 9 }) + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    era * 146_097 + day_of_era - 719_468
-}
-
 /// The epoch second of `date`'s first moment in UTC: what `originallyAvailableAt` compares against.
 fn utc_midnight(date: Day) -> i64 {
-    days_from_civil(date) * 86_400
+    plx_base::civil::days_from_civil(date) * 86_400
 }
 
 /// A rating of `h` hundredths as the decimal text the server compares as a float: 949 is `9.49`.
@@ -708,7 +696,7 @@ mod tests {
     const LOCAL_ZONE_SECONDS: i64 = 5 * 3600;
 
     fn days(date: Day) -> i64 {
-        days_from_civil(date)
+        plx_base::civil::days_from_civil(date)
     }
 
     /// A viewer five hours behind UTC: local midnight is 05:00 UTC, so it differs from UTC midnight.

@@ -1,0 +1,41 @@
+{
+  "friends.page.title": "Znajomi",
+  "friends.page.lead": "Co oglądali Twoi znajomi z Plex.",
+  "friends.filter.all": "Wszyscy",
+  "friends.share.label": "Udostępniaj, co oglądam",
+  "friends.share.on": "Wł.",
+  "friends.share.off": "Wył.",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Nie udało się zaktualizować",
+  "friends.live.heading": "Teraz oglądane",
+  "friends.live.watching": "{name} ogląda",
+  "friends.live.paused": "{name} · wstrzymane",
+  "friends.day.today": "Dzisiaj",
+  "friends.day.yesterday": "Wczoraj",
+  "friends.day.earlier": "Wcześniej",
+  "friends.post.movie": "{name} obejrzał(a)",
+  "friends.post.episode": "{name} obejrzał(a) odcinek",
+  "friends.post.episodes": {
+    "one": "{name} obejrzał(a) {count} odcinek",
+    "few": "{name} obejrzał(a) {count} odcinki",
+    "many": "{name} obejrzał(a) {count} odcinków",
+    "other": "{name} obejrzał(a) {count} odcinka"
+  },
+  "friends.ago.now": "przed chwilą",
+  "friends.ago.minutes": {
+    "one": "{count} min temu",
+    "few": "{count} min temu",
+    "many": "{count} min temu",
+    "other": "{count} min temu"
+  },
+  "friends.ago.hours": {
+    "one": "{count} godz. temu",
+    "few": "{count} godz. temu",
+    "many": "{count} godz. temu",
+    "other": "{count} godz. temu"
+  },
+  "friends.ago.at": "o {time}",
+  "friends.empty.none": "Twoi znajomi jeszcze nic nie obejrzeli",
+  "friends.empty.no_account": "Zaloguj się kontem Plex, aby zobaczyć znajomych",
+  "friends.empty.unreachable": "Nie udało się wczytać aktywności znajomych"
+}

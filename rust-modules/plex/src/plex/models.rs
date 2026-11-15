@@ -296,9 +296,33 @@ pub struct MetadataImage {
     url: String,
 }
 
+/// The account a `/status/sessions` entry plays for (`live.rs`): its name and picture, nothing else.
+#[derive(Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+pub struct SessionUser {
+    #[serde(default, deserialize_with = "de_str")]
+    pub title: String,
+    #[serde(default, deserialize_with = "de_str")]
+    pub thumb: String,
+}
+
+/// A `/status/sessions` entry's player, read for its `state` ONLY (`playing`, `paused`,
+/// `buffering`). Its device, platform, product, address and identifiers are deliberately not
+/// decoded: the Friends page's live section must not become a tracker (the owner's privacy rule).
+#[derive(Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+pub struct SessionPlayer {
+    #[serde(default, deserialize_with = "de_str")]
+    pub state: String,
+}
+
 /// The movie/show/season/episode item. Missing fields default (Plex omits optionals).
 #[derive(Deserialize, Default)]
 pub struct Metadata {
+    /// Only on a `/status/sessions` entry: who is playing it ([`SessionUser`]).
+    #[serde(rename = "User", default)]
+    pub session_user: Option<SessionUser>,
+    /// Only on a `/status/sessions` entry: its player's state ([`SessionPlayer`]).
+    #[serde(rename = "Player", default)]
+    pub session_player: Option<SessionPlayer>,
     /// Only on a read that asked `includePreferences=1` — see [`Preferences`].
     #[serde(rename = "Preferences", default)]
     pub preferences: Preferences,

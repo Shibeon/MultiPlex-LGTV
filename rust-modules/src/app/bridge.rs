@@ -699,6 +699,8 @@ pub(crate) struct Bridge {
     watchlist_reqs: Vec<(MachineId, plx_screens::watchlist::page::WatchlistOut, ReturnState<u32, PageMemory>)>,
     /// What the Watchlist page was last handed from the store (`watchlist::Feed`).
     watchlist: watchlist::Feed,
+    /// What the Friends page was last handed from the community store (`friends::Feed`).
+    friends: friends::Feed,
     /// The catalog page instance the store was last opened for (`watchlist::catalog_feed`).
     catalog_seat: Option<InstanceId>,
     /// The scratch session a Watchlist rig seated for the account it scripts ([`Bridge::seat_watchlist_account_for_test`]).
@@ -964,6 +966,7 @@ impl Bridge {
             item_menu_reqs: Vec::new(),
             watchlist_reqs: Vec::new(),
             watchlist: watchlist::Feed::default(),
+            friends: friends::Feed::default(),
             catalog_seat: None,
             #[cfg(test)]
             watchlist_session: None,
@@ -1516,6 +1519,7 @@ impl Bridge {
             d.nav.tabs.strip_fallback = Some(match route {
                 AppArg::Search => plx_ui::widgets::TAB_KEY_SEARCH,
                 AppArg::Watchlist => plx_ui::widgets::TAB_KEY_WATCHLIST,
+                AppArg::Friends => plx_ui::widgets::TAB_KEY_FRIENDS,
                 _ => plx_screens::home::STRIP_HOME_ELEM,
             });
             if let Some(io) = &self.home_io {
@@ -2953,6 +2957,10 @@ impl Bridge {
                 self.collection_run(command.clone());
                 return Handled::Yes;
             }
+            AppMsg::Store(StoreCmd::Community(command)) => {
+                self.community_run(command.clone());
+                return Handled::Yes;
+            }
             AppMsg::Store(StoreCmd::SubtitleSearch(command)) => {
                 self.subsearch_run(command.clone());
                 return Handled::Yes;
@@ -3382,6 +3390,7 @@ fn step_store(cmd: &StoreCmd, _cx: &Cx<'_, AppHost>, _fx: &mut Effects<'_, AppHo
         StoreCmd::Collection(_) => unreachable!("Collection is stepped by Bridge's owned store"),
         StoreCmd::ViewState(_) => unreachable!("ViewState is stepped by Bridge with its Browse owner"),
         StoreCmd::SubtitleSearch(_) => unreachable!("SubtitleSearch is stepped by Bridge's owned store"),
+        StoreCmd::Community(_) => unreachable!("Community is stepped by Bridge's owned store"),
     }
 }
 
@@ -3555,6 +3564,9 @@ fn frame_ingest(
     // landing began from the old ones (a snap, then a jump back).
     rig.watchlist_pump();
     rig.watchlist_feed(d);
+    // The Friends page's community store, for the same reason: reads only while the page is on
+    // top, nothing for a managed profile, and the page handed what moved before it ticks.
+    rig.friends_feed(d);
     // Library used to be the only route that pumped Browse. Onboard schedules the roster-only
     // owner work from its Tick, but Tick runs after views are captured; land the roster first so
     // a discovery result and the directory publication are observed in one frame. Controlled
@@ -4540,6 +4552,7 @@ fn pill_of_arg(arg: &AppArg, directory: plx_data::stores::browse::DirectoryView<
         AppArg::Home => pill_of(directory, Pill::Home),
         AppArg::Search => pill_of(directory, Pill::Search),
         AppArg::Watchlist => pill_of(directory, Pill::Watchlist),
+        AppArg::Friends => pill_of(directory, Pill::Friends),
         // The grid and the two pages its header pushes (Collections, Recommended) are all the
         // library's: they select its type's pill, the pill they were opened from.
         arg if arg.is_library_family() => {
@@ -4582,9 +4595,10 @@ pub(crate) fn nav_tab(
     ret: Option<ReturnState<u32, PageMemory>>,
 ) {
     use crate::app::chrome::Pill;
-    // A managed Plex Home profile has no My list (`chrome::strip_keys`): whatever asks for it, a
-    // stale press, a boot trigger, lands on Home instead, as the Home pill's BACK does.
-    let tab = if tab == HomeTab::Watchlist && rig.profile_managed() { HomeTab::Home } else { tab };
+    // A managed Plex Home profile has no My list and no Friends page (`chrome::strip_keys`):
+    // whatever asks for either, a stale press, a boot trigger, lands on Home instead, as the Home
+    // pill's BACK does.
+    let tab = if matches!(tab, HomeTab::Watchlist | HomeTab::Friends) && rig.profile_managed() { HomeTab::Home } else { tab };
     let arg = match tab {
         HomeTab::Home => {
             // Keep the pill the user was standing on under focus. An IDENTITY, not an index: a
@@ -4595,6 +4609,7 @@ pub(crate) fn nav_tab(
                     Pill::Home => HomeTab::Home,
                     Pill::Search => HomeTab::Search,
                     Pill::Watchlist => HomeTab::Watchlist,
+                    Pill::Friends => HomeTab::Friends,
                     Pill::Section(plx_data::browse::SecKind::Movie) => HomeTab::Movies,
                     Pill::Section(plx_data::browse::SecKind::Show) => HomeTab::Shows,
                 };
@@ -4638,6 +4653,7 @@ pub(crate) fn nav_tab(
         }
         HomeTab::Search => AppArg::Search,
         HomeTab::Watchlist => AppArg::Watchlist,
+        HomeTab::Friends => AppArg::Friends,
     };
     nav_peer(d, arg, ret);
 }
@@ -5417,6 +5433,13 @@ mod strip_home_pill_tests;
 
 #[path = "watchlist.rs"]
 mod watchlist;
+
+#[path = "friends.rs"]
+mod friends;
+
+#[cfg(test)]
+#[path = "friends_route_tests.rs"]
+mod friends_route_tests;
 pub(crate) use watchlist::{hex_of_guid, open_catalog, open_watchlist_menu};
 
 #[cfg(test)]

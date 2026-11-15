@@ -16,6 +16,7 @@ pub mod paths; // where the app's own files live — /proc/self/exe, not a hardc
 pub mod process; // `exit_now`: the one way the app's own exits end the process (`_exit`, never libc `exit`, #1115)
 pub mod step; // test-time Sans-IO scope, shared by every layer
 pub mod clock; // `vclock_ms`/`vclock_us`: the one monotonic clock for stamps that are only differenced
+pub mod civil; // `days_from_civil`/`civil_from_days`: the one proleptic Gregorian day count
 pub mod task; // the one spawn: a refused thread is a return value, not a panic that kills the app
 pub mod cbuf; // fixed NUL-terminated C-string buffer read/write
 pub mod sha256; // SHA-256 / HMAC / PBKDF2, hand-written: the offline PIN verifier's hash

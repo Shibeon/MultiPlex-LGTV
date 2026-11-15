@@ -42,7 +42,7 @@ fn library_strip_profile_navigation_and_armed_pill_use_the_actual_engine_identit
             .map(|member| member.elem)
             .collect::<Vec<_>>(),
         vec![base + 3, base, base + 1, base + 2, plx_ui::widgets::TAB_KEY_WATCHLIST,
-            plx_ui::widgets::TAB_KEY_SETTINGS, plx_ui::widgets::TAB_KEY_CHIP]
+            plx_ui::widgets::TAB_KEY_FRIENDS, plx_ui::widgets::TAB_KEY_SETTINGS, plx_ui::widgets::TAB_KEY_CHIP]
     );
     let seat = |d: &mut Dispatcher<AppHost>, elem| {
         d.emit(
