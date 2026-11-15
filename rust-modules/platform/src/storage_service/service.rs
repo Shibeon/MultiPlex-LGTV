@@ -91,10 +91,11 @@ pub fn run() -> Result<(), ErrorCode> {
                     continue;
                 }
                 if db8 {
-                    // Once per helper process: carry a pre-rename record of this install's own
-                    // over to its current DB8 id (never PlxNative's, which shares the old stable
-                    // id). Best effort; whatever it leaves in the failure slot is not this
-                    // request's, so the slot is cleared after it.
+                    // Once per helper process (again after a transient failure): carry a
+                    // pre-rename record of this install's own over to its current DB8 id and purge
+                    // the old copy. Never PlxNative's, which shares the old stable and nightly ids.
+                    // Best effort; whatever it leaves in the failure slot is not this request's,
+                    // so the slot is cleared after it.
                     backend.adopt_legacy_record();
                     wire::failure::clear();
                 }
