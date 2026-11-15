@@ -195,6 +195,10 @@ pub struct PlaybackSession {
     /// explicitly, since long credits start before that; a stop past it is the server's to count,
     /// and a scrobble on top would be a second view. Read and cleared by [`scrobble_stop`].
     pub finished: bool,
+    /// This landing has shown the viewer a decoded frame ([`on_decoded_frame`]). Cleared by every
+    /// request and every landing. A stop that never presented one (Back while a Play from Start
+    /// buffered) watched nothing, so it owes the server no resume reset ([`scrobble_stop`]).
+    presented: bool,
     /// Read-only publication of Player.repair for the HUD. Never authorizes a resource effect.
     pub repair_status: plx_platform::tv::sandbox::State,
     /// The request which produced this attempt, retained for terminal Retry / Choose quality.
@@ -1690,6 +1694,7 @@ impl PlaybackSession {
         native_start_refused: None,
         engine_failure: None,
         finished: false,
+        presented: false,
         repair_status: plx_platform::tv::sandbox::State::Idle,
         request: None,
         requested_resume_ns: 0,
@@ -1798,6 +1803,7 @@ impl PlaybackSession {
             native_start_refused,
             engine_failure,
             finished,
+            presented,
             repair_status,
             request,
             requested_resume_ns,
@@ -1888,6 +1894,7 @@ impl PlaybackSession {
             native_start_refused: *native_start_refused,
             engine_failure: *engine_failure,
             finished: *finished,
+            presented: *presented,
             repair_status: *repair_status,
             request: request.clone(),
             requested_resume_ns: *requested_resume_ns,
@@ -8337,6 +8344,10 @@ struct ScrobbleWork {
     /// Mark the item watched once the `stopped` report is in, if it landed below the server's own
     /// watched threshold (`PlaybackSession::finished`).
     mark_watched: bool,
+    /// Clear the resume point the server held when the play began, once the `stopped` report is
+    /// in: the viewer started over and stopped under the server's floor, a stop it drops
+    /// ([`plx_data::viewstate::restart_owes_resume_reset`]).
+    reset_resume: bool,
     /// The record the app learns this stop from; posted just before `timeline_stop` completes.
     stop_mail: Option<PendingStop>,
 }
@@ -8490,6 +8501,18 @@ impl ScrobbleWork {
                     }
                 }
             }
+            // A restart quit under the server's floor: the `stopped` just posted is dropped and the
+            // old resume point stands (`docs/pms-api.md` §7), so clear it. After `stopped`, so a
+            // stop the server does keep cannot land on top of the reset.
+            if self.reset_resume {
+                let cleared = self.client.is_some_and(|c| c.unscrobble(&rk));
+                plx_base::eventlog::log(&format!("restart under the floor: resume point cleared ok={}", cleared as i32));
+                if cleared {
+                    if let Some(rec) = self.stop_mail.as_mut().and_then(|m| m.rec.as_mut()) {
+                        rec.pos_ms = 0; // our word until the read-back says the server's
+                    }
+                }
+            }
         }
         // BEFORE the fence completes, so a completed fence implies the record is in the mailbox.
         if let Some(mut mail) = self.stop_mail.take() {
@@ -8575,13 +8598,23 @@ pub fn scrobble_stop(
     // item, and letting two race would let an older one land last. Normally free — the measured
     // baseline for a finished worker is 0 ms.
     drain_scrobble();
+    let mut reset_resume = false;
     let stop_mail = final_report.as_ref().map(|(rk, pos_ms, dur_ms)| {
         let sid = cur_sid(ps);
-        // The item's row in the play queue, fetched when the play began: its watched state is the
-        // "before" of this stop. A row that cannot be found reads as watched, so an unknown never
-        // fans out a scrobble nobody asked for.
+        // The item's row in the play queue, fetched when the play began: its watched state and its
+        // resume point are the "before" of this stop. A row that cannot be found reads as watched,
+        // so an unknown never fans out a scrobble nobody asked for, nor clears a resume point.
         let row = plx_plex::plex::queue_index_of(&ps.queue, ps.pq_item_id.parse().unwrap_or(0), sid, rk)
             .map(|i| &ps.queue[i]);
+        // Started over and stopped under the server's floor: the `stopped` below would be dropped
+        // and the old resume point would stand (the owner's "Resume at 45 minutes" after a restart).
+        // Only a playback that showed the viewer a frame and did not end failed: Back during a
+        // still-buffering Play from Start, or a start that failed (its report names 0,
+        // `route_start::final_position_ns`), watched nothing from the beginning.
+        reset_resume = !mark_watched
+            && ps.presented
+            && engine_failure(ps).is_none()
+            && row.is_some_and(|r| plx_data::viewstate::restart_owes_resume_reset(*pos_ms, r.resume_ms, r.watched));
         PendingStop::new(plx_data::viewstate::StopRecord {
             sid,
             rk: rk.clone(),
@@ -8607,6 +8640,7 @@ pub fn scrobble_stop(
         reported_rk,
         timeline_stop,
         mark_watched,
+        reset_resume,
         stop_mail,
     })));
     let worker = work.clone();
@@ -10778,6 +10812,7 @@ fn request_play_with_queue(
     viewer_reconfigure: Option<(ViewerReconfigure, bool)>,
 ) -> bool {
     ps.finished = false; // a flag the previous stop never took must not mark THIS item
+    ps.presented = false;
     let sid = request.sid;
     let rk = &request.rk;
     let part = &request.part;
@@ -11662,6 +11697,7 @@ fn apply_plan(ps: &mut PlaybackSession, meta: &mut plx_data::stores::metadata::M
             native_start_refused: None,
             engine_failure: None,
             finished: false,
+            presented: false,
             repair_status: plx_platform::tv::sandbox::State::Idle,
             request,
             requested_resume_ns,

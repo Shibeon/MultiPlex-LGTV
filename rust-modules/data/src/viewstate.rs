@@ -176,8 +176,12 @@ impl Scope {
     }
 }
 
-/// What a finished playback tells the view state: the position its `stopped` timeline POST
-/// carried, and whether the item was already watched when the play began. Filled by the media layer
+/// What a finished playback tells the view state: the resume point this stop leaves on the server
+/// as far as the app knows (the position its `stopped` timeline POST carried, or 0 when the stop
+/// worker followed a restart's under-the-floor stop with `/:/unscrobble`, see
+/// [`restart_owes_resume_reset`], because PMS drops that stop), and whether the item was already
+/// watched when the play began. Read `pos_ms` as the tile's new resume point, not as how far the
+/// viewer actually played. Filled by the media layer
 /// when that POST is attempted or abandoned (`route::take_landed_stops`), consumed by
 /// [`crate::stores::Stores::stops_landed`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -242,6 +246,32 @@ const WATCHED_PERCENT: i64 = 90;
 /// math with saturating products: no overflow whatever the server reported.
 pub fn past_watched_threshold(ms: i64, dur_ms: i64) -> bool {
     dur_ms > 0 && ms.saturating_mul(100) >= dur_ms.saturating_mul(WATCHED_PERCENT)
+}
+
+/// The smallest `stopped` position PMS was measured to STORE as a resume point (`docs/pms-api.md`
+/// §7, "Measured live 2026-10-10", PMS 1.43.4): 60 s was silently dropped, 120 s kept. Between the
+/// two is unmeasured, so everything under 120 s counts as a stop the server may drop.
+const STORED_STOP_FLOOR_MS: i64 = 120_000;
+
+/// May the server silently drop a `stopped` report at `ms`, keeping whatever resume point it held
+/// before? True under [`STORED_STOP_FLOOR_MS`].
+pub fn below_stored_stop_floor(ms: i64) -> bool {
+    ms < STORED_STOP_FLOOR_MS
+}
+
+/// **Does a stop at `stop_ms` owe the server an explicit reset of its resume point?** The server
+/// held `held_resume_ms` when the play began (the play-queue row's `viewOffset`), the viewer left it
+/// for the beginning (a stop under the floor, below the held point, which only "Play from Start" or
+/// the player's "From beginning" / a seek back reach), and the server will drop that stop and keep
+/// offering the old point. Never for a title watched before the play began: `/:/unscrobble`, the
+/// one call that clears a resume point (python-plexapi `updateProgress`: "setting the time to 0
+/// will not work. Use markPlayed or markUnplayed"; `tests/run.py`'s `pms_unscrobble` found a
+/// `time=0` progress PUT ignored live), would also throw its watched state away.
+pub fn restart_owes_resume_reset(stop_ms: i64, held_resume_ms: i64, was_watched: bool) -> bool {
+    !was_watched
+        && below_stored_stop_floor(stop_ms)
+        && !below_stored_stop_floor(held_resume_ms)
+        && stop_ms < held_resume_ms
 }
 
 /// The edit a store applies to the rows a [`ViewAt`] names.

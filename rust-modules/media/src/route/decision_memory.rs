@@ -581,7 +581,8 @@ pub fn rematch_subtitle_with_names(ps: &mut PlaybackSession) -> Option<i64> {
 ///   1. [`rematch_subtitle_with_names`]: the demuxer's track names exist only once the file is open,
 ///      and the re-match must settle what is on screen BEFORE anything tells the server. While a
 ///      write-back is parked it re-points that write's subtitle half and queues no PUT of its own.
-///   2. [`confirm_resume_presented`]: the replacement route shows a frame.
+///   2. [`confirm_resume_presented`]: the replacement route shows a frame, and the landing is
+///      marked as having presented one (`PlaybackSession::presented`).
 ///   3. [`send_parked_write_back`]: the one write names the remembered audio and the subtitle the
 ///      re-match settled on. Swapped with step 1 the send would go first, naming the landing's
 ///      subtitle, and the re-match would then PUT again through the manual path (two writes, no W5,
@@ -589,5 +590,6 @@ pub fn rematch_subtitle_with_names(ps: &mut PlaybackSession) -> Option<i64> {
 pub fn on_decoded_frame(ps: &mut PlaybackSession) {
     rematch_subtitle_with_names(ps);
     confirm_resume_presented(ps);
+    ps.presented = true;
     send_parked_write_back(ps);
 }

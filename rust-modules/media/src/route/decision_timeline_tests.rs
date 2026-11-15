@@ -707,6 +707,137 @@ fn a_finishing_stop_past_the_servers_threshold_posts_stopped_alone() {
     reset_player_control_for_test(&ps);
 }
 
+/// What a PMS does with item `rk`'s resume point, given the request lines a stop sent, as
+/// `docs/pms-api.md` §7 records it ("Measured live 2026-10-10", PMS 1.43.4): a `stopped` report
+/// past the watched threshold, `/:/scrobble` and `/:/unscrobble` all clear it; any other `stopped`
+/// stores its own time, even a lower one, EXCEPT a position under the server's floor (60 s was
+/// measured dropped, 120 s kept), which is silently NOT stored and leaves the old one standing.
+fn pms_resume_after(lines: &[String], rk: &str, mut resume_ms: i64) -> i64 {
+    let param = |line: &str, name: &str| -> Option<String> {
+        let query = line.split_whitespace().nth(1)?.split_once('?')?.1;
+        query.split('&').find_map(|kv| kv.strip_prefix(&format!("{name}=")).map(str::to_owned))
+    };
+    for line in lines {
+        if line.contains(&format!("/:/scrobble?key={rk}&")) || line.contains(&format!("/:/unscrobble?key={rk}&")) {
+            resume_ms = 0;
+        } else if line.contains("/:/timeline?") && param(line, "ratingKey").as_deref() == Some(rk)
+            && param(line, "state").as_deref() == Some("stopped")
+            && param(line, "continuing").as_deref() != Some("1")
+        {
+            let time: i64 = param(line, "time").and_then(|t| t.parse().ok()).unwrap_or(0);
+            let dur: i64 = param(line, "duration").and_then(|d| d.parse().ok()).unwrap_or(0);
+            if plx_data::viewstate::past_watched_threshold(time, dur) {
+                resume_ms = 0;
+            } else if time > 60_000 {
+                resume_ms = time;
+            }
+        }
+    }
+    resume_ms
+}
+
+/// **Started over and quit a few seconds in: the old resume point must not survive.** The owner's
+/// report on v0.12.0: a film played to 45:00 and quit; reopened, taken back to the beginning,
+/// quit ~5 s later — and Continue Watching still offered "Resume at 45 minutes". The final
+/// `stopped` at 5 s goes out, but a PMS does not store a stop under its floor (`docs/pms-api.md`
+/// §7), so the 45:00 it already held stands, and every surface reads it back from there. The
+/// server held a resume point when this playback began (its play-queue row says so) and the viewer
+/// left it for the beginning, so the stop clears that point itself (`/:/unscrobble`, the call
+/// python-plexapi's `updateProgress` names for "progress 0"), and the app is told 0.
+///
+/// The cases that must stay untouched: a stop resumed from that point (45:05 is above the floor
+/// and the server stores it), a title that was already WATCHED (an unscrobble would also throw its
+/// watched state away; that rewatch keeps the server's resume point), and a Play from Start that
+/// never showed the viewer anything — Back while it was still buffering, or a start that failed
+/// (its final report names 0, `route_start::final_position_ns`): nobody watched from the
+/// beginning, so the 45:00 the viewer had is not theirs to lose.
+#[test]
+fn a_restart_from_the_beginning_quit_seconds_in_clears_the_servers_old_resume_point() {
+    let mut ps = crate::route::PlaybackSession::IDLE;
+    let _g = fresh_registry(&mut ps);
+    drain_scrobble();
+    reset_session(&mut ps);
+    reset_player_control_for_test(&ps);
+    let _ = take_landed_stops();
+
+    let server = RecordingServer::start();
+    let sid = plx_plex::plex::register_for_test("restart-stop", "127.0.0.1", server.port, "tok", "restart-client");
+    const DUR: i64 = 6_000_000; // a 100-minute film
+    const AT_45: i64 = 2_700_000;
+    #[derive(Clone, Copy)]
+    enum Shown { Frames, Nothing, ThenFailed }
+    let play = |ps: &mut crate::route::PlaybackSession, held_resume_ms: i64, watched: bool, stop_ms: i64, shown: Shown| {
+        apply_plan(ps, Plan { sid, sess: "logical-restart".into(), ..Default::default() }, "7");
+        match shown {
+            Shown::Frames => on_decoded_frame(ps),
+            Shown::Nothing => {}
+            Shown::ThenFailed => {
+                on_decoded_frame(ps);
+                note_engine_failure(ps, crate::player::RuntimeFailure::Unknown, 0);
+            }
+        }
+        // The item's play-queue row, fetched when the play began: the server's resume point then.
+        ps.queue = vec![plx_plex::plex::QueueRow {
+            item_id: 21, sid, rk: "7".into(), watched, resume_ms: held_resume_ms, dur_ms: DUR, ..Default::default()
+        }];
+        ps.pq_item_id = "21".into();
+        let before = server.lines().len();
+        scrobble_stop(ps, Some(("7".into(), stop_ms, DUR)), None);
+        drain_scrobble();
+        server.lines()[before..].to_vec()
+    };
+
+    // Played to 45:00 from a fresh start, quit: the server holds 45:00.
+    let first = play(&mut ps, 0, false, AT_45, Shown::Frames);
+    let held = pms_resume_after(&first, "7", 0);
+    assert_eq!(held, AT_45, "the first stop stores 45:00: {first:?}");
+    let _ = take_landed_stops();
+
+    // Reopened, back to the beginning, quit 5 s in.
+    let restart = play(&mut ps, held, false, 5_000, Shown::Frames);
+    let after = pms_resume_after(&restart, "7", held);
+    assert_ne!(after, AT_45, "the server must not keep offering 45:00 after a restart: {restart:?}");
+    assert_eq!(after, 0, "{restart:?}");
+    assert!(restart[0].contains("state=stopped"), "`stopped` still goes first: {restart:?}");
+    let stops = take_landed_stops();
+    assert_eq!(stops.len(), 1);
+    assert_eq!((stops[0].pos_ms, stops[0].ok), (0, true), "the app is told the resume point is gone");
+
+    // Resumed at 45:00 and quit 5 s later: 45:05 is the server's to store, nothing is cleared.
+    let resumed = play(&mut ps, AT_45, false, AT_45 + 5_000, Shown::Frames);
+    assert_eq!(resumed.len(), 1, "`stopped` alone: {resumed:?}");
+    assert_eq!(pms_resume_after(&resumed, "7", AT_45), AT_45 + 5_000);
+    let _ = take_landed_stops();
+
+    // A fresh title played 5 s: the server held nothing, so there is nothing to clear.
+    let fresh = play(&mut ps, 0, false, 5_000, Shown::Frames);
+    assert_eq!(fresh.len(), 1, "`stopped` alone: {fresh:?}");
+    let _ = take_landed_stops();
+
+    // A watched title being rewatched: an unscrobble would cost its watched state.
+    let rewatch = play(&mut ps, AT_45, true, 5_000, Shown::Frames);
+    assert_eq!(rewatch.len(), 1, "`stopped` alone, no unscrobble of a watched title: {rewatch:?}");
+    let stops = take_landed_stops();
+    assert_eq!(stops[0].pos_ms, 5_000);
+
+    // Play from Start left with Back while it was still buffering: no frame, nothing watched.
+    let unseen = play(&mut ps, AT_45, false, 0, Shown::Nothing);
+    assert_eq!(unseen.len(), 1, "`stopped` alone for a start that showed nothing: {unseen:?}");
+    assert_eq!(pms_resume_after(&unseen, "7", AT_45), AT_45, "the viewer's 45:00 stands");
+    let _ = take_landed_stops();
+
+    // Play from Start whose engine failed: its final report names 0, and it is not a restart.
+    let failed = play(&mut ps, AT_45, false, 0, Shown::ThenFailed);
+    assert_eq!(failed.len(), 1, "`stopped` alone for a failed start: {failed:?}");
+    assert_eq!(pms_resume_after(&failed, "7", AT_45), AT_45, "the viewer's 45:00 stands");
+    let _ = take_landed_stops();
+
+    server.stop();
+    plx_plex::plex::reset_servers_for_test();
+    reset_session(&mut ps);
+    reset_player_control_for_test(&ps);
+}
+
 /// A `finished` flag no stop took (Up Next with nothing playing to stop) must not mark the item
 /// the next request starts: every playback request clears it.
 #[test]
