@@ -112,34 +112,8 @@ pub fn day_word(day: Option<i64>, today: i64) -> DayWord {
         None => DayWord::Unknown,
         Some(d) if today - d <= 0 => DayWord::Today,
         Some(d) if today - d == 1 => DayWord::Yesterday,
-        Some(d) => DayWord::Date(civil_of_days(d)),
+        Some(d) => DayWord::Date(plx_base::civil::civil_from_days(d)),
     }
-}
-
-/// The civil date of a day count since 1970-01-01 (Howard Hinnant's algorithm).
-pub fn civil_of_days(days: i64) -> [i32; 3] {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + i64::from(m <= 2);
-    [y as i32, m as i32, d as i32]
-}
-
-/// Days since 1970-01-01 of a civil date.
-fn days_of_civil([y, m, d]: [i32; 3]) -> i64 {
-    let (m, d) = (i64::from(m), i64::from(d));
-    let y = i64::from(y) - i64::from(m <= 2);
-    let era = y.div_euclid(400);
-    let yoe = y - era * 400;
-    let mp = (m + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
 }
 
 /// The friends present in the feed with how many entries each has, the most active first (ties in
@@ -185,7 +159,7 @@ pub fn ago(at: Option<i64>, now: i64, offset: i64) -> Ago {
 /// The viewer's offset east of UTC in seconds, from what the platform says the local date and clock
 /// time are at the instant `now`, rounded to the quarter hour (every zone in use is a multiple).
 pub fn utc_offset(now: i64, local_date: [i32; 3], local_hm: [i32; 2]) -> i64 {
-    let local = days_of_civil(local_date) * DAY + i64::from(local_hm[0]) * 3_600 + i64::from(local_hm[1]) * 60;
+    let local = plx_base::civil::days_from_civil(local_date) * DAY + i64::from(local_hm[0]) * 3_600 + i64::from(local_hm[1]) * 60;
     let raw = local - now.div_euclid(60) * 60;
     (raw + 450).div_euclid(900) * 900
 }

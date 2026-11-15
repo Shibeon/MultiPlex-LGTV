@@ -151,17 +151,6 @@ fn image(item: Option<&Value>, key: &str) -> Option<String> {
     obj(item?, "images").and_then(|i| text(i, key)).filter(|u| u.starts_with("https://") || u.starts_with("http://"))
 }
 
-/// Days since 1970-01-01 of a civil date (Howard Hinnant's algorithm).
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y - 1 } else { y };
-    let era = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - era * 400;
-    let mp = (m + 9) % 12;
-    let doy = (153 * mp + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146_097 + doe - 719_468
-}
-
 /// `YYYY-MM-DDTHH:MM[:SS[.fff]][Z|±HH:MM]` as unix seconds. A string with no zone is read as UTC.
 pub fn parse_iso8601(s: &str) -> Option<i64> {
     let s = s.trim();
@@ -197,7 +186,7 @@ pub fn parse_iso8601(s: &str) -> Option<i64> {
             sign * (digits[..2].parse::<i64>().ok()? * 3600 + digits[2..].parse::<i64>().ok()? * 60)
         }
     };
-    Some(days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60 + sec - offset)
+    Some(plx_base::civil::days_from_civil([y as i32, mo as i32, d as i32]) * 86_400 + h * 3600 + mi * 60 + sec - offset)
 }
 
 /// One feed node as the page shows it (the web app's `toFriendActivity`); `None` when it has no

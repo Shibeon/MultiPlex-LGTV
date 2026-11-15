@@ -361,7 +361,7 @@ impl Page {
         for (d, day) in days_of(feed, self.who.as_deref(), self.offset).into_iter().enumerate() {
             let word = match today {
                 Some(today) => day_word(day.day, today),
-                None => day.day.map_or(DayWord::Unknown, |d| DayWord::Date(plx_data::community::civil_of_days(d))),
+                None => day.day.map_or(DayWord::Unknown, |d| DayWord::Date(plx_base::civil::civil_from_days(d))),
             };
             let mut cards = Vec::new();
             for post in &day.posts {
