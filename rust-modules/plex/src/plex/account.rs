@@ -102,6 +102,30 @@ pub fn metadata_provider() -> String {
     metadata_base_of(&discover_resolved())
 }
 
+/// The plex.tv **community** service's real host: the friends' activity feed and the account's
+/// privacy settings, one GraphQL endpoint (`community.rs`). Private and spelled once, like
+/// [`DISCOVER`]: a request is built on [`community`], which a dev stand-in replaces, and
+/// `ci/check-plex-requests.py` fails on the host spelled anywhere else.
+const COMMUNITY: &str = "https://community.plex.tv";
+
+/// The base [`community`] answers for a resolved Discover base: the real community service while
+/// Discover is the real service, else the SAME loopback stand-in (`tests/mock_pms.py` answers
+/// plex.tv, Discover and the community GraphQL on one listener), so a dev build that armed a
+/// stand-in never reaches the real community service either.
+fn community_base_of(resolved: &DiscoverBase) -> String {
+    match resolved.source {
+        DiscoverSource::Real => COMMUNITY.to_string(),
+        DiscoverSource::Trigger | DiscoverSource::FollowsPlexTv => resolved.base.clone(),
+    }
+}
+
+/// The community service's base URL ([`community_base_of`]). Its GraphQL endpoint is `<base>/api`.
+/// A read through it is gated by [`discover_read_allowed`], a write by the account-write failsafe
+/// (`watchlist::account_write_permitted`), exactly as the Watchlist's are.
+pub fn community() -> String {
+    community_base_of(&discover_resolved())
+}
+
 /// Which rule decided the Discover base ([`discover`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiscoverSource {
@@ -1732,6 +1756,7 @@ pub struct HomeUser {
 mod tests {
     use super::{endpoint_shape, pin_is_gone, AccountClient, Pin, Resource};
     use super::{metadata_base_of, permit_read, resolve_discover, DiscoverSource, DISCOVER, METADATA_PROVIDER};
+    use super::{community_base_of, COMMUNITY};
     use std::time::Duration;
 
     /// The metadata provider follows Discover's resolution: the real host only while Discover is the
@@ -1742,6 +1767,16 @@ mod tests {
         assert_eq!(metadata_base_of(&resolve_discover(Some("http://127.0.0.1:9/"), None, false)), "http://127.0.0.1:9");
         assert_eq!(metadata_base_of(&resolve_discover(None, Some("http://localhost:8"), true)), "http://localhost:8");
         assert_eq!(metadata_base_of(&resolve_discover(Some("http://evil.example:9"), None, false)), METADATA_PROVIDER);
+    }
+
+    /// The community GraphQL follows Discover's resolution the same way: a dev build that armed a
+    /// stand-in never reaches the real community service, and a foreign trigger is never followed.
+    #[test]
+    fn the_community_service_follows_the_discover_stand_in() {
+        assert_eq!(community_base_of(&resolve_discover(None, None, false)), COMMUNITY);
+        assert_eq!(community_base_of(&resolve_discover(Some("http://127.0.0.1:9/"), None, false)), "http://127.0.0.1:9");
+        assert_eq!(community_base_of(&resolve_discover(None, Some("http://localhost:8"), true)), "http://localhost:8");
+        assert_eq!(community_base_of(&resolve_discover(None, Some("http://evil.example:8"), false)), COMMUNITY);
     }
 
     #[test]
