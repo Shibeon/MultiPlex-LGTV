@@ -548,11 +548,12 @@ player, transport and tracks auditors, and is counted once in the themes above.
   *Where:* New rust-modules/src/plex/discover.rs + a catalog screen alongside rust-modules/src/ui/library.rs, and a playback source branch in rust-modules/src/route.rs (its stream URL builder assumes a PMS part key).
   *Verified:* Confirmed: the data layer is one PMS Client keyed to host/port/token (plex/client.rs install/client, installed only from app.rs:349/412 and the auth take_ready path); every screen resolves items through pms.rs/browse.rs, which call only that client. route.rs's stream URL builder is built on a PMS part key + PMS session (plex/library.rs:115 direct_play_url), and the whole playback decision chain (transcoder.rs /video/:/transcode/universal/decision) is PMS-only. If anything 'large' understates it: beyond a catalog screen it needs a second content-source abstraction through route.rs AND an ad-sup
 
-- **Discover top tabs (Trending / Activity / Find Friends / Profile) are absent (adjacent social surfaces)** — `minor` / `large`
-  The official content area carries a top tab bar of Home | Trending | Activity | Find Friends | Profile, where everything but Home is a plex.tv Discover/social surface. Our top row is Home | Movies | TV Shows | bookmark (Watchlist) | Search.
-  *Where:* rust-modules/src/ui/widgets.rs draw_tab_row (tab model) + new screens under rust-modules/src/ui/, backed by a new plex.tv Discover client (see the Watchlist gap).
-  *Verified:* Still open: no Trending, Activity, Find Friends or Profile destinations exist. The
-  local tab vocabulary is fixed and no longer coupled to the discovered section count.
+- **Discover top tabs (Trending / Find Friends / Profile) are absent (adjacent social surfaces)** — `minor` / `large`
+  The official content area carries a top tab bar of Home | Trending | Activity | Find Friends | Profile, where everything but Home is a plex.tv Discover/social surface. Our bar's order is the one `strip_keys` lists (`rust-modules/src/app/chrome.rs`): Search, Home, the library types, My list and Friends (not for a managed profile), then Settings and the profile chip.
+  *Where:* the shared strip's keys (`plx_ui::widgets::TAB_KEY_*`, ordered by `strip_keys`) + new screens under rust-modules/screens/src/, backed by the plex.tv community client (`rust-modules/plex/src/plex/community.rs`).
+  *Verified:* Activity has shipped as the Friends page (`docs/friends.md`): the friends' watch
+  feed, "Watching now" on the servers the account owns and the "Share what I watch" setting. Still
+  open: no Trending, Find Friends or social Profile destination exists.
 
 - **Playlists have no representation** — `minor` / `medium`
   The official rail has a Playlists entry; video playlists are movie/show content. We drop playlist hubs on the home screen and have no playlist listing, screen, or client op.
@@ -742,7 +743,7 @@ player, transport and tracks auditors, and is counted once in the themes above.
 
 - **Ratings and Reviews shelf (community reviews from plex.tv)** — `minor` / `large`
   The official page carries a shelf of community review cards — reviewer avatar + handle, date, a 5-star (half-star capable) rating, and ellipsis-truncated review text. We have no reviews of any kind, neither the plex.tv community graph nor the server-side critic Review[].
-  *Where:* ADJACENT-CATALOG (Plex Discover / social graph), not a library feature. Local half: rust-modules/src/plex/library.rs (includeReviews=1) + rust-modules/src/plex/models.rs (Review DTO). Community half: a new plex/community.rs GraphQL client over crate::net (rust-modules/src/net.rs, libcurl HTTPS — already the plex.tv transport), a star-rating leaf in rust-modules/src/ui/widgets.rs, and a review-card block in rust-modules/src/ui/detail.rs
+  *Where:* ADJACENT-CATALOG (Plex Discover / social graph), not a library feature. Local half: rust-modules/src/plex/library.rs (includeReviews=1) + rust-modules/src/plex/models.rs (Review DTO). Community half: extend the community.plex.tv GraphQL client that already exists (`rust-modules/plex/src/plex/community.rs`, the Friends page's; `AccountClient::community_transport`), a star-rating leaf in rust-modules/src/ui/widgets.rs, and a review-card block in rust-modules/src/ui/detail.rs
   *Verified:* Confirmed. Crate-wide grep for review/Review hits only prose comments ('review-confirmed bug' in browse.rs:485, metadata.rs:569, library.rs:317, widgets.rs:528). No Review DTO in plex/models.rs; Client::metadata (plex/library.rs:59-65) never sends includeReviews=1; plex/account.rs stops at login/discovery/home-users (29-104) with no community.plex.tv client; ui/detail.rs:163-191 sections() has no reviews slot and ui/widgets.rs has no star leaf. The ADJACENT-CATALOG framing is right for the community half; the server-side half (includeReviews=1 + a Review DTO) is an ordinary library feature and
 
 - **Tagline and Studio are parsed off the wire and never displayed** — `minor` / `small`
@@ -789,7 +790,7 @@ player, transport and tracks auditors, and is counted once in the themes above.
 
 - **Social action row (like, clap-with-count, more)** — `polish` / `medium`
   Under the reviews the official client shows a circular thumbs-up, a clap reaction with a count, and a "…" button. Nothing equivalent exists.
-  *Where:* ADJACENT-CATALOG (Discover social). rust-modules/src/ui/icons.rs + assets/icons/ (new masks), rust-modules/src/ui/detail.rs (a row of CircleButtons under the reviews block), riding the community.plex.tv client the reviews gap introduces
+  *Where:* ADJACENT-CATALOG (Discover social). rust-modules/src/ui/icons.rs + assets/icons/ (new masks), rust-modules/src/ui/detail.rs (a row of CircleButtons under the reviews block), riding the community.plex.tv client (`rust-modules/plex/src/plex/community.rs`) the reviews gap extends
   *Verified:* Confirmed. ui/icons.rs:13-31 — the WHOLE Icon enum is Cc, Audio, Check, Chevron, ChevronDown, ChevronUp, Ring, UnwatchedAngle, Play, Pause, Info, User, Backspace; no thumb, clap, share or ellipsis mask (and src() at :33-43 maps each to a checked-in assets/icons/*.svg, so a new glyph means a new asset too). ui/detail.rs draw_child (662-685) dispatches exactly tabs/episodes/related/cast/about — no reaction row. No mutation surface exists (same missing community client as the reviews claim). ADJACENT-CATALOG framing correct; 'polish/medium' is right.
 
 - **Share button** — `polish` / `medium`
@@ -1208,10 +1209,10 @@ player, transport and tracks auditors, and is counted once in the themes above.
   *Verified:* Still open. The top row contains no Discover/community destination; the item
   and playback models remain PMS-shaped.
 
-- **Friend activity, Find Friends and social Profile tabs are absent (adjacent-catalog feature)** — `minor` / `large`
-  ADJACENT CATALOG, not a library feature: the official client's Discover area includes a friend activity feed, Find Friends, and a social profile (watch stats, ratings). None of this exists here.
-  *Where:* New `plex/community.rs` (plex.tv community/social endpoints over net.rs) plus a new screen under ui/; would also need the Discover item model from the Discover-catalog gap.
-  *Verified:* CONFIRMED. Grep for friend|community|activity across rust-modules/src matches only remote.rs's 'U+3000 and friends' comment and metadata.rs:20 friendly_codec. plex/account.rs has no social endpoint (method list ends at switch_user, account.rs:104); ui/ has no such screen. Note ui/profile.rs is NOT a social profile — it is the draw-time GPU profiler behind /tmp/multiplex-profile (profile.rs:1-12), which is easy to mistake for one when scanning the file list. minor/large stands; it strictly depends on the Discover item model landing first.
+- **Find Friends and the social Profile are absent (adjacent-catalog feature)** — `minor` / `large`
+  ADJACENT CATALOG, not a library feature: the official client's Discover area includes a friend activity feed, Find Friends, and a social profile (watch stats, ratings). The friend activity feed has shipped as the Friends page (`docs/friends.md`); Find Friends and the social profile do not exist here.
+  *Where:* Extend `rust-modules/plex/src/plex/community.rs` (the community.plex.tv client the Friends page reads through) plus new screens under rust-modules/screens/src/.
+  *Verified (before the Friends page shipped, kept for the history):* CONFIRMED. Grep for friend|community|activity across rust-modules/src matches only remote.rs's 'U+3000 and friends' comment and metadata.rs:20 friendly_codec. plex/account.rs has no social endpoint (method list ends at switch_user, account.rs:104); ui/ has no such screen. Note ui/profile.rs is NOT a social profile — it is the draw-time GPU profiler behind /tmp/multiplex-profile (profile.rs:1-12), which is easy to mistake for one when scanning the file list. minor/large stands; it strictly depends on the Discover item model landing first.
 
 - **Sign-out leaves the device authorized on plex.tv** — `polish` / `small`
   Signing out only deletes the local session file; the TV stays in the account's authorized-device list with a live token until the user removes it from plex.tv by hand.
