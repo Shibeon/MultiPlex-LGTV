@@ -112,7 +112,7 @@ fn a_watchlist_tile_card_keeps_its_one_remove_row() {
 const GUID: &str = "plex://movie/abababababababababababab";
 
 fn catalog(state: TileState, member: Membership) -> Menu {
-    menu(build_catalog(state, Kind::Movie, "", GUID, member))
+    menu(build_catalog(state, Kind::Movie, "", GUID, member, "Synthetic title"))
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn identity_is_in_the_action_not_read_at_press_time() {
 
 #[test]
 fn a_catalog_guid_without_an_id_offers_no_add() {
-    let m = menu(build_catalog(TileState::ComingSoon, Kind::Movie, "", "g", Membership::Off));
+    let m = menu(build_catalog(TileState::ComingSoon, Kind::Movie, "", "g", Membership::Off, "Synthetic title"));
     assert_eq!(m.ids(), [ItemRow::GoToCatalog]);
 }
 
