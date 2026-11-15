@@ -16,11 +16,19 @@ account chip. A managed Plex Home profile has no Friends pill, no page and no re
 - **The friend filter**: "All" first, then the six most active friends of the feed. A press
   narrows the shelves at once; nothing is read for it.
 - **"Share what I watch"**: the account's `userPrivacy { watchHistory }`, shown as a filled toggle
-  chip on the right of the row.
-- **Playing now**, for a server's owner only: `GET /status/sessions` on the servers the account owns,
-  showing who, what, how far and whether it is paused. It deliberately carries NO device, address,
-  player, platform, bandwidth or stream details (`plex/src/plex/live.rs` decodes none of them). A
-  server answering 401/403 hides the section, and so does an empty answer.
+  chip on the right of the row. When it could not be read, a press on it reads it again
+  (`CommunityCmd::Retry`), never writes.
+- **Playing now**, for a server's owner only: `GET /status/sessions` on the servers the account owns
+  (`community::owns`: the server's plex.tv description says `owned`; the browsed server is not
+  taken for one because it is browsed), showing who, what, how far and whether it is paused. It
+  deliberately carries NO device, address, player, platform, bandwidth or stream details
+  (`plex/src/plex/live.rs` decodes none of them). Every owned server answering 401/403 hides the
+  section until the captured servers or their facts change (the owner's own server coming up while
+  they browse a friend's share asks again), and so does an empty answer.
+- **Avatars**: a friend's plex.tv picture, and the plex.tv poster of a title none of the user's
+  servers holds, go through the photo proxy of a reachable server the account OWNS
+  (`community::art_server`), never through a friend's share, not even the one browsed nor the one
+  holding the card's title; with no owned server reachable the card draws the friend's initial.
 
 OK on a card opens the user's own copy when one of their servers holds the title (the Watchlist's
 guid lookup), and otherwise its catalog page.
@@ -31,7 +39,9 @@ The store is `rust-modules/data/src/stores/community.rs` (Sans-IO: it emits jobs
 `src/app/adapters/stores.rs` performs them). Nothing is read while the page is not on screen. The
 feed and the privacy setting are read when the page shows, the feed again when it shows more than
 `FEED_STALE_MS` (2 min) after its last landing; the live sessions are read when the page shows and
-every `LIVE_EVERY_MS` (10 s) while it stays up.
+every `LIVE_EVERY_MS` (10 s) while it stays up. A failed read of the privacy setting is asked again
+once after `RETRY_MS` (a transient 5xx or timeout recovers by itself), then only on Retry or the
+page's next showing.
 
 **The privacy write (`updatePrivacy(input:{watchHistory: FRIENDS|PRIVATE})`) happens only on the
 toggle's explicit press**: the page emits `StoreCmd::Community(CommunityCmd::SetShare(..))`, which
