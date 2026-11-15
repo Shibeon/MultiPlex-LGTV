@@ -29,8 +29,5 @@
     "one": "· {count} non ancora disponibile",
     "many": "· {count} non ancora disponibili",
     "other": "· {count} non ancora disponibili"
-  },
-  "watchlist.avail.available": "Disponibile",
-  "watchlist.avail.unavailable": "Assente",
-  "watchlist.avail.unknown": "Da verificare"
+  }
 }

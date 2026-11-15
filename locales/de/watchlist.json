@@ -28,8 +28,5 @@
   "watchlist.page.unavailable": {
     "one": "· {count} noch nicht verfügbar",
     "other": "· {count} noch nicht verfügbar"
-  },
-  "watchlist.avail.available": "Verfügbar",
-  "watchlist.avail.unavailable": "Fehlt",
-  "watchlist.avail.unknown": "Zu prüfen"
+  }
 }

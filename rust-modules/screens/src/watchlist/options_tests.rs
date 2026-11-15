@@ -547,26 +547,3 @@ fn the_menu_pill_and_readouts_fit_in_every_shipped_language() {
     }
     assert!(bad.is_empty(), "does not fit:\n  {}", bad.join("\n  "));
 }
-
-/// **Every availability chip fits on a My list poster, clear of the corner mark**, in every shipped
-/// language, by the device's own advances: the chip stands `space::XS` in from the top-left corner
-/// and must end `space::XS` before the corner mark's reach (a clock, a struck server, a ring and bar,
-/// or the watched tick, `widgets::corner_mark_reach`).
-#[test]
-fn the_availability_chip_fits_on_the_poster_in_every_shipped_language() {
-    use plx_data::watchlist::model::Availability;
-    let card = super::super::page::GRID_CARD_W;
-    let room = card - plx_ui::widgets::corner_mark_reach(card) - 2.0 * theme::space::XS;
-    let mut bad = Vec::new();
-    for language in LANGUAGES {
-        let _g = language_on_this_thread_for_test(language);
-        for a in [Availability::Available, Availability::Unavailable, Availability::Unknown] {
-            let label = super::super::tiles::avail_label(a);
-            let w = plx_ui::widgets::tile_chip_w(label, &ShippedMeasure) / HEADROOM;
-            if w > room {
-                bad.push(format!("{} {label:?}: {w:.0} px on a {room:.0} px band", language.tag()));
-            }
-        }
-    }
-    assert!(bad.is_empty(), "{bad:#?}");
-}

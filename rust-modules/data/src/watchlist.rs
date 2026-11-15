@@ -426,6 +426,7 @@ mod tests {
         b: ServerId,
         held: String,
         garbled: String,
+        blank: String,
         b_up: bool,
     }
     impl Reach for Join {
@@ -458,7 +459,15 @@ mod tests {
                 facts: Default::default(),
             };
             Ok(guids.iter().filter_map(|g| {
-                if *g == self.held { Some(row(g, "42")) } else if *g == self.garbled { Some(row(g, "n/a")) } else { None }
+                if *g == self.held {
+                    Some(row(g, "42"))
+                } else if *g == self.garbled {
+                    Some(row(g, "n/a"))
+                } else if *g == self.blank {
+                    Some(row(g, "")) // `find_by_guids` keeps a row with an empty key
+                } else {
+                    None
+                }
             }).collect())
         }
         fn roster_gen(&self) -> u32 { 1 }
@@ -468,14 +477,17 @@ mod tests {
 
     /// **The availability join, by plex guid**: a title one server holds is Available; one that
     /// every server answered without is Not available; and a lookup that FAILED (a server that did
-    /// not answer, or answered a row with no usable key) leaves the title Unknown, never absent.
+    /// not answer, or answered a row whose key is not a number or is empty) leaves the title Unknown,
+    /// never absent.
     #[test]
     fn the_guid_join_gives_three_answers_and_a_failed_lookup_is_unknown() {
         use model::{availability, Availability, MatchTable};
         let guid = |n: u8| format!("plex://movie/{}", encode_hex(&[n; 12]));
-        let (held, absent, garbled) = (guid(1), guid(2), guid(3));
-        let mut io = Join { a: ServerId::from_raw(0), b: ServerId::from_raw(1), held: held.clone(), garbled: garbled.clone(), b_up: true };
-        let keys: Vec<(String, Kind)> = [&held, &absent, &garbled].iter().map(|g| ((*g).clone(), Kind::Movie)).collect();
+        let (held, absent, garbled, blank) = (guid(1), guid(2), guid(3), guid(4));
+        let mut io = Join {
+            a: ServerId::from_raw(0), b: ServerId::from_raw(1), held: held.clone(), garbled: garbled.clone(), blank: blank.clone(), b_up: true,
+        };
+        let keys: Vec<(String, Kind)> = [&held, &absent, &garbled, &blank].iter().map(|g| ((*g).clone(), Kind::Movie)).collect();
         let table_of = |answers: Vec<Answer>| {
             let mut t = MatchTable::default();
             for (g, sid, asked) in answers {
@@ -483,7 +495,7 @@ mod tests {
             }
             t
         };
-        let rows: Vec<WatchRow> = [&held, &absent, &garbled].iter().enumerate().map(|(i, g)| WatchRow {
+        let rows: Vec<WatchRow> = [&held, &absent, &garbled, &blank].iter().enumerate().map(|(i, g)| WatchRow {
             guid: (*g).clone(), hex: [i as u8; 12], kind: Kind::Movie, title: String::new(), title_sort: String::new(),
             year: None, added_at: None, release: None, rating: None, released: true, order: i as u32, thumb: String::new(),
         }).collect();
@@ -491,22 +503,23 @@ mod tests {
         // b's lookup fails: only `held` is known (a holds it); `absent` is not proven absent.
         let t = table_of(match_rows(&io, &keys));
         let got: Vec<_> = rows.iter().map(|r| availability(r, &t, &io)).collect();
-        assert_eq!(got, [Availability::Available, Availability::Unknown, Availability::Unknown]);
+        assert_eq!(got, [Availability::Available, Availability::Unknown, Availability::Unknown, Availability::Unknown]);
 
         // b is Unreachable, so only a is asked and a is the whole reachable roster... but b is still
         // on the roster and silent: absence is not proof until every server answered.
         io.b_up = false;
         let t = table_of(match_rows(&io, &keys));
         let got: Vec<_> = rows.iter().map(|r| availability(r, &t, &io)).collect();
-        assert_eq!(got, [Availability::Available, Availability::Unknown, Availability::Unknown]);
+        assert_eq!(got, [Availability::Available, Availability::Unknown, Availability::Unknown, Availability::Unknown]);
 
-        // b answers (absent everywhere): `absent` is Not available, `garbled` stays Unknown.
+        // b answers (absent everywhere): `absent` is Not available; `garbled` and `blank` stay Unknown
+        // (a answered a row for each, but with no key it could use).
         let mut t = table_of(match_rows(&io, &keys));
-        for g in [&held, &absent, &garbled] {
+        for g in [&held, &absent, &garbled, &blank] {
             t.by_guid.entry(g.clone()).or_default().push((io.b, model::Asked::Absent));
         }
         let got: Vec<_> = rows.iter().map(|r| availability(r, &t, &io)).collect();
-        assert_eq!(got, [Availability::Available, Availability::Unavailable, Availability::Unknown]);
+        assert_eq!(got, [Availability::Available, Availability::Unavailable, Availability::Unknown, Availability::Unknown]);
     }
 
     #[test]

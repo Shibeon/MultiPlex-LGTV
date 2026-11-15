@@ -1803,26 +1803,9 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
                 // `wheel:0` token — not a step in either direction
                 return;
             }
-            if super::bridge::search_owns_input(&app.pages) {
-                app.inputs.push(plx_machine::machine::InputEvent {
-                    at: plx_machine::machine::Tick { ms: app.last_input, dt_us: 0 },
-                    source: plx_machine::machine::Source::Sdl,
-                    kind: plx_machine::machine::InputKind::Wheel { dy: dy as f32 },
-                });
-            } else if super::bridge::owns_input(&app.pages) {
-                // A tick becomes the DIRECTION KEY it stands for (`bridge::wheel_input`),
-                // rather than a `Wheel` the family's tables would each have to interpret:
-                // one tick is one row, which is what `on_updown(±1)` meant. `RepeatGate`
-                // is deliberately NOT applied — a wheel gesture's ticks are the user's own
-                // cadence and the gate is armed against the remote's 50 ms hardware
-                // repeat, so sharing it would let a held key mute a scroll and vice versa.
-                app.inputs.extend(super::bridge::wheel_input(
-                    dy,
-                    plx_machine::machine::Tick { ms: app.last_input, dt_us: 0 },
-                ));
-            }
-            // `Route::Search` is deliberately absent here: `search_owns_input()` above
-            // already took every wheel tick on this route and returned.
+            let notch = wheel_notch_inputs(&app.pages, dy, app.last_input);
+            app.inputs.extend(notch);
+            // Search's owned page takes the notch as its own `Wheel` (`wheel_notch_inputs`).
         }
     } else if et == SDL_TEXTINPUT {
         // The television's own keyboard committing text. Route-UNCONDITIONAL, and
@@ -1844,6 +1827,33 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
         } else {
             crate::textinput::on_event(&app.ev);
         }
+    }
+}
+
+/// **The inputs one wheel notch `dy` becomes**, wherever the pointer rests. Search's owned page takes
+/// it as a `Wheel` (it scrolls the document without moving focus, spec §7.3); any other owned page
+/// takes it as the DIRECTION KEY it stands for (`bridge::wheel_input`), so a notch always steps the
+/// PAGE, a shelf at a time, and never scrolls a row sideways under the pointer (a row moves with
+/// Left/Right and the pointer's edge glide): the pointer's place is deliberately not an input.
+/// Nothing for a page that does not own input.
+pub(super) fn wheel_notch_inputs(pages: &plx_ui::dispatch::Dispatcher<super::bridge::AppHost>,
+    dy: i32, ms: u32) -> Vec<plx_machine::machine::InputEvent<u32>> {
+    let at = plx_machine::machine::Tick { ms, dt_us: 0 };
+    if super::bridge::search_owns_input(pages) {
+        vec![plx_machine::machine::InputEvent {
+            at,
+            source: plx_machine::machine::Source::Sdl,
+            kind: plx_machine::machine::InputKind::Wheel { dy: dy as f32 },
+        }]
+    } else if super::bridge::owns_input(pages) {
+        // A tick becomes the DIRECTION KEY it stands for rather than a `Wheel` the family's tables
+        // would each have to interpret: one tick is one row, which is what `on_updown(±1)` meant.
+        // `RepeatGate` is deliberately NOT applied — a wheel gesture's ticks are the user's own
+        // cadence and the gate is armed against the remote's 50 ms hardware repeat, so sharing it
+        // would let a held key mute a scroll and vice versa.
+        super::bridge::wheel_input(dy, at)
+    } else {
+        Vec::new()
     }
 }
 

@@ -2618,10 +2618,13 @@ class DiscoverFixture:
               carries no usable ratingKey (`GARBLED_LOOKUP`), so the app can neither open a copy
               nor call it absent                                                    -> Unknown
 
-    So My list's availability badge shows all three answers by default: Available (1-6),
-    Not available (10-13, and the unreleased 8, 9) and To check (14).
+    So My list's availability (each card's corner mark, the "Available only" filter and the
+    Availability sort) shows all three answers by default: Available (1-7: 7 is held, so it is
+    Available though it keeps its coming-soon clock), Not available (10-13, and the unreleased
+    8, 9) and To check, Unknown (14).
 
-    The other two states come from switches: Unknown (no match while some server is silent) from
+    The other two states come from switches: Unknown for every unmatched title (no match while
+    some server is silent) from
     `POST /_mock/discover {"guid_lookup": "fail"}`, which makes `GET /library/all?guid=` answer 503
     so an unmatched title re-matches as Unknown; ServerOffline (a matching server that later goes
     Unreachable) from `{"pms": "fail"}` sent AFTER the list matched, which makes every PMS request

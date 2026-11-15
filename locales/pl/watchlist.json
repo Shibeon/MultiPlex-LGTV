@@ -30,8 +30,5 @@
     "few": "· jeszcze niedostępne: {count}",
     "many": "· jeszcze niedostępne: {count}",
     "other": "· jeszcze niedostępne: {count}"
-  },
-  "watchlist.avail.available": "Dostępny",
-  "watchlist.avail.unavailable": "Niedostępny",
-  "watchlist.avail.unknown": "Sprawdzić"
+  }
 }

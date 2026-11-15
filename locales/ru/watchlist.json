@@ -30,8 +30,5 @@
     "few": "· пока недоступно: {count}",
     "many": "· пока недоступно: {count}",
     "other": "· пока недоступно: {count}"
-  },
-  "watchlist.avail.available": "Доступно",
-  "watchlist.avail.unavailable": "Недоступно",
-  "watchlist.avail.unknown": "Не проверено"
+  }
 }

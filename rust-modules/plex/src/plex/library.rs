@@ -110,8 +110,10 @@ impl Client {
     /// simply absent from the result; `Err` means a chunk could not be answered at all, which the
     /// caller must NOT read as "absent" (docs/watchlist-plan.md §1.5).
     ///
-    /// A guid the server holds in two libraries is reported once (the first row); the caller wants
-    /// "this server has it, under this key", not a per-library listing.
+    /// A guid the server holds in two libraries is reported once (the first row with a key); the
+    /// caller wants "this server has it, under this key", not a per-library listing. A row with an
+    /// EMPTY `ratingKey` is reported too (with that empty key) when no row of the guid has one, so
+    /// the caller can tell "answered without a usable key" from "absent" (`watchlist::match_on`).
     pub fn find_by_guids(&self, kind: GuidKind, guids: &[String]) -> Result<Vec<GuidMatch>, GuidLookupError> {
         let mut found: Vec<GuidMatch> = Vec::new();
         for (paths, chunk) in guid_lookup_paths(kind, guids) {
@@ -119,17 +121,26 @@ impl Client {
                 return Err(GuidLookupError::Unanswered);
             };
             for item in mc.metadata {
-                if chunk.contains(&item.guid)
-                    && !item.rating_key.is_empty()
-                    && !found.iter().any(|m| m.guid == item.guid)
-                {
-                    found.push(GuidMatch {
-                        facts: item.listing_facts(),
-                        blur: item.ultra_blur_colors.and_then(|c| c.corners()),
-                        library_section_id: (item.library_section_id != 0).then_some(item.library_section_id),
-                        guid: item.guid,
-                        rating_key: item.rating_key,
-                    });
+                if !chunk.contains(&item.guid) {
+                    continue;
+                }
+                // A row with no key still says the server answered for the guid: it is kept, so the
+                // caller reads it as "answered, nothing usable" (Unknown) and never as absent. A
+                // later row with a key replaces it.
+                let slot = found.iter().position(|m| m.guid == item.guid);
+                if slot.is_some_and(|i| !found[i].rating_key.is_empty()) {
+                    continue;
+                }
+                let m = GuidMatch {
+                    facts: item.listing_facts(),
+                    blur: item.ultra_blur_colors.and_then(|c| c.corners()),
+                    library_section_id: (item.library_section_id != 0).then_some(item.library_section_id),
+                    guid: item.guid,
+                    rating_key: item.rating_key,
+                };
+                match slot {
+                    Some(i) => found[i] = m,
+                    None => found.push(m),
                 }
             }
         }

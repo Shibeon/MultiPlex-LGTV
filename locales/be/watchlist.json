@@ -30,8 +30,5 @@
     "few": "· пакуль недаступна: {count}",
     "many": "· пакуль недаступна: {count}",
     "other": "· пакуль недаступна: {count}"
-  },
-  "watchlist.avail.available": "Даступна",
-  "watchlist.avail.unavailable": "Недаступна",
-  "watchlist.avail.unknown": "Не праверана"
+  }
 }

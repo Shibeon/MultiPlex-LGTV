@@ -115,17 +115,5 @@
       "count": "i64"
     },
     "description": "The quiet note after the Watchlist page's count pill (My list  [12]  · 3 not available yet): how many titles on the list are on none of the user's servers yet (unreleased, or released but on no server). Starts with a middle dot that separates it from the pill."
-  },
-  "watchlist.avail.available": {
-    "value": "Available",
-    "description": "Small badge on a My list (Watchlist) poster: the title is in a library on the user's own Plex servers and can be played. Keep it short: it sits on the poster's corner."
-  },
-  "watchlist.avail.unavailable": {
-    "value": "Not available",
-    "description": "Small badge on a My list (Watchlist) poster: every one of the user's Plex servers answered and none has the title (streaming services are not counted). Keep it short."
-  },
-  "watchlist.avail.unknown": {
-    "value": "To check",
-    "description": "Small badge on a My list (Watchlist) poster: whether the user's Plex servers have the title is not known yet (a server did not answer, is offline, or has not been asked). Means 'to be checked', not 'absent'. Keep it short."
   }
 }

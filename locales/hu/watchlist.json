@@ -28,8 +28,5 @@
   "watchlist.page.unavailable": {
     "one": "· {count} még nem elérhető",
     "other": "· {count} még nem elérhető"
-  },
-  "watchlist.avail.available": "Elérhető",
-  "watchlist.avail.unavailable": "Nem elérhető",
-  "watchlist.avail.unknown": "Ellenőrizendő"
+  }
 }

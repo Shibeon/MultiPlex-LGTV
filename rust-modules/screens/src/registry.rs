@@ -2833,7 +2833,9 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // through its closing morph. Previous pin: 0x7e36_4373_746a_c3dc.
 // Detail's hero More menu: `ItemMenuKind::Hero{host,rows}` joins `ARG_SHAPE` and the item menu's
 // `Action` gains `Hero(elem)`. Previous pin: 0x1427_1d82_bf6b_e04c; re-record the replay anchors.
-const SCREEN_SHAPES_PIN: u64 = 0x086d_35c6_7e98_86f1;
+// My list's tiles carry their availability (`WatchTile::avail`, which the "Available only" filter
+// and the Availability sort read). Previous pin: 0x086d_35c6_7e98_86f1; re-record the replay anchors.
+const SCREEN_SHAPES_PIN: u64 = 0x1097_dde4_cf49_0664;
 
 #[cfg(test)]
 mod arg_tests {

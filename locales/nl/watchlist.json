@@ -28,8 +28,5 @@
   "watchlist.page.unavailable": {
     "one": "· {count} nog niet beschikbaar",
     "other": "· {count} nog niet beschikbaar"
-  },
-  "watchlist.avail.available": "Beschikbaar",
-  "watchlist.avail.unavailable": "Ontbreekt",
-  "watchlist.avail.unknown": "Te controleren"
+  }
 }
