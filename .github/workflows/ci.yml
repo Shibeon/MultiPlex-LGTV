@@ -434,12 +434,15 @@ jobs:
   # it is its `DepGates` class running ci/check-deps.sh over private copies of the tree on every
   # core of the runner, so it gains nothing from sharing a runner with the other gates.
   # `make check-python` is still the two halves, run side by side locally.
+  # The suite has grown since: 731 tests in 376 s (20 min of CPU) on 4 cores, measured 2026-11-15,
+  # and 7-9 min on this runner when it passes. With a 10 min limit, 7 of the 14 pushes to main
+  # before that date were cancelled mid-run with no test failing, so the limit is 20 min.
   host-python-harness:
     name: host harness tests
     needs: changes
     if: needs.changes.outputs.gated == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
