@@ -121,7 +121,7 @@ fn community_base_of(resolved: &DiscoverBase) -> String {
 
 /// The community service's base URL ([`community_base_of`]). Its GraphQL endpoint is `<base>/api`.
 /// A read through it is gated by [`discover_read_allowed`], a write by the account-write failsafe
-/// (`watchlist::account_write_permitted`), exactly as the Watchlist's are.
+/// (`watchlist::account_write_gate`), exactly as the Watchlist's are.
 pub fn community() -> String {
     community_base_of(&discover_resolved())
 }
