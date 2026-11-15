@@ -30,7 +30,9 @@ fn seat_managed_session() {
         ];
         Some(next)
     }), "the fixture session takes the roster");
-    session::publish_profile_for_test(Some(UserRef { uuid: "u-kid".into(), ..Default::default() }),
+    // With its own plex.tv credential, so nothing but the managed rule keeps the Watchlist away.
+    session::publish_profile_for_test(Some(UserRef { uuid: "u-kid".into(),
+        plex_tv_token: Some("synthetic-credential".into()), ..Default::default() }),
         session::current_gen().wrapping_add(1));
 }
 
@@ -125,4 +127,38 @@ fn a_managed_home_hero_asks_no_membership() {
     assert_eq!(home(&w), Some(Some([9; 12])), "premise: the owner's hero stands for the title");
     seat_managed(&mut w);
     assert_eq!(home(&w), Some(None), "a managed profile's hero has no disc to feed");
+}
+
+/// The catalog page (a title no server holds, reached from a person's credit) on a managed
+/// profile: the record is shown with no pill, the Watchlist is never read, and the write the
+/// pill would have asked for (or a stale one) reaches nothing.
+#[test]
+fn a_managed_catalog_page_has_no_pill_reads_no_list_and_writes_nothing() {
+    use plx_screens::catalog::{CatalogOut, CatalogScreen, Load, PILL_ELEM};
+    let _serial = plx_base::testlock::serial();
+    let script = super::watchlist_press_tests::Script::new(&[1]);
+    let (mut d, mut rig) = super::watchlist_press_tests::rig_over(&script);
+    seat_managed_session();
+    super::frame(&mut d, &mut rig, super::test_support::tick(1), vec![]);
+    let hex = [9u8; 12];
+    super::open_catalog(&mut d, hex, None);
+    for i in 0..40 {
+        super::frame(&mut d, &mut rig, super::test_support::tick(10 + i), vec![]);
+    }
+    super::watchlist_press_tests::settle(&mut d, &mut rig, 60);
+    let page = |d: &Dispatcher<AppHost>| d.top_screen().and_then(|s| s.as_any())
+        .and_then(|s| s.downcast_ref::<CatalogScreen>()).expect("the catalog page is on top").view_model().clone();
+    let vm = page(&d);
+    assert!(matches!(vm.load, Load::Loaded { .. }), "the record is still shown: {:?}", vm.load);
+    assert!(!vm.offered, "with no pill");
+    assert_ne!(w_elem(&d), Some(PILL_ELEM), "and no focus on one");
+    assert_eq!(rig.stores.watchlist.view().status(), plx_data::stores::watchlist::Status::Idle, "no list read");
+    rig.catalog_effect(CatalogOut::Add { hex });
+    super::watchlist_press_tests::settle(&mut d, &mut rig, 120);
+    assert!(script.writes().is_empty(), "no write reaches plex.tv");
+    assert_eq!(rig.stores.watchlist.view().status(), plx_data::stores::watchlist::Status::Idle);
+}
+
+fn w_elem(d: &Dispatcher<AppHost>) -> Option<u32> {
+    d.focus().map(|key| key.elem)
 }

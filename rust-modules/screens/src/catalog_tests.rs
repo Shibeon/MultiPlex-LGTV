@@ -48,7 +48,7 @@ fn loaded(status: Status, release: Option<&str>) -> Load {
 
 fn page(load: Load, membership: Membership) -> CatalogScreen {
     let mut s = CatalogScreen::new(ENTRY, HEX);
-    s.input(CatalogViewModel { load, membership });
+    s.input(CatalogViewModel { load, membership, offered: true });
     s
 }
 
@@ -308,10 +308,10 @@ fn an_unreachable_list_wears_the_add_face_and_a_press_follows_the_input() {
     assert_eq!(s.view_model().membership, Membership::Unknown);
     // the store's ledger flips it, then reverts when plex.tv refuses
     let before = LogicalState::hash(&s);
-    s.input(CatalogViewModel { load: loaded(Status::None, None), membership: Membership::On });
+    s.input(CatalogViewModel { load: loaded(Status::None, None), membership: Membership::On, offered: true });
     assert_eq!(asked(step(&mut s, ScreenEvent::Activate(PILL_ELEM), pill())), [CatalogOut::Remove { hex: HEX }]);
     assert_ne!(LogicalState::hash(&s), before);
-    s.input(CatalogViewModel { load: loaded(Status::None, None), membership: Membership::Unknown });
+    s.input(CatalogViewModel { load: loaded(Status::None, None), membership: Membership::Unknown, offered: true });
     assert_eq!(LogicalState::hash(&s), before);
 }
 
@@ -534,4 +534,23 @@ fn a_loaded_page_lays_the_shade_over_its_art_and_a_bare_page_lays_none() {
     for load in [Load::Loading, Load::NotFound, Load::Unreachable] {
         assert_eq!(layers(load.clone()), 0, "{load:?} draws no copy on the art, so no shade");
     }
+}
+
+/// **A managed Plex Home profile is offered no Watchlist** (`CatalogViewModel::offered` false): the
+/// record is shown with no pill, no focus group or stop, and neither OK nor a click asks for a
+/// write. BACK still leaves.
+#[test]
+fn a_page_not_offered_the_watchlist_has_no_pill() {
+    let mut s = CatalogScreen::new(ENTRY, HEX);
+    s.input(CatalogViewModel { load: loaded(Status::NotOnAnyServer, None), membership: Membership::Unknown, offered: false });
+    let c = cx(None);
+    assert!(s.pill_rect(&FixtureMeasure).is_none(), "no pill drawn");
+    let mut groups = Vec::new();
+    Focusable::<CatHost>::groups(&s, &c, &mut groups);
+    assert!(groups.is_empty(), "no focus group");
+    assert_eq!(Focusable::<CatHost>::group_of(&s, &PILL_ELEM, &c), None);
+    assert!(Focusable::<CatHost>::place(&s, &PILL_ELEM, &c, At::SpringTarget).is_none());
+    assert!(asked(step(&mut s, ScreenEvent::PressCommit(PressId(0)), pill())).is_empty());
+    assert!(asked(step(&mut s, ScreenEvent::Activate(PILL_ELEM), None)).is_empty());
+    assert!(back_asked(&step(&mut s, press_key(Key::Back), None)));
 }

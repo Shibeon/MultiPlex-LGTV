@@ -37,7 +37,10 @@ into the screen inputs (`ScreenInputs::managed`): the Home hero has no bookmark 
 and Info, and a focus left on the disc reconciles to Play), the Detail More menu has no Watchlist row,
 and the application hands a hold menu no Watchlist face (`Bridge::watchlist_offered`). Neither page
 hands the feed a title, so no list read and no record resolve is made on their behalf. The catalog
-page is unchanged.
+page (a title no server holds, reached from a person's credit) shows its record with no pill and no
+focus stop (`CatalogViewModel::offered`), its mount and re-read do not read the list, and
+`Bridge::watchlist_press`, the one door every add and remove goes through, writes nothing for such a
+profile.
 
 ## Wire facts (redacted: no ids, tokens or addresses)
 

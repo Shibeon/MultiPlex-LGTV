@@ -267,7 +267,10 @@ impl Bridge {
     }
 
     /// A bookmark press (or the hold menu's Remove) on the catalog id `hex`.
+    /// Nothing for a managed Plex Home profile, which is offered no Watchlist
+    /// ([`Self::watchlist_offered`]): a stale press from any route writes nothing to plex.tv.
     pub(crate) fn watchlist_press(&mut self, hex: [u8; 12], intent: Intent) {
+        if !self.watchlist_offered() { return; }
         self.stores.watchlist.run(WatchlistCmd::Press { hex, intent });
         plx_machine::idle::invalidate();
     }
@@ -577,11 +580,15 @@ impl Bridge {
         let instance = inst.id;
         let Some(screen) = inst.screen.as_any_mut().and_then(|a| a.downcast_mut::<plx_screens::catalog::CatalogScreen>())
             else { return };
+        let offered = self.watchlist_offered();
         if self.catalog_seat != Some(instance) {
             self.catalog_seat = Some(instance);
             self.catalog_open(hex);
             // The page's membership needs the list: read it again on every mount, like the tab does.
-            self.stores.watchlist.run_with_input(WatchlistCmd::Open, &Self::watchlist_input());
+            // Not for a managed profile, whose page has no pill and so no membership to show.
+            if offered {
+                self.stores.watchlist.run_with_input(WatchlistCmd::Open, &Self::watchlist_input());
+            }
         }
         // The status line follows the title's tile on the Watchlist (a match landing or a server
         // going offline moves it), the record's date rule only for a title not on the list read.
@@ -594,6 +601,7 @@ impl Bridge {
         screen.input(plx_screens::catalog::CatalogViewModel {
             load,
             membership: self.stores.catalog.membership(&self.stores.watchlist).into(),
+            offered,
         });
         screen.set_art_server(self.stores.watchlist.view().art_server());
     }
@@ -601,7 +609,7 @@ impl Bridge {
     /// The catalog page's re-read (`reread.rs`): the list again, which re-matches the title, and
     /// the discover record when it never landed (a loaded record is kept, not blanked).
     pub(crate) fn catalog_reread(&mut self, hex: [u8; 12]) {
-        self.watchlist_reread();
+        if self.watchlist_offered() { self.watchlist_reread(); }
         if self.stores.catalog.hex == Some(hex)
             && !matches!(self.stores.catalog.load, plx_data::catalog::Load::Loaded(_))
         {

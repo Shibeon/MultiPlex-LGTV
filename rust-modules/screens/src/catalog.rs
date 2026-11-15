@@ -106,11 +106,15 @@ pub enum Load {
 pub struct CatalogViewModel {
     pub load: Load,
     pub membership: Membership,
+    /// The watching profile is offered the Watchlist. `false` for a managed Plex Home profile
+    /// (`ScreenInputs::managed`, the app's `Bridge::watchlist_offered`): the page shows the record
+    /// with no pill, no focus stop and nothing to press, and `membership` is not read.
+    pub offered: bool,
 }
 
 impl Default for CatalogViewModel {
     fn default() -> Self {
-        Self { load: Load::Loading, membership: Membership::Unknown }
+        Self { load: Load::Loading, membership: Membership::Unknown, offered: true }
     }
 }
 
@@ -358,6 +362,12 @@ impl CatalogScreen {
         matches!(self.vm.load, Load::Loaded { .. })
     }
 
+    /// The pill stands: a loaded record, for a profile offered the Watchlist
+    /// ([`CatalogViewModel::offered`]). Otherwise the page has no stop and nothing to press.
+    fn has_pill(&self) -> bool {
+        self.loaded() && self.vm.offered
+    }
+
     /// The rows' placement, for a loaded record.
     fn stack(&self, measure: &dyn Measure) -> Option<Stack> {
         let Load::Loaded { summary, release_date, status, .. } = &self.vm.load else { return None };
@@ -371,6 +381,7 @@ impl CatalogScreen {
 
     /// The pill's frame: the hero row's first (and only) control.
     fn pill_rect(&self, measure: &dyn Measure) -> Option<Rect> {
+        if !self.vm.offered { return None; }
         let stack = self.stack(measure)?;
         let w = hero_layout::pill_w(measure, pill_label(self.vm.membership), theme::size::BODY, true, None)
             .max(hero_layout::PW);
@@ -378,7 +389,7 @@ impl CatalogScreen {
     }
 
     fn activate<H: ContentLike>(&mut self, elem: u32, fx: &mut Effects<'_, H>) -> Handled {
-        if elem != PILL_ELEM || !self.loaded() {
+        if elem != PILL_ELEM || !self.has_pill() {
             return Handled::No;
         }
         fx.push(Fx::App(AppFx::Catalog(press_out(self.vm.membership, self.hex))));
@@ -565,7 +576,10 @@ impl LogicalState for CatalogScreen {
             Load::NotFound => (2, 0),
             Load::Unreachable => (3, 0),
         };
-        c.u32(load).u32(status).u32(self.vm.membership as u32);
+        // A page offered no Watchlist has no pill, so no membership: it writes a value no
+        // membership takes (3), which leaves an offered page's bytes as they always were.
+        let membership = if self.vm.offered { self.vm.membership as u32 } else { 3 };
+        c.u32(load).u32(status).u32(membership);
     }
 
     fn probe(&self, out: &mut String) {
@@ -615,7 +629,7 @@ impl<H: ContentLike> Machine<H> for CatalogScreen {
 
 impl<H: ContentLike> Focusable<H> for CatalogScreen {
     fn groups(&self, _: &Cx<'_, H>, out: &mut Vec<GroupSpec>) {
-        if !self.loaded() {
+        if !self.has_pill() {
             return;
         }
         out.push(GroupSpec {
@@ -630,7 +644,7 @@ impl<H: ContentLike> Focusable<H> for CatalogScreen {
         });
     }
     fn group_of(&self, elem: &u32, _: &Cx<'_, H>) -> Option<GroupId> {
-        (*elem == PILL_ELEM && self.loaded()).then_some(GROUP)
+        (*elem == PILL_ELEM && self.has_pill()).then_some(GROUP)
     }
     fn neighbour(&self, _: FocusKey<u32>, _: Dir, _: &Cx<'_, H>) -> Step<u32> {
         Step::Edge
@@ -643,7 +657,7 @@ impl<H: ContentLike> Focusable<H> for CatalogScreen {
         Some(Placed { rect, rest_rect: rect, clip: Rect::FULL, index: Some(0) })
     }
     fn reconcile(&self, want: FocusKey<u32>, _: &Cx<'_, H>) -> FocusKey<u32> {
-        if self.loaded() { self.key() } else { want }
+        if self.has_pill() { self.key() } else { want }
     }
     fn seat(&self, _: GroupId, _: Placed, _: &Cx<'_, H>) -> FocusKey<u32> {
         self.key()
