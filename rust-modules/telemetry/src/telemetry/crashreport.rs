@@ -4410,10 +4410,10 @@ mod tests {
     /// fixed table that can reach it.
     #[test]
     fn privacy_names_the_freeze_leg_tag_and_every_word_it_can_carry() {
-        let notice = include_str!("../../../../PRIVACY.md");
-        assert!(notice.contains("`freeze.leg`"), "PRIVACY.md does not name the tag");
+        let notice = include_str!("../../../../docs/optional-reporting.md");
+        assert!(notice.contains("`freeze.leg`"), "docs/optional-reporting.md does not name the tag");
         for leg in LoopPhase::ALL {
-            assert!(notice.contains(&format!("`{}`", leg.word())), "PRIVACY.md does not name `{}`", leg.word());
+            assert!(notice.contains(&format!("`{}`", leg.word())), "docs/optional-reporting.md does not name `{}`", leg.word());
         }
     }
 

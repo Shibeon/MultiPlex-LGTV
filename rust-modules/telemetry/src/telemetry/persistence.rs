@@ -1295,9 +1295,13 @@ mod upgrade_tests {
     impl plx_platform::storage::keymanager::Rpc for Db8 {
         fn call(&mut self, uri: &str, payload: &Value) -> Result<Value, ErrorCode> {
             match uri {
-                "luna://com.palm.db/get" => Ok(
-                    serde_json::json!({"returnValue":true,"results":self.record.iter().cloned().collect::<Vec<_>>()}),
-                ),
+                // One record, answered only to its own id, as DB8 does.
+                "luna://com.palm.db/get" => Ok(serde_json::json!({"returnValue":true,"results":self
+                    .record
+                    .iter()
+                    .filter(|r| r["_id"] == payload["ids"][0])
+                    .cloned()
+                    .collect::<Vec<_>>()})),
                 "luna://com.palm.db/put" if self.refuse_puts => Err(ErrorCode::Unavailable),
                 "luna://com.palm.db/put" => {
                     let mut next = payload["objects"][0].clone();
@@ -1305,22 +1309,29 @@ mod upgrade_tests {
                     let rev = self.record.as_ref().and_then(|r| r["_rev"].as_u64()).unwrap_or(0) + 1;
                     next["_rev"] = serde_json::json!(rev);
                     self.record = Some(next);
-                    Ok(serde_json::json!({"returnValue":true,"results":[{"id":"plxstate.stable","rev":rev}]}))
+                    Ok(serde_json::json!({"returnValue":true,"results":[{"id":"mpxstate.stable","rev":rev}]}))
                 }
                 other => panic!("unexpected DB8/Keymanager call {other}"),
             }
         }
     }
 
+    /// The helper as it stands once its first connection is set up: a record of this install's
+    /// own kept under the stable install's pre-0.11 id (the 0.6.6 fixture) has been carried over
+    /// to the current one (`Backend::adopt_legacy_record`). That copy is not one of the writes
+    /// these tests count, so the count starts after it.
     fn backend(record: Option<Value>) -> plx_platform::storage::backend::Backend<Db8> {
-        plx_platform::storage::backend::Backend::new(
+        let mut b = plx_platform::storage::backend::Backend::new(
             Db8 {
                 record,
                 ..Default::default()
             },
             plx_platform::storage::state::Flavor::Stable,
             "app.multiplex.native.storage".into(),
-        )
+        );
+        b.adopt_legacy_record();
+        b.rpc.puts = 0;
+        b
     }
 
     fn db8_066() -> Value {

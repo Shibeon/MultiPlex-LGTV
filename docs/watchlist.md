@@ -26,6 +26,22 @@ catalog id name the same film in two unrelated id spaces; the only join between 
 Layers: `data` names `plx_plex` and below, never `net` or `media`; screens never name a sibling
 screen or the app; the application owns the pulse and the routes (`docs/module-layers.md`).
 
+**A managed Plex Home profile has no My list tab** (the owner's decision, shared with the web app).
+The bar's keys are built in `app/chrome.rs` (`strip_keys`) from the profile the chip shows, and
+`Session::profile_is_managed` (plex.tv's `restricted` flag on that profile's persisted roster tile,
+`false` whenever the roster cannot prove it) leaves `TAB_KEY_WATCHLIST` out, so focus travels the
+shorter strip through the `FocusEngine` with nothing routed by hand. Whatever still asks for the page
+on such a profile, the `/tmp/multiplex-watchlist` boot target included, goes through
+`bridge::nav_tab`, which lands on Home. The other affordances go too, on the same answer captured
+into the screen inputs (`ScreenInputs::managed`): the Home hero has no bookmark disc (the row is Play
+and Info, and a focus left on the disc reconciles to Play), the Detail More menu has no Watchlist row,
+and the application hands a hold menu no Watchlist face (`Bridge::watchlist_offered`). Neither page
+hands the feed a title, so no list read and no record resolve is made on their behalf. The catalog
+page (a title no server holds, reached from a person's credit) shows its record with no pill and no
+focus stop (`CatalogViewModel::offered`), its mount and re-read do not read the list, and
+`Bridge::watchlist_press`, the one door every add and remove goes through, writes nothing for such a
+profile.
+
 ## Wire facts (redacted: no ids, tokens or addresses)
 
 Measured with a restricted managed profile's own token; nothing was written to a household account

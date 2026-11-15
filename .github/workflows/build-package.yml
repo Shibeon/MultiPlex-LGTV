@@ -52,7 +52,11 @@ on:
         type: string
         default: ''
       telemetry:
-        description: 'Which telemetry credential pair to compile in — production or development.'
+        description: >
+          Which telemetry credential pair to compile in — production, development, or none. `none`
+          is a build that carries no endpoint at all (the MultiPlex fork ships no telemetry
+          destination): every pair must be absent, the binary is checked to carry no Sentry DSN or
+          PostHog key, and nothing is uploaded to Sentry, so the run needs no SENTRY_AUTH_TOKEN.
         type: string
         required: true
       artifact:
@@ -103,8 +107,10 @@ on:
         type: boolean
         default: true
     secrets:
+      # Optional at the call boundary so a `telemetry: none` caller (the fork's release) runs
+      # without it. A build that DOES upload still refuses an empty token, in the upload step.
       SENTRY_AUTH_TOKEN:
-        required: true
+        required: false
     outputs:
       ipk:
         description: Path to the built .ipk inside the runner's workspace (pkg/*.ipk).
@@ -132,8 +138,8 @@ jobs:
             *) echo "::error::flavor must be stable, debug, or nightly, got '$FLAVOR'"; exit 1 ;;
           esac
           case "$TELEMETRY" in
-            production|development) ;;
-            *) echo "::error::telemetry must be production or development, got '$TELEMETRY'"; exit 1 ;;
+            production|development|none) ;;
+            *) echo "::error::telemetry must be production, development or none, got '$TELEMETRY'"; exit 1 ;;
           esac
           # A manifest is keyed to the app id it was generated for, and only two installs carry
           # one: stable (the webosbrew catalogue's listing) and nightly (attached to its
@@ -313,6 +319,13 @@ jobs:
             echo "telemetry fingerprints (sha256, first 16):"
             printf '  sentry  %s\n' "$(printf %s "$PLX_SENTRY_DSN"  | sha256sum | cut -c1-16)"
             printf '  posthog %s\n' "$(printf %s "$PLX_POSTHOG_KEY" | sha256sum | cut -c1-16)"
+          elif [ "$TELEMETRY" = none ]; then
+            # No destination at all, and that is graded on the bytes rather than assumed from the
+            # empty variables: no pair reached the build, and the binary carries neither a Sentry
+            # DSN nor a PostHog key (the same patterns ci/gen-release-audit.py reports from).
+            [ -z "$PLX_SENTRY_DSN$PLX_POSTHOG_KEY$PLX_SENTRY_DSN_DEV$PLX_POSTHOG_KEY_DEV" ] \
+              || { echo '::error::telemetry credentials are present in a telemetry: none build.'; exit 1; }
+            python3 -c 'import re,sys; b=open("pkg/multiplex","rb").read(); sys.exit("::error::the packaged binary carries a telemetry endpoint" if re.search(rb"https://[0-9a-f]{8,}@[A-Za-z0-9.-]*ingest\.[a-z]{2}\.sentry\.io/\d+",b) or re.search(rb"phc_[A-Za-z0-9]{20,}",b) else 0)'
           else
             [ -n "$PLX_SENTRY_DSN_DEV" ] || { echo '::error::PLX_SENTRY_DSN_DEV is required for a development-telemetry build.'; exit 1; }
             [ -n "$PLX_POSTHOG_KEY_DEV" ] || { echo '::error::PLX_POSTHOG_KEY_DEV is required for a development-telemetry build.'; exit 1; }
@@ -364,6 +377,11 @@ jobs:
           TELEMETRY: ${{ inputs.telemetry }}
           UPLOAD: ${{ inputs.upload-debug-files }}
         run: |
+          # A build with no telemetry destination has nowhere to send a crash, so there is nothing
+          # to symbolicate against: the check below still runs, the upload does not.
+          if [ "$TELEMETRY" = none ]; then
+            UPLOAD=false
+          fi
           if [ "$UPLOAD" = true ]; then
             if [ -z "$SENTRY_AUTH_TOKEN" ]; then
               echo "::error::SENTRY_AUTH_TOKEN is not set — refusing to ship unsymbolicatable crash reports."
@@ -385,7 +403,7 @@ jobs:
           SENTRY_CLI="$PWD/tools/node_modules/.bin/sentry-cli" \
             python3 ci/check-debug-files.py pkg/multiplex.debug pkg/symbols/*.debug
           if [ "$UPLOAD" != true ]; then
-            echo "Skipping the Sentry upload: upload-debug-files is '$UPLOAD' (a pull request's nightly dry run)."
+            echo "Skipping the Sentry upload: upload-debug-files is '$UPLOAD' (a pull request's dry run, or telemetry: $TELEMETRY)."
             exit 0
           fi
           tools/node_modules/.bin/sentry-cli debug-files upload \

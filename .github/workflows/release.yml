@@ -371,10 +371,12 @@ jobs:
       # package deliberately does not write that released asset name) — a loud failure naming a
       # checksum rather than a flavour.
       flavor: stable
-      # The PRODUCTION telemetry endpoints, compiled in from `vars` rather than `secrets`
-      # DELIBERATELY — see build-package.yml's own comment on the point. Only SENTRY_AUTH_TOKEN,
-      # passed as a secret below, can read or delete the project.
-      telemetry: production
+      # NO telemetry destination: the MultiPlex fork removed the upstream project's Sentry and
+      # PostHog endpoints, so the release carries none (build-package.yml grades that on the bytes)
+      # and uploads no debug files. The run therefore needs neither the PLX_SENTRY_DSN /
+      # PLX_POSTHOG_KEY repository variables nor the SENTRY_AUTH_TOKEN secret; the secret is still
+      # passed through so a fork that later adds a destination only changes this one line.
+      telemetry: none
       artifact: release-assets
       homebrew-manifest: true
       source-asset: true

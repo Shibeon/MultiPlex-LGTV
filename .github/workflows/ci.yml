@@ -30,7 +30,8 @@ on:
     #     and `.github/actions/` (ci/test_ci_*.py read every workflow and action file), and
     #     `.claude/hooks/` and `.agents/skills/wake-tv/` (their `*-test.py` and ci/test_tv_config.py
     #     are `make check` steps);
-    #   * `PRIVACY.md` (`include_str!`ed by three rust-modules/telemetry tests and read by
+    #   * `PRIVACY.md` (shipped in the source bundle) and `docs/optional-reporting.md`
+    #     (`include_str!`ed by three rust-modules/telemetry tests and read by
     #     telemetry/src/diag/schema.rs), `LICENSE` (`include_str!`ed by screens/src/legal.rs and
     #     packaged), and `LICENSING.md`, `TRADEMARKS.md`, `THIRD-PARTY-NOTICES.md` (ci/check-package.py
     #     grades the packaged payload against them; the Makefile ships them in the .ipk);
@@ -67,12 +68,15 @@ on:
       - '!SECURITY.md'
       - '!AGENTS.md'
       - '!CLAUDE.md'
-      # docs: nothing under docs/ is read by a gate except the two re-includes below
+      # docs: nothing under docs/ is read by a gate except the three re-includes below
       # (docs/macos-app-readme.md is only copied into the macOS bundle by `make macapp`, which
       # this workflow does not run; docs/plex-openapi.json and the images are referenced by prose)
       - '!docs/**'
       # graded by tests/test_demo_library.py (make check): must stay a trigger
       - 'docs/screenshots/CREDITS.md'
+      # include_str!ed by the rust-modules/telemetry payload tests and read by diag/schema.rs
+      # (make check): must stay a trigger
+      - 'docs/optional-reporting.md'
       # replayed by tools/test_abr_calibrate_plant.py, test_abr_transfer_bound.py and
       # test_scrub_logs.py (make check): must stay a trigger
       - 'docs/measurements/*-logs/*.log'

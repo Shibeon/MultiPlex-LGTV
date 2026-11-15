@@ -497,6 +497,38 @@ session with the set; several are answerable from one run's event log.
    and see whether SAM still launches it by the directory's name — a deliberate experiment on the
    **debug** install, never the stable one.
 
+8. **Does MultiPlex coexist with PlxNative (`com.beb.plxnative`) on one set?** People who install
+   MultiPlex may already have the app this fork derives from. Never observed on a television: no
+   set here has had both installed. What the code separates, as of 0.11.0:
+   - **The app id**, and with it the install directory, SAM's record, the launcher tile and the
+     session file (`/media/developer/<id>-auth.json`, keyed on the id, §3.1).
+   - **The DB8 kind**, `<storage service>:1`, named after each app's own helper service.
+   - **The DB8 record id.** DB8 ids are global across kinds, and PlxNative keeps its state under
+     `plxstate.stable` (and its nightly under `plxstate.night`), the ids the stable and nightly
+     installs used until 0.11.0. They now use `mpxstate.stable` and `mpxstate.night`
+     (`ci/install-identities.json`, `legacy_object_id` naming the old one); the debug id is
+     unchanged. At each helper start, `Backend::adopt_legacy_record` asks for the old id once.
+     Only when the object there is of MultiPlex's own kind does it act: while the new id is
+     empty it copies the record there with a create without `_rev` (it cannot overwrite a
+     record) and reads the new id back; then it re-reads the old object, checks its kind again
+     and purges it (`del` with `purge: true`), so no copy with plaintext tokens outlives a sign-out
+     or Delete all local data. An object of another kind, or a read refused with -3999 ("access
+     denied") or -3963, is never kept, written or deleted, and settles the question for the
+     process; a transport error or another refusal is asked again on the next connection. A
+     record of MultiPlex's own kind that does not decode is purged without being copied.
+   - **The runtime files.** Both apps write into `/tmp`, MultiPlex as `multiplex-*` and PlxNative
+     as `plxnative-*`. Until 0.11.0, MultiPlex deleted the `plxnative-*` logs, recordings and
+     markers its own uid owned, at every boot and in Delete all local data. Under item 4's
+     possible shared uid, that check would have deleted a running PlxNative's files. MultiPlex now
+     deletes no `plxnative-*` name at all (`preparing_the_runtime_root_leaves_plxnative_files_alone`,
+     `delete_all_local_data_leaves_plxnative_files_alone`).
+
+   Not separated, and not checked: the capture listener's port for a developer build of each app
+   (§3.1), and everything in §3.2 (one video plane, one decoder, the jail template).
+   *Settled by:* install both apps on one set. Sign in to each with a different account, relaunch
+   each, and confirm that neither shows the other's account. On the set, `luna-send` a DB8 `get`
+   of both ids to confirm each record has its own kind.
+
 ## 7. The `appId` evidence, graded honestly
 
 **No tool in this repository can answer "does libpf read `option.appId`, and what does it do with

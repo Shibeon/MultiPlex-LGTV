@@ -282,3 +282,38 @@ fn a_focused_icon_only_control_draws_no_name() {
         }
     }
 }
+
+/// One tick with the host's screen inputs saying the watching profile is a managed Plex Home
+/// member (`ScreenInputs::managed`), as the application publishes them.
+fn tick_managed(s: &mut HomeScreen, view: HubsView<'_>, focus: Option<FocusKey<u32>>, managed: bool) {
+    let inputs: &'static crate::registry::ScreenInputs =
+        Box::leak(Box::new(crate::registry::ScreenInputs { managed, ..Default::default() }));
+    let mut context = cx(view, focus);
+    context.views.2 = inputs;
+    let mut out = Vec::new();
+    let mut present = plx_machine::present::Present::new();
+    let mut fx = Effects::new(&mut out, plx_machine::machine::MachineId::Instance(InstanceId(9)), &mut present);
+    Machine::<TestHost>::step(s, &ScreenEvent::Tick(Tick { ms: 16, dt_us: 16_667 }), &context, &mut fx);
+}
+
+/// **A managed profile has no bookmark disc** (the owner's decision, the web app's too): the row is
+/// Play and Info, the application's feed is handed no title (so it reads no membership), and a
+/// focus left on the disc reconciles to Play through the engine. The owner's row keeps it.
+#[test]
+fn a_managed_profile_has_no_disc() {
+    let _guard = plx_base::testlock::serial();
+    let snapshot = seeded(true);
+    let view = snapshot.view();
+    let mut s = screen(view);
+    let want = key(&s, HERO_WATCHLIST_ELEM);
+    tick_managed(&mut s, view, Some(want), true);
+    assert!(disc_rect(&s, view).is_none(), "no disc drawn");
+    assert_eq!(s.hero_slots(view), ([0, 1, 0], 2));
+    assert_eq!(s.watchlist_hex(), None, "the feed is handed no title");
+    assert_eq!(Focusable::<TestHost>::group_of(&s, &HERO_WATCHLIST_ELEM, &cx(view, None)), None);
+    assert_eq!(Focusable::<TestHost>::reconcile(&s, want, &cx(view, Some(want))).elem, HERO_PLAY_ELEM);
+
+    tick_managed(&mut s, view, None, false);
+    assert!(disc_rect(&s, view).is_some(), "the owner's hero has its disc again");
+    assert_eq!(s.watchlist_hex(), Some(HEX_A));
+}

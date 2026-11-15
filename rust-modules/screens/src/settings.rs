@@ -493,12 +493,14 @@ fn mount_page(
         SettingsPage::Contribute => Box::new(super::legal::DocumentPage::contribute(entry)),
         SettingsPage::Playback => Box::new(super::preferences::PreferencesPage::new(entry, super::preferences::Kind::Playback, &cx.views.inputs)),
         SettingsPage::AudioSubtitles => Box::new(super::preferences::PreferencesPage::new(entry, super::preferences::Kind::AudioSubtitles, &cx.views.inputs)),
-        SettingsPage::Legal => Box::new(super::legal::LegalIndex::new(entry)),
+        SettingsPage::Legal => Box::new(super::legal::LegalIndex::for_build(entry, cx.views.inputs.telemetry_absent)),
         SettingsPage::About => Box::new(super::legal::DocumentPage::about(entry)),
-        SettingsPage::Document(i) => Box::new(super::legal::DocumentPage::legal(entry, i)),
+        SettingsPage::Document(i) => Box::new(super::legal::DocumentPage::legal_for_build(
+            entry, i, cx.views.inputs.telemetry_absent)),
         SettingsPage::Privacy => Box::new(super::consent::ConsentPage::settings(entry, cx, fx)),
-        SettingsPage::Preview(i) => Box::new(super::consent::PreviewPage::new(
-            entry, super::consent::offered_preview(i, cx.views.inputs.telemetry_absent))),
+        SettingsPage::Preview(i) => Box::new(super::consent::PreviewPage::for_build(
+            entry, super::consent::offered_preview(i, cx.views.inputs.telemetry_absent),
+            cx.views.inputs.telemetry_absent)),
         SettingsPage::ConsentStage(i) => {
             Box::new(super::consent::ConsentPage::first_run(entry, i, cx, fx))
         }

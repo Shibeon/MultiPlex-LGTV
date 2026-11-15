@@ -13,7 +13,7 @@
     ],
     "platform/build.rs": "d584003c0eedf98ff74c93d059e6481dffadd1076d7ab30118c785c0cab49e0e",
     "platform/build_support/catalog.rs": "b02769b2de34bf6cf53a60d05bc9fc3080e6012778e30b400b13f772b43f7083",
-    "build_support/install_identities.rs": "722eaf0fa99da601c3c0684d804d1b1aadc19d543fa085859d1a64ed85356c8a",
+    "build_support/install_identities.rs": "cb1abd97535b7ea95c049b07b43b7af25b0fa85fb5d37c723da1ea1da02eaf1b",
     "machine/src/lib.rs": "1b12901e3f544c1721ee7e0f526ffa9851f075f97f5924c726374148955ee2f4",
     "machine/src/machine.rs": [
       "571415d64a9885248f852b402153feedd4660acbe03606e4796c59659726049f",

@@ -517,7 +517,7 @@ presentation in a design pass.
    60 x 60, the mark at `TAB_ICON_D`; the Watchlist, "My list", is the bookmark with its name), and a
    destination is found by its KEY (`TAB_KEY_WATCHLIST` is `STRIP_BASE + 5`, `TAB_KEY_SETTINGS`
    `STRIP_BASE + 6`), never by "the last face". MultiPlex's order is Search, Home, the types, My
-   list, a `Divider` (`TAB_KEY_DIVIDER`, drawn and never a stop), Settings and the profile chip
+   list (absent for a managed Plex Home profile: `app/chrome.rs`'s `strip_keys`), a `Divider` (`TAB_KEY_DIVIDER`, drawn and never a stop), Settings and the profile chip
    (`TabFace::Avatar` at `TAB_KEY_CHIP`, the track's last pill: the focus capsule rings the avatar
    `profile_chip_with` draws in `StripRender::avatar_frame`). The strip PULSES a mark once
    after a title is put on the list: `StripRender::pulse(idx)` (`TAB_PULSE_S` 0.4 s, the GLYPH

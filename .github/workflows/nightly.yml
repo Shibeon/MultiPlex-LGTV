@@ -189,11 +189,12 @@ jobs:
       ref: ${{ needs.plan.outputs.sha }}
       flavor: nightly
       nightly-date: ${{ needs.plan.outputs.date }}
-      # The DEVELOPMENT telemetry pair — a nightly is unreleased and untested on a television, so
-      # its crash reports and usage events belong in the project's development project
-      # (`plx-native-dev`), not mixed into what a real release reports. build-package.yml's own
-      # build step asserts this pair specifically for `telemetry: development`.
-      telemetry: development
+      # No telemetry destination, as the release and the candidate: the MultiPlex fork has no
+      # reporting service, and `development` requires the upstream project's development pair
+      # (`PLX_SENTRY_DSN_DEV`, `PLX_POSTHOG_KEY_DEV`), which this repository does not have, so it
+      # failed every scheduled run. build-package.yml checks the binary carries no key and skips
+      # the debug-file upload for `none`.
+      telemetry: none
       artifact: nightly-assets
       # The package REDISTRIBUTES FFmpeg, so the LGPL corresponding-source obligation applies here
       # exactly as it does to a stable release — this is the fail-closed default anyway, but named

@@ -1,6 +1,6 @@
 {
   "id": "app.multiplex.native",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "vendor": "MultiPlex",
   "type": "native",
   "main": "multiplex",

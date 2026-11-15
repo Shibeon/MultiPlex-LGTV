@@ -59,6 +59,10 @@ fn test_store() -> &'static mut plx_data::stores::metadata::MetadataStore {
     TEST_METADATA.with(|cell| unsafe { &mut *cell.get() })
 }
 
+impl crate::registry::ScreenInputsLike for TestHost {
+    fn screen_inputs<'a>(_cx: &Cx<'a, Self>) -> &'a crate::registry::ScreenInputs { crate::registry::empty_fixture() }
+}
+
 impl crate::registry::MetadataLike for TestHost {
     fn metadata<'a>(_cx: &Cx<'a, Self>) -> plx_data::metadata::MetadataView<'a> {
         test_store().view()
@@ -128,7 +132,7 @@ fn bare(sid: ServerId, rk: &str) -> DetailScreen {
         tabs: TabStrip::new(),
         season_pop: CtlPop::new(),
         ctl_pop: CtlPop::new(),
-        watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None,
+        watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None, no_watchlist: false,
         season_metrics: season::Metrics::new(),
         about_rows: about::Rows::new(),
         ground: AmbientWash::flat(theme::SURFACE_APP),
