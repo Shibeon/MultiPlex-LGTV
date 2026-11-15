@@ -6134,6 +6134,13 @@ impl TabStrip {
             foc: Capsule::new(),
         }
     }
+    /// The selection plate's horizontal velocity: zero while it rests or lands, non-zero while it
+    /// travels between two pills.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_selection_x_vel(&self) -> f32 {
+        self.sel.x.vel
+    }
+
     /// Re-enter the selected plate at its new layout position on the next update.
     pub(crate) fn restart_selection(&mut self) {
         self.sel = Capsule::new();

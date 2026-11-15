@@ -180,6 +180,65 @@ fn the_share_write_is_asked_for_only_on_the_explicit_press() {
     assert_eq!(requests(h.press(SHARE_ELEM)), vec![Asked::SetShare(false)]);
 }
 
+/// **An unreadable setting is read again on the toggle's press**: the press while the read failed
+/// asks the store to retry the read, never to write a value the page could not read.
+#[test]
+fn a_press_on_an_unreadable_setting_reads_it_again() {
+    let mut h = H::new(view(ShareState::Failed));
+    assert_eq!(h.run(30), vec![], "a failed read is not retried by the page on its own");
+    assert_eq!(requests(h.press(SHARE_ELEM)), vec![Asked::Retry]);
+    h.screen.input(FriendsIn::View(FriendsView { writing: Some(true), ..view(ShareState::Failed) }));
+    assert_eq!(requests(h.press(SHARE_ELEM)), vec![], "nothing while a save is out");
+}
+
+/// **Privacy: a friend's plex.tv avatar never goes through a server the account does not own.**
+/// The poster of a held title comes from the server holding it (a friend's share, here), but the
+/// avatar on it is fetched only through the owned art server; with none, the initials are drawn.
+#[test]
+fn a_friends_avatar_goes_only_through_an_owned_server() {
+    let (shared, owned) = (ServerId::from_raw(3), ServerId::from_raw(5));
+    let url = "https://plex.tv/users/abc/avatar?c=1";
+    let mut rows = feed();
+    for row in &mut rows {
+        row.user.avatar = Some(url.into());
+    }
+    let mut held = HashMap::new();
+    held.insert(format!("plex://movie/{HEX}"), ServerMatch::new(shared, 77));
+    let held_view = || FriendsView { feed: FeedState::Ready(Arc::from(rows.clone())), held: held.clone(), shares: ShareState::Known(true), ..Default::default() };
+    let mut h = H::new(held_view());
+    let film = (0, 1);
+    assert_eq!(h.screen.probe_day_poster(film.0, film.1).map(|(src, _)| src), Some(shared.raw()), "the held copy's own poster");
+    assert_eq!(h.screen.probe_day_avatar(film.0, film.1), Some((0, String::new())), "no owned server: initials");
+    assert_eq!(h.screen.probe_day_avatar(0, 0), Some((0, String::new())));
+
+    h.screen.input(FriendsIn::ArtServer(Some(owned)));
+    assert_eq!(h.screen.probe_day_poster(film.0, film.1).map(|(src, _)| src), Some(shared.raw()));
+    assert_eq!(h.screen.probe_day_avatar(film.0, film.1), Some((owned.raw(), url.to_string())), "through the owned server");
+    assert_eq!(h.screen.probe_day_avatar(0, 0), Some((owned.raw(), url.to_string())));
+}
+
+/// **A rebuilt filter row reflows the page's OWN selection plate**: when the chosen friend leaves
+/// the row (a feed without them), the plate arrives on All in the new layout instead of streaking
+/// across from where the friend's chip was (`HeaderRow::reflow_selection`, the Library header's
+/// rule).
+#[test]
+fn a_chip_that_leaves_the_row_does_not_streak_the_plate() {
+    let mut h = H::new(view(ShareState::Known(true)));
+    h.press(FriendsScreen::chip_elem(3));
+    assert_eq!(h.screen.filter(), Some("3"));
+    h.run(120);
+    assert!(!h.screen.probe_header_moving(), "settled on Inès");
+    let without: Vec<_> = feed().into_iter().filter(|a| a.user.id != "3").collect();
+    h.screen.input(FriendsIn::View(FriendsView { feed: FeedState::Ready(Arc::from(without)), ..view(ShareState::Known(true)) }));
+    assert_eq!(h.screen.filter(), None, "the chosen friend left: All");
+    h.run(1);
+    assert!(h.screen.probe_header_selection_x_vel().abs() < 0.01,
+        "the plate lands on All instead of travelling from the chip that went: {}", h.screen.probe_header_selection_x_vel());
+    h.press(FriendsScreen::chip_elem(1));
+    h.run(1);
+    assert!(h.screen.probe_header_selection_x_vel().abs() > 0.01, "a pick between two chips that stay still travels");
+}
+
 /// **The filter row: All first, then the friends, the most active first; a press narrows the
 /// shelves to that friend, and All widens them again.**
 #[test]

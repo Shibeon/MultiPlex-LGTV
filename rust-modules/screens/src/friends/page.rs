@@ -132,6 +132,9 @@ struct Card {
     src: u16,
     thumb: String,
     year: i32,
+    /// The server the avatar is fetched through: one the account owns, never the poster's `src`
+    /// (a friend's share may hold the title). 0 with an empty `avatar`: the initials.
+    face: u16,
     avatar: String,
     initial: CString,
     progress: Option<f32>,
@@ -254,7 +257,10 @@ struct Page {
     /// Element to (section, index).
     index: HashMap<u32, (Sec, usize)>,
     rev: u64,
-    header_capsules: plx_ui::widgets::TabStrip,
+    /// The header row's capsules. Behind a cell because the row is rebuilt behind `&self` (the
+    /// focus questions find it on the first ask), and the rebuild reflows THIS strip's selection
+    /// plate (`header::Row::begin_swap`), as the Library header does.
+    header_capsules: std::cell::RefCell<plx_ui::widgets::TabStrip>,
     header_pop: plx_ui::widgets::CtlPop<1>,
     handoff: plx_ui::scroll_chrome::Handoff,
     header_rows: plx_ui::page_header::SharedRow<header::Row>,
@@ -299,7 +305,7 @@ impl Page {
         self.header_rows.get_replacing(
             h.finish(),
             || header::Row::new(measure, &names, self.selected_chip(), self.share_face(), |i| CHIP_BASE + i as u32, SHARE_ELEM),
-            |old, new| new.begin_swap(old, &mut self.header_swap.borrow_mut(), &mut plx_ui::widgets::TabStrip::new()),
+            |old, new| new.begin_swap(old, &mut self.header_swap.borrow_mut(), &mut self.header_capsules.borrow_mut()),
         )
     }
 
@@ -342,6 +348,8 @@ impl Page {
                 src: sid.raw(),
                 thumb: s.thumb.clone(),
                 year: 0,
+                // The session's own server: an owned one (`community::live_on_owned`).
+                face: sid.raw(),
                 avatar: s.user_thumb.clone(),
                 initial: initial(&s.user),
                 progress,
@@ -380,6 +388,7 @@ impl Page {
                     src,
                     thumb,
                     year: if post.episodes.is_empty() { a.year.unwrap_or(0) } else { 0 },
+                    face: art,
                     avatar: a.user.avatar.clone().filter(|_| art != 0).unwrap_or_default(),
                     initial: initial(&a.user.name),
                     progress: None,
@@ -493,13 +502,13 @@ impl<H: ContentLike> CardSource<H> for Cards<'_> {
         self.cards.get(i)?.progress
     }
     /// The friend's avatar in the poster's lower-left corner: the shared profile chip's disc (their
-    /// plex.tv picture through the art server, else their initial).
+    /// plex.tv picture through the owned art server, never the poster's server, else their initial).
     fn overlay(&self, p: Painter, i: usize, tile: &Tile, _measure: &dyn plx_machine::machine::Measure) {
         let Some(c) = self.cards.get(i) else { return };
         let d = AVATAR_D * tile.scale;
         let inset = AVATAR_INSET * tile.scale;
         let rect = Rect::new(tile.rect.x + inset, tile.rect.y + tile.rect.h - inset - d, d, d);
-        plx_ui::widgets::profile_chip_with(p, ProfileChipRead { src: c.src, thumb: &c.avatar, initial: &c.initial }, 0.0, rect);
+        plx_ui::widgets::profile_chip_with(p, ProfileChipRead { src: c.face, thumb: &c.avatar, initial: &c.initial }, 0.0, rect);
     }
     /// A post has no item menu: a hold does nothing.
     fn holdable(&self, _i: usize) -> bool {
@@ -642,7 +651,7 @@ impl<H: ContentLike> StackPage<H> for Page {
             Sec::Head => {
                 let p = p.alpha(self.handoff.head_alpha(r.y));
                 let row = self.header_row(f.measure);
-                row.draw(p, r.y, &self.header_capsules, self.header_pop.scale_with(0, f.press.scale), &self.header_swap.borrow());
+                row.draw(p, r.y, &self.header_capsules.borrow(), self.header_pop.scale_with(0, f.press.scale), &self.header_swap.borrow());
             }
             Sec::Status => {
                 if let Some(overlay) = self.overlay() {
@@ -684,7 +693,7 @@ impl FriendsScreen {
             keys: Keys::new(),
             index: HashMap::new(),
             rev: 0,
-            header_capsules: plx_ui::widgets::TabStrip::new(),
+            header_capsules: std::cell::RefCell::new(plx_ui::widgets::TabStrip::new()),
             header_pop: plx_ui::widgets::CtlPop::new(),
             handoff: plx_ui::scroll_chrome::Handoff::new(),
             header_rows: plx_ui::page_header::SharedRow::new(),
@@ -754,6 +763,30 @@ impl FriendsScreen {
         self.page.days.get(d)?.cards.get(i).map(|c| c.elem)
     }
 
+    /// Whether the header row's capsules are still moving.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_header_moving(&self) -> bool {
+        self.page.header_capsules.borrow().moving()
+    }
+
+    /// The header row's selection plate's horizontal velocity (non-zero: travelling).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_header_selection_x_vel(&self) -> f32 {
+        self.page.header_capsules.borrow().probe_selection_x_vel()
+    }
+
+    /// Day `d`'s card `i`'s poster: the server it is fetched through and its path.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_day_poster(&self, d: usize, i: usize) -> Option<(u16, String)> {
+        self.page.days.get(d)?.cards.get(i).map(|c| (c.src, c.thumb.clone()))
+    }
+
+    /// Day `d`'s card `i`'s avatar: the server it is fetched through and its URL (empty: initials).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_day_avatar(&self, d: usize, i: usize) -> Option<(u16, String)> {
+        self.page.days.get(d)?.cards.get(i).map(|c| (if c.avatar.is_empty() { 0 } else { c.face }, c.avatar.clone()))
+    }
+
     /// What a press on `elem` does, as the page decides it.
     fn press(&mut self, elem: u32, fx: &mut Effects<'_, impl ContentLike>) -> Handled {
         if let Some(settings) = crate::registry::strip_settings(elem) {
@@ -774,10 +807,17 @@ impl FriendsScreen {
         match elem {
             RETRY_ELEM => self.route(AppFx::Store(StoreId::Community, StoreCmd::Community(CommunityCmd::Retry)), fx),
             SHARE_ELEM => {
-                // The explicit press: the opposite of what the account says, and nothing while the
-                // setting is not known or a save is out.
-                if let (ShareState::Known(on), None) = (self.page.view.shares, self.page.view.writing) {
-                    self.route(AppFx::Store(StoreId::Community, StoreCmd::Community(CommunityCmd::SetShare(!on))), fx);
+                // The explicit press: the opposite of what the account says; while the setting could
+                // not be read, a read again (never a write of a value nobody read); nothing while it
+                // is still being read or a save is out.
+                match (self.page.view.shares, self.page.view.writing) {
+                    (ShareState::Known(on), None) => {
+                        self.route(AppFx::Store(StoreId::Community, StoreCmd::Community(CommunityCmd::SetShare(!on))), fx);
+                    }
+                    (ShareState::Failed, None) => {
+                        self.route(AppFx::Store(StoreId::Community, StoreCmd::Community(CommunityCmd::Retry)), fx);
+                    }
+                    _ => {}
                 }
             }
             e if (CHIP_BASE..CHIP_BASE + 1 + header::FILTER_FRIENDS as u32).contains(&e) => {
@@ -872,7 +912,7 @@ impl FriendsScreen {
     }
 
     fn tick<H: ContentLike>(&mut self, t: Tick, cx: &Cx<'_, H>) {
-        self.page.header_row(cx.measure).step(self.page.entry, cx.focus.current, &mut self.page.header_capsules, &mut self.page.header_pop, t.dt());
+        self.page.header_row(cx.measure).step(self.page.entry, cx.focus.current, self.page.header_capsules.get_mut(), &mut self.page.header_pop, t.dt());
         self.page.header_swap.get_mut().step(t.dt());
         self.page.handoff.step(t.dt(), self.stack.scroll(), self.stack.target(), SHELF_STYLE.pitch_fixed(), false);
     }
@@ -904,7 +944,7 @@ impl LogicalState for FriendsScreen {
             }
         }
         self.stack.write(c);
-        page.header_capsules.write_motion(c);
+        page.header_capsules.borrow().write_motion(c);
         page.header_pop.write_motion(c);
         page.handoff.write(c);
     }
