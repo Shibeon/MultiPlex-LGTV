@@ -318,7 +318,7 @@ impl Pointer {
         let Some((x, y)) = self.edge.at().filter(|_| !self.dpad_mode) else { return false };
         let zone = zone.filter(|z| z.covers(x, y));
         match plx_ui::wheel::route(dy, zone, self.wheel.pending(zone)) {
-            plx_ui::wheel::WheelRoute::Row(dx) => {
+            plx_ui::wheel::WheelMove::Row(dx) => {
                 let Some(zone) = zone else { return false };
                 if self.wheel.pending(Some(zone)) == 0.0 {
                     self.wheel_last = now;
@@ -326,7 +326,7 @@ impl Pointer {
                 self.wheel.add(dx, x, y, zone);
                 true
             }
-            plx_ui::wheel::WheelRoute::Page => false,
+            plx_ui::wheel::WheelMove::Page => false,
         }
     }
 

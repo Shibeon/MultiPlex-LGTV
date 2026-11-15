@@ -57,7 +57,7 @@ impl PanZone {
 
 /// Where a wheel notch goes.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum WheelRoute {
+pub enum WheelMove {
     /// The row under the pointer moves by this many px (+ shows more on the right), never past an end.
     Row(f32),
     /// The page's own vertical step (nothing scrolls sideways there, the row fits, or it already
@@ -73,18 +73,18 @@ pub enum WheelRoute {
 /// Wheel DOWN scrolls the row RIGHT and wheel up left, by [`NOTCH_CARDS`] cards a notch, held to
 /// the row's ends: a notch that would pass the end goes as far as the end, and a notch at the end
 /// is the page's.
-pub fn route(notch: i32, zone: Option<&PanZone>, pending: f32) -> WheelRoute {
+pub fn route(notch: i32, zone: Option<&PanZone>, pending: f32) -> WheelMove {
     let Some(zone) = zone.filter(|z| notch != 0 && z.max > END_EPS && z.pitch.is_finite() && z.pitch > 0.0) else {
-        return WheelRoute::Page;
+        return WheelMove::Page;
     };
     let at = (zone.scroll + if pending.is_finite() { pending } else { 0.0 }).clamp(0.0, zone.max);
     let step = NOTCH_CARDS * zone.pitch * notch.unsigned_abs() as f32;
     let room = if notch < 0 { zone.max - at } else { at };
     if room <= END_EPS {
-        return WheelRoute::Page;
+        return WheelMove::Page;
     }
     let dx = step.min(room);
-    WheelRoute::Row(if notch < 0 { dx } else { -dx })
+    WheelMove::Row(if notch < 0 { dx } else { -dx })
 }
 
 /// The topmost zone under the point, in draw order (the last registered wins, as a stop does).
@@ -121,7 +121,7 @@ impl WheelGlide {
         }
     }
 
-    /// A notch's `dx` ([`WheelRoute::Row`]) over `zone`, turned at `(x, y)`.
+    /// A notch's `dx` ([`WheelMove::Row`]) over `zone`, turned at `(x, y)`.
     pub fn add(&mut self, dx: f32, x: f32, y: f32, zone: &PanZone) {
         if !matches!(self.at, Some((_, _, rect)) if rect == zone.rect) {
             *self = Self::IDLE;
@@ -161,31 +161,31 @@ mod tests {
 
     #[test]
     fn wheel_down_scrolls_the_row_right_and_up_scrolls_it_left() {
-        assert_eq!(route(-1, Some(&zone(0.0, 2000.0)), 0.0), WheelRoute::Row(560.0));
-        assert_eq!(route(1, Some(&zone(1000.0, 2000.0)), 0.0), WheelRoute::Row(-560.0));
-        assert_eq!(route(-2, Some(&zone(0.0, 2000.0)), 0.0), WheelRoute::Row(1120.0), "a double notch is two steps");
+        assert_eq!(route(-1, Some(&zone(0.0, 2000.0)), 0.0), WheelMove::Row(560.0));
+        assert_eq!(route(1, Some(&zone(1000.0, 2000.0)), 0.0), WheelMove::Row(-560.0));
+        assert_eq!(route(-2, Some(&zone(0.0, 2000.0)), 0.0), WheelMove::Row(1120.0), "a double notch is two steps");
     }
 
     #[test]
     fn a_notch_stops_at_the_end_and_the_next_is_the_pages() {
-        assert_eq!(route(-1, Some(&zone(1800.0, 2000.0)), 0.0), WheelRoute::Row(200.0), "only as far as the end");
-        assert_eq!(route(-1, Some(&zone(2000.0, 2000.0)), 0.0), WheelRoute::Page, "at the right end, down is the page's");
-        assert_eq!(route(1, Some(&zone(0.0, 2000.0)), 0.0), WheelRoute::Page, "at the left end, up is the page's");
-        assert_eq!(route(1, Some(&zone(2000.0, 2000.0)), 0.0), WheelRoute::Row(-560.0), "at the right end, up still scrolls back");
+        assert_eq!(route(-1, Some(&zone(1800.0, 2000.0)), 0.0), WheelMove::Row(200.0), "only as far as the end");
+        assert_eq!(route(-1, Some(&zone(2000.0, 2000.0)), 0.0), WheelMove::Page, "at the right end, down is the page's");
+        assert_eq!(route(1, Some(&zone(0.0, 2000.0)), 0.0), WheelMove::Page, "at the left end, up is the page's");
+        assert_eq!(route(1, Some(&zone(2000.0, 2000.0)), 0.0), WheelMove::Row(-560.0), "at the right end, up still scrolls back");
     }
 
     #[test]
     fn a_row_that_fits_or_no_row_never_takes_the_wheel() {
-        assert_eq!(route(-1, Some(&zone(0.0, 0.0)), 0.0), WheelRoute::Page);
-        assert_eq!(route(-1, None, 0.0), WheelRoute::Page);
-        assert_eq!(route(0, Some(&zone(0.0, 2000.0)), 0.0), WheelRoute::Page, "no step, no move");
+        assert_eq!(route(-1, Some(&zone(0.0, 0.0)), 0.0), WheelMove::Page);
+        assert_eq!(route(-1, None, 0.0), WheelMove::Page);
+        assert_eq!(route(0, Some(&zone(0.0, 2000.0)), 0.0), WheelMove::Page, "no step, no move");
     }
 
     #[test]
     fn a_notch_still_easing_counts_toward_the_end() {
-        assert_eq!(route(-1, Some(&zone(1000.0, 2000.0)), 560.0), WheelRoute::Row(440.0));
-        assert_eq!(route(-1, Some(&zone(1000.0, 2000.0)), 1000.0), WheelRoute::Page, "already on its way to the end");
-        assert_eq!(route(-1, Some(&zone(0.0, 2000.0)), f32::NAN), WheelRoute::Row(560.0), "a broken pending is no pending");
+        assert_eq!(route(-1, Some(&zone(1000.0, 2000.0)), 560.0), WheelMove::Row(440.0));
+        assert_eq!(route(-1, Some(&zone(1000.0, 2000.0)), 1000.0), WheelMove::Page, "already on its way to the end");
+        assert_eq!(route(-1, Some(&zone(0.0, 2000.0)), f32::NAN), WheelMove::Row(560.0), "a broken pending is no pending");
     }
 
     #[test]
@@ -193,7 +193,7 @@ mod tests {
         let z = zone(0.0, 2000.0);
         let mut g = WheelGlide::IDLE;
         assert_eq!(g.step(1.0 / 60.0), None, "nothing under way");
-        let WheelRoute::Row(dx) = route(-1, Some(&z), g.pending(Some(&z))) else { panic!("the row's") };
+        let WheelMove::Row(dx) = route(-1, Some(&z), g.pending(Some(&z))) else { panic!("the row's") };
         g.add(dx, 300.0, 200.0, &z);
         let mut moved = Vec::new();
         while let Some((d, x, y)) = g.step(1.0 / 60.0) {
