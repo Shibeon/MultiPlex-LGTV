@@ -131,7 +131,10 @@ pub struct FoldedRow {
 /// ([`crate::hud_format::compile::Compiled::folds`], R2) in the order the compiler reports. A row is listed
 /// only when the app's own predicate for its command holds for this frame's content
 /// ([`HudCommand::enabled`]): a movie gets no Previous or Next row rather than a dead one. `open_tracks`
-/// folds as one row, which opens the track menu on its Subtitles tab (the menu holds both tabs).
+/// folds as ONE command but lists up to two rows, one per tab of the track menu ([`fold_rows`]): an Audio row
+/// when the playing item carries two or more audio tracks, then a Subtitles row. The menu draws no tab bar,
+/// so a row that opened only the Subtitles tab left the audio list behind an unmarked LEFT press (v0.11.0
+/// report: "nothing to change the audio language").
 pub fn folded_rows(
     folds: &[crate::hud_format::Fold],
     model: &crate::player_hud::model::HudModel,
@@ -139,22 +142,42 @@ pub fn folded_rows(
 ) -> Vec<FoldedRow> {
     use crate::player_hud::command::{Section, TrackTab};
     use plx_platform::i18n::msg;
-    folds
-        .iter()
-        .filter_map(|fold| {
-            let (command, label) = match (fold.command, fold.section) {
-                ("previous", _) => (HudCommand::Previous, msg::widgets_menu_previous_episode()),
-                ("next", _) => (HudCommand::Next, msg::widgets_next_episode()),
-                ("open_tracks", _) => (HudCommand::OpenTracks(TrackTab::Subtitles), msg::settings_audio_title()),
-                ("toggle_section", Some("chapters")) => (HudCommand::ToggleSection(Section::Chapters), msg::widgets_player_chapters()),
-                ("toggle_section", Some("info")) => (HudCommand::ToggleSection(Section::Info), msg::widgets_player_info()),
-                ("from_beginning", _) => (HudCommand::FromBeginning, crate::info_panel::actions(meta)[0]),
-                ("go_to_detail", _) => (HudCommand::GoToDetail, crate::info_panel::actions(meta)[1]),
-                _ => return None,
-            };
-            command.enabled(model).then_some(FoldedRow { command, label })
-        })
-        .collect()
+    let audio_tracks = meta.playing().map_or(0, |p| p.audio.len());
+    let mut rows = Vec::new();
+    for fold in folds {
+        let (command, label) = match (fold.command, fold.section) {
+            ("previous", _) => (HudCommand::Previous, msg::widgets_menu_previous_episode()),
+            ("next", _) => (HudCommand::Next, msg::widgets_next_episode()),
+            ("open_tracks", _) => {
+                // the Audio tab's own row, only when there is a track to choose between
+                let audio = HudCommand::OpenTracks(TrackTab::Audio);
+                if audio_tracks >= 2 && audio.enabled(model) {
+                    rows.push(FoldedRow { command: audio, label: msg::widgets_tracks_audio() });
+                }
+                (HudCommand::OpenTracks(TrackTab::Subtitles), msg::widgets_tracks_subtitles())
+            }
+            ("toggle_section", Some("chapters")) => (HudCommand::ToggleSection(Section::Chapters), msg::widgets_player_chapters()),
+            ("toggle_section", Some("info")) => (HudCommand::ToggleSection(Section::Info), msg::widgets_player_info()),
+            ("from_beginning", _) => (HudCommand::FromBeginning, crate::info_panel::actions(meta)[0]),
+            ("go_to_detail", _) => (HudCommand::GoToDetail, crate::info_panel::actions(meta)[1]),
+            _ => continue,
+        };
+        if command.enabled(model) {
+            rows.push(FoldedRow { command, label });
+        }
+    }
+    rows
+}
+
+/// **The most rows a fold can list on More's root**: two for `open_tracks` (its Audio and Subtitles rows,
+/// [`folded_rows`]), one for every other command. What the HUD lint (`hud_format::lint_menus`, M2) sums to ask
+/// [`need_h`] for the tallest root a package can show.
+pub(crate) fn fold_rows(fold: &crate::hud_format::Fold) -> usize {
+    if fold.command == "open_tracks" {
+        2
+    } else {
+        1
+    }
 }
 
 /// **A drill-in page of the More menu** — the form's `Dest`. The root is the empty page stack, not
@@ -317,12 +340,13 @@ impl FormId for Action {
             Action::None => 0,
             Action::ToggleStats => 1,
             Action::SendDiagnostics => 2,
-            // 30..=43: the folded commands, one key each (the four a package can never fold are listed so a
+            // 30..=44: the folded commands, one key each (each of `open_tracks`'s two tabs is its own row) (the four a package can never fold are listed so a
             // new command cannot compile without claiming one)
             Action::Hud(command) => match command {
                 HudCommand::Previous => 30,
                 HudCommand::Next => 31,
-                HudCommand::OpenTracks(_) => 32,
+                HudCommand::OpenTracks(crate::player_hud::command::TrackTab::Subtitles) => 32,
+                HudCommand::OpenTracks(crate::player_hud::command::TrackTab::Audio) => 37,
                 HudCommand::ToggleSection(crate::player_hud::command::Section::Chapters) => 33,
                 HudCommand::ToggleSection(crate::player_hud::command::Section::Info) => 34,
                 HudCommand::FromBeginning => 35,
@@ -2300,6 +2324,56 @@ mod folded_tests {
         }
     }
 
+    /// A metadata store whose playing item carries `langs.len()` audio tracks, one per language.
+    fn playing_with_audio(langs: &[&str]) -> plx_data::stores::metadata::MetadataStore {
+        let mut store = plx_data::stores::metadata::MetadataStore::default();
+        let mut item = plx_data::metadata::PlayingItem::with_subs(Vec::new());
+        item.audio = langs
+            .iter()
+            .enumerate()
+            .map(|(i, lang)| plx_data::metadata::Stream { id: 100 + i as i64, index: i as i64, lang: (*lang).into(), codec: "eac3".into(), channels: 6, default: i == 0, ..Default::default() })
+            .collect();
+        assert!(store.run(plx_data::stores::metadata::MetadataCmd::InstallPlaying(Some(item))));
+        store
+    }
+
+    /// **Owner report (v0.11.0): "nothing to change the AUDIO language, only subtitles".** `builtin:multiplex`
+    /// places no `open_tracks` control, so More's root is the only way to the track menu. Its one folded row
+    /// opened the menu on the Subtitles tab, which draws no tab bar: the audio list sat behind an unmarked LEFT
+    /// press. A film with two or more audio tracks gets its own Audio row, opening the menu on the Audio tab, and
+    /// a Subtitles row beside it; with one audio track there is nothing to choose, so only Subtitles is listed.
+    #[test]
+    fn multiplex_offers_an_audio_row_when_the_film_has_several_audio_tracks() {
+        let _g = plx_base::testlock::serial();
+        let multiplex = crate::player_hud::loaded::multiplex_for_test();
+        let dual = playing_with_audio(&["English", "Français"]);
+        let rows = folded_rows(multiplex.folds(), &model(false), dual.view());
+        let tracks: Vec<&FoldedRow> = rows.iter().filter(|r| matches!(r.command, HudCommand::OpenTracks(_))).collect();
+        assert_eq!(
+            tracks.iter().map(|r| (r.command, r.label)).collect::<Vec<_>>(),
+            [
+                (HudCommand::OpenTracks(TrackTab::Audio), plx_platform::i18n::msg::widgets_tracks_audio()),
+                (HudCommand::OpenTracks(TrackTab::Subtitles), plx_platform::i18n::msg::widgets_tracks_subtitles()),
+            ],
+            "{rows:?}"
+        );
+        // OK on the Audio row asks for the track menu on its Audio tab, through the one performer
+        plx_media::speed_audio::force_speed_decoder_for_test(true); // a host test loads no FFmpeg
+        let ps = PlaybackSession::default();
+        let mut st = MoreMenuState::new_folded(&ps, None, rows);
+        assert!(st.focus_key(Action::Hud(HudCommand::OpenTracks(TrackTab::Audio)).key().0), "{:?}", st.keys());
+        assert_eq!(st.on_ok(&ps), MoreOk::Action(Action::Hud(HudCommand::OpenTracks(TrackTab::Audio))));
+        assert!(st.focus_key(Action::Hud(HudCommand::OpenTracks(TrackTab::Subtitles)).key().0));
+        assert_eq!(st.on_ok(&ps), MoreOk::Action(Action::Hud(HudCommand::OpenTracks(TrackTab::Subtitles))));
+        // one audio track: nothing to pick, so no Audio row
+        let single = playing_with_audio(&["English"]);
+        let rows = folded_rows(multiplex.folds(), &model(false), single.view());
+        assert_eq!(
+            commands(&rows).into_iter().filter(|c| matches!(c, HudCommand::OpenTracks(_))).collect::<Vec<_>>(),
+            [HudCommand::OpenTracks(TrackTab::Subtitles)]
+        );
+    }
+
     /// **A package with no previous or next folds both, a movie shows neither**: the rows are the app's own
     /// predicate (`HudCommand::enabled`), so a movie gets no dead pair.
     #[test]
@@ -2402,8 +2476,6 @@ mod folded_tests {
         let mut keys: Vec<(u32, Action)> = all.iter().map(|a| (a.key().0, *a)).collect();
         keys.push((MoreRow::OpenQuality.key().0, Action::None));
         keys.push((MoreRow::OpenSpeed.key().0, Action::None));
-        // the two tab addresses of `open_tracks` are one row, so one key
-        keys.retain(|(_, a)| *a != Action::Hud(HudCommand::OpenTracks(TrackTab::Audio)));
         let mut seen = std::collections::BTreeMap::new();
         for (key, action) in keys {
             if let Some(other) = seen.insert(key, action) {
@@ -2413,7 +2485,8 @@ mod folded_tests {
     }
 
     /// The three numbers [`need_h`] is built from are the real table's: the root at its tallest standard shape, with
-    /// zero to seven folded rows (the most a package can fold), is as tall as the formula says.
+    /// zero to eight folded rows (the most a package can fold: seven commands, `open_tracks` listing two), is as tall
+    /// as the formula says.
     #[test]
     fn root_height_is_the_tables() {
         plx_media::speed_audio::force_speed_decoder_for_test(true); // a host test loads no FFmpeg
@@ -2421,6 +2494,7 @@ mod folded_tests {
         let all = [
             HudCommand::Previous,
             HudCommand::Next,
+            HudCommand::OpenTracks(TrackTab::Audio),
             HudCommand::OpenTracks(TrackTab::Subtitles),
             HudCommand::ToggleSection(Section::Chapters),
             HudCommand::ToggleSection(Section::Info),
