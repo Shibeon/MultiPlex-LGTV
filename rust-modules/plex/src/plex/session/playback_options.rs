@@ -1,4 +1,5 @@
-//! The per-profile choices for instant D-pad seeking and the playback engine.
+//! The per-profile choices for instant D-pad seeking, the playback engine, the audio mode and whether
+//! the app decodes the sound for it.
 use serde::{Deserialize, Serialize};
 
 /// Whether Left/Right on a hidden transport jumps at once instead of first revealing the scrubber —
@@ -67,6 +68,77 @@ impl UriEngine {
     }
 }
 
+/// **The app's own processing of the sound** — one per profile. `Off` (the default, and what absence
+/// means) leaves the samples untouched. `Night` compresses the dynamic range (loud passages quieter,
+/// quiet dialogue louder); `Voice` lifts the centre channel of a multichannel source above the others
+/// as it is mixed down, and gives a stereo or mono source a gentle compression and a presence lift;
+/// both end in a limiter. It applies ONLY where the samples pass through the app (the app decodes
+/// the track: `plx_media::player::audio_mode_offered`); where the television or a receiver decodes
+/// the sound the saved value is kept and has no effect.
+#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioMode {
+    #[default]
+    #[serde(rename = "off")]
+    Off,
+    #[serde(rename = "night")]
+    Night,
+    #[serde(rename = "voice")]
+    Voice,
+}
+
+impl AudioMode {
+    /// Every option, the order the picker and the player's menu list them in.
+    pub const LADDER: [AudioMode; 3] = [AudioMode::Off, AudioMode::Night, AudioMode::Voice];
+
+    /// An in-memory index back to an option; out of range is the default, as [`InstantDpadSeeking::from_index`].
+    pub fn from_index(i: u8) -> AudioMode {
+        Self::LADDER.get(i as usize).copied().unwrap_or_default()
+    }
+
+    pub fn index(self) -> u8 {
+        Self::LADDER.iter().position(|&m| m == self).unwrap_or(0) as u8
+    }
+
+    /// `skip_serializing_if` needs a function, not just `PartialEq` with `Default::default()`.
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// **Whether the app decodes the sound itself so that an audio mode can act on it** — one per profile.
+/// `On` (the default, and what absence means): while an [`AudioMode`] other than `Off` is chosen, a
+/// compressed track the television would decode (AAC, AC-3, E-AC-3, DTS, Opus) is decoded by the app
+/// on the Feed engine, mixed to stereo and fed as PCM, so the mode reaches it. `Off`: the television
+/// keeps decoding those tracks, and the mode acts only where the app already holds the samples.
+/// With the mode `Off` this choice changes nothing. The rule is `plx_media::route::audio_mode_decode`.
+#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioModeDecode {
+    #[default]
+    #[serde(rename = "on")]
+    On,
+    #[serde(rename = "off")]
+    Off,
+}
+
+impl AudioModeDecode {
+    /// Every option, the order the picker lists them in.
+    pub const LADDER: [AudioModeDecode; 2] = [AudioModeDecode::On, AudioModeDecode::Off];
+
+    /// An in-memory index back to an option; out of range is the default, as [`InstantDpadSeeking::from_index`].
+    pub fn from_index(i: u8) -> AudioModeDecode {
+        Self::LADDER.get(i as usize).copied().unwrap_or_default()
+    }
+
+    pub fn index(self) -> u8 {
+        Self::LADDER.iter().position(|&m| m == self).unwrap_or(0) as u8
+    }
+
+    /// `skip_serializing_if` needs a function, not just `PartialEq` with `Default::default()`.
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
 /// Whether Dolby Vision is declared when the TV reports support, or never — one per profile, like
 /// [`InstantDpadSeeking`]. `Off` sends no Dolby Vision node, so a stream with a cross-compatible
 /// base layer (Profile 8.1) plays that layer, and one without (Profile 5) is refused direct play
@@ -115,7 +187,7 @@ impl DolbyVisionMode {
 mod tests {
     use super::*;
     use crate::plex::session::{effective, own_prefs, put_own, DolbyVisionModePref,
-        InstantDpadSeekingPref, Preferences, ProfilePrefs, UriEnginePref};
+        AudioModeDecodePref, AudioModePref, InstantDpadSeekingPref, Preferences, ProfilePrefs, UriEnginePref};
 
     #[test]
     fn instant_dpad_seeking_is_defaulted_and_scoped_per_profile() {
@@ -156,6 +228,54 @@ mod tests {
         assert_eq!(serde_json::from_str::<ProfilePrefs>(&encoded).unwrap(), records[0].prefs);
         assert_eq!(UriEngine::LADDER.map(UriEngine::index), [0, 1]);
         assert_eq!(UriEngine::from_index(99), UriEngine::Off);
+    }
+
+    #[test]
+    fn the_audio_mode_is_off_unless_the_profile_chose_it_and_round_trips_per_profile() {
+        for json in ["{}", r#"{"audio_mode":"future"}"#, r#"{"audio_mode":null}"#, r#"{"audio_mode":3}"#] {
+            let prefs: Preferences = serde_json::from_str(json).unwrap();
+            assert_eq!(prefs.audio_mode, AudioMode::Off, "{json}: an unknown spelling degrades to Off");
+            let encoded = serde_json::to_value(&prefs).unwrap();
+            assert!(encoded.get("audio_mode").is_none(), "the default is never written");
+        }
+        let prefs: Preferences = serde_json::from_str(r#"{"audio_mode":"voice"}"#).unwrap();
+        assert_eq!(prefs.audio_mode, AudioMode::Voice, "the legacy top-level key is read");
+        let mut records = Vec::new();
+        assert!(put_own::<AudioModePref>(&mut records, "alice", "account", AudioMode::Night));
+        let legacy = Preferences::default();
+        assert_eq!(effective::<AudioModePref>(&legacy, own_prefs(&records, "alice", "account")), AudioMode::Night);
+        for (user, account) in [("bob", "account"), ("alice", "other")] {
+            assert_eq!(effective::<AudioModePref>(&legacy, own_prefs(&records, user, account)), AudioMode::Off,
+                "another profile, or another account, keeps its own (default) mode");
+        }
+        let encoded = serde_json::to_string(&records[0].prefs).unwrap();
+        assert!(encoded.contains(r#""audio_mode":"night""#), "{encoded}");
+        assert_eq!(serde_json::from_str::<ProfilePrefs>(&encoded).unwrap(), records[0].prefs);
+        assert_eq!(AudioMode::LADDER.map(AudioMode::index), [0, 1, 2]);
+        assert_eq!(AudioMode::from_index(99), AudioMode::Off);
+    }
+
+    #[test]
+    fn the_audio_decode_is_on_unless_the_profile_turned_it_off_and_round_trips_per_profile() {
+        for json in ["{}", r#"{"audio_mode_decode":"future"}"#, r#"{"audio_mode_decode":null}"#, r#"{"audio_mode_decode":0}"#] {
+            let prefs: Preferences = serde_json::from_str(json).unwrap();
+            assert_eq!(prefs.audio_mode_decode, AudioModeDecode::On, "{json}: an unknown spelling degrades to On");
+            let encoded = serde_json::to_value(&prefs).unwrap();
+            assert!(encoded.get("audio_mode_decode").is_none(), "the default is never written");
+        }
+        let mut records = Vec::new();
+        assert!(put_own::<AudioModeDecodePref>(&mut records, "alice", "account", AudioModeDecode::Off));
+        let legacy = Preferences::default();
+        assert_eq!(effective::<AudioModeDecodePref>(&legacy, own_prefs(&records, "alice", "account")), AudioModeDecode::Off);
+        for (user, account) in [("bob", "account"), ("alice", "other")] {
+            assert_eq!(effective::<AudioModeDecodePref>(&legacy, own_prefs(&records, user, account)), AudioModeDecode::On,
+                "another profile, or another account, keeps its own (default) choice");
+        }
+        let encoded = serde_json::to_string(&records[0].prefs).unwrap();
+        assert!(encoded.contains(r#""audio_mode_decode":"off""#), "{encoded}");
+        assert_eq!(serde_json::from_str::<ProfilePrefs>(&encoded).unwrap(), records[0].prefs);
+        assert_eq!(AudioModeDecode::LADDER.map(AudioModeDecode::index), [0, 1]);
+        assert_eq!(AudioModeDecode::from_index(99), AudioModeDecode::On);
     }
 
     #[test]

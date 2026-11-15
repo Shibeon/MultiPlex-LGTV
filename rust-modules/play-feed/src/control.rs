@@ -332,6 +332,7 @@ impl FeedControl for FeedBackend {
             FeedCommand::NoteFailure(flag) => feed_pump::note_failure(flag),
             FeedCommand::Rebase { playpos_ns, disp_base } => feed_pump::rebase(playpos_ns, disp_base),
             FeedCommand::SelectAudio { idx } => feed_pump::select_audio(idx),
+            FeedCommand::AudioProcessing(mode) => feed_pump::select_audio_processing(mode),
             FeedCommand::BeginPlayback => crate::seek::set_native_seek_refused(false),
             FeedCommand::DvStandDown => feed_pump::dv_stand_down(&mut self.resources),
             FeedCommand::SyncSideReader(want) => crate::side_reader::sync(

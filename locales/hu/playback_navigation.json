@@ -9,5 +9,14 @@
   "settings.playback.uri_engine": "Lejátszómotor",
   "settings.playback.uri_engine.copy": "A Kísérleti mód a TV-re bízza a fájl streamelését. A vezérlők ugyanazok maradnak. Hiba esetén a videó Normál módban indul újra. Egyes videók mindig Normál módban játszódnak le.",
   "settings.playback.uri_engine.off": "Normál",
-  "settings.playback.uri_engine.on": "Kísérleti"
+  "settings.playback.uri_engine.on": "Kísérleti",
+  "settings.playback.audio_mode": "Hangmód",
+  "settings.playback.audio_mode.copy": "Az éjszakai mód kiegyenlíti a hangerőt: a hangos jelenetek halkabbak, a halk párbeszédek hangosabbak. A Tiszta beszéd kiemeli a párbeszédet. Nincs hatása, ha a tévé vagy egy erősítő dekódolja a hangot.",
+  "settings.playback.audio_mode.off": "Ki",
+  "settings.playback.audio_mode.night": "Éjszakai mód",
+  "settings.playback.audio_mode.voice": "Tiszta beszéd",
+  "settings.playback.audio_mode_decode": "Dekódolás a hangmódokhoz",
+  "settings.playback.audio_mode_decode.copy": "Bekapcsolt hangmódnál az alkalmazás maga dekódolja a hangot, hogy a mód a legtöbb filmen működjön. A hang ekkor sztereó, Atmos nélkül. Erősítő felé soha.",
+  "settings.playback.audio_mode_decode.on": "Be",
+  "settings.playback.audio_mode_decode.off": "Ki"
 }

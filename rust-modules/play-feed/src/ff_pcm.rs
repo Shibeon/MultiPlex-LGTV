@@ -1,6 +1,8 @@
 //! Audio decoded in the app and fed as PCM: the lossless FLAC, ALAC and integer LPCM, and DTS, MP3, Vorbis
 //! and TrueHD, the lossy entries, converted to stereo 48 kHz S16 and only where the attempt decodes the track in
-//! the app (`Caps::app_decodes_lossy_track`; `devcaps::APP_DECODED` is the set). One converter, [`PcmConverter`],
+//! the app (`Caps::app_decodes_lossy_track`; `devcaps::APP_DECODED` is the set); and AAC, AC-3, E-AC-3 and
+//! Opus (`devcaps::MODE_DECODED`), the same lossy shape, only while the viewer's audio mode asks for it
+//! (`route::audio_mode_decode`). One converter, [`PcmConverter`],
 //! serves both: lossy it downmixes, resamples to 48 kHz and writes S16; lossless above the PCM input's table it
 //! resamples to the table's top and writes S32.
 //!
@@ -13,6 +15,12 @@
 //! app, by `speed_audio::Resampler`, to the table's top rate (44.1 kHz for a multiple of it, else 48 kHz) and
 //! carried as S32 whatever its own depth, at unity gain, without dither or limiter; the clipped samples and
 //! the peak are counted and logged once per stream.
+//!
+//! All of that is with the viewer's audio mode Off (the default). Night mode or Clear voices runs the
+//! decoder's output through `plx_media_codecs::audio_mode::AudioModeStage` (compression, the presence EQ
+//! of a stereo Clear voices, a limiter at -1 dBFS), and Clear voices on a surround lossy track also asks
+//! the converter's downmix to lift the centre (`PcmConverter::set_centre_lift`). Off returns before any
+//! arithmetic, so its output stays bit-exact.
 //!
 //! The Load is built before the demuxer opens the file, so it declares the shape from the PMS
 //! track facts (`route::stream_pcm`), and [`PcmDecoder::open`] refuses a stream whose own rate or
@@ -53,6 +61,9 @@ pub struct PcmDecoder {
     /// packet follows the converter's own clock), and the stamp of the first block of it the converter produced.
     packet_pts: Option<i64>,
     stamp: Option<i64>,
+    /// The viewer's audio mode on the declared PCM ([`Self::set_audio_mode`]; `plx_media_codecs::audio_mode`):
+    /// `Off` leaves every byte the decoder's own.
+    mode: plx_media_codecs::audio_mode::AudioModeStage,
 }
 
 // Owned by the one demux thread that opened it.
@@ -124,12 +135,19 @@ impl PcmDecoder {
         Ok(PcmDecoder {
             ctx, frame, out, buf: Vec::new(), conv, lossy: entry.lossy, core_only, errors: ErrorBudget::default(),
             packet_pts: None, stamp: None,
+            mode: plx_media_codecs::audio_mode::AudioModeStage::new(out.rate, out.channels as usize),
         })
     }
 
     /// The batcher for this decoder's output: blocks shorter than [`MIN_AU_MS`] are gathered into one AU.
     pub fn au_batcher(&self) -> AuBatcher {
         AuBatcher::new(self.out)
+    }
+
+    /// The audio mode for every packet decoded from now on: a change crossfades, `Off` is bit-exact
+    /// once its fade is over (`plx_media_codecs::audio_mode`).
+    pub fn set_audio_mode(&mut self, mode: plx_playback_contract::feed::AudioProcessing) {
+        self.mode.set_mode(mode);
     }
 
     /// Whether the decoder is a lossy one running its core only (see the field).
@@ -161,6 +179,10 @@ impl PcmDecoder {
         self.buf.clear();
         self.packet_pts = Some(pts);
         self.stamp = None;
+        // Voice lifts the centre of a surround source as the lossy shape mixes it down
+        if let Some(conv) = self.conv.as_mut().filter(|_| self.lossy) {
+            conv.set_centre_lift(self.mode.wants_centre_lift());
+        }
         match self.decode_packet(pkt) {
             Ok(()) => self.errors.ok(),
             Err(why) if self.lossy && self.errors.skip() => {
@@ -168,6 +190,8 @@ impl PcmDecoder {
             }
             Err(why) => return Err(why),
         }
+        self.mode.set_centre_lifted(self.lossy && self.conv.as_ref().is_some_and(|c| c.centre_lifted()));
+        self.mode.process(&mut self.buf, self.out.bits as usize / 8);
         Ok((self.stamp.unwrap_or(pts), &self.buf))
     }
 
@@ -200,6 +224,7 @@ impl PcmDecoder {
         if let Some(conv) = self.conv.as_mut() {
             conv.reset();
         }
+        self.mode.reset();
     }
 }
 
@@ -286,6 +311,14 @@ impl PcmDecoder {
 
 impl Drop for PcmDecoder {
     fn drop(&mut self) {
+        // one line a stream the audio mode touched: how much, and how often it limited
+        let mode = self.mode.report();
+        if mode.frames > 0 {
+            plx_base::eventlog::log(&format!(
+                "ff: audio mode {:?}: {} frames, {} samples limited, {} restarts",
+                self.mode.mode(), mode.frames, mode.limited, mode.restarts
+            ));
+        }
         // one line a stream with a converter: what it did, and what it clipped
         if let Some(conv) = &self.conv {
             let (report, (from, to)) = (conv.report(), conv.rates());

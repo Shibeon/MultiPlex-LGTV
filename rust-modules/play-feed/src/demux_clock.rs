@@ -242,6 +242,9 @@ impl DemuxClock for FeedDemuxClock {
     fn applied_rate_permille(&self) -> i32 {
         FEED_SHARED.applied_rate_permille.load(Ordering::Relaxed)
     }
+    fn audio_processing(&self) -> plx_playback_contract::feed::AudioProcessing {
+        plx_playback_contract::feed::AudioProcessing::from_code(FEED_SHARED.audio_processing.load(Ordering::Relaxed))
+    }
     fn side_subtitle_owner(&self) -> bool {
         FEED_SHARED.side_subs_owner.load(Ordering::Acquire)
     }
@@ -429,6 +432,7 @@ impl DemuxMedia for FeedDemuxMedia {
             DemuxEffect::VideoTailNs(ns) => FEED_SHARED.hls_video_tail_ns.store(ns, Ordering::Release),
             DemuxEffect::AudioTailNs(ns) => FEED_SHARED.hls_audio_tail_ns.store(ns, Ordering::Release),
             DemuxEffect::AudioExpected(expected) => FEED_SHARED.hls_audio_expected.store(expected, Ordering::Release),
+            DemuxEffect::AppPcmAudio(pcm) => FEED_SHARED.app_pcm_audio.store(pcm, Ordering::Release),
             DemuxEffect::PrimeRunwayMax(runway_ms) => { FEED_SHARED.hls_prime_runway_ms.fetch_max(runway_ms, Ordering::AcqRel); }
             DemuxEffect::PrimeRunway(runway_ms) => FEED_SHARED.hls_prime_runway_ms.store(runway_ms, Ordering::Release),
             DemuxEffect::RecoverySegment { total_us, duration } => FEED_SHARED.observe_hls_recovery(total_us, duration),

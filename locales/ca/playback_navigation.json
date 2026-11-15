@@ -9,5 +9,14 @@
   "settings.playback.uri_engine": "Motor de reproducció",
   "settings.playback.uri_engine.copy": "Experimental deixa que el televisor rebi el fitxer en streaming. Els controls continuen igual. Si falla, el vídeo es reinicia en Estàndard. Alguns vídeos sempre usen Estàndard.",
   "settings.playback.uri_engine.off": "Estàndard",
-  "settings.playback.uri_engine.on": "Experimental"
+  "settings.playback.uri_engine.on": "Experimental",
+  "settings.playback.audio_mode": "Mode d’àudio",
+  "settings.playback.audio_mode.copy": "El mode nit iguala el volum: escenes fortes més suaus, diàlegs fluixos més alts. Veus clares realça els diàlegs. No té cap efecte si el televisor o un receptor descodifica el so.",
+  "settings.playback.audio_mode.off": "Desactivat",
+  "settings.playback.audio_mode.night": "Mode nit",
+  "settings.playback.audio_mode.voice": "Veus clares",
+  "settings.playback.audio_mode_decode": "Descodificació per als modes d'àudio",
+  "settings.playback.audio_mode_decode.copy": "Amb un mode d'àudio actiu, l'app descodifica el so ella mateixa perquè el mode s'apliqui a la majoria de pel·lícules. El so passa a estèreo, sense Atmos. Mai cap a un amplificador.",
+  "settings.playback.audio_mode_decode.on": "Activat",
+  "settings.playback.audio_mode_decode.off": "Desactivat"
 }

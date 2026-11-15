@@ -671,6 +671,7 @@ pub fn apply_inplace_seek_post(feed: &mut FeedResources, t: i64, now: u32) {
         eng.seek_retries = 0;
         eng.max_fed_video_pts = 0;
         eng.max_fed_audio_pts = 0;
+        eng.mode_decode_short_since = None;
         eng.audio_start_fp = None;
         eng.audio_stale_dropped = 0;
         // Drop any AU held from BEFORE the seek (the per-lane BufferFull retry). drain_aq cleared the
@@ -851,6 +852,31 @@ pub fn tick_load(feed: &mut FeedResources, mt: &MainThread, now: u32,
                 notice.speed_fallback = Some("the pipeline never reported its audio");
             }
             _ => {}
+        }
+    }
+
+    // ---------- a decode for the audio mode: the same safety net ----------
+    // The same declaration as a speed session's PCM. A pipeline that set up something else, or said
+    // nothing in time, is told to the pump as the decode being behind (`FeedRaw::mode_decode_behind`),
+    // which puts the television's decoder back for this title; the speed is not touched.
+    if FEED_SHARED.mode_decode.load(Relaxed)
+        && !FEED_SHARED.mode_decode_behind.load(Relaxed)
+        && eng.stage >= Stage::Playing
+        && !no_audio
+        && FEED_TX.seek_to_ns.load(Relaxed) < 0
+    {
+        let why = match FEED_SHARED.speed_audio_verdict.load(Relaxed) {
+            crate::shared::SPEED_AUDIO_BAD => Some("the pipeline set up different audio than the PCM declared"),
+            crate::shared::SPEED_AUDIO_UNKNOWN
+                if now.wrapping_sub(FEED_SHARED.dg_load_at.load(Relaxed)) > speed_deadline_ms =>
+            {
+                Some("the pipeline never reported its audio")
+            }
+            _ => None,
+        };
+        if let Some(why) = why {
+            log(&format!("audio mode: {why}; the television decodes the track again"));
+            FEED_SHARED.mode_decode_behind.store(true, Release);
         }
     }
 
@@ -1279,6 +1305,12 @@ pub fn select_audio(idx: i32) {
     FEED_SHARED.select_audio(idx);
 }
 
+/// The viewer's audio mode (`FeedCommand::AudioProcessing`): what the demuxer applies to every PCM
+/// block it decodes from now on, the running session's included.
+pub fn select_audio_processing(mode: plx_playback_contract::feed::AudioProcessing) {
+    FEED_SHARED.audio_processing.store(mode.code(), Relaxed);
+}
+
 /// The seek was given up on (`FeedCommand::AbandonSeek`): the spinner and the frozen playhead end
 /// with it. `seek_display_ns` goes back to `-1`, the HUD's "no seek target".
 pub fn seek_abandoned() {
@@ -1378,6 +1410,10 @@ fn native_feed_raw(failure: FailureSample) -> FeedRaw {
         side_exact_delta_ns: crate::side_reader::exact_delta_ns(),
         native_audio: crate::ff::native_audio::fed()
             .map(|(kind, channels)| plx_playback_contract::feed::NativeAudio { codec: kind.ffmpeg_name(), channels }),
+        app_pcm_audio: FEED_SHARED.app_pcm_audio.load(Acquire),
+        sound_output: plx_playback_contract::feed::SoundOutput::from_code(FEED_SHARED.sound_output.load(Acquire)),
+        mode_decode: FEED_SHARED.mode_decode.load(Acquire),
+        mode_decode_behind: FEED_SHARED.mode_decode_behind.load(Acquire),
     }
 }
 

@@ -424,6 +424,25 @@ pub struct Shared {
     /// Whether the active HLS segment declared an audio stream that this session feeds. The prime
     /// gate must not reinterpret a temporarily empty audio lane as a genuinely video-only file.
     pub hls_audio_expected: AtomicBool,
+    /// This session's demuxer decodes the audio in the app and feeds PCM (`DemuxEffect::AppPcmAudio`,
+    /// `FeedRaw::app_pcm_audio`); cleared by the session's reset.
+    pub app_pcm_audio: AtomicBool,
+    /// The viewer's audio mode (`AudioProcessing::code`), as the player last sent it
+    /// (`FeedCommand::AudioProcessing`). A preference mirror, not a session fact: the reset keeps it.
+    pub audio_processing: AtomicU8,
+    /// The last read of the sound output for a decode for an audio mode (`SoundOutput::code`,
+    /// `FeedRaw::sound_output`). A fact about the set: the session's reset keeps it.
+    pub sound_output: AtomicU8,
+    /// The Load being built asks its Load thread to read the sound output
+    /// (`OpenStream::probe_sound_output`); stored by every streamed Load's preparation, taken by the
+    /// first read on its Load thread (`pcm_lead::note_sound_output`).
+    pub sound_output_probe: AtomicBool,
+    /// This session's Load decodes for the viewer's audio mode (`FeedRaw::mode_decode`); cleared by the
+    /// session's reset.
+    pub mode_decode: AtomicBool,
+    /// The audio lane of a mode-decode session fell behind (`FeedRaw::mode_decode_behind`); cleared by
+    /// the session's reset.
+    pub mode_decode_behind: AtomicBool,
     /// Retrospective replay reserve used only at a fresh HLS Load/seek boundary. Viewer Resume
     /// requires the balanced decoder prime; automatic runtime rebuffer uses the pause-local
     /// `hls_recovery` certificate below; carrying this history into every controller-created hold
@@ -745,6 +764,12 @@ impl Shared {
             hls_video_tail_ns: AtomicI64::new(-1),
             hls_audio_tail_ns: AtomicI64::new(-1),
             hls_audio_expected: AtomicBool::new(false),
+            app_pcm_audio: AtomicBool::new(false),
+            audio_processing: AtomicU8::new(0),
+            sound_output: AtomicU8::new(0),
+            sound_output_probe: AtomicBool::new(false),
+            mode_decode: AtomicBool::new(false),
+            mode_decode_behind: AtomicBool::new(false),
             hls_prime_runway_ms: AtomicI64::new(0),
             hls_rebuffer_requested: AtomicBool::new(false),
             hls_rebuffer_request_tail_ns: AtomicI64::new(-1),
@@ -1112,6 +1137,9 @@ impl Shared {
         self.hls_video_tail_ns.store(-1, Ordering::Relaxed);
         self.hls_audio_tail_ns.store(-1, Ordering::Relaxed);
         self.hls_audio_expected.store(false, Ordering::Relaxed);
+        self.app_pcm_audio.store(false, Ordering::Relaxed);
+        self.mode_decode.store(false, Ordering::Relaxed);
+        self.mode_decode_behind.store(false, Ordering::Relaxed);
         self.hls_prime_runway_ms.store(0, Ordering::Relaxed);
         self.hls_rebuffer_requested.store(false, Ordering::Relaxed);
         self.hls_rebuffer_request_tail_ns

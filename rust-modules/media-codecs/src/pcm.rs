@@ -81,7 +81,8 @@ impl Clock {
 /// at 48 kHz: the downmix is [`speed_audio::downmix_by_mask`]) or [`Shape::Lossless`] (a 1 or 2 channel integer
 /// stream above the PCM input's table to the table's top rate as S32 LE: the frame is read to f64 exactly,
 /// `i16 / 2^15`, `i32 / 2^31`, mono through the stereo kernel with one channel kept, and written as
-/// `round(v * 2^31)` saturated to `i32`, at unity gain, no dither, no limiter). The resample is the
+/// `round(v * 2^31)` saturated to `i32`, at unity gain, no dither, no limiter; the viewer's audio mode, which
+/// adds a limiter, runs after this converter, in `ff_pcm`). The resample is the
 /// [`Resampler`] (linear up to the output rate, a Kaiser windowed-sinc low-pass decimator from above it; the bundled
 /// FFmpeg is built without swresample), kept across frames so their edges are seamless.
 ///
@@ -100,6 +101,11 @@ pub struct PcmConverter {
     input: Vec<[f64; 2]>,
     output: Vec<[f64; 2]>,
     report: ConvertReport,
+    /// The audio mode asks the lossy mix-down to lift the centre (Voice), and whether the last block
+    /// it mixed had one to lift ([`speed_audio::CentreLift`], which fades the lift in and out).
+    centre_lift: bool,
+    lifted: bool,
+    lift: speed_audio::CentreLift,
 }
 
 impl PcmConverter {
@@ -113,7 +119,21 @@ impl PcmConverter {
             input: Vec::new(),
             output: Vec::new(),
             report: ConvertReport::default(),
+            centre_lift: false,
+            lifted: false,
+            lift: speed_audio::CentreLift::new(),
         }
+    }
+
+    /// Lift the centre of what the lossy shape mixes down from now on (the audio mode's Voice);
+    /// the lossless shape mixes nothing and ignores it.
+    pub fn set_centre_lift(&mut self, lift: bool) {
+        self.centre_lift = lift;
+    }
+
+    /// Whether the last block the lossy shape mixed down had its centre lifted.
+    pub fn centre_lifted(&self) -> bool {
+        self.lifted
     }
 
     /// The lossy shape: any source to stereo 48 kHz S16.
@@ -177,7 +197,9 @@ impl PcmConverter {
         self.input.clear();
         match self.shape {
             Shape::Lossy => {
-                let stereo = speed_audio::downmix_by_mask(fmt, planar, mask, channels, frames, planes);
+                let (stereo, lifted) =
+                    self.lift.downmix(fmt, planar, mask, channels, frames, planes, rate, self.centre_lift);
+                self.lifted = lifted;
                 self.input.extend(stereo.iter().map(|f| [f64::from(f[0]), f64::from(f[1])]));
             }
             Shape::Lossless { channels: kept } => {

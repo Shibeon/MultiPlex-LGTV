@@ -492,7 +492,8 @@ something.
   decoder); otherwise Force Direct Play has no native path for the track on a set without a DTS row (webOS 10+, or a refusal
   the install learned) AND the track has at most two channels, or the recovery rung below put the codec in force (`Caps::with_app_lossy_for`).
   **The app never mixes a source of more than two channels down to stereo by default** (owner decision 2026-10-28;
-  D1(b) and D2 as amended). `devcaps::app_decode_mixes_down(channels)` (channels outside 1..=2, so an unknown
+  D1(b) and D2 as amended), with ONE recorded exception, the viewer's audio mode (below, "The audio mode";
+  `devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX`, the switch that turns it off). `devcaps::app_decode_mixes_down(channels)` (channels outside 1..=2, so an unknown
   width counts too) is the ONE predicate, `Caps::app_may_mix_down` its gate, and both the planner and the recovery
   ladder read it: under Force Direct Play (D1(b)) a surround track the set has no native path for is NOT decoded
   in the app (`app_decodes_lossy_track` is false for it, in either arm, the codec being in force or not), so the
@@ -528,7 +529,8 @@ something.
   (decimated by the app) and FLAC, ALAC and LPCM (below) are exempt. **Lossless hi-res**: a mono or stereo FLAC, ALAC or LPCM track above 48 kHz is
   resampled by the app (`ff_pcm::PcmConverter`, lossless shape) to 48 kHz, or to 44.1 kHz for a multiple of 44.1 kHz (`devcaps::pcm_load_rate`, the one rule
   for the planner, Forced, the track menu and the profile), and declared S32 whatever its own depth, at unity gain, saturating at the i32 range,
-  without dither or limiter; one log line per stream counts the clipped samples and the peak. A 5.1 hi-res track still converts on the server
+  without dither or limiter (with the viewer's audio mode Off, the default; Night mode or Clear voices adds
+  `media-codecs/src/audio_mode.rs`'s compression and a -1 dBFS limiter to any app-decoded PCM, and Off stays bit-exact); one log line per stream counts the clipped samples and the peak. A 5.1 hi-res track still converts on the server
   (the profile keeps `audio.channels <= 2` for these codecs). A table rate (8 to 48 kHz) builds no converter and stays bit-exact. TrueHD is
   decoded as FFmpeg's `truehd` decodes it, up to the 7.1 bed; an Atmos object substream is not rendered. Its access units are
   1/1200 s, so the demuxer gathers decoded blocks shorter than 10 ms into AUs of about that length (`ff_pcm::AuBatcher`; a DTS,
@@ -776,6 +778,44 @@ something.
   the rate the session OFFERS its next Load (`session_rate_for` lowers it to 1x when the playback does not offer
   the pick; the viewer's intent is the session's `requested_rate_permille` and survives that) and persists across
   reloads; `applied_rate_permille` is the current pipeline's and is reset by `reset_session`. The feed throttle's run-on reads the applied one (`FeedPace::reference_at`).
+- **The audio mode (Off / Night mode / Clear voices) acts only on PCM the app decodes.** It is a
+  per-profile setting (`AudioModePref`, Settings > Playback and the More menu), and the pump hands it to
+  the feed as `FeedCommand::AudioProcessing` whenever it changes (`PlayerAdapter::sync_audio_processing`);
+  the demuxer reads it on each audio packet and the two PCM producers (`ff_pcm::PcmDecoder`,
+  `SpeedDecoder`) run `media-codecs/src/audio_mode.rs` over their output: a soft-knee compressor with
+  make-up gain (Night), centre +3 dB / others -3 dB in the downmix of a surround track or a 2.5 kHz
+  presence EQ with gentle compression on stereo and mono (Clear voices), always ending in a -1 dBFS
+  limiter. A change of mode crossfades through dry over 20 ms out and 20 ms in, and the centre lift
+  ramps its downmix gains over 20 ms (`speed_audio::CentreLift`, the same channels lifted or not; off
+  again it is bit-identical to `downmix_by_mask`), falling back to the dry block on a non-finite result.
+  A native AAC/AC3/EAC3/DTS/Opus track is decoded by the app too, but only while a mode is on and the
+  profile's "Decode for audio modes" (`AudioModeDecode`, default On) allows it, and only once a probe
+  said the sound plays on the set's speakers or Bluetooth on a stack with a planned PCM lead
+  (`devcaps::MODE_DECODED`, `MODE_DECODE_OUTPUTS`, `AudioStack::plans_pcm_lead`; `route::audio_mode_decode`
+  is the rule, a pure table over `route::ModeDecodeFacts`). The Load then declares the lossy decode's
+  stereo 48 kHz PCM, so a surround track is mixed down (Voice lifting its centre in that mix), under Force
+  Direct Play too: the one recorded exception to the never-downmix rule above
+  (`devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX`, provisional owner decision 2026-11-15: the outputs the mode
+  decodes for are stereo already), and the track menu marks such a track "played in stereo"
+  (`route::audio_decoded_in_app`). E-AC-3 Atmos objects are lost. The Load fixes PCM or compressed audio
+  for its session, so turning a mode on or off is a full reload at the viewer's position
+  (`player::sync_audio_mode_decode`, the speed change's one-shot reload). The Load thread probes the
+  sound output after the Load returns (`OpenStream::probe_sound_output`, `FeedRaw::sound_output`), on
+  the run's first eligible Load whatever the mode and on every eligible Load with a mode on; the readout
+  keeps the verdict across the reset every reload makes (`PlayerReadout::sound_output`), since the raw
+  goes back to `Unknown` before the next Load is captured. Not probed yet is no decode: the run's first
+  Load feeds compressed, and the set's speakers then cost one reload into the decode. Any other output
+  (ARC, optical: a receiver may take the bitstream), no answer, or a stack with no lead (`SoundOutput::NoLead`,
+  no bus read) never gets a PCM Load for a mode. A refused PCM Load of a mode decode is the app's lossy
+  decode for the failed-open ladder (`route::load_pcm_is_lossy`). The safety net: a mode-decode session whose audio lane
+  stays short beside a healthy video lane (`native_executor::mode_decode_short`, 1.5 s) or whose PCM
+  the pipeline did not take latches `FeedRaw::mode_decode_behind`, and the pump refuses the decode to
+  that title for the life of the process and reloads with the television decoding. Where the app
+  neither decodes nor could (the profile's decode Off, no probe yet, a receiver, a stack with no lead, the
+  URI engine, a refused title) no
+  sample passes through it: `player::audio_mode_offered` reads `FeedRaw::app_pcm_audio` and the rule's
+  `available`, and the More menu lists no Audio mode row at all there; the saved mode is kept and has no
+  effect.
 - **A Load that declares `"audio":"PCM"` on one of LG's audio stacks has its audio fed later than the
   picture it belongs with, by an amount the stack decides; a set with no lead (`adecsink` on 2016/2017, not
   determined; Realtek; MStar; an unknown stack) gets none at all** (#1086, #1088, #1092, #1093; FLAC and every other app-decoded codec (a DTS the app decodes under the lossy gate

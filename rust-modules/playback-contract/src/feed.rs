@@ -27,6 +27,8 @@
 //! | `hls_rebuffering` (1), `seen_frame` (1) | plain bool | **mapped** |
 //! | `native_audio_refused`, `decoder_revoked` | one-shot takes | **raw counters** ([`FeedRaw::native_audio_refusals`], [`FeedRaw::decoder_revocations`]): the feed counts each edge, the player's readout holds how many it has taken |
 //! | `file_size`, `applied_rate_permille`, `speed_audio_verdict`, `dg_vpres_ct`, `dg_vpres_gap_sum`, `dg_vpres_gap_ct`, `pts_shift` | no `AttemptFacts` field | **raw**, in [`FeedRaw`]; the three presentation counters are diagnostics only (the heartbeat's liveness line differences two samples: the tick count, and the mean gap as sum over gap count) |
+//! | `app_pcm_audio` (the demuxer's `DemuxEffect::AppPcmAudio`) | no `AttemptFacts` field | **raw**, in [`FeedRaw`]: `false` is both "not said yet" and "the television decodes the sound", and either hides the More menu's audio-mode entry (`player::audio_mode_offered`) |
+//! | `sound_output`, `mode_decode`, `mode_decode_behind` (the Load thread's read of the sound output, its decision to decode for an audio mode, the audio lane's verdict on that decode) | no `AttemptFacts` field | **raw**, in [`FeedRaw`]: the pump's safety net reads `mode_decode`/`mode_decode_behind`; `sound_output` is a fact about the set the feed keeps across the session's reset, but the raw copy is reset with it, so the route's audio-mode decode rule (`route::audio_mode_decode`) reads the readout's sticky copy (`PlayerReadout::sound_output`) |
 //! | `stage`, `load_thread_finished`, `route_actions_ready` (the Engine's own fields, not mailboxes) | none | **raw**, in [`LoadRaw`] (`FeedRaw::load`), which `FeedBackend::sample` fills beside the mailbox half: a `None` stage, a finished Load thread and "not ready" each mean something the idle default would lose, and the session's reset returns them to [`LoadRaw::IDLE`] |
 //! | `native_load_abandoned` | the Load a teardown parked | **terminal fact**: `AttemptFacts::load_abandoned`, recorded by the teardown's own ingestion, because the live phase outlives the session reset and the readout does not |
 //!
@@ -169,6 +171,15 @@ pub struct OpenStream {
     pub video_codec: String,
     pub audio_codec: String,
     pub pcm_is_lossy: bool,
+    /// The lossy PCM declared in `feed_payload` is a decode for the viewer's audio mode
+    /// (`route::audio_mode_decode`), of a track the television would decode itself.
+    pub mode_decode: bool,
+    /// This open probes the television's sound output (`FeedRaw::sound_output`): the track is one the
+    /// app could decode for a mode, and the verdict is not known yet or a mode is on
+    /// (`route::ModeDecodeFacts::probes`). Answered by the PCM lead's own read before the Load, else by a
+    /// detached worker the Load thread starts once the Load returned, so neither the start nor a
+    /// teardown waits for it.
+    pub probe_sound_output: bool,
     pub audio_channels: i64,
     pub feed_payload: PayloadFacts,
     pub payload_options: PayloadOptions,
@@ -529,6 +540,57 @@ pub struct FeedRaw {
     /// This session's direct-play seek mode (`Segment` before a Load selects one); the feed
     /// downgrades it to `Reload` when the pipeline refuses a native `Seek`.
     pub seek_mode: SeekMode,
+    /// The demuxer of this session decodes the audio in the app and feeds PCM it holds (the
+    /// app-decoded codecs, `ff_pcm::PcmDecoder`, or a speed session's `SpeedDecoder`), so the
+    /// app's own [`AudioProcessing`] reaches the sound. `false` before the demuxer has said so, for
+    /// a session that feeds the compressed audio to the television's decoder, and after the
+    /// session's reset. The player's More menu shows its audio-mode entry only while this is true.
+    pub app_pcm_audio: bool,
+    /// What the last probe of the television's sound output said about decoding for an audio mode
+    /// ([`SoundOutput`]), `Unknown` until one ran, for an open that asks
+    /// (`OpenStream::probe_sound_output`). The FEED keeps its verdict across the session's reset (it is
+    /// the set's, not the session's), but this copy is the raw: the player's readout resets it to
+    /// [`FeedRaw::IDLE`] with every `SessionReset`, so the route reads the readout's own sticky copy
+    /// (`PlayerReadout::sound_output`), which only a probe's answer changes.
+    pub sound_output: SoundOutput,
+    /// This session's Load declared PCM so that the viewer's audio mode reaches a track the television
+    /// would otherwise decode (`OpenStream::mode_decode`, and the output allowed it). `false` before the
+    /// Load and after the session's reset.
+    pub mode_decode: bool,
+    /// The audio lane of a [`FeedRaw::mode_decode`] session ran short while the video lane was not:
+    /// the app's decode is not keeping up. Latched for the session; the pump's safety net then puts
+    /// the television's decoder back (`player::sync_audio_mode_decode`).
+    pub mode_decode_behind: bool,
+}
+
+/// The television's sound output, as far as a decode for an audio mode is concerned
+/// (`devcaps::mode_decode_output_ok`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SoundOutput {
+    /// Not read yet in this process.
+    #[default]
+    Unknown,
+    /// The set's speakers or Bluetooth: the set renders what it is fed, so the app may decode.
+    Local,
+    /// Any other output (HDMI ARC, optical, ...), where a receiver may take the bitstream, or a read
+    /// that gave no answer: the app never decodes for a mode there.
+    NotLocal,
+    /// The set's audio stack plans no lead for the app's PCM (`devcaps::AudioStack::plans_pcm_lead`):
+    /// whatever the output, the app never decodes for a mode there, and the output is not read.
+    NoLead,
+}
+
+impl SoundOutput {
+    pub const fn code(self) -> u8 {
+        match self { Self::Unknown => 0, Self::Local => 1, Self::NotLocal => 2, Self::NoLead => 3 }
+    }
+    /// The verdict on a read that answered `output` (`None`: no answer).
+    pub fn of_read(output: Option<&str>, local: impl Fn(&str) -> bool) -> Self {
+        if output.is_some_and(local) { Self::Local } else { Self::NotLocal }
+    }
+    pub const fn from_code(code: u8) -> Self {
+        match code { 1 => Self::Local, 2 => Self::NotLocal, 3 => Self::NoLead, _ => Self::Unknown }
+    }
 }
 
 /// The audio a session feeds the pipeline natively: the codec's FFmpeg name and the track's channel
@@ -694,6 +756,10 @@ impl FeedRaw {
         abr: DemuxAbr::IDLE,
         side_reader_active: false, side_failures: 0, side_exact_delta_ns: None, native_audio: None,
         seek_mode: SeekMode::Segment,
+        app_pcm_audio: false,
+        sound_output: SoundOutput::Unknown,
+        mode_decode: false,
+        mode_decode_behind: false,
     };
 }
 
@@ -713,6 +779,42 @@ pub struct FeedFacts {
 // ---------------------------------------------------------------------------------------------
 // Commands: what the player asks of the feed, by value.
 // ---------------------------------------------------------------------------------------------
+
+/// **What the app does to the PCM it decodes before it is fed** — the viewer's audio mode as the
+/// feed carries it ([`FeedCommand::AudioProcessing`]). It acts only on samples that pass through the
+/// app ([`FeedRaw::app_pcm_audio`]); compressed audio the television decodes is never touched.
+/// The DSP is `plx_media_codecs::audio_mode`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AudioProcessing {
+    /// The samples are fed exactly as decoded.
+    #[default]
+    Off,
+    /// Dynamic range compression: loud passages quieter, quiet ones louder, then a limiter.
+    Night,
+    /// Dialogue first: the centre of a multichannel source lifted as it is mixed down, or a gentle
+    /// compression and a presence lift for a stereo or mono one, then a limiter.
+    Voice,
+}
+
+impl AudioProcessing {
+    /// The value an atomic mailbox carries.
+    pub const fn code(self) -> u8 {
+        match self {
+            Self::Off => 0,
+            Self::Night => 1,
+            Self::Voice => 2,
+        }
+    }
+
+    /// The inverse of [`Self::code`]; an unknown code is `Off`, which never changes the sound.
+    pub const fn from_code(code: u8) -> Self {
+        match code {
+            1 => Self::Night,
+            2 => Self::Voice,
+            _ => Self::Off,
+        }
+    }
+}
 
 /// One intent the player gives the feed. Each is the effect of one readout event (the event states
 /// what the viewer or the route meant, the command is what the feed does about it), so a request
@@ -778,6 +880,10 @@ pub enum FeedCommand {
     /// a node it can take out): the Dolby Vision guard never acts again for this Engine and the held
     /// landing feeds.
     DvStandDown,
+    /// The viewer's audio mode, for every PCM block the demuxer decodes from now on (the running
+    /// session's included: it takes effect without a reload). Sent by the player whenever the mode
+    /// it last sent differs from the seated profile's.
+    AudioProcessing(AudioProcessing),
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -1340,6 +1340,8 @@ pub(crate) fn settings_boot_page(target: &str) -> Option<plx_screens::family::Se
         "picker-instant-dpad-seeking" => SettingsPage::Picker(PickerKind::InstantDpadSeeking),
         "picker-dolby-vision" => SettingsPage::Picker(PickerKind::DolbyVision),
         "picker-uri-engine" => SettingsPage::Picker(PickerKind::UriEngine),
+        "picker-audio-mode" => SettingsPage::Picker(PickerKind::AudioMode),
+        "picker-audio-mode-decode" => SettingsPage::Picker(PickerKind::AudioModeDecode),
         "picker-skip-interval" => SettingsPage::Picker(PickerKind::SkipInterval),
         // root → Playback → the Player HUD page (`SettingsPage::boot_trail`; BACK dismisses the surface, see there)
         "player-hud" => SettingsPage::PlayerHud,

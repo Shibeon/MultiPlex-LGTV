@@ -103,6 +103,9 @@ pub enum Action {
     /// select a playback speed, in thousandths (one of [`plx_media::player::PLAY_RATES`];
     /// [`plx_media::player::set_play_rate`])
     SetSpeed(i32),
+    /// select the audio mode ([`plx_media::route::select_audio_mode`]): Off, Night or Clear voices.
+    /// Offered only while the app itself decodes the sound ([`plx_media::player::audio_mode_offered`]).
+    SetAudioMode(plx_media::route::AudioMode),
     /// **Lab builds only** — snapshot and upload the diagnostic ring (`crate::lab`). Here as well
     /// as in `account_menu` because the account menu is unreachable during playback, and playback
     /// is what a Cloud Test Lab session is usually reproducing.
@@ -164,6 +167,9 @@ pub enum MorePage {
     /// The playback speeds, slowest first, Normal checked by default ([`MoreRow::Act`] of a
     /// [`Action::SetSpeed`]).
     Speed,
+    /// The audio modes (Off, Night, Clear voices), the current one checked ([`MoreRow::Act`] of a
+    /// [`Action::SetAudioMode`]). There is no such page while the TV or a receiver decodes the sound.
+    AudioMode,
 }
 
 impl MorePage {
@@ -172,6 +178,7 @@ impl MorePage {
         match self {
             Self::Quality => plx_platform::i18n::msg::widgets_menu_quality().to_string(),
             Self::Speed => plx_platform::i18n::msg::widgets_menu_speed().to_string(),
+            Self::AudioMode => plx_platform::i18n::msg::settings_playback_audio_mode().to_string(),
         }
     }
 
@@ -180,6 +187,7 @@ impl MorePage {
         match self {
             Self::Quality => 1,
             Self::Speed => 2,
+            Self::AudioMode => 3,
         }
     }
 }
@@ -192,6 +200,8 @@ pub enum MoreRow {
     OpenQuality,
     /// The root's Playback speed row ([`MorePage::Speed`]): reads out the current speed.
     OpenSpeed,
+    /// The root's Audio mode row ([`MorePage::AudioMode`]): reads out the current mode.
+    OpenAudioMode,
     Act(Action),
 }
 
@@ -234,6 +244,11 @@ pub struct MoreMenuState {
     speed: i32,
     /// The speeds this playback offers ([`plx_media::player::speed_offer`]); empty hides the row.
     speeds: Vec<i32>,
+    /// The audio mode the root's Audio mode row reads out and its page checks, as of the last build.
+    audio_mode: plx_media::route::AudioMode,
+    /// Whether the app decodes this playback's sound itself ([`plx_media::player::audio_mode_offered`]):
+    /// false hides the Audio mode row entirely (no greyed row, no note), and it follows the path live.
+    audio_offered: bool,
     /// The folded rows listed between Speed and Options ([`folded_rows`]), fixed when the menu opened: a
     /// command's predicate holds for the item playing, which does not change under an open menu.
     folded: Vec<FoldedRow>,
@@ -253,14 +268,14 @@ pub struct MoreMenuState {
 
 /// **The tallest page this menu shows with app-owned rows** — the Quality page, its title band,
 /// seven rungs (Auto first) and the table's padding: 536 px in English. It decides the SIDE of the
-/// opener the panel opens on (`plx_ui::popover::anchor_panel`'s `need_h`) for a root with up to three folded
+/// opener the panel opens on (`plx_ui::popover::anchor_panel`'s `need_h`) for a root with up to two folded
 /// rows; [`need_h`] decides it beyond that. The number is the same on every page. 600 leaves room for a longer label that wraps. Classic's room above its row is 710,
 /// which this stays under, so classic opens upward. `pub(crate)` because the HUD lint places this
 /// menu with it (`hud_format::lint_menus`, M2), through [`place_panel`].
 pub(crate) const NEED_H: f32 = 600.0;
 
 /// **The height the root asks of its room when it lists `folded` rows**: the root at its tallest standard shape
-/// (Quality and Speed, Options with Stats for nerds and Send diagnostics) plus the folded section, which is
+/// (Quality, Speed and Audio mode, Options with Stats for nerds and Send diagnostics) plus the folded section, which is
 /// [`FOLDED_SECTION_H`] and a [`FOLDED_ROW_H`] per row. Never below [`NEED_H`], the tallest page, so a menu with
 /// no folded rows (classic) asks what it always asked and opens where it always opened. A fixed function of
 /// the count, not of what is on screen: the side must not change between pages or with the rows a language or
@@ -271,8 +286,8 @@ pub(crate) fn need_h(folded: usize) -> f32 {
     NEED_H.max(root)
 }
 
-/// The root's height with Quality, Speed, Stats for nerds and Send diagnostics and no folded row.
-const ROOT_BASE_H: f32 = 344.0;
+/// The root's height with Quality, Speed, Audio mode, Stats for nerds and Send diagnostics and no folded row.
+const ROOT_BASE_H: f32 = 404.0;
 /// One folded row: a compact table row.
 const FOLDED_ROW_H: f32 = 60.0;
 /// The gap the folded section adds between Speed and Options.
@@ -329,6 +344,8 @@ impl FormId for Action {
             Action::SetSpeed(r) => {
                 20 + plx_media::player::PLAY_RATES.iter().position(|x| *x == *r).map_or(9, |i| i as u32)
             }
+            // 50..=52 by the mode's place in its ladder
+            Action::SetAudioMode(m) => 50 + m.index() as u32,
         })
     }
 }
@@ -336,9 +353,10 @@ impl FormId for Action {
 impl FormId for MoreRow {
     fn key(&self) -> RowKey {
         match self {
-            // free in `Action`'s key space (0..=2, 10..=16 and 20..=29)
+            // free in `Action`'s key space (0..=2, 10..=16, 20..=29, 30..=44 and 50..=52)
             MoreRow::OpenQuality => RowKey(3),
             MoreRow::OpenSpeed => RowKey(4),
+            MoreRow::OpenAudioMode => RowKey(5),
             MoreRow::Act(a) => a.key(),
         }
     }
@@ -361,6 +379,7 @@ fn root_form(
     current: plx_media::route::Quality,
     speed: i32,
     speeds: &[i32],
+    audio: (plx_media::route::AudioMode, bool),
     folded: &[FoldedRow],
 ) -> MoreForm {
     let mut options = FormSection::new(plx_platform::i18n::msg::widgets_menu_options());
@@ -383,6 +402,16 @@ fn root_form(
         RowKind::Nav(MorePage::Speed),
         Action::None,
         Row::new(plx_platform::i18n::msg::widgets_menu_speed()).value(speed_label(speed)),
+    )
+    // Only where the app decodes the sound itself (`player::audio_mode_offered`). Where the TV or a
+    // receiver decodes it no row at all, greyed or explained: the saved mode is kept and simply
+    // has no effect there, and Settings > Playback says so.
+    .item_if(
+        audio.1,
+        MoreRow::OpenAudioMode,
+        RowKind::Nav(MorePage::AudioMode),
+        Action::None,
+        Row::new(plx_platform::i18n::msg::settings_playback_audio_mode()).value(audio_mode_label(audio.0)),
     );
     let mut form = Form::new().section(quality);
     // The commands the package places nowhere: after Quality and Speed, before Options, in the compiler's order.
@@ -405,6 +434,25 @@ fn speed_form(ps: &plx_media::route::PlaybackSession, speed: i32, speeds: &[i32]
         |sec, a| sec.choice(MoreRow::Act(a), a, row_for(ps, a), |id| *id == MoreRow::Act(Action::SetSpeed(speed))),
     );
     Form::new().section(sec)
+}
+
+/// The Audio mode PAGE: one checked row per mode, the current one checked.
+fn audio_mode_form(ps: &plx_media::route::PlaybackSession, mode: plx_media::route::AudioMode) -> MoreForm {
+    let sec = plx_media::route::AudioMode::LADDER.into_iter().map(Action::SetAudioMode).fold(
+        FormSection::new(""),
+        |sec, a| sec.choice(MoreRow::Act(a), a, row_for(ps, a), |id| *id == MoreRow::Act(Action::SetAudioMode(mode))),
+    );
+    Form::new().section(sec)
+}
+
+/// An audio mode's name, as this menu and the Settings > Playback picker both word it.
+pub fn audio_mode_label(mode: plx_media::route::AudioMode) -> &'static str {
+    use plx_media::route::AudioMode;
+    match mode {
+        AudioMode::Off => plx_platform::i18n::msg::settings_playback_audio_mode_off(),
+        AudioMode::Night => plx_platform::i18n::msg::settings_playback_audio_mode_night(),
+        AudioMode::Voice => plx_platform::i18n::msg::settings_playback_audio_mode_voice(),
+    }
 }
 
 /// A speed's name: `Normal` at 1x, else the multiplier (`plx_media::player::rate_name`).
@@ -472,10 +520,12 @@ impl MoreMenuState {
         let current = plx_media::route::quality();
         let speed = plx_media::player::selected_rate(ps).unwrap_or(plx_media::player::RATE_NORMAL);
         let speeds = plx_media::player::speed_offer(ps);
+        let audio_mode = plx_media::route::audio_mode();
+        let audio_offered = plx_media::player::audio_mode_offered(ps);
         let mut form = FormTable::new(plx_ui::table_screen::BAND_BASE);
         form.table.compact = true; // a short action list — BODY labels, like the profile menu
         form.table.min_panel_w = theme::layout::PLAYER_MENU_MIN_W;
-        form.set_or_open(root_form(ps, &rows, forced, current, speed, &speeds, &folded), None);
+        form.set_or_open(root_form(ps, &rows, forced, current, speed, &speeds, (audio_mode, audio_offered), &folded), None);
         let mut st = MoreMenuState {
             form,
             rows,
@@ -483,6 +533,8 @@ impl MoreMenuState {
             current,
             speed,
             speeds,
+            audio_mode,
+            audio_offered,
             folded,
             pages: PageStack::new(),
             motion: PanelMotion::new(),
@@ -497,12 +549,18 @@ impl MoreMenuState {
             None => false,
             Some(MorePage::Quality) => quality_offered(&st.rows, st.forced),
             Some(MorePage::Speed) => st.speeds.len() > 1,
+            Some(MorePage::AudioMode) => st.audio_offered,
         };
         if let Some(page) = page.filter(|_| offered) {
             // the page is pushed from its opener's row, so BACK lands where a viewer would have
             // pressed to get here
-            if page == MorePage::Speed {
-                st.focus_key(MoreRow::OpenSpeed.key().0);
+            let opener = match page {
+                MorePage::Speed => Some(MoreRow::OpenSpeed),
+                MorePage::AudioMode => Some(MoreRow::OpenAudioMode),
+                MorePage::Quality => None,
+            };
+            if let Some(row) = opener {
+                st.focus_key(row.key().0);
             }
             st.push(ps, page);
             st.motion.cancel_slide();
@@ -527,6 +585,7 @@ impl MoreMenuState {
         match page {
             MorePage::Quality => quality_form(ps, &self.rows, self.current),
             MorePage::Speed => speed_form(ps, self.speed, &self.speeds),
+            MorePage::AudioMode => audio_mode_form(ps, self.audio_mode),
         }
     }
 
@@ -536,6 +595,7 @@ impl MoreMenuState {
         match page {
             MorePage::Quality => Some(MoreRow::Act(Action::SetQuality(self.current))),
             MorePage::Speed => Some(MoreRow::Act(Action::SetSpeed(self.speed))),
+            MorePage::AudioMode => Some(MoreRow::Act(Action::SetAudioMode(self.audio_mode))),
         }
     }
 
@@ -559,7 +619,7 @@ impl MoreMenuState {
         let Some(saved) = self.pages.pop() else { return false };
         let leaving = page_stack::leave_page(&mut self.form);
         self.motion.begin_slide(leaving, -1.0);
-        let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, &self.folded);
+        let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded);
         self.form.restore(form, Some(&saved.return_id), saved.scroll);
         self.form.table.set_title(None);
         true
@@ -603,6 +663,7 @@ impl MoreMenuState {
             plx_media::route::quality(),
             plx_media::player::selected_rate(ps).unwrap_or(plx_media::player::RATE_NORMAL),
             plx_media::player::speed_offer(ps),
+            (plx_media::route::audio_mode(), plx_media::player::audio_mode_offered(ps)),
         )
     }
 
@@ -616,24 +677,30 @@ impl MoreMenuState {
         current: plx_media::route::Quality,
         speed: i32,
         speeds: Vec<i32>,
+        audio: (plx_media::route::AudioMode, bool),
     ) -> bool {
         if forced == self.forced
             && rows == self.rows
             && current == self.current
             && speed == self.speed
             && speeds == self.speeds
+            && audio == (self.audio_mode, self.audio_offered)
         {
             return false;
         }
         self.speeds = speeds;
+        (self.audio_mode, self.audio_offered) = audio;
         self.rows = rows;
         self.forced = forced;
         self.current = current;
         self.speed = speed;
         if let Some(first) = self.pages.first().copied() {
-            // either page can vanish under the viewer: Quality with its ladder, Speed with its offer
+            // any page can vanish under the viewer: Quality with its ladder, Speed with its offer,
+            // Audio mode when the sound stops passing through the app (a track switch to a codec
+            // the TV decodes)
             let still_offered = match first.page {
                 MorePage::Speed => self.speeds.len() > 1,
+                MorePage::AudioMode => self.audio_offered,
                 MorePage::Quality => quality_offered(&self.rows, self.forced),
             };
             if still_offered {
@@ -645,14 +712,14 @@ impl MoreMenuState {
                 // the ladder is gone under the viewer: back to the root, restoring the opener and
                 // scroll the stack saved at its first push
                 self.pages.clear();
-                let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, &self.folded);
+                let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded);
                 self.form.restore(form, Some(&first.return_id), first.scroll);
                 self.form.table.set_title(None);
                 self.motion.cancel_slide();
             }
         } else {
             let keep = self.form.selected_id().copied();
-            self.form.set_or_open(root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, &self.folded), keep.as_ref());
+            self.form.set_or_open(root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded), keep.as_ref());
         }
         true
     }
@@ -925,6 +992,7 @@ fn label(a: Action) -> std::borrow::Cow<'static, str> {
         // the picker's leading mark (see this module's doc)
         Action::SetQuality(q) => q.label().into(),
         Action::SetSpeed(r) => speed_label(r).into(),
+        Action::SetAudioMode(m) => audio_mode_label(m).into(),
         Action::SendDiagnostics => plx_platform::i18n::msg::widgets_menu_diagnostics().into(),
         Action::None => "".into(),
         // a folded row is labelled by its `FoldedRow`, which knows the content
@@ -959,7 +1027,7 @@ fn is_on(a: Action) -> bool {
     match a {
         Action::ToggleStats => stats_on(),
         // a rung is not a switch — see `row_for`, which gives it the leading mark instead
-        Action::SetQuality(_) | Action::SetSpeed(_) | Action::SendDiagnostics | Action::Hud(_) | Action::None => false,
+        Action::SetQuality(_) | Action::SetSpeed(_) | Action::SetAudioMode(_) | Action::SendDiagnostics | Action::Hud(_) | Action::None => false,
     }
 }
 
@@ -1001,7 +1069,7 @@ fn row_for(ps: &plx_media::route::PlaybackSession, a: Action) -> Row {
     match a {
         Action::SetQuality(q) => Row::new(label(a)).detail(quality_detail(q, plx_media::route::source_decodable(ps))),
         // a picker row like a rung: the leading mark comes from the page's `choice`
-        Action::SetSpeed(_) => Row::new(label(a)),
+        Action::SetSpeed(_) | Action::SetAudioMode(_) => Row::new(label(a)),
         _ => Row::new(label(a)).toggle(is_on(a)),
     }
 }
@@ -1026,6 +1094,9 @@ pub fn overscan_rects(out: &mut Vec<(&'static str, Rect)>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The audio-mode answer of a playback whose sound the TV decodes: no Audio mode row.
+    const NO_AUDIO: (plx_media::route::AudioMode, bool) = (plx_media::route::AudioMode::Off, false);
 
     /// **The Original row says so when it cannot be Original.**
     ///
@@ -1111,8 +1182,8 @@ mod tests {
         let rows = rows_for(forced);
         let mut form = FormTable::new(plx_ui::table_screen::BAND_BASE);
         form.table.compact = true;
-        form.set_or_open(root_form(&ps, &rows, forced, current, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, &[]), None);
-        MoreMenuState { form, rows, forced, current, speed: plx_media::player::RATE_NORMAL, speeds: plx_media::player::PLAY_RATES.to_vec(), folded: Vec::new(), pages: PageStack::new(), motion: PanelMotion::new(), anchor: crate::player_hud::classic::ctrl_row_hit_rect(), side: std::cell::Cell::new(plx_ui::popover::Side::Above) }
+        form.set_or_open(root_form(&ps, &rows, forced, current, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, NO_AUDIO, &[]), None);
+        MoreMenuState { form, rows, forced, current, speed: plx_media::player::RATE_NORMAL, speeds: plx_media::player::PLAY_RATES.to_vec(), audio_mode: plx_media::route::AudioMode::Off, audio_offered: false, folded: Vec::new(), pages: PageStack::new(), motion: PanelMotion::new(), anchor: crate::player_hud::classic::ctrl_row_hit_rect(), side: std::cell::Cell::new(plx_ui::popover::Side::Above) }
     }
 
     /// The same menu with the Quality page pushed (and its slide skipped).
@@ -1291,7 +1362,7 @@ mod tests {
         let ps = plx_media::route::PlaybackSession::default();
         for forced in [false, true] {
             let mut root = MoreMenuState::new(&ps);
-            let form = root_form(&ps, &rows_for(forced), forced, plx_media::route::Quality::Auto, 1000, &plx_media::player::PLAY_RATES, &[]);
+            let form = root_form(&ps, &rows_for(forced), forced, plx_media::route::Quality::Auto, 1000, &plx_media::player::PLAY_RATES, NO_AUDIO, &[]);
             root.form.set(form, None);
             assert!(
                 root.form.index_of(&MoreRow::OpenSpeed).is_some(),
@@ -1355,7 +1426,7 @@ mod tests {
         let rows = rows_for(false);
         for offer in [vec![], vec![1000]] {
             let mut root = MoreMenuState::new(&ps);
-            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &offer, &[]), None);
+            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &offer, NO_AUDIO, &[]), None);
             assert!(root.form.index_of(&MoreRow::OpenSpeed).is_none(), "offer {offer:?}");
         }
         let mut st = MoreMenuState::new(&ps);
@@ -1363,9 +1434,58 @@ mod tests {
         st.push(&ps, MorePage::Speed);
         assert_eq!(st.page(), Some(MorePage::Speed));
         let (forced, rows, q) = (st.forced, st.rows.clone(), st.current);
-        assert!(st.refresh_to(&ps, forced, rows, q, 1000, Vec::new()));
+        assert!(st.refresh_to(&ps, forced, rows, q, 1000, Vec::new(), NO_AUDIO));
         assert_eq!(st.page(), None, "the page went with its offer");
         assert!(st.form.index_of(&MoreRow::OpenSpeed).is_none());
+    }
+
+    /// **The Audio mode row is there only while the app decodes the sound, and follows the path
+    /// live.** Where the TV or a receiver decodes it (native AC3/EAC3/AAC, passthrough, the URI
+    /// engine) there is no row at all, not a greyed one; the saved mode is untouched. When a track
+    /// switch moves the sound onto the app (a FLAC track) the row appears under the open menu, and an
+    /// open Audio mode page goes back to the root, on the row that opened it, when it moves off again.
+    #[test]
+    fn the_audio_mode_row_is_offered_only_where_the_app_decodes_the_sound() {
+        use plx_media::route::AudioMode;
+        plx_media::speed_audio::force_speed_decoder_for_test(true); // a host test loads no FFmpeg
+        let ps = plx_media::route::PlaybackSession::default();
+        let rows = rows_for(false);
+        for mode in AudioMode::LADDER {
+            let mut root = MoreMenuState::new(&ps);
+            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &plx_media::player::PLAY_RATES, (mode, false), &[]), None);
+            assert!(root.form.index_of(&MoreRow::OpenAudioMode).is_none(), "not offered, {mode:?}: no row");
+            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &plx_media::player::PLAY_RATES, (mode, true), &[]), None);
+            assert!(root.form.index_of(&MoreRow::OpenAudioMode).is_some(), "offered, {mode:?}: the row");
+        }
+        // a default session plays nothing through the app: the menu opens without the row, and a
+        // page entry for it is the ordinary root
+        let st = MoreMenuState::new(&ps);
+        assert!(!st.audio_offered);
+        assert!(st.form.index_of(&MoreRow::OpenAudioMode).is_none());
+        assert_eq!(MoreMenuState::new_on(&ps, Some(MorePage::AudioMode)).page(), None);
+
+        // the path changes under the open menu: the row appears, its page checks the mode, a row
+        // commits its own mode
+        let mut st = MoreMenuState::new(&ps);
+        let (forced, rows, q, speed, speeds) = (st.forced, st.rows.clone(), st.current, st.speed, st.speeds.clone());
+        assert!(st.refresh_to(&ps, forced, rows.clone(), q, speed, speeds.clone(), (AudioMode::Night, true)));
+        assert!(st.form.index_of(&MoreRow::OpenAudioMode).is_some(), "the row appears live");
+        st.focus_key(MoreRow::OpenAudioMode.key().0);
+        st.push(&ps, MorePage::AudioMode);
+        assert_eq!(st.page(), Some(MorePage::AudioMode));
+        let ids: Vec<MoreRow> = (0..st.form.table.n_rows() as usize).filter_map(|i| st.form.id_at(i).copied()).collect();
+        let want: Vec<MoreRow> = AudioMode::LADDER.iter().map(|m| MoreRow::Act(Action::SetAudioMode(*m))).collect();
+        assert_eq!(ids, want, "Off, Night, Clear voices");
+        assert_eq!(st.form.selected_id(), Some(&MoreRow::Act(Action::SetAudioMode(AudioMode::Night))), "on the current mode");
+        let i = st.form.index_of(&MoreRow::Act(Action::SetAudioMode(AudioMode::Voice))).unwrap();
+        match st.form.activate(i) {
+            Some(Activation::Action(got)) => assert_eq!(got, Action::SetAudioMode(AudioMode::Voice)),
+            _ => panic!("a mode row must commit its own mode"),
+        }
+        // and away again: a switch to a track the TV decodes takes the page and the row with it
+        assert!(st.refresh_to(&ps, forced, rows, q, speed, speeds, (AudioMode::Night, false)));
+        assert_eq!(st.page(), None, "the page went with the path");
+        assert!(st.form.index_of(&MoreRow::OpenAudioMode).is_none(), "and the row");
     }
 
     /// The names: Normal at 1x, the multiplier with no trailing zeros otherwise, the way Plex Web
@@ -1408,6 +1528,8 @@ mod tests {
             current: Quality::Auto,
             speed: plx_media::player::RATE_NORMAL,
             speeds: plx_media::player::PLAY_RATES.to_vec(),
+            audio_mode: plx_media::route::AudioMode::Off,
+            audio_offered: false,
             folded: Vec::new(),
             pages: PageStack::new(),
             motion: PanelMotion::new(),
@@ -1496,8 +1618,8 @@ mod tests {
         let before = st.form.table.sel;
         // the current rung moves: the check follows, focus stays on the row the viewer was on
         let rows = st.rows.clone();
-        assert!(st.refresh_to(&ps, false, rows.clone(), Quality::P480, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec()));
-        assert!(!st.refresh_to(&ps, false, rows.clone(), Quality::P480, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec()), "and only once");
+        assert!(st.refresh_to(&ps, false, rows.clone(), Quality::P480, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec(), NO_AUDIO));
+        assert!(!st.refresh_to(&ps, false, rows.clone(), Quality::P480, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec(), NO_AUDIO), "and only once");
         assert_eq!(st.page(), Some(MorePage::Quality), "still on the page");
         assert_eq!(st.form.table.title(), Some("Quality"), "the title band stays");
         assert_eq!(st.form.selected_id(), Some(&MoreRow::Act(Action::SetQuality(Quality::P720))));
@@ -1506,7 +1628,7 @@ mod tests {
         assert!(!checked(&mut st, MoreRow::Act(Action::SetQuality(Quality::P1080))));
         // the focused rung leaves the ladder: focus falls back to the checked rung, page stays
         let without: Vec<Action> = rows.iter().copied().filter(|a| *a != Action::SetQuality(Quality::P720)).collect();
-        assert!(st.refresh_to(&ps, false, without, Quality::P480, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec()));
+        assert!(st.refresh_to(&ps, false, without, Quality::P480, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec(), NO_AUDIO));
         assert!(st.form.index_of(&MoreRow::Act(Action::SetQuality(Quality::P720))).is_none());
         assert_eq!(st.page(), Some(MorePage::Quality));
         assert_eq!(st.form.selected_id(), Some(&MoreRow::Act(Action::SetQuality(Quality::P480))));
@@ -1520,7 +1642,7 @@ mod tests {
         plx_media::speed_audio::force_speed_decoder_for_test(true); // a host test loads no FFmpeg
         let ps = plx_media::route::PlaybackSession::default();
         let mut st = quality_page(Quality::P1080);
-        assert!(st.refresh_to(&ps, true, rows_for(true), Quality::P1080, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec()));
+        assert!(st.refresh_to(&ps, true, rows_for(true), Quality::P1080, plx_media::player::RATE_NORMAL, plx_media::player::PLAY_RATES.to_vec(), NO_AUDIO));
         assert_eq!(st.page(), None);
         assert_eq!(st.form.table.title(), None);
         assert!(!st.transitioning(), "a page that vanished does not slide away");
@@ -1713,6 +1835,8 @@ mod focus_tests {
             current: plx_media::route::Quality::Auto,
             speed: plx_media::player::RATE_NORMAL,
             speeds: plx_media::player::PLAY_RATES.to_vec(),
+            audio_mode: plx_media::route::AudioMode::Off,
+            audio_offered: false,
             folded: Vec::new(),
             pages: PageStack::new(),
             motion: PanelMotion::new(),
@@ -1821,7 +1945,7 @@ mod focus_tests {
             let _guard = language_on_this_thread_for_test(language);
             for q in plx_media::route::QUALITY_LADDER {
                 let mut root = MoreMenuState::new(&ps);
-                root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, &[]), None);
+                root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[]), None);
                 check(language.tag(), &root.form);
                 let mut page = MoreMenuState::new(&ps);
                 page.current = q;
@@ -1836,13 +1960,26 @@ mod focus_tests {
             // the Speed page, and the root reading out the longest speed name
             for r in plx_media::player::PLAY_RATES {
                 let mut root = MoreMenuState::new(&ps);
-                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, r, &plx_media::player::PLAY_RATES, &[]), None);
+                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, r, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[]), None);
                 check(language.tag(), &root.form);
             }
             let mut page = MoreMenuState::new(&ps);
             page.focus_key(MoreRow::OpenSpeed.key().0);
             page.push(&ps, MorePage::Speed);
             check(language.tag(), &page.form);
+            // the Audio mode page, and the root reading out each mode's name
+            for m in plx_media::route::AudioMode::LADDER {
+                let mut root = MoreMenuState::new(&ps);
+                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (m, true), &[]), None);
+                check(language.tag(), &root.form);
+                let mut page = MoreMenuState::new(&ps);
+                page.audio_offered = true;
+                page.audio_mode = m;
+                page.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (m, true), &[]), None);
+                page.focus_key(MoreRow::OpenAudioMode.key().0);
+                page.push(&ps, MorePage::AudioMode);
+                check(language.tag(), &page.form);
+            }
             // the root with every command folded, which no package can exceed, under both readings of Go to
             // (a show's and a movie's) and the longest quality readout
             let fold = |command, section| crate::hud_format::Fold { command, section };
@@ -1868,7 +2005,7 @@ mod focus_tests {
                 folded[6].label = go;
                 for q in plx_media::route::QUALITY_LADDER {
                     let mut root = MoreMenuState::new(&ps);
-                    root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, &folded), None);
+                    root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &folded), None);
                     check(language.tag(), &root.form);
                 }
             }
@@ -2300,7 +2437,7 @@ mod folded_tests {
             let folded: Vec<FoldedRow> = all[..n].iter().map(|&command| FoldedRow { command, label: "Previous Episode" }).collect();
             let mut form = FormTable::new(plx_ui::table_screen::BAND_BASE);
             form.table.compact = true;
-            let root = root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, &folded);
+            let root = root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &folded);
             form.set_or_open(root, None);
             let formula = if n == 0 { ROOT_BASE_H } else { ROOT_BASE_H + FOLDED_SECTION_H + FOLDED_ROW_H * n as f32 };
             assert_eq!(form.table.measured_height(), formula, "{n} folded rows");

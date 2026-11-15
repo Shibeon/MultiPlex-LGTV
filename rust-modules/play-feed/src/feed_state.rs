@@ -136,6 +136,10 @@ pub struct Engine {
     pub presentation_rearm_pending: bool,
     pub max_fed_video_pts: i64, // high-water fed pts, VIDEO lane (g_max_fed_pts)
     pub max_fed_audio_pts: i64, // high-water fed pts, AUDIO lane (two-lane feed)
+    /// Since when (`vclock_ms`) the audio lane of a decode for an audio mode has been short while the
+    /// video lane was not (`native_executor::mode_decode_short`); `None` while it is not. Reset with
+    /// `max_fed_audio_pts`.
+    pub mode_decode_short_since: Option<u32>,
     /// Fed pts of the AU that opened this timeline's audio — the one the demuxer marked as its
     /// first since the open or seek (`FEED_SHARED.first_audio_pts`) — once Starfish accepted it.
     /// `None` until then; reset with `max_fed_audio_pts`. See `audio_lead_in`.

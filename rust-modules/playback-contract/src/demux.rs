@@ -95,6 +95,9 @@ pub trait DemuxClock {
     fn user_sequence(&self) -> u64;
     fn desired_audio_idx(&self) -> i32;
     fn applied_rate_permille(&self) -> i32;
+    /// The viewer's audio mode as the player last sent it (`FeedCommand::AudioProcessing`); the
+    /// demuxer reads it for every PCM block it decodes, so a change takes effect without a reload.
+    fn audio_processing(&self) -> crate::feed::AudioProcessing;
     fn side_subtitle_owner(&self) -> bool;
     fn playpos_sampler(&self) -> AddressedSampler<i64>;
     fn hls_buffer_sampler(&self) -> AddressedSampler<Option<i64>>;
@@ -161,6 +164,8 @@ pub enum DemuxEffect {
     VideoTailNs(i64),
     AudioTailNs(i64),
     AudioExpected(bool),
+    /// This open decodes the audio in the app and feeds PCM ([`crate::feed::FeedRaw::app_pcm_audio`]).
+    AppPcmAudio(bool),
     PrimeRunwayMax(i64),
     /// The adaptive controller's prime runway (ms), replacing the published one: a completed round or a
     /// committed trial. [`Self::PrimeRunwayMax`] only raises it.

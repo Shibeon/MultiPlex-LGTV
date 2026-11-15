@@ -19,7 +19,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::sync::mpsc::{self, Receiver};
 use plx_appkit::skip_policy::MarkerPrefsView;
-use plx_plex::plex::session::{MarkerSkipMode, DolbyVisionMode, InstantDpadSeeking, UiResolution, UriEngine};
+use plx_plex::plex::session::{MarkerSkipMode, DolbyVisionMode, InstantDpadSeeking, UiResolution, UriEngine, AudioMode, AudioModeDecode};
 use plx_plex::plex::account::{AudioPreferences, PreferenceError, PreferenceRequest, PreferenceSnapshot, PreferenceUpdate};
 use plx_media::route::{Choice, DeckPress, DirectPlayMode, NextEpisodeMode, Quality, SkipInterval, SubtitlePosition, SubtitleSize, SubtitleTone, HdrOverlayBrightness};
 use plx_ui::form::{Form, FormId, FormSection, FormTable, RowKey, RowKind};
@@ -53,6 +53,8 @@ impl PickerKind {
         Self::SkipInterval => plx_platform::i18n::msg::settings_playback_skip_interval(),
         Self::InstantDpadSeeking => plx_platform::i18n::msg::settings_playback_instant_dpad_seeking(),
         Self::UriEngine => plx_platform::i18n::msg::settings_playback_uri_engine(),
+        Self::AudioMode => plx_platform::i18n::msg::settings_playback_audio_mode(),
+        Self::AudioModeDecode => plx_platform::i18n::msg::settings_playback_audio_mode_decode(),
         Self::DolbyVision => plx_platform::i18n::msg::settings_playback_dolby_vision(),
         Self::IntroSkip => plx_platform::i18n::msg::settings_playback_intro_skip(),
         Self::CreditsSkip => plx_platform::i18n::msg::settings_playback_credits_skip(),
@@ -74,6 +76,8 @@ impl PickerKind {
         Self::SkipInterval => plx_platform::i18n::msg::settings_playback_skip_interval_copy(),
         Self::InstantDpadSeeking => plx_platform::i18n::msg::settings_playback_instant_dpad_seeking_copy(),
         Self::UriEngine => plx_platform::i18n::msg::settings_playback_uri_engine_copy(),
+        Self::AudioMode => plx_platform::i18n::msg::settings_playback_audio_mode_copy(),
+        Self::AudioModeDecode => plx_platform::i18n::msg::settings_playback_audio_mode_decode_copy(),
         Self::DolbyVision => plx_platform::i18n::msg::settings_playback_dolby_vision_copy(),
         Self::IntroSkip => plx_platform::i18n::msg::settings_playback_intro_skip_copy(),
         Self::CreditsSkip => plx_platform::i18n::msg::settings_playback_credits_skip_copy(),
@@ -83,7 +87,7 @@ impl PickerKind {
     /// The field-list page this field belongs to; `None` for a field the Settings root lists itself.
     fn kind(self) -> Option<Kind> {
         match self {
-            Self::Quality | Self::DirectPlay | Self::HdrOverlay | Self::NextEpisode | Self::DeckPress | Self::SkipInterval | Self::InstantDpadSeeking | Self::UriEngine | Self::DolbyVision | Self::IntroSkip | Self::CreditsSkip => Some(Kind::Playback),
+            Self::Quality | Self::DirectPlay | Self::HdrOverlay | Self::NextEpisode | Self::DeckPress | Self::SkipInterval | Self::InstantDpadSeeking | Self::UriEngine | Self::AudioMode | Self::AudioModeDecode | Self::DolbyVision | Self::IntroSkip | Self::CreditsSkip => Some(Kind::Playback),
             Self::AudioLanguage | Self::SubtitleMode | Self::SubtitleLanguage | Self::ForcedSubtitles | Self::SubtitleSize | Self::SubtitlePosition | Self::SubtitleColor => Some(Kind::AudioSubtitles),
             Self::UiResolution => None,
         }
@@ -109,7 +113,7 @@ impl Kind {
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Value { IntroSkip(MarkerSkipMode, u64), CreditsSkip(MarkerSkipMode, u64), InstantDpadSeeking(InstantDpadSeeking), UriEngine(UriEngine), DolbyVision(DolbyVisionMode), Quality(Quality), DirectPlay(DirectPlayMode), SubtitleSize(SubtitleSize), SubtitlePosition(SubtitlePosition), SubtitleTone(SubtitleTone), HdrOverlay(HdrOverlayBrightness), NextEpisode(NextEpisodeMode), DeckPress(DeckPress), SkipInterval(SkipInterval), UiResolution(UiResolution), Language(String), Mode(i64), Forced(i64) }
+enum Value { IntroSkip(MarkerSkipMode, u64), CreditsSkip(MarkerSkipMode, u64), InstantDpadSeeking(InstantDpadSeeking), UriEngine(UriEngine), AudioMode(AudioMode), AudioModeDecode(AudioModeDecode), DolbyVision(DolbyVisionMode), Quality(Quality), DirectPlay(DirectPlayMode), SubtitleSize(SubtitleSize), SubtitlePosition(SubtitlePosition), SubtitleTone(SubtitleTone), HdrOverlay(HdrOverlayBrightness), NextEpisode(NextEpisodeMode), DeckPress(DeckPress), SkipInterval(SkipInterval), UiResolution(UiResolution), Language(String), Mode(i64), Forced(i64) }
 
 /// The hashed half of a transaction: what the page shows while a load or save is in flight.
 struct Io { busy: bool, status: String }
@@ -283,6 +287,8 @@ impl Txn {
             Value::DeckPress(mode) => PreferenceCmd::Choose(Choice::DeckPress(mode), reply),
             Value::InstantDpadSeeking(seeking) => PreferenceCmd::Choose(Choice::InstantDpadSeeking(seeking), reply),
             Value::UriEngine(engine) => PreferenceCmd::Choose(Choice::UriEngine(engine), reply),
+            Value::AudioMode(mode) => PreferenceCmd::Choose(Choice::AudioMode(mode), reply),
+            Value::AudioModeDecode(v) => PreferenceCmd::Choose(Choice::AudioModeDecode(v), reply),
             Value::DolbyVision(mode) => PreferenceCmd::Choose(Choice::DolbyVision(mode), reply),
             Value::SkipInterval(interval) => PreferenceCmd::Choose(Choice::SkipInterval(interval), reply),
             // Install-wide, not a seated profile's live setting, so it has no `Choice`.
@@ -371,6 +377,8 @@ impl FormId for RowId {
             Self::Field(PickerKind::InstantDpadSeeking) => 10,
             Self::Field(PickerKind::DolbyVision) => 11,
             Self::Field(PickerKind::UriEngine) => 17,
+            Self::Field(PickerKind::AudioMode) => 19,
+            Self::Field(PickerKind::AudioModeDecode) => 20,
             Self::PlayerHud => 12,
             Self::Field(PickerKind::IntroSkip) => 13,
             Self::Field(PickerKind::CreditsSkip) => 14,
@@ -421,6 +429,8 @@ pub struct PreferencesPage {
     skip_interval: SkipInterval,
     instant_dpad_seeking: InstantDpadSeeking,
     uri_engine: UriEngine,
+    audio_mode: AudioMode,
+    audio_mode_decode: AudioModeDecode,
     dolby_vision: DolbyVisionMode,
     /// Whose settings the list was last built for, with the profile publication it read that from
     /// (not canonical state, like `look`: the copy and the rows' dimming are not hashed either).
@@ -435,7 +445,8 @@ impl PreferencesPage {
             look: (plx_media::route::subtitle_size(), plx_media::route::subtitle_position(), plx_media::player::subtitle_tone(), plx_media::route::hdr_overlay_brightness()),
             next_episode: plx_media::route::next_episode_mode(), deck_press: plx_media::route::deck_press(),
             skip_interval: plx_media::route::skip_interval(), instant_dpad_seeking: plx_media::route::instant_dpad_seeking(),
-            uri_engine: plx_media::route::uri_engine(),
+            uri_engine: plx_media::route::uri_engine(), audio_mode: plx_media::route::audio_mode(),
+            audio_mode_decode: plx_media::route::audio_mode_decode_choice(),
             dolby_vision: plx_media::route::dolby_vision_mode(), whose: Whose::now(inputs) };
         s.rebuild(None);
         // A page opens on its first row's sentence at once, with nothing fading.
@@ -473,6 +484,8 @@ impl PreferencesPage {
         self.skip_interval = plx_media::route::skip_interval();
         self.instant_dpad_seeking = plx_media::route::instant_dpad_seeking();
         self.uri_engine = plx_media::route::uri_engine();
+        self.audio_mode = plx_media::route::audio_mode();
+        self.audio_mode_decode = plx_media::route::audio_mode_decode_choice();
         self.dolby_vision = plx_media::route::dolby_vision_mode();
         self.whose = Whose::now(&self.inputs);
         self.copy = copy_text(Subject::Page(self.state.kind), &self.state.io.status, self.state.direct_play, &self.whose.1).into_owned();
@@ -515,7 +528,7 @@ fn groups_of(kind: Kind) -> [(&'static str, &'static [PickerKind]); 3] {
     match kind {
         Kind::Playback => [
             (msg::settings_playback_group_video(), &[PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine]),
-            (msg::settings_playback_group_player(), &[PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip]),
+            (msg::settings_playback_group_player(), &[PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode]),
             (msg::settings_playback_group_up_next(), &[PickerKind::NextEpisode, PickerKind::DeckPress]),
         ],
         Kind::AudioSubtitles => [
@@ -585,6 +598,8 @@ fn resolve_value(field: PickerKind, quality: Quality, direct_play: DirectPlayMod
         PickerKind::SkipInterval => Value::SkipInterval(plx_media::route::skip_interval()),
         PickerKind::InstantDpadSeeking => Value::InstantDpadSeeking(plx_media::route::instant_dpad_seeking()),
         PickerKind::UriEngine => Value::UriEngine(plx_media::route::uri_engine()),
+        PickerKind::AudioMode => Value::AudioMode(plx_media::route::audio_mode()),
+        PickerKind::AudioModeDecode => Value::AudioModeDecode(plx_media::route::audio_mode_decode_choice()),
         PickerKind::DolbyVision => Value::DolbyVision(plx_media::route::dolby_vision_mode()),
         PickerKind::UiResolution => unreachable!("resolution requires the retained inputs"),
         // A deprecated code (`pb`) resolves to its replacement so the picker checks that entry.
@@ -618,6 +633,10 @@ fn field_options(field: PickerKind, quality: Quality, direct_play: DirectPlayMod
             .map(|m| (instant_dpad_seeking_label(m).into(), Value::InstantDpadSeeking(m))).collect(),
         PickerKind::UriEngine => UriEngine::LADDER.into_iter()
             .map(|m| (uri_engine_label(m).into(), Value::UriEngine(m))).collect(),
+        PickerKind::AudioMode => AudioMode::LADDER.into_iter()
+            .map(|m| (plx_appkit::more_menu::audio_mode_label(m).into(), Value::AudioMode(m))).collect(),
+        PickerKind::AudioModeDecode => AudioModeDecode::LADDER.into_iter()
+            .map(|m| (audio_mode_decode_label(m).into(), Value::AudioModeDecode(m))).collect(),
         PickerKind::DolbyVision => DolbyVisionMode::LADDER.into_iter()
             .map(|m| (dolby_vision_label(m).into(), Value::DolbyVision(m))).collect(),
         PickerKind::SkipInterval => SkipInterval::LADDER.into_iter()
@@ -750,6 +769,12 @@ fn instant_dpad_seeking_label(mode: InstantDpadSeeking) -> &'static str {
         InstantDpadSeeking::On => plx_platform::i18n::msg::settings_playback_instant_dpad_seeking_on(),
     }
 }
+fn audio_mode_decode_label(choice: AudioModeDecode) -> &'static str {
+    match choice {
+        AudioModeDecode::On => plx_platform::i18n::msg::settings_playback_audio_mode_decode_on(),
+        AudioModeDecode::Off => plx_platform::i18n::msg::settings_playback_audio_mode_decode_off(),
+    }
+}
 fn dolby_vision_label(mode: DolbyVisionMode) -> &'static str {
     match mode {
         DolbyVisionMode::Auto => plx_platform::i18n::msg::settings_playback_auto(),
@@ -830,6 +855,8 @@ impl Machine<InnerHost> for PreferencesPage {
                     || self.skip_interval != plx_media::route::skip_interval()
                     || self.instant_dpad_seeking != plx_media::route::instant_dpad_seeking()
                     || self.uri_engine != plx_media::route::uri_engine()
+                    || self.audio_mode != plx_media::route::audio_mode()
+                    || self.audio_mode_decode != plx_media::route::audio_mode_decode_choice()
                     || self.dolby_vision != plx_media::route::dolby_vision_mode()
                     {
                     self.rebuild_keeping();

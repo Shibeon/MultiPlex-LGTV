@@ -7,6 +7,10 @@ pub struct PhysicalOpen {
     pub video_codec: String,
     pub audio_codec: String,
     pub pcm_is_lossy: bool,
+    /// [`plx_playback_contract::feed::OpenStream::mode_decode`].
+    pub mode_decode: bool,
+    /// [`plx_playback_contract::feed::OpenStream::probe_sound_output`].
+    pub probe_sound_output: bool,
     pub audio_channels: i64,
     pub feed_payload: crate::PayloadFacts,
     pub payload_options: crate::PayloadOptions,
@@ -30,6 +34,8 @@ impl From<plx_playback_contract::feed::OpenStream> for PhysicalOpen {
             video_codec: stream.video_codec,
             audio_codec: stream.audio_codec,
             pcm_is_lossy: stream.pcm_is_lossy,
+            mode_decode: stream.mode_decode,
+            probe_sound_output: stream.probe_sound_output,
             audio_channels: stream.audio_channels,
             feed_payload: stream.feed_payload,
             payload_options: stream.payload_options,
