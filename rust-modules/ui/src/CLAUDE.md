@@ -87,10 +87,6 @@ arguments, and its time is the `dt` it is handed.
      the owner's `Focusable` contract (`screen.rs`: `neighbour`, `Link`, `EdgeRule`, `Seat`). A
      screen declares its groups and edges; it never matches a direction key to move focus between
      regions.
-   - **The Magic Remote wheel over a sideways row**: `wheel.rs` (`route`, the pure decision;
-     `WheelGlide`, the notch eased on `K_SCROLL`). A row that scrolls sideways registers its band
-     with `DrawFrame::pan_zone` (`cards::Shelf` does it for every shelf) and answers the
-     `InputKind::Pan` it already takes from the pointer's edge glide; it never reads the wheel itself.
    - **Cold text before it is shown** (a destination's strings meeting the glyph cache in the first
      visible frame): the shared prewarm — a recording walk (`record_walk`, `Painter::recording`)
      drained by `plx_gfx::text::drain_prewarm` under the frame's budget. A route dip does it for its
@@ -778,7 +774,7 @@ it AS DRAWN: a grid measures to the drawn top of the tile below (its live pop an
 of stacked shelves hands each one the lift of the next shelf's heading (`SectionFrame::below_rise`;
 `Stack`, Home, Recommended and Detail do; a `Stack` page keeps its shelves adjacent, the air under one its
 `StackPage::shelf_foot`, never a `Custom` gap section between two; that foot is `consts::SHELF_FOOT`, the label air and the
-`consts::SECTION_AIR` that makes a resting shelf's posters stand `theme::space::SECTION` (56 px) above the next heading on every
+`consts::SECTION_AIR` that makes a resting shelf's posters stand `theme::space::SECTION` (96 px) above the next heading on every
 stacked-shelf page, where a grid's rows keep the `space::LG` block gap; `RowStyle::foot` is the one exception, the Continue
 Watching stills row keeping its board's gap); `GridBands::closing` names the card a closing band's caption belongs to.
 Live and target geometry include these bands, so painting, paging, scrolling and restored

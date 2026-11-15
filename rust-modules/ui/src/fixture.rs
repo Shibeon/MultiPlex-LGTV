@@ -341,10 +341,6 @@ pub struct FixtureScreen {
     /// How far this page answers that it has tucked the top chrome away (`Screen::chrome_tuck`);
     /// 0 for every page until a test sets it.
     pub tuck: f32,
-    /// A horizontal row this page registers for the wheel on every draw (`DrawFrame::pan_zone`),
-    /// and whether the page answers `Screen::glides`; neither until a test sets it.
-    pub pan: Option<crate::wheel::PanZone>,
-    pub glides: bool,
 }
 
 crate::focusable_via_composed!(FixtureScreen, FixtureHost);
@@ -504,9 +500,6 @@ impl Screen<FixtureHost> for FixtureScreen {
     fn chrome_tuck(&self) -> f32 {
         self.tuck
     }
-    fn glides(&self) -> bool {
-        self.glides
-    }
     fn focus_source(&self) -> super::screen::FocusSource {
         if self.arg == FixtureArg::Legacy {
             super::screen::FocusSource::Legacy
@@ -540,9 +533,6 @@ impl Screen<FixtureHost> for FixtureScreen {
             self.lifted = f.lifted;
         }
         composed_draw(self, f);
-        if let Some(zone) = self.pan {
-            f.pan_zone(f.painter, zone);
-        }
         if matches!(self.arg, FixtureArg::Page(_)) {
             // a page that always shows a placeholder, for the held-image debt test
             crate::placeholder::note(f.painter, crate::placeholder::Reason::DetailSpinner, "fixture");
@@ -696,7 +686,7 @@ impl FixtureModal {
                                 },
                                 draw_at: 0,
                                 recorded_draws: 0, recorded_at: 0, speculative_draws: 0, lifted: None,
-                                redrawn_at: Default::default(), redraws: Default::default(), departing: None, tuck: 0.0, pan: None, glides: false,
+                                redrawn_at: Default::default(), redraws: Default::default(), departing: None, tuck: 0.0,
                             }),
                             inflight: Vec::new(),
                             staged: false,
@@ -999,7 +989,7 @@ impl Mounter<FixtureHost> for FixtureMounter {
             },
             draw_at: 0,
             recorded_draws: 0, recorded_at: 0, speculative_draws: 0, lifted: None,
-            redrawn_at: Default::default(), redraws: Default::default(), departing: None, tuck: 0.0, pan: None, glides: false,
+            redrawn_at: Default::default(), redraws: Default::default(), departing: None, tuck: 0.0,
         })
     }
 }

@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Serien",
   "watchlist.filter.show_all": "Alle",
   "watchlist.filter.show_released": "Erschienen",
-  "watchlist.filter.show_on_servers": "Auf deinen Servern",
+  "watchlist.filter.show_on_servers": "Nur verfügbare",
   "watchlist.action.add": "Zur Merkliste hinzufügen",
   "watchlist.action.add_show": "Serie zur Merkliste hinzufügen",
   "watchlist.action.on_list": "Auf der Merkliste",

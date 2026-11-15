@@ -28,7 +28,7 @@
     "description": "Availability filter choice: only titles that have been released."
   },
   "watchlist.filter.show_on_servers": {
-    "value": "On your servers",
+    "value": "Available only",
     "description": "Availability filter choice: only titles found on one of the account's reachable servers."
   },
   "watchlist.action.add": {

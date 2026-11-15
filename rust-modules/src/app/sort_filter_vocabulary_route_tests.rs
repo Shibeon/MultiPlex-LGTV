@@ -84,7 +84,7 @@ fn both_sort_and_filter_panels_name_facts_and_directions_the_same_way() {
     let wl = watchlist_panel(&w);
     assert_eq!(wl.iter().map(|(h, _)| h.as_str()).collect::<Vec<_>>(), ["Show", "Sort", "Filter"]);
     let sort = section(&wl, "Sort");
-    assert_eq!(sort.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["Date added", "Title", "Release date", "Score"]);
+    assert_eq!(sort.iter().map(|(l, _)| l.as_str()).collect::<Vec<_>>(), ["Date added", "Title", "Release date", "Score", "Availability"]);
     assert_eq!(sort[0].1.as_deref(), Some("Newest first"), "the direction is the checked row's value word");
     assert!(sort[1..].iter().all(|(_, v)| v.is_none()), "only the checked row carries one");
     // Sort > Title: ascending is its natural order.

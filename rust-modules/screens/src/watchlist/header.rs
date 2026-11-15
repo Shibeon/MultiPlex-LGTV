@@ -75,8 +75,8 @@ const CUE_SIZE: std::os::raw::c_int = theme::size::LABEL;
 pub const HEADER_TOP: f32 = page_header::TOP;
 /// Where the lead line's band stands: one title block and its air under [`HEADER_TOP`] (the
 /// Library's `ROW_Y`, 236, where its row of chips stands). The row of controls stays at
-/// [`HEADER_TOP`], on the title block's line: the Sort & Filter menu hangs under it, and its ten
-/// rows fit under that line in every shipped language.
+/// [`HEADER_TOP`], on the title block's line: the Sort & Filter menu hangs under it, and its eleven
+/// rows scroll inside the panel the safe frame leaves under that line (`OptionsMenu::panel_rect`).
 pub const ROW_Y: f32 = HEADER_TOP + page_header::TITLE_H + page_header::TITLE_ROW_GAP;
 /// The header block: the title, the lead line's band (56) and the air under it, so the grid's first
 /// poster top is 96 under the band's top (332), as the Library's grid is under its chips.

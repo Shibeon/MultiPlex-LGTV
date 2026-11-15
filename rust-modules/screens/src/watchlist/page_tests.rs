@@ -107,16 +107,26 @@ fn captions_carry_the_state_sentence_with_the_month_date() {
     assert_eq!(default_caption(&row, TileState::Available), "Movie", "no year: the kind, never an empty line under an open band");
 }
 
-/// **One mark per tile, and the no-server wash is quieter under focus** (TileStates board).
+/// **One mark per tile, and the no-server wash is quieter under focus** (TileStates board). The
+/// mark is also the card's availability answer: a ring and play triangle for a held title until it
+/// is watched (the poster's tick takes the slot back), a ring and bar for one no server holds, a
+/// ring and question mark for one still to check; an upcoming title keeps its clock either way.
 #[test]
 fn marks_and_washes_follow_the_state() {
     use plx_ui::icons::Icon;
-    assert_eq!(marks::mark(TileState::ComingSoon), Some(Icon::Clock));
-    assert_eq!(marks::mark(TileState::ComingSoonMatched), Some(Icon::Clock));
-    assert_eq!(marks::mark(TileState::ServerOffline), Some(Icon::ServerSlash));
-    assert_eq!(marks::mark(TileState::Available), None);
-    assert_eq!(marks::mark(TileState::NotOnAnyServer), Some(Icon::CircleSlash));
-    assert!(marks::owns_corner(TileState::NotOnAnyServer));
+    for watched in [false, true] {
+        assert_eq!(marks::mark(TileState::ComingSoon, watched), Some(Icon::Clock));
+        assert_eq!(marks::mark(TileState::ComingSoonMatched, watched), Some(Icon::Clock));
+        assert_eq!(marks::mark(TileState::ServerOffline, watched), Some(Icon::ServerSlash));
+        assert_eq!(marks::mark(TileState::NotOnAnyServer, watched), Some(Icon::CircleSlash));
+        assert_eq!(marks::mark(TileState::Unknown, watched), Some(Icon::CircleQuestion));
+    }
+    assert_eq!(marks::mark(TileState::Available, false), Some(Icon::CirclePlay));
+    assert_eq!(marks::mark(TileState::Available, true), None, "a watched held title wears the tick, not a second mark");
+    assert!(!marks::owns_corner(TileState::Available));
+    for state in [TileState::ComingSoon, TileState::ComingSoonMatched, TileState::ServerOffline, TileState::NotOnAnyServer, TileState::Unknown] {
+        assert!(marks::owns_corner(state), "{state:?} owns the corner, so its tile never also wears the tick");
+    }
     assert_eq!(marks::wash(TileState::NotOnAnyServer, false), 0.55);
     assert_eq!(marks::wash(TileState::NotOnAnyServer, true), 0.25);
     assert_eq!(marks::wash(TileState::Available, false), 0.0);

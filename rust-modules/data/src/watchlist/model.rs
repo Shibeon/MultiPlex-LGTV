@@ -131,6 +131,55 @@ pub fn tile_state(row: &WatchRow, table: &MatchTable, reach: &dyn Reach) -> Tile
     }
 }
 
+/// **Is the title in the user's own Plex libraries?** The three answers My list shows on every card
+/// (a library on the account's servers, never a streaming service), apart from the tile states
+/// above, which also fold in the release date and which server is reachable.
+///
+/// The join is the title's primary `plex://` guid only (`GET /library/all?type=T&guid=…`,
+/// `docs/pms-api.md` 2d): the same lookup the match table is built from, so no request is added.
+/// `imdb://`, `tmdb://` and `tvdb://` are not asked: that lookup answers them size 0 (measured), and
+/// a "not held" read from one would be a false "Not available".
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Availability {
+    /// A copy is held on a Reachable server: playable now.
+    Available,
+    /// Every server on the roster answered, and none holds it.
+    Unavailable,
+    /// Not known yet: a server was silent (its lookup failed or has not run), the only copies are
+    /// on servers that are Unreachable now, or no server was asked. "To check", never "absent".
+    Unknown,
+}
+
+impl Availability {
+    /// The availability order (Sort & Filter's Availability key): playable first, then the titles
+    /// still to check, then the ones no server holds.
+    pub fn rank(self) -> u8 {
+        match self {
+            Availability::Available => 0,
+            Availability::Unknown => 1,
+            Availability::Unavailable => 2,
+        }
+    }
+}
+
+/// Derive a row's [`Availability`] from what the servers answered. Pure; run with [`tile_state`]
+/// at commit and when reachability or the roster moves. Unlike [`tile_state`] it does not read the
+/// release date: an announced title the servers all answered absent is `Unavailable` too.
+pub fn availability(row: &WatchRow, table: &MatchTable, reach: &dyn Reach) -> Availability {
+    let answers: &[(ServerId, Asked)] = table.by_guid.get(&row.guid).map_or(&[], |v| v.as_slice());
+    if answers.iter().any(|(sid, a)| matches!(a, Asked::Held(..)) && reach.reachable(*sid)) {
+        return Availability::Available;
+    }
+    if answers.iter().any(|(_, a)| matches!(a, Asked::Held(..))) {
+        // Held, but every server holding it is Unreachable now: it cannot be checked.
+        return Availability::Unknown;
+    }
+    let roster = reach.roster();
+    let all_absent = !roster.is_empty()
+        && roster.iter().all(|sid| answers.iter().any(|(s, a)| s == sid && matches!(a, Asked::Absent)));
+    if all_absent { Availability::Unavailable } else { Availability::Unknown }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,6 +289,26 @@ mod tests {
         // One server absent, the other silent: not yet "on no server".
         let t = table(&r, vec![(a, Asked::Absent)]);
         assert_eq!(tile_state(&r, &t, &stub(&[a, b], &[a, b])), TileState::Unknown);
+    }
+
+    /// The three availability answers, and the ones that must never read as "absent": a silent
+    /// server, an Unreachable holder and an empty roster are all Unknown.
+    #[test]
+    fn availability_is_held_absent_or_unknown() {
+        let (a, b) = (sid(0), sid(1));
+        let r = row(true);
+        let up = stub(&[a, b], &[a, b]);
+        assert_eq!(availability(&r, &table(&r, vec![held(a), (b, Asked::Absent)]), &up), Availability::Available);
+        assert_eq!(availability(&r, &table(&r, vec![(a, Asked::Absent), (b, Asked::Absent)]), &up), Availability::Unavailable);
+        assert_eq!(availability(&r, &table(&r, vec![(a, Asked::Absent)]), &up), Availability::Unknown, "b is silent");
+        assert_eq!(availability(&r, &MatchTable::default(), &up), Availability::Unknown, "not checked yet");
+        assert_eq!(availability(&r, &table(&r, vec![held(a)]), &stub(&[], &[a])), Availability::Unknown, "holder offline");
+        assert_eq!(availability(&r, &table(&r, vec![(a, Asked::Absent)]), &stub(&[], &[])), Availability::Unknown, "nobody asked");
+        // Not released yet but every server answered absent: still not in the library.
+        let soon = row(false);
+        assert_eq!(availability(&soon, &table(&soon, vec![(a, Asked::Absent), (b, Asked::Absent)]), &up), Availability::Unavailable);
+        assert!(Availability::Available.rank() < Availability::Unknown.rank());
+        assert!(Availability::Unknown.rank() < Availability::Unavailable.rank());
     }
 
     #[test]

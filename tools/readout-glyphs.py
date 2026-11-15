@@ -143,7 +143,7 @@ def server_slash():
     return unary_union([base.difference(slash.buffer(HW_INLINE + 1.0, cap_style='round')),
                         slash.buffer(HW_INLINE, cap_style='round')])
 
-INLINE = {  # the Watchlist's marks: Icon::{Bookmark, BookmarkFill, Clock, ServerSlash, CircleSlash} in ui/src/icons.rs
+INLINE = {  # the Watchlist's marks: Icon::{Bookmark, BookmarkFill, Clock, ServerSlash, CircleSlash, CirclePlay, CircleQuestion} in ui/src/icons.rs
   # Not on the watchlist / the tab: an outline ribbon with the inline weight.
   "bookmark":      lambda: stroke(BOOKMARK, HW_INLINE),
   # On the watchlist: the outline's own silhouette filled, so the state flip never moves an edge.
@@ -154,6 +154,12 @@ INLINE = {  # the Watchlist's marks: Icon::{Bookmark, BookmarkFill, Clock, Serve
   "server-slash":  server_slash,
   # Not on any of your servers: the universal "unavailable" ring-and-bar, at the inline weight.
   "circle-slash":  lambda: stroke(circ(12, 12, 9) + "M5.64 5.64 18.36 18.36", HW_INLINE),
+  # In your own library, ready to play: the same ring around a play triangle.
+  "circle-play":   lambda: unary_union([stroke(circ(12, 12, 9), HW_INLINE),
+                                        Polygon([(10.2, 8.4), (10.2, 15.6), (15.9, 12)]).buffer(0.6, join_style='round', quad_segs=16)]),
+  # Not known yet (a lookup failed or has not run): the same ring around a question mark.
+  "circle-question": lambda: unary_union([stroke(circ(12, 12, 9) + "M9.5 9.6a2.5 2.5 0 1 1 3.6 2.2c-.7.35-1.1.85-1.1 1.6v.3", HW_INLINE),
+                                          dot(12, 16.8, 1.25)]),
 }
 
 def fmt(v): s = f"{v:.2f}".rstrip('0').rstrip('.'); return "0" if s in ("-0", "") else s

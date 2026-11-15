@@ -212,8 +212,12 @@ const RESOLUTION_SHAPE: &str = "ProductResolutionV1{fo:Option<(entry:u32,elem:u3
 /// `ItemMenuKind::Hero{host,rows}` and the item menu's `Hero(elem)` action, so the two frozen
 /// vectors (`current-base-fingerprints.json`) and both numbers were re-derived from them, and the
 /// replay anchors were re-recorded on the new profile.
-pub(crate) const FP_PRIOR: u64 = 8932796983854629004;
-pub(crate) const FP_V6: u64 = 15834642128357272210;
+///
+/// **My list's tiles carry their availability**: `SCREEN_SHAPES`' `WatchlistScreen` gains
+/// `avail:u32` per tile, so both frozen vectors and both numbers were re-derived again and the
+/// replay anchors re-recorded.
+pub(crate) const FP_PRIOR: u64 = 16966599510782656729;
+pub(crate) const FP_V6: u64 = 5721615536593523891;
 
 pub(crate) fn state_fp() -> u64 {
     let mut shapes: Vec<&str> = APP_SHAPES.to_vec();

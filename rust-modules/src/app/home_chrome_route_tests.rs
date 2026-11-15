@@ -179,6 +179,51 @@ fn present_home_stops(w: &mut World) {
     w.d.input.hit.swap();
 }
 
+/// **A wheel notch with the pointer over a long shelf steps the PAGE, never the shelf** (owner: the
+/// Magic Remote's wheel scrolls the page again). d91e5e50 handed a notch over a shelf that scrolls
+/// sideways to that shelf (the application asked the presented hit map for the row under the pointer
+/// and kept the notch from the page), so this notch produced no input at all and the shelf slid
+/// instead. Now the notch is the Down key wherever the pointer rests: focus goes to the next shelf,
+/// which comes to the rest line, and the shelf under the pointer has not moved sideways.
+#[test]
+fn a_wheel_notch_with_the_pointer_over_a_long_shelf_steps_the_page_not_the_row() {
+    use plx_machine::machine::{Edge, InputKind};
+    let mut w = home_shelves_of("hc-wheel-over-row", 24);
+    w.frames(150);
+    // the frame's hit map, presented: the pointer is over the focused shelf's next poster
+    let rest = heading_y(&mut w, 0).expect("premise: the first shelf's heading is drawn");
+    present_home_stops(&mut w);
+    let focused = w.focus().expect("a poster holds focus");
+    let (x, y, own_x) = {
+        let stops = w.d.input.hit.front();
+        let own = stops.iter().find(|stop| stop.key == focused).expect("the focused poster is a stop");
+        let next = stops.iter()
+            .filter(|stop| stop.key.entry == focused.entry && (stop.rest_rect.y - own.rest_rect.y).abs() < 1.0
+                && stop.rest_rect.x > own.rest_rect.x + 1.0)
+            .min_by(|a, b| a.rest_rect.x.total_cmp(&b.rest_rect.x))
+            .expect("premise: the shelf has a poster to the right of the focused one");
+        (next.rect.cx(), next.rect.cy(), own.rest_rect.x)
+    };
+    assert!(x < plx_ui::consts::SCR_W && y < plx_ui::consts::SCR_H, "premise: the pointer is on screen ({x}, {y})");
+    let notch = super::super::run::wheel_notch_inputs(&w.d, -1, (w.frame + 1) * 16);
+    let keys: Vec<_> = notch.iter().filter_map(|e| match e.kind {
+        InputKind::Key { key, edge, .. } => Some((key, edge)),
+        _ => None,
+    }).collect();
+    assert_eq!(keys, [(Key::Down, Edge::Down), (Key::Down, Edge::Up)],
+        "wheel down over a long shelf is the page's Down, not the row's");
+    w.step(notch);
+    w.frames(150);
+    let next = heading_y(&mut w, 1).expect("the notch brought the second shelf's heading");
+    assert!((next - rest).abs() < 1.0, "the second shelf rests on the rest line ({next} vs {rest})");
+    assert_ne!(w.focus(), Some(focused), "focus left the first shelf");
+    present_home_stops(&mut w);
+    let stops = w.d.input.hit.front();
+    if let Some(own) = stops.iter().find(|stop| stop.key == focused) {
+        assert!((own.rest_rect.x - own_x).abs() < 0.5, "the shelf under the pointer did not slide ({} vs {own_x})", own.rest_rect.x);
+    }
+}
+
 /// **One wheel notch is one directional step**, whatever its size: the notch becomes a single Down
 /// (away from you) or Up key, press and release, and never a run of them or a continuous scroll.
 #[test]

@@ -597,7 +597,10 @@ collapses as `Item::absent` does, so classic's Chapters pill exists only with ch
 `2 x CONTROL_GAP`, `player_hud.rs:724-727`), `widget` (`disc`
 through `TransportButton`, `pill` through `TabPill` labelled by the command's app string, `button`
 through `widgets::Button`), `size` (px), `rest` (`film` today's, `bare` glyph only, `solid` the focused
-colours at rest, `plate` (format 1.2) a dark opaque plate under the white glyph; `custom` is refused because format 1.0 defines no keys for its inks), `focus` (`accent` today's, `ring`: rest face plus the white
+colours at rest (the one exception: a `toggle_play` disc resting `solid` is the player's primary action and takes the
+primary plate, `widgets::TransportRest::Primary`: the ivory `theme::PLAYER_PRIMARY_FILL`, `#F5F1EA`, under the dark glyph,
+a softer inner light and a focus halo that stays within half the gap to its neighbours, `TransportButton::halo_reach`;
+every other `solid` disc, pill or button keeps the focused colours), `plate` (format 1.2) a dark opaque plate under the white glyph; `custom` is refused because format 1.0 defines no keys for its inks), `focus` (`accent` today's, `ring`: rest face plus the white
 focus ring), `face` (optional: the command's classic glyph when absent). A pair that draws one face twice (`solid` with `accent`) is rejected. Faces: an asset
 or `builtin:<icon>`; `toggle_play` takes `{playing, paused}`; `previous` takes `{default, restart}` (the `restart` face is still required and
 parsed, because published packages carry it and format 1.0 is frozen, but the app never selects it any more:
@@ -1317,7 +1320,7 @@ with computed values; PR17's compile reports the chapters plus info block's top 
 | 9 | Speech bubble | `open_tracks {tab: subtitles}`, `rest: bare`; the menu reaches Audio (F15) | `TransportButton` |
 | 10 | Arrow "10" | `seek {by: -10}`, static face | `TransportButton`; the extracted jump |
 | 11 | Previous | `previous`, `{default, restart}` faces (`restart` is accepted and never selected) | `TransportButton` |
-| 12 | Large white disc | `toggle_play`, size 64, `rest: solid`, `focus: ring`, `{playing, paused}` | `TransportButton`; the extracted toggle |
+| 12 | Large white disc (the ivory primary plate) | `toggle_play`, size 64, `rest: solid`, `focus: ring`, `{playing, paused}` | `TransportButton` (`TransportRest::Primary`); the extracted toggle |
 | 13 | Next | `next` | `TransportButton` |
 | 14 | Arrow "30" | `seek {by: 30}`, static face | `TransportButton` |
 | 15 | Cluster centred | segment `center`, `align: center` | `HStack` `Align::Centre` |

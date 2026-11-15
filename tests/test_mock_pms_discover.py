@@ -88,21 +88,27 @@ class DiscoverMock(unittest.TestCase):
 
     def test_fixture_covers_the_states_one_mock_can_produce(self):
         pms = make()
-        held = {}
+        held, errs = {}, set()
         for c in pms.discover.catalog[:14]:
             kind = {"movie": "1", "show": "2"}[c["kind"]]
             guid = urllib.parse.quote(c["guid"], safe="")
             rows = jcall(pms, "GET", f"/library/all?type={kind}&guid={guid}")["Metadata"]
-            held[c["hex"]] = bool(rows)
+            held[c["hex"]] = bool(rows) and rows[0]["ratingKey"].isdigit()
             if rows:
                 self.assertEqual(rows[0]["guid"], c["guid"])
-                self.assertTrue(rows[0]["ratingKey"].isdigit())
+                if not rows[0]["ratingKey"].isdigit():
+                    errs.add(c["hex"])
         states = set()
         for c in pms.discover.catalog[:14]:
+            if c["hex"] in errs:
+                states.add("Unknown")
+                continue
             states.add(("Available" if c["released"] else "ComingSoonMatched") if held[c["hex"]]
                        else ("NotOnAnyServer" if c["released"] else "ComingSoon"))
-        self.assertEqual(states, {"Available", "ComingSoonMatched", "ComingSoon", "NotOnAnyServer"})
+        self.assertEqual(states, {"Available", "ComingSoonMatched", "ComingSoon", "NotOnAnyServer", "Unknown"})
         self.assertEqual(sum(held.values()), 7)
+        self.assertEqual(errs, {pms.discover.catalog[pms.discover.GARBLED_LOOKUP]["hex"]},
+                         "exactly one title's lookup errs (the availability badge's To check)")
         self.assertGreaterEqual(sum(1 for c in pms.discover.catalog[:14] if c["kind"] == "show"), 4)
 
     def test_a_guid_batch_is_one_request(self):

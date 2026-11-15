@@ -11,5 +11,6 @@
   "sort_facts.oldest_first": "Oudste eerst",
   "sort_facts.newest_first": "Nieuwste eerst",
   "sort_facts.lowest_first": "Laagste eerst",
-  "sort_facts.highest_first": "Hoogste eerst"
+  "sort_facts.highest_first": "Hoogste eerst",
+  "sort_facts.availability": "Beschikbaarheid"
 }

@@ -158,6 +158,27 @@ mod loopback {
         ]);
     }
 
+    /// **A row with an empty `ratingKey` is kept, not dropped**: dropping it made the guid read as
+    /// absent ("Not available") when the server had answered for it; kept with its empty key, the
+    /// matcher reads it as neither held nor absent. A later row of the same guid with a key wins.
+    #[test]
+    fn a_row_with_an_empty_key_is_kept_and_a_keyed_row_of_the_guid_replaces_it() {
+        let g = guids("movie", 2);
+        let body = format!(
+            r#"{{"MediaContainer":{{"size":3,"Metadata":[{},{},{}]}}}}"#,
+            row(&g[0], "", 4),
+            row(&g[1], "", 4),
+            row(&g[1], "202", 5),
+        );
+        let (port, server) = serve(vec![("200 OK", body)]);
+        let got = client(port).find_by_guids(GuidKind::Movie, &g).unwrap();
+        server.join().unwrap();
+        assert_eq!(got, vec![
+            GuidMatch { guid: g[0].clone(), rating_key: String::new(), library_section_id: Some(4), blur: None, facts: Default::default() },
+            GuidMatch { guid: g[1].clone(), rating_key: "202".into(), library_section_id: Some(5), blur: None, facts: Default::default() },
+        ]);
+    }
+
     #[test]
     fn forty_one_guids_make_two_requests_and_a_failed_chunk_is_unanswered() {
         let ok = r#"{"MediaContainer":{"size":0}}"#.to_string();

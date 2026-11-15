@@ -11,5 +11,6 @@
   "sort_facts.oldest_first": "Сначала старые",
   "sort_facts.newest_first": "Сначала новые",
   "sort_facts.lowest_first": "По возрастанию",
-  "sort_facts.highest_first": "По убыванию"
+  "sort_facts.highest_first": "По убыванию",
+  "sort_facts.availability": "Доступность"
 }

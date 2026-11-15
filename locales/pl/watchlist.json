@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Seriale",
   "watchlist.filter.show_all": "Wszystkie",
   "watchlist.filter.show_released": "Po premierze",
-  "watchlist.filter.show_on_servers": "Na Twoich serwerach",
+  "watchlist.filter.show_on_servers": "Tylko dostępne",
   "watchlist.action.add": "Dodaj do obejrzenia",
   "watchlist.action.add_show": "Dodaj serial do obejrzenia",
   "watchlist.action.on_list": "Do obejrzenia",

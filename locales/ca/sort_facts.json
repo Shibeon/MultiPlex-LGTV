@@ -11,5 +11,6 @@
   "sort_facts.oldest_first": "Els més antics primer",
   "sort_facts.newest_first": "Més recents primer",
   "sort_facts.lowest_first": "De menys a més",
-  "sort_facts.highest_first": "De més a menys"
+  "sort_facts.highest_first": "De més a menys",
+  "sort_facts.availability": "Disponibilitat"
 }

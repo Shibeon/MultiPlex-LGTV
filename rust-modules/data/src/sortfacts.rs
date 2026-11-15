@@ -1,5 +1,5 @@
 //! **One vocabulary for the Sort & Filter panels** (design review S17, N1). The Library's sort rows
-//! come from the server's per-library list and the Watchlist's from its own four keys; both name a
+//! come from the server's per-library list and the Watchlist's from its own five keys; both name a
 //! fact (a title, a date, a rating), and a fact has ONE name and ONE way to say which end comes
 //! first, whichever page asks.
 //!
@@ -77,11 +77,14 @@ pub enum SortFact {
     /// The video's height (`mediaHeight`).
     Resolution,
     Random,
+    /// Whether the user's own libraries hold it (the Watchlist's Availability order): grouped, not
+    /// a scale, so it has no ends to word.
+    Availability,
 }
 
 impl SortFact {
-    pub const ALL: [SortFact; 10] = [Self::Title, Self::DateAdded, Self::ReleaseDate, Self::Rating, Self::AudienceRating,
-        Self::LastViewed, Self::Plays, Self::Duration, Self::Resolution, Self::Random];
+    pub const ALL: [SortFact; 11] = [Self::Title, Self::DateAdded, Self::ReleaseDate, Self::Rating, Self::AudienceRating,
+        Self::LastViewed, Self::Plays, Self::Duration, Self::Resolution, Self::Random, Self::Availability];
 
     /// The fact a PMS `Sort` key orders by, if the table names it.
     pub fn of_pms_key(key: &str) -> Option<SortFact> {
@@ -113,6 +116,7 @@ impl SortFact {
             Self::Duration => msg::widgets_tracks_duration(),
             Self::Resolution => msg::widgets_tracks_resolution(),
             Self::Random => msg::sort_facts_random(),
+            Self::Availability => msg::sort_facts_availability(),
         }
     }
 
@@ -122,7 +126,7 @@ impl SortFact {
             Self::Title => Some(Axis::Alphabetical),
             Self::DateAdded | Self::ReleaseDate | Self::LastViewed => Some(Axis::Chronological),
             Self::Rating | Self::AudienceRating | Self::Plays | Self::Duration | Self::Resolution => Some(Axis::Magnitude),
-            Self::Random => None,
+            Self::Random | Self::Availability => None,
         }
     }
 }
@@ -139,7 +143,7 @@ mod tests {
         let _g = language_on_this_thread_for_test(Preference::En);
         let labels: Vec<_> = SortFact::ALL.iter().map(|f| f.label()).collect();
         assert_eq!(labels, ["Title", "Date added", "Release date", "Score", "Audience score", "Date viewed", "Plays",
-            "Duration", "Resolution", "Random"]);
+            "Duration", "Resolution", "Random", "Availability"]);
         for label in &labels {
             let rest = label.chars().skip(1).collect::<String>();
             assert_eq!(rest, rest.to_lowercase(), "{label:?}: sentence case, only the first letter is a capital");

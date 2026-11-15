@@ -2613,9 +2613,18 @@ class DiscoverFixture:
       * 1-6   released, held by this mock PMS (guid matches a library item)      -> Available
       * 7     NOT released (future date), held by this mock PMS                   -> ComingSoonMatched
       * 8, 9  NOT released, held nowhere                                          -> ComingSoon
-      * 10-14 released, held nowhere (13 is a catalog-only show)                  -> NotOnAnyServer
+      * 10-13 released, held nowhere (13 is a catalog-only show)                  -> NotOnAnyServer
+      * 14    released, its guid lookup ERRS: this server answers the title with a row that
+              carries no usable ratingKey (`GARBLED_LOOKUP`), so the app can neither open a copy
+              nor call it absent                                                    -> Unknown
 
-    The other two states come from switches: Unknown (no match while some server is silent) from
+    So My list's availability (each card's corner mark, the "Available only" filter and the
+    Availability sort) shows all three answers by default: Available (1-7: 7 is held, so it is
+    Available though it keeps its coming-soon clock), Not available (10-13, and the unreleased
+    8, 9) and To check, Unknown (14).
+
+    The other two states come from switches: Unknown for every unmatched title (no match while
+    some server is silent) from
     `POST /_mock/discover {"guid_lookup": "fail"}`, which makes `GET /library/all?guid=` answer 503
     so an unmatched title re-matches as Unknown; ServerOffline (a matching server that later goes
     Unreachable) from `{"pms": "fail"}` sent AFTER the list matched, which makes every PMS request
@@ -2647,6 +2656,8 @@ class DiscoverFixture:
         ("show", "Low Season", 2022, "2022-06-10", True, False),
     )
     LISTED = 14
+    # The listed title whose guid lookup errs (index into TITLES: "Ninefold", entry 14).
+    GARBLED_LOOKUP = 13
     BASE_ADDED_AT = 1_760_000_000  # synthetic; entry i was added i days before it
 
     def __init__(self):
@@ -2869,6 +2880,12 @@ class DiscoverFixture:
             kind = {"1": "movie", "2": "show"}.get(q.get("type", ""))
             rows = [it for it in lib.items.values()
                     if it.get("guid") in want and (kind is None or it.get("type") == kind)]
+            # The demo's errored lookup: a row for the title whose key the app cannot use (an empty
+            # or non-numeric key both leave the title Unknown: it can neither open a copy nor call
+            # it absent), beside the real answers for the batch.
+            bad = self.catalog[self.GARBLED_LOOKUP]
+            if bad["guid"] in want and (kind is None or bad["kind"] == kind):
+                rows.append({"guid": bad["guid"], "type": bad["kind"], "title": bad["title"], "ratingKey": "garbled"})
             return j({"MediaContainer": {"size": len(rows), "Metadata": rows}})
         return None
 

@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Sèries",
   "watchlist.filter.show_all": "Tots",
   "watchlist.filter.show_released": "Estrenats",
-  "watchlist.filter.show_on_servers": "Als teus servidors",
+  "watchlist.filter.show_on_servers": "Només disponibles",
   "watchlist.action.add": "Afegeix a la llista de seguiment",
   "watchlist.action.add_show": "Afegeix la sèrie a la llista de seguiment",
   "watchlist.action.on_list": "A la llista de seguiment",

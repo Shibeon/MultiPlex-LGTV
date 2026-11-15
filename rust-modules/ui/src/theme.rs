@@ -233,10 +233,14 @@ pub mod space {
     pub const LG: f32 = 40.0;
     /// Section gap — one titled row of cards to the next section's heading: the air between a
     /// shelf's resting posters and the heading under them, on every page that stacks shelves
-    /// (Home, the Library's hubs, Detail's rows, Search, the person page). 56 px at 1080p
-    /// (37 px on a 720p panel), the top of the web client's 40–56 px desktop section gap, so
-    /// sections breathe; [`crate::consts::SECTION_AIR`] is what a shelf adds for it.
-    pub const SECTION: f32 = 56.0;
+    /// (Home, the Library's hubs, Detail's rows, Search, the person page). 96 px at 1080p
+    /// (64 px on a 720p panel): the owner asked for 72–96 px between sections, and 96 is what keeps
+    /// even a FOCUSED shelf's caption block [`crate::consts::UNDER_LABEL_AIR`] plus
+    /// [`crate::consts::SECTION_AIR`] (78 px) clear of the next heading inside that range, so a
+    /// section's heading, its row and its caption read as one block apart from the next. Wider
+    /// than [`XL`] on purpose: on a stacked-shelf page the sections ARE the regions;
+    /// [`crate::consts::SECTION_AIR`] is what a shelf adds for it.
+    pub const SECTION: f32 = 96.0;
     /// Major gap — separates whole regions (a title band from the metadata beneath it).
     pub const XL: f32 = 64.0;
 }
@@ -581,6 +585,22 @@ pub const CONTROL_FOCUS_RING_GAP: f32 = 3.0;
 /// renderer's is the latter, so 16 and 3 arrive here doubled — transcribing the CSS numbers
 /// literally would draw a shadow half the size the design asks for.
 pub const CONTROL_CAST_FOCUS: [(f32, f32, f32); 2] = [(5.0, 32.0, 0.34), (1.0, 6.0, 0.20)];
+
+/// **The player's PRIMARY action plate** (`widgets::TransportRest::Primary`, a HUD package's
+/// `rest: "solid"` disc: the MultiPlex HUD's Play/Pause): a warm ivory, `#F5F1EA`, softer than the
+/// cool near-white [`ACCENT`] every focused control takes, so the one light disc in the row reads as
+/// the main action without glaring over a dark picture. Its glyph is [`ACCENT_INK`].
+pub const PLAYER_PRIMARY_FILL: [f32; 4] = rgb8(0xf5, 0xf1, 0xea);
+/// The light that spills inward off the primary plate's rim, in [`CONTROL_RIM_FOCUS_UNKEYED_GLOW`]'s
+/// shape (`[top depth px, top weight, bottom depth px, bottom weight]`): half its depth and about a
+/// third of its weight, because on an always-light plate the full étliv read as a bloom.
+pub const PLAYER_PRIMARY_GLOW: [f32; 4] = [2.5, 0.35, 1.25, 0.2];
+/// The primary plate's focus lift, `(dy, blur, alpha)` like [`CONTROL_CAST_FOCUS`] but tight and
+/// faint: its whole reach ([`PLAYER_PRIMARY_REACH`]) stays inside half the transport row's gap, so
+/// nothing the Play disc draws ever lands on the skip discs beside it.
+pub const PLAYER_PRIMARY_CAST: [(f32, f32, f32); 1] = [(2.0, 8.0, 0.18)];
+/// How far the primary plate's cast reaches past the disc's frame, at most: blur plus offset.
+pub const PLAYER_PRIMARY_REACH: f32 = PLAYER_PRIMARY_CAST[0].1 + PLAYER_PRIMARY_CAST[0].0;
 
 // ── Surfaces / backgrounds ───────────────────────────────────────────────────
 /// Flat shelf/app base (both gradient stops) — Apple TV's shelf gray **#2C2C2E (44,44,46)**. A

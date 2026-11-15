@@ -16,7 +16,7 @@
 //! title (the application opens `ContentArg::Catalog` for it).
 use std::collections::HashMap;
 
-use plx_data::watchlist::model::{Kind as WatchKind, ServerMatch, TileState, WatchRow};
+use plx_data::watchlist::model::{Availability, Kind as WatchKind, ServerMatch, TileState, WatchRow};
 use plx_machine::machine::{
     Canon, Cx, Delivery, Edge, Effects, Enter, EntryId, FocusKey, FocusTarget, Fx, GroupId, Handled, InputEvent,
     InputKind, Key, LogicalState, Machine, Tick,
@@ -51,6 +51,9 @@ use crate::registry::{AppFx, ContentArg, ContentLike, ContentReq, HomeTab};
 pub struct WatchTile {
     pub row: WatchRow,
     pub state: TileState,
+    /// Whether the user's own libraries hold it: what the "Available only" filter and the
+    /// Availability sort read (the card says it with its corner mark, [`super::tiles::mark`]).
+    pub avail: Availability,
     pub copy: Option<ServerMatch>,
 }
 
@@ -560,7 +563,8 @@ impl<H: ContentLike> CardSource<H> for Titles<'_> {
     }
     fn overlay(&self, p: Painter, i: usize, tile: &Tile, _measure: &dyn plx_machine::machine::Measure) {
         if let Some(t) = self.page.tiles.get(i) {
-            tiles::paint(p, t.state, tile);
+            let watched = self.page.cells.get(i).is_some_and(|c| c.watched);
+            tiles::paint(p, t.state, watched, tile);
         }
     }
     /// Every cell is painted: a reserved one, whose row has not landed, as the skeleton poster
@@ -633,8 +637,8 @@ impl<H: ContentLike> CardSource<H> for GhostTitles<'_> {
         self.tiles.get(i).copied().flatten().and_then(|(_, c)| c.resume)
     }
     fn overlay(&self, p: Painter, i: usize, tile: &Tile, _measure: &dyn plx_machine::machine::Measure) {
-        if let Some((t, _)) = self.tiles.get(i).copied().flatten() {
-            tiles::paint(p, t.state, tile);
+        if let Some((t, c)) = self.tiles.get(i).copied().flatten() {
+            tiles::paint(p, t.state, c.watched, tile);
         }
     }
     fn loaded(&self, i: usize) -> bool {
@@ -855,7 +859,7 @@ impl WatchlistScreen {
     /// The heartbeat word, byte-identical to the route word (`tests/manifest.json` selects on it).
     pub const WORD: &'static str = "watchlist";
 
-    pub const SHAPE: &'static str = "WatchlistScreen{entry:u32,next_elem:u32,list:{tag:u32,total:u64},options:{type:u32,sort:u32,descending:bool,show:u32},tiles:[{guid:str,state:u32,elem:u32}],stack:Stack{scroll:{pos:f32,vel:f32},target:f32,sections:[Grid{bands,pop,landing}]},header_capsules:TabStrip{sel:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32},foc:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32}},header_pop:{sp:[Spring{pos:f32,vel:f32};1],focused:Option<u32>},handoff:Handoff{tucked:bool,chrome:f32,capsule:f32}}";
+    pub const SHAPE: &'static str = "WatchlistScreen{entry:u32,next_elem:u32,list:{tag:u32,total:u64},options:{type:u32,sort:u32,descending:bool,show:u32},tiles:[{guid:str,state:u32,avail:u32,elem:u32}],stack:Stack{scroll:{pos:f32,vel:f32},target:f32,sections:[Grid{bands,pop,landing}]},header_capsules:TabStrip{sel:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32},foc:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32}},header_pop:{sp:[Spring{pos:f32,vel:f32};1],focused:Option<u32>},handoff:Handoff{tucked:bool,chrome:f32,capsule:f32}}";
 
     /// A page over `rows` (a snapshot already ordered and filtered by `options`), landed. The
     /// entry is unset: mount with [`at_entry`](Self::at_entry).
@@ -1497,7 +1501,7 @@ impl LogicalState for WatchlistScreen {
         page.options.write_canon(c);
         c.seq(page.tiles.len());
         for (t, cell) in page.tiles.iter().zip(&page.cells) {
-            c.str(&t.row.guid).u32(t.state as u32).u32(cell.elem);
+            c.str(&t.row.guid).u32(t.state as u32).u32(t.avail as u32).u32(cell.elem);
         }
         self.stack.write(c);
         page.header_capsules.write_motion(c);

@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Сериалы",
   "watchlist.filter.show_all": "Все",
   "watchlist.filter.show_released": "Вышедшие",
-  "watchlist.filter.show_on_servers": "На ваших серверах",
+  "watchlist.filter.show_on_servers": "Только доступные",
   "watchlist.action.add": "В список просмотра",
   "watchlist.action.add_show": "Сериал в список просмотра",
   "watchlist.action.on_list": "В списке просмотра",
