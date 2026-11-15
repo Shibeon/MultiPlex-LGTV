@@ -6,22 +6,23 @@
 //! Main-thread state plus an `Arc` mailbox. The store starts no worker, reads no registry and no
 //! clock: [`CommunityStore::pump`] is handed the plex.tv identity the Bridge read, whether the profile
 //! is a managed Plex Home member, whether the page is on screen, the captured server keys and the
-//! frame's `dt`, and puts [`StoreJob::Community`] jobs on its outbox that the application's runner
-//! starts in the same call (`Bridge::community_feed`).
+//! app's logical clock (`now_ms`, wrapping; every wait is a deadline against it, never a sum of
+//! frame deltas), and puts [`StoreJob::Community`] jobs on its outbox that the application's runner
+//! starts in the same call (`Bridge::friends_feed`).
 //!
 //! - **Nothing is read for a managed profile** (the owner's rule, shared with My list and the web
 //!   app): such a profile has no Friends tab, and a pump that is told `managed` empties the store and
 //!   emits nothing.
 //! - **Nothing is read while the page is not on screen.** The feed and the privacy setting are read
-//!   when the page shows, and the feed again when it shows after [`FEED_STALE_SECS`]. The live
-//!   sessions are read when the page shows and every [`LIVE_EVERY_SECS`] while it stays up; a
+//!   when the page shows, and the feed again when it shows after [`FEED_STALE_MS`]. The live
+//!   sessions are read when the page shows and every [`LIVE_EVERY_MS`] while it stays up; a
 //!   server that answers 401/403 (the account does not own it) ends the polling for the identity,
 //!   and the section is hidden whenever nothing plays.
 //! - **The privacy write is a command, never a step's decision**: [`CommunityStore::set_share`] is
 //!   called by the Bridge only for the page's explicit press of the toggle. No pump emits it.
 //!
 //! **Every job is answered once, a refusal included.** A job the runner never started answers
-//! `NotStarted` through the port's `refused`: the read is owed again after [`RETRY_SECS`]; a refused
+//! `NotStarted` through the port's `refused`: the read is owed again after [`RETRY_MS`]; a refused
 //! write is reported failed (the user presses again). A job that panics lands as a failure.
 
 use super::watchlist_job::{AuthValue, Snapshot};
@@ -42,11 +43,16 @@ use std::sync::{Arc, Mutex};
 /// How many entries of the feed are read (the web app reads 80).
 pub const FEED_FIRST: u32 = 80;
 /// The feed is read again when the page shows this long after it last landed.
-pub const FEED_STALE_SECS: f32 = 120.0;
+pub const FEED_STALE_MS: u32 = 120_000;
 /// The live sessions' cadence while the page is up.
-pub const LIVE_EVERY_SECS: f32 = 10.0;
+pub const LIVE_EVERY_MS: u32 = 10_000;
 /// A refused (never started) read waits this long before it is asked again.
-pub const RETRY_SECS: f32 = 2.0;
+pub const RETRY_MS: u32 = 2_000;
+
+/// Has the wrapping clock `now` reached `due`? (`motion::Phase`'s drift-free comparison.)
+fn reached(now: u32, due: u32) -> bool {
+    now.wrapping_sub(due) as i32 >= 0
+}
 
 /// The I/O a community job goes through. Production is [`LiveCommunityIo`]; tests script it.
 pub trait CommunityIo: Send + Sync {
@@ -100,6 +106,16 @@ impl CommunityIo for LiveCommunityIo {
         let io = super::watchlist_job::ports::LiveWatchlistIo { input: input.clone(), lookup: self.lookup, lease: self.lease };
         match_rows(&io as &dyn WatchlistIo, rows)
     }
+}
+
+/// **What the Friends page asks the store**, on the ordered FIFO (`StoreCmd::Community`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CommunityCmd {
+    /// **The toggle's explicit press**: share (`true`) or stop sharing what the account watches.
+    /// The ONLY command that leads to the privacy write ([`CommunityStore::set_share`]).
+    SetShare(bool),
+    /// Try again on the unreachable read-out ([`CommunityStore::retry`]).
+    Retry,
 }
 
 /// One community job's request. The request id is the job's address.
@@ -253,13 +269,21 @@ pub enum ShareState {
 /// One live session and the server it plays on.
 pub type LiveRow = (ServerId, LiveSession);
 
+/// The reachable server whose photo proxy draws the feed's absolute plex.tv posters and avatars:
+/// the best ranked one (the current server, then an owned one), My list's rule. `None` while none
+/// is reachable. A pure read of the captured keys.
+pub fn art_server(keys: &ClientKeys) -> Option<ServerId> {
+    let snapshot = Snapshot::new(keys, None);
+    snapshot.roster().into_iter().filter(|s| snapshot.reachable(*s)).min_by_key(|s| snapshot.copy_rank(*s))
+}
+
 /// A slot's request in flight, or a wait before asking again.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Ask {
     Idle,
     Out(u32),
-    /// Refused by the runner: asked again once the wait runs out.
-    Owed(f32),
+    /// Refused by the runner: asked again once the clock reaches this deadline (ms).
+    Owed(u32),
 }
 
 impl Ask {
@@ -274,8 +298,8 @@ impl Ask {
 /// Live polling.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum LivePoll {
-    /// Read when the wait runs out (0: on the next visible pump).
-    Every(f32),
+    /// Read once the clock reaches this deadline (ms); `None`: on the next visible pump.
+    Every(Option<u32>),
     /// A request is out.
     Out(u32),
     /// The account owns no server it may read the sessions of: never asked again for this identity.
@@ -294,7 +318,10 @@ pub struct CommunityStore {
     feed: FeedState,
     feed_ask: Ask,
     /// Seconds since the feed last landed.
-    feed_age: f32,
+    /// The clock when the feed last landed.
+    feed_landed: Option<u32>,
+    /// The clock of the last pump: a landing's next deadline counts from it.
+    now: u32,
     shares: ShareState,
     share_ask: Ask,
     /// The value a write in flight asks for.
@@ -323,13 +350,14 @@ impl Default for CommunityStore {
             identity: None,
             feed: FeedState::NoAccount,
             feed_ask: Ask::Idle,
-            feed_age: 0.0,
+            feed_landed: None,
+            now: 0,
             shares: ShareState::Unknown,
             share_ask: Ask::Idle,
             writing: None,
             write_failed: false,
             live: Arc::from(Vec::new()),
-            live_poll: LivePoll::Every(0.0),
+            live_poll: LivePoll::Every(None),
             held: HashMap::new(),
             match_ask: Ask::Idle,
             feed_rev: 0,
@@ -466,7 +494,8 @@ impl CommunityStore {
     /// The frame pass: take the landings, then, while the page is on screen, ask for what is owed.
     /// Returns whether anything the page reads changed. A managed profile empties the store and
     /// asks for nothing.
-    pub fn pump(&mut self, input: &CommunityInput<'_>, dt: f32) -> bool {
+    pub fn pump(&mut self, input: &CommunityInput<'_>, now_ms: u32) -> bool {
+        self.now = now_ms;
         let before = self.gen;
         if input.managed {
             if self.identity.is_some() || self.has_jobs() {
@@ -478,27 +507,26 @@ impl CommunityStore {
         }
         self.adopt(input);
         self.land();
-        let dt = dt.max(0.0);
-        self.feed_age += dt;
         let shown = input.visible && !self.was_visible;
         self.was_visible = input.visible;
         if input.visible {
-            self.ask_owed(input, dt, shown);
+            self.ask_owed(input, shown);
         }
         self.gen != before
     }
 
-    fn ask_owed(&mut self, input: &CommunityInput<'_>, dt: f32, shown: bool) {
+    fn ask_owed(&mut self, input: &CommunityInput<'_>, shown: bool) {
+        let now = self.now;
         for ask in [&mut self.feed_ask, &mut self.share_ask, &mut self.match_ask] {
-            if let Ask::Owed(wait) = ask {
-                *wait -= dt;
-                if *wait <= 0.0 {
+            if let Ask::Owed(due) = *ask {
+                if reached(now, due) {
                     *ask = Ask::Idle;
                 }
             }
         }
         if let Some(auth) = self.auth() {
-            let stale = shown && matches!(self.feed, FeedState::Ready(_)) && self.feed_age >= FEED_STALE_SECS;
+            let stale = shown && matches!(self.feed, FeedState::Ready(_))
+                && self.feed_landed.is_some_and(|at| reached(now, at.wrapping_add(FEED_STALE_MS)));
             if self.feed_ask == Ask::Idle && (self.feed == FeedState::Loading || stale) {
                 self.feed_ask = Ask::Out(self.emit(CommunityReq::Feed { auth: auth.clone() }));
             }
@@ -506,13 +534,10 @@ impl CommunityStore {
                 self.share_ask = Ask::Out(self.emit(CommunityReq::Privacy { auth }));
             }
         }
-        if let LivePoll::Every(wait) = self.live_poll {
-            let wait = if shown { 0.0 } else { wait - dt };
-            self.live_poll = if wait <= 0.0 {
-                LivePoll::Out(self.emit(CommunityReq::Live { input: Snapshot::new(input.keys, None) }))
-            } else {
-                LivePoll::Every(wait)
-            };
+        if let LivePoll::Every(due) = self.live_poll {
+            if shown || due.is_none_or(|due| reached(now, due)) {
+                self.live_poll = LivePoll::Out(self.emit(CommunityReq::Live { input: Snapshot::new(input.keys, None) }));
+            }
         }
         if let FeedState::Ready(feed) = &self.feed {
             let wanted = (self.feed_rev, input.keys.roster_gen());
@@ -542,17 +567,18 @@ impl CommunityStore {
             let write = self.writing.is_some_and(|(r, _)| r == req);
             match outcome {
                 Outcome::NotStarted => {
-                    if feed { self.feed_ask = Ask::Owed(RETRY_SECS) }
-                    if share { self.share_ask = Ask::Owed(RETRY_SECS) }
-                    if matched { self.match_ask = Ask::Owed(RETRY_SECS); self.matched_for = None }
-                    if live { self.live_poll = LivePoll::Every(RETRY_SECS) }
+                    let retry = self.now.wrapping_add(RETRY_MS);
+                    if feed { self.feed_ask = Ask::Owed(retry) }
+                    if share { self.share_ask = Ask::Owed(retry) }
+                    if matched { self.match_ask = Ask::Owed(retry); self.matched_for = None }
+                    if live { self.live_poll = LivePoll::Every(Some(retry)) }
                     if write { self.writing = None; self.write_failed = true; self.touch() }
                 }
                 Outcome::Panicked => {
                     if feed { self.feed_ask = Ask::Idle; self.fail_feed() }
                     if share { self.share_ask = Ask::Idle; self.shares = ShareState::Failed; self.touch() }
                     if matched { self.match_ask = Ask::Idle }
-                    if live { self.live_poll = LivePoll::Every(LIVE_EVERY_SECS) }
+                    if live { self.live_poll = LivePoll::Every(Some(self.now.wrapping_add(LIVE_EVERY_MS))) }
                     if write { self.writing = None; self.write_failed = true; self.touch() }
                 }
                 Outcome::Feed(result) if feed => {
@@ -560,7 +586,7 @@ impl CommunityStore {
                     match result {
                         Ok(list) => {
                             self.feed = FeedState::Ready(list.into());
-                            self.feed_age = 0.0;
+                            self.feed_landed = Some(self.now);
                             self.feed_rev = self.feed_rev.wrapping_add(1);
                             self.touch();
                         }
@@ -587,14 +613,14 @@ impl CommunityStore {
                     let next = match result {
                         Ok(rows) => {
                             self.live = rows.into();
-                            LivePoll::Every(LIVE_EVERY_SECS)
+                            LivePoll::Every(Some(self.now.wrapping_add(LIVE_EVERY_MS)))
                         }
                         Err(LiveError::Forbidden) => {
                             self.live = Arc::from(Vec::new());
                             LivePoll::Forbidden
                         }
                         // A failed read keeps what was shown and tries again at the cadence.
-                        Err(LiveError::Failed) => LivePoll::Every(LIVE_EVERY_SECS),
+                        Err(LiveError::Failed) => LivePoll::Every(Some(self.now.wrapping_add(LIVE_EVERY_MS))),
                     };
                     self.live_poll = next;
                     self.touch();

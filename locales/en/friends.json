@@ -1,0 +1,132 @@
+{
+  "friends.page.title": {
+    "value": "Friends",
+    "description": "Title of the Friends page (what the user's Plex friends watched) and the label of its tab in the top bar, beside a two-people mark. Keep it short: it is a tab label."
+  },
+  "friends.page.lead": {
+    "value": "What your Plex friends have been watching.",
+    "description": "Quiet lead line under the Friends page's title."
+  },
+  "friends.filter.all": {
+    "value": "All",
+    "description": "First chip of the Friends page's filter row: show every friend's activity. The other chips are the friends' names."
+  },
+  "friends.share.label": {
+    "value": "Share what I watch",
+    "description": "The Friends page's toggle: whether the user's Plex account shares what they watch with their Plex friends. It is the Plex account's privacy setting and applies in every Plex app. Followed by the setting's state (On / Off)."
+  },
+  "friends.share.on": {
+    "value": "On",
+    "description": "State of the Share what I watch toggle: shared with friends."
+  },
+  "friends.share.off": {
+    "value": "Off",
+    "description": "State of the Share what I watch toggle: private."
+  },
+  "friends.share.pending": {
+    "value": "…",
+    "description": "State of the Share what I watch toggle while it is read or saved."
+  },
+  "friends.share.failed": {
+    "value": "Couldn’t update",
+    "description": "State of the Share what I watch toggle when reading or saving the setting failed. Pressing the toggle again retries."
+  },
+  "friends.live.heading": {
+    "value": "Watching now",
+    "description": "Heading of the Friends page's row of what is playing right now on the user's own servers."
+  },
+  "friends.live.watching": {
+    "value": "{name} is watching",
+    "description": "Caption of a card in the Watching now row: who is watching it (a Plex user's name).",
+    "args": {
+      "name": "str"
+    }
+  },
+  "friends.live.paused": {
+    "value": "{name} · paused",
+    "description": "Caption of a card in the Watching now row when that playback is paused.",
+    "args": {
+      "name": "str"
+    }
+  },
+  "friends.day.today": {
+    "value": "Today",
+    "description": "Heading of the day group of today's activity on the Friends page."
+  },
+  "friends.day.yesterday": {
+    "value": "Yesterday",
+    "description": "Heading of the day group of yesterday's activity on the Friends page."
+  },
+  "friends.day.earlier": {
+    "value": "Earlier",
+    "description": "Heading of the group of activity whose date is unknown, at the end of the Friends page."
+  },
+  "friends.post.movie": {
+    "value": "{name} watched",
+    "description": "Caption of an activity card: a friend watched this movie. The movie's title is the card's title.",
+    "args": {
+      "name": "str"
+    }
+  },
+  "friends.post.episode": {
+    "value": "{name} watched an episode of",
+    "description": "Caption of an activity card: a friend watched one episode of the show named by the card's title.",
+    "args": {
+      "name": "str"
+    }
+  },
+  "friends.post.episodes": {
+    "value": {
+      "one": "{name} watched {count} episode of",
+      "other": "{name} watched {count} episodes of"
+    },
+    "description": "Caption of an activity card: a friend watched several episodes in a row of the show named by the card's title.",
+    "args": {
+      "count": "i64",
+      "name": "str"
+    }
+  },
+  "friends.ago.now": {
+    "value": "just now",
+    "description": "Relative time of a friend's activity less than a minute ago."
+  },
+  "friends.ago.minutes": {
+    "value": {
+      "one": "{count} min ago",
+      "other": "{count} min ago"
+    },
+    "description": "Relative time of a friend's activity, in minutes.",
+    "args": {
+      "count": "i64"
+    }
+  },
+  "friends.ago.hours": {
+    "value": {
+      "one": "{count} h ago",
+      "other": "{count} h ago"
+    },
+    "description": "Relative time of a friend's activity, in hours.",
+    "args": {
+      "count": "i64"
+    }
+  },
+  "friends.ago.at": {
+    "value": "at {time}",
+    "description": "Time of a friend's activity on an earlier day (the day is the group's heading). The time is a clock time such as 21:40.",
+    "args": {
+      "time": "str"
+    }
+  },
+  "friends.empty.none": {
+    "value": "Your friends haven’t watched anything yet",
+    "description": "Friends page read-out when the activity feed is empty."
+  },
+  "friends.empty.no_account": {
+    "value": "Sign in with a Plex account to see your friends",
+    "description": "Friends page read-out when the profile has no Plex account to read the feed as."
+  },
+  "friends.empty.unreachable": {
+    "value": "Couldn’t load your friends’ activity",
+    "description": "Friends page read-out when the activity feed could not be read. Offers Try again."
+  }
+}

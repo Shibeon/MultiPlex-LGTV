@@ -2,10 +2,12 @@
 """PreToolUse guard: an agent may not turn on the owner's live Watchlist switch.
 
 `multiplex-watchlist-live` in a debug install's runtime root (on the television
-`/tmp/app.multiplex.native.debug/`) lets a `devtriggers` build send Watchlist add/remove to the REAL
-plex.tv account (`rust-modules/plex/src/plex/watchlist.rs`, `live_armed`). Without it a debug build
-refuses every write (the Q11 failsafe), which is what keeps an agent's TV run from changing a
-household's Watchlist. The owner creates the file by hand, from their own terminal, when they want to
+`/tmp/app.multiplex.native.debug/`) lets a `devtriggers` build send its plex.tv ACCOUNT writes to the
+REAL account: the Watchlist's add/remove and the Friends page's "Share what I watch" privacy mutation
+(`updatePrivacy`), both behind the one gate (`rust-modules/plex/src/plex/watchlist.rs`,
+`account_write_gate` / `live_armed`). Without it a debug build refuses every such write (the Q11
+failsafe), which is what keeps an agent's TV run from changing a household's Watchlist or its
+viewing-privacy setting. The owner creates the file by hand, from their own terminal, when they want to
 check real writes; AGENTS.md: no agent creates it unless the owner asks for it in that same session.
 
 What is refused is a Bash command that would CREATE the file: `touch`, `tee`, `cp`/`mv`/`install`/
@@ -78,7 +80,8 @@ def main():
         "BLOCKED: this command would turn on the owner's live Watchlist switch "
         "(multiplex-watchlist-live).\n"
         "  the command: %s\n\n"
-        "With that file present a debug build writes Watchlist add/remove to the REAL plex.tv account.\n"
+        "With that file present a debug build writes Watchlist add/remove and the Friends page's\n"
+        "privacy setting (updatePrivacy) to the REAL plex.tv account.\n"
         "AGENTS.md: no agent creates it unless the owner asks for it in this same session. Test writes\n"
         "against the mock instead (`tools/tv-session.sh up --mock-plextv=PORT` arms the discover\n"
         "stand-in). If the owner did ask, prefix the command with PLX_WATCHLIST_LIVE_OWNER=1.\n"

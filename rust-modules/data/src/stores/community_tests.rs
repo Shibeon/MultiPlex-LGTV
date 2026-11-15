@@ -75,12 +75,15 @@ struct Rig {
     visible: bool,
     /// Every job's request kind, in the order they were emitted.
     log: Vec<&'static str>,
+    /// The logical clock handed to each pump (ms, wrapping), started near the wrap so a deadline
+    /// that crosses it is exercised by every test.
+    now: u32,
 }
 
 impl Rig {
     fn new() -> Self {
         Self { store: CommunityStore::default(), watch: WatchlistInput::for_test(1), keys: ClientKeys::default(),
-            managed: false, visible: true, log: Vec::new() }
+            managed: false, visible: true, log: Vec::new(), now: u32::MAX - 5_000 }
     }
 
     /// The toggle's press, with this frame's input.
@@ -91,8 +94,9 @@ impl Rig {
 
     /// A pump whose jobs are left on the outbox.
     fn step(&mut self, dt: f32) {
+        self.now = self.now.wrapping_add((dt * 1000.0).round() as u32);
         let input = CommunityInput { watch: &self.watch, managed: self.managed, visible: self.visible, keys: &self.keys };
-        self.store.pump(&input, dt);
+        self.store.pump(&input, self.now);
     }
 
     /// Run every emitted job through `io` (the runner's part), logging what each asked.
@@ -119,8 +123,9 @@ impl Rig {
     }
 
     fn pump(&mut self, dt: f32, io: &dyn CommunityIo) -> bool {
+        self.now = self.now.wrapping_add((dt * 1000.0).round() as u32);
         let input = CommunityInput { watch: &self.watch, managed: self.managed, visible: self.visible, keys: &self.keys };
-        let changed = self.store.pump(&input, dt);
+        let changed = self.store.pump(&input, self.now);
         self.run(io);
         changed
     }
@@ -337,7 +342,7 @@ fn a_refused_read_is_asked_again_after_the_wait() {
     rig.refuse();
     rig.pump(0.0, &io);
     assert!(rig.log.is_empty());
-    rig.pump(RETRY_SECS, &io);
+    rig.pump(RETRY_MS as f32 / 1000.0, &io);
     assert_eq!(rig.log, ["feed", "privacy", "live"]);
 }
 
@@ -355,7 +360,7 @@ fn a_stale_feed_is_read_again_when_the_page_shows() {
     rig.pump(0.0, &io);
     assert_eq!(feeds(&rig), 1, "fresh: not read again");
     rig.visible = false;
-    rig.pump(FEED_STALE_SECS, &io);
+    rig.pump(FEED_STALE_MS as f32 / 1000.0, &io);
     rig.visible = true;
     rig.pump(0.0, &io);
     assert_eq!(feeds(&rig), 2);

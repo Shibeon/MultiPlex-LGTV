@@ -72,6 +72,7 @@ use plx_data::metadata::{
 use plx_data::person::{finish_person_job, PersonPort, PersonReq};
 use plx_data::stores::catalog::{finish_catalog_job, CatalogPort, CatalogReq};
 use plx_data::stores::upcoming::{finish_upcoming_job, UpcomingPort, UpcomingReq};
+use plx_data::stores::community::{finish_community_job, CommunityPort, CommunityReq};
 use plx_data::stores::viewreconcile::{finish_reconcile_job, ReconcilePort, ReconcileReq};
 use plx_data::pms::{launch_hubs_job, HubRequest, HubsPort};
 use plx_data::stores::{Admission, StoreJob};
@@ -126,6 +127,11 @@ fn watchlist_auth_current(auth: &plx_data::watchlist::WatchlistAuth) -> bool {
     let profile = plx_plex::plex::session::current_snapshot();
     let credential = profile.user.as_ref().and_then(plx_plex::plex::session::plex_tv_credential);
     auth.matches_lease(&profile, credential.as_deref())
+}
+/// The Friends page's production seam: plex.tv's community service as the captured identity (the
+/// lease re-checked against the seated one), the captured servers through the registry.
+fn community_io() -> plx_data::stores::community::LiveCommunityIo {
+    plx_data::stores::community::LiveCommunityIo { lookup: plx_plex::plex::client_for, lease: watchlist_auth_current }
 }
 fn watchlist_io(input: plx_data::stores::watchlist_job::Snapshot) -> std::sync::Arc<dyn plx_data::watchlist::WatchlistIo> {
     std::sync::Arc::new(plx_data::stores::watchlist_job::ports::LiveWatchlistIo {
@@ -399,6 +405,7 @@ impl StoreRunner {
             StoreJob::Hubs(job, port) => self.start_hubs(job, port),
             StoreJob::Catalog(job, port) => self.start_catalog(job, port),
             StoreJob::Upcoming(job, port) => self.start_upcoming(job, port),
+            StoreJob::Community(job, port) => self.start_community(job, port),
             StoreJob::SubtitleSearch(job, port) => self.start_subsearch(job, port),
             StoreJob::ViewReconcile(job, port) => self.start_reconcile(job, port),
             StoreJob::BrowseHubs(job, port) => self.start_browse_hubs(job, port),
@@ -458,6 +465,7 @@ impl StoreRunner {
                 | StoreJob::Person(..)
                 | StoreJob::Catalog(..)
                 | StoreJob::Upcoming(..)
+                | StoreJob::Community(..)
                 | StoreJob::SubtitleSearch(..)
                 | StoreJob::ViewReconcile(..)
                 | StoreJob::BrowseHubs(..)
@@ -561,6 +569,7 @@ impl StoreRunner {
                     | StoreJob::Hubs(..)
                     | StoreJob::Catalog(..)
                     | StoreJob::Upcoming(..)
+                    | StoreJob::Community(..)
                     | StoreJob::SubtitleSearch(..)
                     | StoreJob::ViewReconcile(..)
                     | StoreJob::BrowseHubs(..)
@@ -750,6 +759,35 @@ fn start_watchlist_stream(&mut self, job: StoreJob) {
             #[cfg(test)]
             Self::Held { parked: held, .. } => {
                 held.push(StoreJob::Upcoming(job, port));
+                true
+            }
+        }
+    }
+
+    /// A Friends-page job (the feed, the privacy read or write, the live sessions, the guid match)
+    /// is not on the tape; the plex.tv ones name no client and the server ones carry their captured
+    /// keys, re-checked when the job runs, so the launch is the whole decision, as for the upcoming
+    /// read. A launch that did not happen is refused: the store owes a read again after its wait and
+    /// reports a write failed.
+    fn start_community(&mut self, job: Job<CommunityReq>, port: CommunityPort) {
+        let addr = job.addr;
+        let refusal = port.clone();
+        if !self.launch_community(job, port) {
+            refusal.refused(addr);
+        }
+    }
+
+    fn launch_community(&mut self, job: Job<CommunityReq>, port: CommunityPort) -> bool {
+        match self {
+            Self::Live => {
+                let Job { addr, req } = job;
+                plx_base::task::spawn_small("community-fetch", move || {
+                    finish_community_job(&port, addr, req, &community_io());
+                })
+            }
+            #[cfg(test)]
+            Self::Held { parked: held, .. } => {
+                held.push(StoreJob::Community(job, port));
                 true
             }
         }
@@ -1393,6 +1431,7 @@ fn start_watchlist_stream(&mut self, job: StoreJob) {
                 }
                 StoreJob::Catalog(job, port) => finish_catalog_job(&port, job.addr, job.req),
                 StoreJob::Upcoming(job, port) => finish_upcoming_job(&port, job.addr, job.req),
+                StoreJob::Community(job, port) => finish_community_job(&port, job.addr, job.req, &community_io()),
                 StoreJob::SubtitleSearch(job, port) => {
                     // The registry may have moved on since the job was parked: a request whose
                     // client is gone is refused, as the launch would have refused it.

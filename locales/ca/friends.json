@@ -1,0 +1,38 @@
+{
+  "friends.page.title": "Amics",
+  "friends.page.lead": "El que han mirat els teus amics de Plex.",
+  "friends.filter.all": "Tots",
+  "friends.share.label": "Compartir el que miro",
+  "friends.share.on": "Sí",
+  "friends.share.off": "No",
+  "friends.share.pending": "…",
+  "friends.share.failed": "No s’ha pogut actualitzar",
+  "friends.live.heading": "Mirant ara",
+  "friends.live.watching": "{name} està mirant",
+  "friends.live.paused": "{name} · en pausa",
+  "friends.day.today": "Avui",
+  "friends.day.yesterday": "Ahir",
+  "friends.day.earlier": "Abans",
+  "friends.post.movie": "{name} ha mirat",
+  "friends.post.episode": "{name} ha mirat un episodi de",
+  "friends.post.episodes": {
+    "one": "{name} ha mirat {count} episodi de",
+    "many": "{name} ha mirat {count} episodis de",
+    "other": "{name} ha mirat {count} episodis de"
+  },
+  "friends.ago.now": "ara mateix",
+  "friends.ago.minutes": {
+    "one": "fa {count} min",
+    "many": "fa {count} min",
+    "other": "fa {count} min"
+  },
+  "friends.ago.hours": {
+    "one": "fa {count} h",
+    "many": "fa {count} h",
+    "other": "fa {count} h"
+  },
+  "friends.ago.at": "a les {time}",
+  "friends.empty.none": "Els teus amics encara no han mirat res",
+  "friends.empty.no_account": "Inicia la sessió amb un compte de Plex per veure els teus amics",
+  "friends.empty.unreachable": "No s’ha pogut carregar l’activitat dels teus amics"
+}

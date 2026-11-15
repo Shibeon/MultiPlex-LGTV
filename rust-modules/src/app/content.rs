@@ -545,6 +545,10 @@ pub(crate) fn content_requests(app: &mut App, fr: &mut Frame) {
                 halt_preview(app);
                 content_back(&mut app.pages, source, entry, ret);
             }
+            ContentReq::Tab(_) | ContentReq::Account | ContentReq::LeaveToHome => {
+                let route = app.route();
+                bar_page_navigation(&mut app.pages, &mut app.bridge, &route, &request, ret);
+            }
             ContentReq::Play { play, resume_ns } => {
                 let mounted = bridge::player(&app.pages).is_some();
                 if !clear_engine_for_play(&mut app.player.session, &mut app.adapters.player, mounted) {
@@ -1133,6 +1137,30 @@ pub(crate) fn watchlist_navigation(
         _ => return Some(ret),
     }
     None
+}
+
+/// **A top-bar page's moves** (`ContentReq::Tab`, `ContentReq::Account`, `ContentReq::LeaveToHome`),
+/// the same ones the Watchlist's own requests make ([`watchlist_navigation`]): BACK to Home, the
+/// strip's pills (not the page `route` already is, nor one the profile has no such page for), and
+/// the account chip. Shared with the tests' pump.
+pub(crate) fn bar_page_navigation(
+    pages: &mut plx_ui::dispatch::Dispatcher<bridge::AppHost>, rig: &mut bridge::Bridge, route: &AppArg,
+    request: &ContentReq, ret: ReturnState<u32, PageMemory>,
+) {
+    match request {
+        ContentReq::LeaveToHome => bridge::nav_tab(pages, rig, HomeTab::Home, None, Some(ret)),
+        ContentReq::Tab(tab) => {
+            let here = matches!((tab, route), (HomeTab::Search, AppArg::Search)
+                | (HomeTab::Watchlist, AppArg::Watchlist) | (HomeTab::Friends, AppArg::Friends));
+            if here || !rig.search_tab_available(*tab) { return; }
+            match tab {
+                HomeTab::Home => bridge::nav_home_pill(pages, rig, Some(ret)),
+                other => bridge::nav_tab(pages, rig, *other, None, Some(ret)),
+            }
+        }
+        ContentReq::Account => chip_activate(pages),
+        _ => {}
+    }
 }
 
 fn home_tab_available(

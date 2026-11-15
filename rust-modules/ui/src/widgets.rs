@@ -6574,6 +6574,10 @@ pub const TAB_KEY_SETTINGS: u32 = crate::dispatch::STRIP_BASE + 6;
 /// one parallel pair, and NEVER a member — [`tab_members`] publishes no stop for it, so focus and the
 /// pointer pass over it.
 pub const TAB_KEY_DIVIDER: u32 = crate::dispatch::STRIP_BASE + 7;
+/// The Friends pill, `+8` (the two-people mark and its word): appended after the divider's `+7`
+/// so no key moves, and placed right after My list in the strip's visual order. Never on a managed
+/// Plex Home profile (`app::chrome::strip_keys`).
+pub const TAB_KEY_FRIENDS: u32 = crate::dispatch::STRIP_BASE + 8;
 /// The top chrome band's y — the chip and the pills sit on it (Home and Library alike).
 ///
 /// **Derived from the overscan safe area, not chosen.** It was a bare `44.0` until 2026-08-23, which

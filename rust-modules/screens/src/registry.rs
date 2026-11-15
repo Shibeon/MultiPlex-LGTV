@@ -74,6 +74,7 @@ pub enum AppFx {
     /// The Watchlist page's and its Sort & Filter menu's requests (plan §2.4 W45): everything the
     /// page asks of the app that has no existing effect spelling.
     Watchlist(crate::watchlist::page::WatchlistOut),
+    /// The Friends page's requests: a catalog page, the explicit privacy write, retry, the strip.
     Catalog(crate::catalog::CatalogOut),
     /// Player-route requests — what an overlay panel on the player's own `ModalStack` asks of the
     /// loop, because the thing being asked for needs the `MainThread` token, the route or the
@@ -327,6 +328,8 @@ pub enum HomeTab {
     Shows,
     /// The Watchlist mark, before Search (docs/watchlist-plan.md §2.4 W45).
     Watchlist,
+    /// The Friends page, after My list (the web app's *Amis*). Never on a managed profile.
+    Friends,
     Search,
 }
 
@@ -1165,6 +1168,15 @@ pub enum ContentReq {
     Push(ContentArg),
     Present(ContentArg),
     Back,
+    /// **A top-bar page's move to another of the bar's pages** (its strip's pill pressed): the
+    /// loop opens `HomeTab` as the bar's own pills do, unless the profile has no such page. Any
+    /// page that wears the shared strip and names no sibling may ask it.
+    Tab(HomeTab),
+    /// The strip's account chip pressed on a top-bar page: the loop opens the account surface.
+    Account,
+    /// BACK on a top-bar page that is not Home: the loop returns to Home (a bar page is a root,
+    /// so there is nothing under it to pop to).
+    LeaveToHome,
     Play { play: PlayIntent, resume_ns: i64 },
     /// Start a hero preview. Does not push the player route.
     PreviewStart {
@@ -1935,6 +1947,7 @@ pub mod page_id {
     pub const SEARCH: ScreenId = ScreenId(10);
     pub const COLLECTION: ScreenId = ScreenId(23);
     pub const WATCHLIST: ScreenId = ScreenId(25);
+    pub const FRIENDS: ScreenId = ScreenId(31);
     pub const LIBRARY_COLLECTIONS: ScreenId = ScreenId(28);
     pub const LIBRARY_RECOMMENDED: ScreenId = ScreenId(29);
 }
@@ -2036,6 +2049,9 @@ pub enum AppArg {
     /// from the bookmark mark. It carries nothing — the list is the store's, the order is the
     /// store's sort and filter.
     Watchlist,
+    /// The Friends page (`screens::friends`): a PEER of Home and My list on the strip, after My
+    /// list. It carries nothing — the feed, the setting and the live sessions are the store's.
+    Friends,
     /// Playback. Its panels are NOT here — they are entries on the player page's own
     /// `ModalStack` ([`Self::PlayerOverlay`]), and the container owns which one is up.
     Player,
@@ -2060,7 +2076,7 @@ impl AppArg {
     }
 }
 
-pub const ARG_SHAPE: &str = "AppArg{Login,Profiles,Onboard,Home,Library,LibraryCollections{section:u32},LibraryRecommended{section:u32},Search,Watchlist,Player,Content:{Detail{sid:u32,rk:str},Person{sid:u32,key:str,guid:str,name:str,thumb:str},Filmography{sid:u32,key:str},Collection{sid:u32,rk:str,sec:i64,tag:i64,name:str},Catalog{hex:str}},Settings:SettingsPage{Root,Playback,AudioSubtitles,Favourites,LibraryFavourites,Privacy,Legal,About,Document(u8),Preview(u8),ConsentStage(u8),Language,Contribute},FirstRunConsent(u8),LibraryMenu{host:u32,target:{epoch:u32,sid:u32,section:u64},kind:u32,anchor:[u32;4]},\
+pub const ARG_SHAPE: &str = "AppArg{Login,Profiles,Onboard,Home,Library,LibraryCollections{section:u32},LibraryRecommended{section:u32},Search,Watchlist,Friends,Player,Content:{Detail{sid:u32,rk:str},Person{sid:u32,key:str,guid:str,name:str,thumb:str},Filmography{sid:u32,key:str},Collection{sid:u32,rk:str,sec:i64,tag:i64,name:str},Catalog{hex:str}},Settings:SettingsPage{Root,Playback,AudioSubtitles,Favourites,LibraryFavourites,Privacy,Legal,About,Document(u8),Preview(u8),ConsentStage(u8),Language,Contribute},FirstRunConsent(u8),LibraryMenu{host:u32,target:{epoch:u32,sid:u32,section:u64},kind:u32,anchor:[u32;4]},\
      PlayerOverlay{Tracks(tab:i32),Info,Chapters,More(page:u8)},\
      AltSources{host:u32,sid:u32,rk:str,anchor:[u32;4]},\
      VersionsPanel{host:u32,sid:u32,rk:str,anchor:[u32;4]},\
@@ -2108,6 +2124,8 @@ impl LogicalState for AppArg {
             // 12 and 13, forward of Watchlist's 11 (both are in `ARG_SHAPE`).
             Self::LibraryCollections { section } => { c.u32(0).u32(12).u32(*section); }
             Self::LibraryRecommended { section } => { c.u32(0).u32(13).u32(*section); }
+            // 14, forward of the Recommended page's 13.
+            Self::Friends => { c.u32(0).u32(14); }
             Self::Content(arg) => { c.u32(1); arg.write(c); }
             Self::Settings(page) => { c.u32(2); page.write(c); }
             Self::FirstRunConsent(stage) => { c.u32(3).u8(*stage); }
@@ -2124,7 +2142,7 @@ impl plx_ui::screen::ScreenArg for AppArg {
     /// them fade the bar with the page.
     fn chrome(&self) -> Chrome {
         match self {
-            AppArg::Home | AppArg::Library | AppArg::Search | AppArg::Watchlist => Chrome::TabBar,
+            AppArg::Home | AppArg::Library | AppArg::Search | AppArg::Watchlist | AppArg::Friends => Chrome::TabBar,
             // The two sub-pages of a library keep the bar, as the Library they are pushed over.
             AppArg::LibraryCollections { .. } | AppArg::LibraryRecommended { .. } => Chrome::TabBar,
             AppArg::Login
@@ -2199,6 +2217,8 @@ impl plx_ui::screen::ScreenArg for AppArg {
             AppArg::Content(ContentArg::Catalog { .. }) => 27,
             // 30, forward of the Recommended page's 29.
             AppArg::VersionsPanel(_) => 30,
+            // 31, forward of the Versions panel's 30.
+            AppArg::Friends => page_id::FRIENDS.0,
         })
     }
     fn title(&self) -> Option<&str> {
@@ -2431,6 +2451,8 @@ where
             // The list is the store's: the page mounts on "loading" and the application feeds it
             // the rows, the options and the matched facts (`WatchlistIn`) on its first frames.
             AppArg::Watchlist => Box::new(crate::watchlist::page::WatchlistScreen::loading(entry)),
+            // The same for the Friends page: the app feeds it the store's state (`FriendsIn`).
+            AppArg::Friends => Box::new(crate::friends::page::FriendsScreen::loading(entry)),
             // Phase 9: the player is an OWNED screen — the instance that holds the HUD, the scrub
             // gesture, the held-key timer, the control row's springs and the Up Next countdown,
             // and that answers `RenderStrategy::VideoPlane`. Its transport is pinned from the
@@ -2564,6 +2586,7 @@ pub fn every_surface_arg() -> Vec<AppArg> {
             | AppArg::LibraryRecommended { .. }
             | AppArg::Search
             | AppArg::Watchlist
+            | AppArg::Friends
             | AppArg::Player
             | AppArg::Content(_) => {
                 panic!("a page argument is not a surface: its word is `route=`")
@@ -2631,6 +2654,7 @@ pub const SCREEN_SHAPES: &[&str] = &[
     crate::watchlist::menu::SHAPE,
     crate::catalog::CatalogScreen::SHAPE,
     crate::versions_panel::SHAPE,
+    crate::friends::page::FriendsScreen::SHAPE,
 ];
 
 /// The pin over [`SCREEN_SHAPES`] — bump it in the same edit that adds an entry, and say why.
@@ -2835,7 +2859,10 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // `Action` gains `Hero(elem)`. Previous pin: 0x1427_1d82_bf6b_e04c; re-record the replay anchors.
 // My list's tiles carry their availability (`WatchTile::avail`, which the "Available only" filter
 // and the Availability sort read). Previous pin: 0x086d_35c6_7e98_86f1; re-record the replay anchors.
-const SCREEN_SHAPES_PIN: u64 = 0x1097_dde4_cf49_0664;
+// The Friends page (the web app's *Amis*): `ARG_SHAPE` gains `Friends` (canon page tag 14, screen
+// id 31) and `FriendsScreen::SHAPE` joins the array. Previous pin: 0x1097_dde4_cf49_0664; re-record
+// the replay anchors.
+const SCREEN_SHAPES_PIN: u64 = 0xaffa_778c_f4f5_f3dc;
 
 #[cfg(test)]
 mod arg_tests {
@@ -2909,6 +2936,7 @@ mod arg_tests {
             AppArg::LibraryRecommended { section: 0 },
             AppArg::Search,
             AppArg::Watchlist,
+            AppArg::Friends,
         ] {
             assert!((r.chrome() == Chrome::TabBar), "a bar-wearing page carries the chip");
         }

@@ -134,6 +134,13 @@ every `multiplex-*` trigger, so any agent run turns it off again. **No agent cre
 asks in that session** (AGENTS.md); `.claude/hooks/watchlist-live-guard.py` refuses a Bash command that
 would, unless it carries the owner's `PLX_WATCHLIST_LIVE_OWNER=1` prefix.
 
+**The same switch covers the Friends page's one write**, the community service's `updatePrivacy`
+("Share what I watch", `docs/friends.md`). It is a write to the same real plex.tv account, so it
+answers to the same gate (`plex::watchlist::account_write_gate`): a `devtriggers` build sends it only
+while the stand-in is armed (the mock's `POST /api` then takes it) or this switch is on, and a write
+that goes out only because of the switch logs `community: LIVE privacy write <endpoint shape> -> HTTP
+<status>`. There is no second switch.
+
 ## Matching a title to a server (guid matching)
 
 A Watchlist row is a Discover guid. To play it, the app asks each Reachable server whether it holds

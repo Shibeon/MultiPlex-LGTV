@@ -1,0 +1,41 @@
+{
+  "friends.page.title": "Сябры",
+  "friends.page.lead": "Што глядзелі вашы сябры ў Plex.",
+  "friends.filter.all": "Усе",
+  "friends.share.label": "Дзяліцца тым, што я гляджу",
+  "friends.share.on": "Укл.",
+  "friends.share.off": "Выкл.",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Не ўдалося абнавіць",
+  "friends.live.heading": "Глядзяць зараз",
+  "friends.live.watching": "{name} глядзіць",
+  "friends.live.paused": "{name} · паўза",
+  "friends.day.today": "Сёння",
+  "friends.day.yesterday": "Учора",
+  "friends.day.earlier": "Раней",
+  "friends.post.movie": "{name} паглядзеў(-ла)",
+  "friends.post.episode": "{name} паглядзеў(-ла) серыю",
+  "friends.post.episodes": {
+    "one": "{name} паглядзеў(-ла) {count} серыю",
+    "few": "{name} паглядзеў(-ла) {count} серыі",
+    "many": "{name} паглядзеў(-ла) {count} серый",
+    "other": "{name} паглядзеў(-ла) {count} серыі"
+  },
+  "friends.ago.now": "толькі што",
+  "friends.ago.minutes": {
+    "one": "{count} хв таму",
+    "few": "{count} хв таму",
+    "many": "{count} хв таму",
+    "other": "{count} хв таму"
+  },
+  "friends.ago.hours": {
+    "one": "{count} гадз таму",
+    "few": "{count} гадз таму",
+    "many": "{count} гадз таму",
+    "other": "{count} гадз таму"
+  },
+  "friends.ago.at": "у {time}",
+  "friends.empty.none": "Вашы сябры яшчэ нічога не глядзелі",
+  "friends.empty.no_account": "Увайдзіце з уліковым запісам Plex, каб бачыць сяброў",
+  "friends.empty.unreachable": "Не ўдалося загрузіць актыўнасць сяброў"
+}

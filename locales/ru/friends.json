@@ -1,0 +1,41 @@
+{
+  "friends.page.title": "Друзья",
+  "friends.page.lead": "Что смотрели ваши друзья в Plex.",
+  "friends.filter.all": "Все",
+  "friends.share.label": "Делиться тем, что я смотрю",
+  "friends.share.on": "Вкл.",
+  "friends.share.off": "Выкл.",
+  "friends.share.pending": "…",
+  "friends.share.failed": "Не удалось обновить",
+  "friends.live.heading": "Смотрят сейчас",
+  "friends.live.watching": "{name} смотрит",
+  "friends.live.paused": "{name} · пауза",
+  "friends.day.today": "Сегодня",
+  "friends.day.yesterday": "Вчера",
+  "friends.day.earlier": "Ранее",
+  "friends.post.movie": "{name} посмотрел(а)",
+  "friends.post.episode": "{name} посмотрел(а) серию",
+  "friends.post.episodes": {
+    "one": "{name} посмотрел(а) {count} серию",
+    "few": "{name} посмотрел(а) {count} серии",
+    "many": "{name} посмотрел(а) {count} серий",
+    "other": "{name} посмотрел(а) {count} серии"
+  },
+  "friends.ago.now": "только что",
+  "friends.ago.minutes": {
+    "one": "{count} мин назад",
+    "few": "{count} мин назад",
+    "many": "{count} мин назад",
+    "other": "{count} мин назад"
+  },
+  "friends.ago.hours": {
+    "one": "{count} ч назад",
+    "few": "{count} ч назад",
+    "many": "{count} ч назад",
+    "other": "{count} ч назад"
+  },
+  "friends.ago.at": "в {time}",
+  "friends.empty.none": "Ваши друзья ещё ничего не смотрели",
+  "friends.empty.no_account": "Войдите с аккаунтом Plex, чтобы видеть друзей",
+  "friends.empty.unreachable": "Не удалось загрузить активность друзей"
+}
