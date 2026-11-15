@@ -50,5 +50,9 @@
   "sort_facts.highest_first": {
     "value": "Highest first",
     "description": "Direction word on the checked sort row when a rating or count order runs from the highest."
+  },
+  "sort_facts.availability": {
+    "value": "Availability",
+    "description": "Sort row on My list (the Watchlist): titles in the user's own Plex libraries first, then the ones still to check, then the ones no server holds. A noun naming the order, like Title or Rating."
   }
 }

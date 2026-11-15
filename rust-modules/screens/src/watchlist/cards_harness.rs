@@ -1,7 +1,7 @@
 //! The Tier 2 card-conformance harness for the Watchlist page (`cards_conformance_tests.rs`). A
 //! sibling of `page`, so it reads the page through the `pub(crate)` test accessors the screen
 //! exposes; it also builds the rows the page tests share.
-use plx_data::watchlist::model::{Kind, ServerMatch, TileState, WatchRow};
+use plx_data::watchlist::model::{Availability, Kind, ServerMatch, TileState, WatchRow};
 use plx_machine::machine::{
     Cx, Effects, EntryId, FocusKey, FocusRead, Host, InputOwner, Machine, PressRead, Tick,
 };
@@ -53,13 +53,23 @@ pub(crate) fn copy(i: usize) -> ServerMatch {
 
 /// An available, matched tile.
 pub(crate) fn tile(i: usize) -> WatchTile {
-    WatchTile { row: row(i), state: TileState::Available, copy: Some(copy(i)) }
+    WatchTile { row: row(i), state: TileState::Available, avail: Availability::Available, copy: Some(copy(i)) }
 }
 
 pub(crate) fn tile_in(i: usize, state: TileState) -> WatchTile {
     let copy = matches!(state, TileState::Available | TileState::ComingSoonMatched | TileState::ServerOffline)
         .then(|| copy(i));
-    WatchTile { row: row(i), state, copy }
+    WatchTile { row: row(i), state, avail: avail_of(state), copy }
+}
+
+/// The availability a fixture tile in `state` stands for: held on a Reachable server, answered
+/// absent everywhere, or not known (an upcoming title's own answers are not modelled here).
+pub(crate) fn avail_of(state: TileState) -> Availability {
+    match state {
+        TileState::Available | TileState::ComingSoonMatched => Availability::Available,
+        TileState::NotOnAnyServer => Availability::Unavailable,
+        TileState::ComingSoon | TileState::ServerOffline | TileState::Unknown => Availability::Unknown,
+    }
 }
 
 pub(crate) fn tiles(n: usize) -> Vec<WatchTile> {

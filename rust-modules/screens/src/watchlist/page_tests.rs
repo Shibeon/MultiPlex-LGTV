@@ -2,7 +2,7 @@
 //! caption and mark vocabulary, what a press and a hold ask for, the removal landing, the read-out
 //! selection, the ground's fallback chain, key stability and the Tier 2 card conformance run.
 use plx_base::fontcov::advances::ShippedMeasure;
-use plx_data::watchlist::model::TileState;
+use plx_data::watchlist::model::{Availability, TileState};
 use plx_machine::machine::Measure;
 use plx_platform::i18n::{language_on_this_thread_for_test, msg, Preference, SHIPPED};
 use plx_ui::fit::HEADROOM;
@@ -861,7 +861,13 @@ fn a_remove_changes_nothing_on_the_grid_until_the_landing_starts() {
     let removed = h.focused().unwrap();
     // every word the frame draws and where: the focus caption (title and year line) among them
     // (in a stable order: the wall names every card, and the landing's draw ORDER is its own)
+    // The availability chips are the cards' overlays, not captions, and an overlay is laid wherever
+    // the grid draws a card: the card that will move up a row is drawn at its arriving slot too
+    // while the landing is held (one more chip at that slot), so chips are left out of this
+    // caption comparison.
+    let chips = [Availability::Available, Availability::Unavailable, Availability::Unknown].map(super::tiles::avail_label);
     let sorted = |mut words: Vec<(String, plx_ui::Rect)>| {
+        words.retain(|(w, _)| !chips.contains(&w.as_str()));
         words.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.y.total_cmp(&b.1.y)).then(a.1.x.total_cmp(&b.1.x)));
         words
     };
@@ -1327,4 +1333,22 @@ fn the_header_row_is_built_once_per_key_not_once_per_question() {
     h.run(30);
     h.draw();
     assert_eq!(h.screen.probe_header_builds(), built + 2, "and the frames after it build none");
+}
+
+/// **Every card says whether the user's libraries hold it**: the availability chip's word is drawn
+/// on each poster (Available, Not available, To check), at the poster's top-left corner.
+#[test]
+fn every_card_wears_its_availability_chip() {
+    use plx_ui::cards::conformance::CardHarness;
+    let _g = language_on_this_thread_for_test(Preference::En);
+    let mut h = Harness::new(vec![tile_in(0, TileState::Available), tile_in(1, TileState::NotOnAnyServer), tile_in(2, TileState::Unknown)]);
+    h.focus_index(0);
+    h.run(60);
+    let words = h.draw_texts();
+    for (i, word) in ["Available", "Not available", "To check"].into_iter().enumerate() {
+        let card = h.cards()[i];
+        let rect = h.drawn_rect(card, 1.0).unwrap();
+        assert!(words.iter().any(|(w, r)| w == word && rect.contains(r.x, r.y) && r.x < rect.cx() && r.y < rect.cy()),
+            "card {i} wears {word:?} on its top-left quarter: {words:?}");
+    }
 }

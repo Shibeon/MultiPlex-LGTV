@@ -11,5 +11,6 @@
   "sort_facts.oldest_first": "A legrégebbiek elöl",
   "sort_facts.newest_first": "A legújabbak elöl",
   "sort_facts.lowest_first": "A legalacsonyabbak elöl",
-  "sort_facts.highest_first": "A legmagasabbak elöl"
+  "sort_facts.highest_first": "A legmagasabbak elöl",
+  "sort_facts.availability": "Elérhetőség"
 }

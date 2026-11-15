@@ -419,6 +419,96 @@ pub fn run_write(io: &dyn WatchlistIo, auth: &WatchlistAuth, tag: Tag, write: Pe
 mod tests {
     use super::*;
 
+    /// A scripted pair of servers for the availability join: `a` answers its lookups (holding
+    /// `held`, and answering `garbled` with a row whose key is unusable), `b` fails every lookup.
+    struct Join {
+        a: ServerId,
+        b: ServerId,
+        held: String,
+        garbled: String,
+        b_up: bool,
+    }
+    impl Reach for Join {
+        fn reachable(&self, s: ServerId) -> bool {
+            s == self.a || (s == self.b && self.b_up)
+        }
+        fn roster(&self) -> Vec<ServerId> {
+            vec![self.a, self.b]
+        }
+    }
+    impl WatchlistIo for Join {
+        fn page(&self, _: &WatchlistAuth, _: u32, _: u32, _: Option<&str>) -> Result<WatchPage, WatchlistError> {
+            unreachable!("the join reads no list")
+        }
+        fn released(&self, _: &WatchlistAuth) -> Result<Vec<WatchItem>, WatchlistError> {
+            unreachable!("the join reads no list")
+        }
+        fn write(&self, _: &WatchlistAuth, _: &str, _: Intent) -> Result<(), WatchlistError> {
+            unreachable!("the join writes nothing")
+        }
+        fn find(&self, server: ServerId, _: GuidKind, guids: &[String]) -> Result<Vec<GuidMatch>, GuidLookupError> {
+            if server == self.b {
+                return Err(GuidLookupError::Unanswered);
+            }
+            let row = |guid: &String, rating_key: &str| GuidMatch {
+                guid: guid.clone(),
+                rating_key: rating_key.into(),
+                library_section_id: Some(1),
+                blur: None,
+                facts: Default::default(),
+            };
+            Ok(guids.iter().filter_map(|g| {
+                if *g == self.held { Some(row(g, "42")) } else if *g == self.garbled { Some(row(g, "n/a")) } else { None }
+            }).collect())
+        }
+        fn roster_gen(&self) -> u32 { 1 }
+        fn facts_gen(&self) -> u32 { 1 }
+        fn today(&self) -> Option<String> { None }
+    }
+
+    /// **The availability join, by plex guid**: a title one server holds is Available; one that
+    /// every server answered without is Not available; and a lookup that FAILED (a server that did
+    /// not answer, or answered a row with no usable key) leaves the title Unknown, never absent.
+    #[test]
+    fn the_guid_join_gives_three_answers_and_a_failed_lookup_is_unknown() {
+        use model::{availability, Availability, MatchTable};
+        let guid = |n: u8| format!("plex://movie/{}", encode_hex(&[n; 12]));
+        let (held, absent, garbled) = (guid(1), guid(2), guid(3));
+        let mut io = Join { a: ServerId::from_raw(0), b: ServerId::from_raw(1), held: held.clone(), garbled: garbled.clone(), b_up: true };
+        let keys: Vec<(String, Kind)> = [&held, &absent, &garbled].iter().map(|g| ((*g).clone(), Kind::Movie)).collect();
+        let table_of = |answers: Vec<Answer>| {
+            let mut t = MatchTable::default();
+            for (g, sid, asked) in answers {
+                t.by_guid.entry(g).or_default().push((sid, asked));
+            }
+            t
+        };
+        let rows: Vec<WatchRow> = [&held, &absent, &garbled].iter().enumerate().map(|(i, g)| WatchRow {
+            guid: (*g).clone(), hex: [i as u8; 12], kind: Kind::Movie, title: String::new(), title_sort: String::new(),
+            year: None, added_at: None, release: None, rating: None, released: true, order: i as u32, thumb: String::new(),
+        }).collect();
+
+        // b's lookup fails: only `held` is known (a holds it); `absent` is not proven absent.
+        let t = table_of(match_rows(&io, &keys));
+        let got: Vec<_> = rows.iter().map(|r| availability(r, &t, &io)).collect();
+        assert_eq!(got, [Availability::Available, Availability::Unknown, Availability::Unknown]);
+
+        // b is Unreachable, so only a is asked and a is the whole reachable roster... but b is still
+        // on the roster and silent: absence is not proof until every server answered.
+        io.b_up = false;
+        let t = table_of(match_rows(&io, &keys));
+        let got: Vec<_> = rows.iter().map(|r| availability(r, &t, &io)).collect();
+        assert_eq!(got, [Availability::Available, Availability::Unknown, Availability::Unknown]);
+
+        // b answers (absent everywhere): `absent` is Not available, `garbled` stays Unknown.
+        let mut t = table_of(match_rows(&io, &keys));
+        for g in [&held, &absent, &garbled] {
+            t.by_guid.entry(g.clone()).or_default().push((io.b, model::Asked::Absent));
+        }
+        let got: Vec<_> = rows.iter().map(|r| availability(r, &t, &io)).collect();
+        assert_eq!(got, [Availability::Available, Availability::Unavailable, Availability::Unknown]);
+    }
+
     #[test]
     fn hex_round_trips_and_rejects_the_wrong_shape() {
         let h = decode_hex("0123456789abcdef01234567").unwrap();

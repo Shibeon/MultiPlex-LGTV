@@ -1710,6 +1710,44 @@ pub fn keyline_chip(p: Painter, x: f32, cy: f32, text: &str, col: [f32; 4], meas
     w
 }
 
+// ---- Tile chip: the FINE-PRINT capsule that rides on a POSTER — a short status word on the tile's
+// own artwork (My list's "Available" / "Not available" / "To check", `screens::watchlist::tiles`).
+//
+// Deliberately NOT `badge` + `BadgeStyle::OverArt`, which is the same surface on `BADGE_H` (34) with
+// a bold `CAPTION` label and 12px padding: sized to stand in a row of metadata chips, it took most of
+// a 225px wall poster and read louder than the title under it. This one hugs a regular `MICRO`
+// label (the keyline chip's metrics one rung down) on the same idle-control face, so the word is
+// legible over any artwork and stays the quietest thing on the tile.
+const TILE_CHIP_PAD_X: f32 = 8.0;
+const TILE_CHIP_PAD_Y: f32 = 5.0;
+
+/// The width [`tile_chip`] will occupy for `text`.
+pub fn tile_chip_w(text: &str, measure: &dyn plx_machine::machine::Measure) -> f32 {
+    measure.width_str(text, theme::size::MICRO, false) + 2.0 * TILE_CHIP_PAD_X
+}
+
+/// The height of a [`tile_chip`]: the `MICRO` cap band and its padding.
+pub fn tile_chip_h(measure: &dyn plx_machine::machine::Measure) -> f32 {
+    measure.cap_h(theme::size::MICRO) + 2.0 * TILE_CHIP_PAD_Y
+}
+
+/// How far in from a tile's right edge its corner mark ([`corner_mark`], the watched tick's slot)
+/// reaches on a `card_w`-wide tile: what a chip on the same top edge must stay left of.
+pub fn corner_mark_reach(card_w: f32) -> f32 {
+    card_w * (TICK_RATIO + TICK_INSET)
+}
+
+/// Draw a tile chip with its LEFT edge at `x`, its TOP at `y`; returns its width.
+pub fn tile_chip(p: Painter, x: f32, y: f32, text: &str, measure: &dyn plx_machine::machine::Measure) -> f32 {
+    let Ok(lc) = std::ffi::CString::new(text) else { return 0.0 };
+    let (w, h) = (tile_chip_w(text, measure), tile_chip_h(measure));
+    let r = Rect::new(x, y, w, h);
+    p.rrect(r, h * 0.5, h * 0.5, theme::CONTROL_IDLE_FILL);
+    let ty = plx_gfx::text::text_vcenter_y(theme::size::MICRO, 0, r.cy());
+    p.text(lc.as_ptr(), x + TILE_CHIP_PAD_X, ty, theme::size::MICRO, theme::CONTROL_IDLE_INK, 0, 0);
+    w
+}
+
 /// Home's metadata band uses brighter reading ink over the hero art and reserves room for the rating.
 pub fn hero_metadata(p: Painter, r: Rect, parts: &[&str], quality: Option<&str>, rating: &str, measure: &dyn plx_machine::machine::Measure) {
     let rating = (!rating.is_empty() && keyline_chip_w(rating, measure) <= r.w * 0.5).then_some(rating);

@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Серыялы",
   "watchlist.filter.show_all": "Усе",
   "watchlist.filter.show_released": "Выпушчаныя",
-  "watchlist.filter.show_on_servers": "На вашых серверах",
+  "watchlist.filter.show_on_servers": "Толькі даступныя",
   "watchlist.action.add": "Дадаць у спіс для прагляду",
   "watchlist.action.add_show": "Дадаць серыял у спіс для прагляду",
   "watchlist.action.on_list": "У спісе для прагляду",
@@ -30,5 +30,8 @@
     "few": "· пакуль недаступна: {count}",
     "many": "· пакуль недаступна: {count}",
     "other": "· пакуль недаступна: {count}"
-  }
+  },
+  "watchlist.avail.available": "Даступна",
+  "watchlist.avail.unavailable": "Недаступна",
+  "watchlist.avail.unknown": "Не праверана"
 }

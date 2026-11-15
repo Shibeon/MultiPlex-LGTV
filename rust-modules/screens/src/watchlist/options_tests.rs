@@ -58,6 +58,28 @@ fn a_new_sort_key_lands_on_its_natural_direction_and_the_active_key_flips() {
     assert_eq!(s, default_state(), "back on Date added the value is the default again");
 }
 
+/// **Availability is one more sort, never the default**: it groups available first and has no
+/// direction to flip (no direction word, a second press changes nothing), and "Available only" is
+/// the Filter section's availability choice, worded as the owner asked in French.
+#[test]
+fn availability_sorts_one_way_and_the_filter_reads_available_only() {
+    let mut s = default_state();
+    assert_eq!(s.sort, SortKey::DateAdded, "the default order is untouched");
+    assert!(OptionsRow::Sort(SortKey::Availability).apply(&mut s));
+    assert_eq!((s.sort, s.descending), (SortKey::Availability, false));
+    assert!(!OptionsRow::Sort(SortKey::Availability).apply(&mut s), "no ends to flip");
+    {
+        let _g = language_on_this_thread_for_test(Preference::En);
+        let secs = sections(&s);
+        let row = secs[1].rows.iter().find(|r| r.checked).expect("the checked sort");
+        assert_eq!((row.label.as_str(), row.value.as_deref()), ("Availability", None));
+        assert_eq!(OptionsRow::Show(ShowFilter::OnYourServers).label(), "Available only");
+    }
+    let _g = language_on_this_thread_for_test(Preference::Fr);
+    assert_eq!(OptionsRow::Show(ShowFilter::OnYourServers).label(), "Disponibles uniquement");
+    assert_eq!(OptionsRow::Sort(SortKey::Availability).label(), "Disponibilité");
+}
+
 #[test]
 fn every_row_is_in_all_once_and_exactly_one_per_section_is_chosen() {
     let s = default_state();
@@ -65,7 +87,7 @@ fn every_row_is_in_all_once_and_exactly_one_per_section_is_chosen() {
     assert_eq!(chosen(|r| matches!(r, OptionsRow::Type(_))), 1);
     assert_eq!(chosen(|r| matches!(r, OptionsRow::Sort(_))), 1);
     assert_eq!(chosen(|r| matches!(r, OptionsRow::Show(_))), 1);
-    assert_eq!(OptionsRow::ALL.len(), 10);
+    assert_eq!(OptionsRow::ALL.len(), 11);
 }
 
 #[test]
@@ -74,7 +96,7 @@ fn sections_are_named_as_the_librarys_and_the_checked_sort_says_its_direction_in
     let mut s = default_state();
     let secs = sections(&s);
     assert_eq!(secs.len(), 3);
-    assert_eq!(secs.iter().map(|x| x.rows.len()).collect::<Vec<_>>(), [3, 4, 3]);
+    assert_eq!(secs.iter().map(|x| x.rows.len()).collect::<Vec<_>>(), [3, 5, 3]);
     assert_eq!(secs.iter().map(|x| x.header.as_str()).collect::<Vec<_>>(), ["Show", "Sort", "Filter"],
         "the Library's section words, not Type / Sort by / Show");
     assert_eq!(secs[1].rows[0].value.as_deref(), Some("Newest first"), "Date added descending");
@@ -206,17 +228,22 @@ fn the_panel_hangs_under_the_pill_right_aligned_inside_the_safe_frame() {
     assert!(panel.w >= plx_ui::table::MENU_MIN_W && panel.w <= MENU_MAX_W);
 }
 
-/// **Every row of the ten-row menu lies inside the panel, in every language** (the panel used to
-/// run past the safe frame and clip its last rows).
+/// **Every row of the eleven-row menu lies inside the panel once highlighted, in every language**
+/// (the panel used to run past the safe frame and clip its last rows; it now keeps the room under
+/// the pill and its rows scroll, the table's scroll following the highlight).
 #[test]
 fn every_row_lies_inside_the_panel_in_every_language() {
     let safe = plx_ui::consts::SAFE;
     for lang in LANGUAGES {
         let _g = language_on_this_thread_for_test(lang);
-        let (m, _, _) = open_menu();
+        let (mut m, _, _) = open_menu();
         let panel = m.panel_rect(&ShippedMeasure);
         assert!(panel.y >= safe.y - 0.01 && panel.y + panel.h <= safe.y + safe.h + 0.01, "{}: panel in the safe frame", lang.tag());
         for i in 0..OptionsRow::ALL.len() {
+            m.set_selected(i);
+            for _ in 0..240 {
+                m.update(1.0 / 60.0, &ShippedMeasure);
+            }
             let r = m.row_frame(i, &ShippedMeasure).expect("row frame");
             assert!(r.y >= panel.y - 0.01 && r.y + r.h <= panel.y + panel.h + 0.01, "{}: row {i} inside the panel", lang.tag());
         }
@@ -459,7 +486,7 @@ fn the_menu_pill_and_readouts_fit_in_every_shipped_language() {
         let _g = language_on_this_thread_for_test(language);
         let tag = language.tag();
         // The widest menu state: every section's longest label, the active key's direction word.
-        for (sort, descending) in [SortKey::DateAdded, SortKey::Title, SortKey::Release, SortKey::Rating]
+        for (sort, descending) in [SortKey::DateAdded, SortKey::Title, SortKey::Release, SortKey::Rating, SortKey::Availability]
             .into_iter().flat_map(|sort| [(sort, false), (sort, true)])
         {
             let mut state = default_state();
@@ -474,7 +501,7 @@ fn the_menu_pill_and_readouts_fit_in_every_shipped_language() {
         // The pill with the longest summary the menu can compose: the longest sort label.
         // The title's plate must end a cluster gap before the right cluster's first text edge, for
         // every sort's name with the longest read-out in front of it.
-        for sort in [SortKey::DateAdded, SortKey::Title, SortKey::Release, SortKey::Rating] {
+        for sort in [SortKey::DateAdded, SortKey::Title, SortKey::Release, SortKey::Rating, SortKey::Availability] {
             let mut long = default_state();
             long.sort = sort;
             for count in [Count::All(88888), Count::Of { shown: 88888, total: 88888 }] {
@@ -519,4 +546,27 @@ fn the_menu_pill_and_readouts_fit_in_every_shipped_language() {
         }
     }
     assert!(bad.is_empty(), "does not fit:\n  {}", bad.join("\n  "));
+}
+
+/// **Every availability chip fits on a My list poster, clear of the corner mark**, in every shipped
+/// language, by the device's own advances: the chip stands `space::XS` in from the top-left corner
+/// and must end `space::XS` before the corner mark's reach (a clock, a struck server, a ring and bar,
+/// or the watched tick, `widgets::corner_mark_reach`).
+#[test]
+fn the_availability_chip_fits_on_the_poster_in_every_shipped_language() {
+    use plx_data::watchlist::model::Availability;
+    let card = super::super::page::GRID_CARD_W;
+    let room = card - plx_ui::widgets::corner_mark_reach(card) - 2.0 * theme::space::XS;
+    let mut bad = Vec::new();
+    for language in LANGUAGES {
+        let _g = language_on_this_thread_for_test(language);
+        for a in [Availability::Available, Availability::Unavailable, Availability::Unknown] {
+            let label = super::super::tiles::avail_label(a);
+            let w = plx_ui::widgets::tile_chip_w(label, &ShippedMeasure) / HEADROOM;
+            if w > room {
+                bad.push(format!("{} {label:?}: {w:.0} px on a {room:.0} px band", language.tag()));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{bad:#?}");
 }

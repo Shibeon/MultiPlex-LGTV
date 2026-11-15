@@ -1,6 +1,6 @@
 //! Client-side sort and filter over stored rows, and the title comparator (plan §1.3, §1.10).
 //! No request is made on a Sort & Filter change.
-use super::model::{Kind, WatchRow};
+use super::model::{Availability, Kind, WatchRow};
 use std::cmp::Ordering;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -13,6 +13,10 @@ pub enum SortKey {
     Release,
     /// A missing rating sorts last in both directions.
     Rating,
+    /// In the user's libraries first, then the titles still to check, then the ones no server
+    /// holds ([`Availability::rank`]); within each group the default order (newest added first).
+    /// One way only: it has no ends to flip.
+    Availability,
 }
 
 impl SortKey {
@@ -24,6 +28,7 @@ impl SortKey {
             SortKey::DateAdded => SortFact::DateAdded,
             SortKey::Release => SortFact::ReleaseDate,
             SortKey::Rating => SortFact::Rating,
+            SortKey::Availability => SortFact::Availability,
         }
     }
 }
@@ -35,7 +40,8 @@ pub struct SortSpec {
 }
 
 /// The "Show" filter (plan INPUT 1): `Released` keeps rows in the API released list;
-/// `OnYourServers` keeps rows playable on a Reachable server.
+/// `OnYourServers` ("Available only") keeps rows playable on a Reachable server
+/// ([`Availability::Available`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Show {
     #[default]
@@ -115,16 +121,16 @@ fn fold_accent(c: char) -> char {
     }
 }
 
-/// Indices into `rows`, filtered then sorted. `available` answers the Show filter from the
-/// committed tile state (row index to "playable on a Reachable server"); it is computed at commit,
-/// never per frame.
-pub fn sorted_filtered(rows: &[WatchRow], sort: &SortSpec, filter: &FilterSpec, available: &dyn Fn(usize) -> bool) -> Vec<usize> {
+/// Indices into `rows`, filtered then sorted. `availability` answers the Show filter and the
+/// Availability sort from the committed answers (row index to [`Availability`]); it is computed at
+/// commit, never per frame.
+pub fn sorted_filtered(rows: &[WatchRow], sort: &SortSpec, filter: &FilterSpec, availability: &dyn Fn(usize) -> Availability) -> Vec<usize> {
     let mut idx: Vec<usize> = (0..rows.len())
         .filter(|&i| filter.kind.is_none_or(|k| rows[i].kind == k))
         .filter(|&i| match filter.show {
             Show::All => true,
             Show::Released => rows[i].released,
-            Show::OnYourServers => available(i),
+            Show::OnYourServers => availability(i) == Availability::Available,
         })
         .collect();
     // A missing field sorts last whichever way the key runs, so the direction applies only to
@@ -153,6 +159,8 @@ pub fn sorted_filtered(rows: &[WatchRow], sort: &SortSpec, filter: &FilterSpec, 
             }
             SortKey::Release => present(a.release.as_ref(), b.release.as_ref(), sort.desc).then(a.order.cmp(&b.order)),
             SortKey::Rating => present(a.rating.as_ref(), b.rating.as_ref(), sort.desc).then(a.order.cmp(&b.order)),
+            // Grouped, the default order kept inside each group (server order, newest first).
+            SortKey::Availability => availability(i).rank().cmp(&availability(j).rank()).then(a.order.cmp(&b.order)),
         }
     });
     idx
@@ -188,7 +196,7 @@ mod tests {
     fn by_title(list: &[&str]) -> Vec<String> {
         let rows: Vec<WatchRow> = list.iter().enumerate().map(|(i, t)| row(t, i as u32)).collect();
         let s = SortSpec { key: SortKey::Title, desc: false };
-        let idx = sorted_filtered(&rows, &s, &FilterSpec::default(), &|_| true);
+        let idx = sorted_filtered(&rows, &s, &FilterSpec::default(), &|_| Availability::Available);
         titles(&rows, &idx)
     }
 
@@ -242,7 +250,7 @@ mod tests {
     }
 
     fn order_of(rows: &[WatchRow], sort: SortSpec) -> Vec<u32> {
-        sorted_filtered(rows, &sort, &FilterSpec::default(), &|_| true).iter().map(|&i| rows[i].order).collect()
+        sorted_filtered(rows, &sort, &FilterSpec::default(), &|_| Availability::Available).iter().map(|&i| rows[i].order).collect()
     }
 
     #[test]
@@ -276,8 +284,8 @@ mod tests {
         let desc = SortSpec { key: SortKey::Title, desc: true };
         assert_eq!(order_of(&rows, desc), [2, 1, 0]);
         let movies = FilterSpec { kind: Some(Kind::Movie), show: Show::All };
-        assert_eq!(sorted_filtered(&rows, &desc, &movies, &|_| true), [2, 0]);
-        let avail = |i: usize| i != 2;
+        assert_eq!(sorted_filtered(&rows, &desc, &movies, &|_| Availability::Available), [2, 0]);
+        let avail = |i: usize| if i != 2 { Availability::Available } else { Availability::Unknown };
         let on = FilterSpec { kind: None, show: Show::OnYourServers };
         assert_eq!(sorted_filtered(&rows, &desc, &on, &avail), [1, 0]);
         let off = FilterSpec { kind: None, show: Show::Released };
@@ -290,10 +298,33 @@ mod tests {
         rows[1].released = false;
         let sort = SortSpec { key: SortKey::DateAdded, desc: true };
         let released = FilterSpec { kind: None, show: Show::Released };
-        assert_eq!(sorted_filtered(&rows, &sort, &released, &|_| false), [0, 2]);
+        assert_eq!(sorted_filtered(&rows, &sort, &released, &|_| Availability::Unknown), [0, 2]);
         // Row 2 stands for Unknown (not playable on a Reachable server).
         let held = FilterSpec { kind: None, show: Show::OnYourServers };
-        assert_eq!(sorted_filtered(&rows, &sort, &held, &|i| i != 2), [0, 1]);
+        let avail = |i: usize| if i != 2 { Availability::Available } else { Availability::Unknown };
+        assert_eq!(sorted_filtered(&rows, &sort, &held, &avail), [0, 1]);
+    }
+
+    /// **The Availability sort groups and keeps the default order inside each group**, whichever
+    /// way its direction reads; "Available only" keeps the Available rows in the order they had;
+    /// and the default order (date added, newest first) is the same rows untouched.
+    #[test]
+    fn availability_groups_in_default_order_and_the_filter_keeps_order() {
+        use Availability::*;
+        let rows: Vec<WatchRow> = (0..6).map(|i| row("x", i)).collect();
+        let of = [Unavailable, Available, Unknown, Available, Unavailable, Unknown];
+        let avail = |i: usize| of[i];
+        for desc in [false, true] {
+            let by = SortSpec { key: SortKey::Availability, desc };
+            assert_eq!(sorted_filtered(&rows, &by, &FilterSpec::default(), &avail), [1, 3, 2, 5, 0, 4]);
+        }
+        let default = SortSpec { key: SortKey::DateAdded, desc: true };
+        assert_eq!(sorted_filtered(&rows, &default, &FilterSpec::default(), &avail), [0, 1, 2, 3, 4, 5],
+            "the default order is not touched by availability");
+        let only = FilterSpec { kind: None, show: Show::OnYourServers };
+        assert_eq!(sorted_filtered(&rows, &default, &only, &avail), [1, 3]);
+        let by_title = SortSpec { key: SortKey::Title, desc: false };
+        assert_eq!(sorted_filtered(&rows, &by_title, &only, &avail), [1, 3], "a tie keeps the hex order, the filter none of its own");
     }
 
     #[test]
@@ -301,7 +332,7 @@ mod tests {
         let rows: Vec<WatchRow> =
             ["Яблык", "Іван", "Ёлка", "Жук", "Зіма"].iter().enumerate().map(|(i, t)| row(t, i as u32)).collect();
         let sort = SortSpec { key: SortKey::Title, desc: false };
-        let titles: Vec<&str> = sorted_filtered(&rows, &sort, &FilterSpec::default(), &|_| true)
+        let titles: Vec<&str> = sorted_filtered(&rows, &sort, &FilterSpec::default(), &|_| Availability::Available)
             .iter()
             .map(|&i| rows[i].title.as_str())
             .collect();

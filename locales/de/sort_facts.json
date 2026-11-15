@@ -11,5 +11,6 @@
   "sort_facts.oldest_first": "Älteste zuerst",
   "sort_facts.newest_first": "Neueste zuerst",
   "sort_facts.lowest_first": "Niedrigste zuerst",
-  "sort_facts.highest_first": "Höchste zuerst"
+  "sort_facts.highest_first": "Höchste zuerst",
+  "sort_facts.availability": "Verfügbarkeit"
 }

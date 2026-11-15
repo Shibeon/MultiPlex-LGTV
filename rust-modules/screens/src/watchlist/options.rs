@@ -1,7 +1,7 @@
 //! The Sort & Filter value (plan §1.3, §1.10): what the pill summarises and the popover edits.
 //! Filtering and ordering are client-side over the stored rows, so a change makes no request.
 use super::page::WatchTile;
-use plx_data::watchlist::model::{Kind, TileState};
+use plx_data::watchlist::model::Kind;
 pub use plx_data::watchlist::order::SortKey;
 use plx_data::watchlist::order::{sorted_filtered, FilterSpec, Show, SortSpec};
 use plx_platform::i18n::msg;
@@ -19,7 +19,7 @@ pub enum TypeFilter {
     Shows,
 }
 
-/// The Show section: `All` / `Released` / `On your servers`.
+/// The Show section: `All` / `Released` / `Available only` (in the user's own libraries).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum ShowFilter {
     #[default]
@@ -82,6 +82,7 @@ impl WatchlistOptionsState {
             SortKey::DateAdded => 1,
             SortKey::Release => 2,
             SortKey::Rating => 3,
+            SortKey::Availability => 4,
         })
         .bool(self.descending)
         .u32(match self.show {
@@ -119,20 +120,22 @@ impl WatchlistOptionsState {
     }
 
     /// `rows` filtered and ordered by this value, exactly as the data layer does it
-    /// (`order::sorted_filtered`); "On your servers" reads each tile's committed state.
+    /// (`order::sorted_filtered`); "Available only" and the Availability sort read each tile's
+    /// committed availability.
     pub fn apply(&self, rows: &[WatchTile]) -> Vec<WatchTile> {
         let (sort, filter) = self.specs();
         let data: Vec<_> = rows.iter().map(|t| t.row.clone()).collect();
-        let playable = |i: usize| matches!(rows[i].state, TileState::Available | TileState::ComingSoonMatched);
-        sorted_filtered(&data, &sort, &filter, &playable).into_iter().map(|i| rows[i].clone()).collect()
+        let avail = |i: usize| rows[i].avail;
+        sorted_filtered(&data, &sort, &filter, &avail).into_iter().map(|i| rows[i].clone()).collect()
     }
 }
 
 /// A sort key's own first direction, the one choosing it from another key lands on: Title reads
 /// A to Z, the others newest, highest and most recent first. Date added descending is the
-/// service's own order and the page's default.
+/// service's own order and the page's default. Availability runs one way only (available first)
+/// and keeps `false`.
 pub fn natural_desc(key: SortKey) -> bool {
-    !matches!(key, SortKey::Title)
+    !matches!(key, SortKey::Title | SortKey::Availability)
 }
 
 /// One selectable row of the Sort & Filter menu: its identity is its meaning, never its position.
@@ -144,8 +147,9 @@ pub enum OptionsRow {
 }
 
 impl OptionsRow {
-    /// Every row in draw order: Show, Sort, Filter (boards WatchlistOptions: 3 + 4 + 3 rows).
-    pub const ALL: [OptionsRow; 10] = [
+    /// Every row in draw order: Show, Sort, Filter (boards WatchlistOptions: 3 + 4 + 3 rows, and
+    /// the Availability sort after them).
+    pub const ALL: [OptionsRow; 11] = [
         OptionsRow::Type(TypeFilter::All),
         OptionsRow::Type(TypeFilter::Movies),
         OptionsRow::Type(TypeFilter::Shows),
@@ -153,6 +157,7 @@ impl OptionsRow {
         OptionsRow::Sort(SortKey::Title),
         OptionsRow::Sort(SortKey::Release),
         OptionsRow::Sort(SortKey::Rating),
+        OptionsRow::Sort(SortKey::Availability),
         OptionsRow::Show(ShowFilter::All),
         OptionsRow::Show(ShowFilter::Released),
         OptionsRow::Show(ShowFilter::OnYourServers),
@@ -182,12 +187,14 @@ impl OptionsRow {
 
     /// Press this row. A different sort key lands on its [`natural_desc`]; pressing the key that is
     /// already chosen flips the direction, the Library sort menu's idiom (the direction word on the
-    /// active row). Returns whether `state` changed (a Type or Show press on the chosen row does not).
+    /// active row), except for a key with no ends to flip (Availability, no direction word). Returns
+    /// whether `state` changed (a Type or Show press on the chosen row does not).
     pub fn apply(self, state: &mut WatchlistOptionsState) -> bool {
         let before = *state;
         match self {
             OptionsRow::Type(t) => state.type_ = t,
             OptionsRow::Show(s) => state.show = s,
+            OptionsRow::Sort(k) if state.sort == k && k.fact().axis().is_none() => {}
             OptionsRow::Sort(k) if state.sort == k => state.descending = !state.descending,
             OptionsRow::Sort(k) => {
                 state.sort = k;
@@ -315,12 +322,13 @@ impl OptionsMenu {
         let safe = plx_ui::consts::SAFE;
         let w = self.table.menu_panel_width_from(measure, self.pill);
         let x = plx_ui::popover::hang_x(self.pill, w, safe);
-        let h = self.table.measured_height().min(safe.h);
-        // Hung under the pill; a menu taller than the room below it slides up rather than cutting
-        // its last rows off (the ten-row menu fits under the header on a 1080 frame in every
-        // shipped language, so it does not today). The pill is drawn above the panel by the opener
-        // lift, never under its glass.
-        let y = (self.pill.y + self.pill.h + theme::space::SM).min(safe.y + safe.h - h);
+        // Hung under the pill, never over it (the pill is drawn above the panel by the opener lift,
+        // and a panel slid up over it would hide the control it is about). A menu taller than the
+        // room below the pill keeps that room and its rows scroll inside it, the table's own
+        // scroll following the selection (`TableView::update`): the eleven-row menu (the
+        // Availability sort is the eleventh) is a row taller than the room on a 1080 frame.
+        let y = self.pill.y + self.pill.h + theme::space::SM;
+        let h = self.table.measured_height().min(safe.y + safe.h - y);
         Rect::new(x, y, w, h)
     }
 

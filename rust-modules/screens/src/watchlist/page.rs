@@ -16,7 +16,7 @@
 //! title (the application opens `ContentArg::Catalog` for it).
 use std::collections::HashMap;
 
-use plx_data::watchlist::model::{Kind as WatchKind, ServerMatch, TileState, WatchRow};
+use plx_data::watchlist::model::{Availability, Kind as WatchKind, ServerMatch, TileState, WatchRow};
 use plx_machine::machine::{
     Canon, Cx, Delivery, Edge, Effects, Enter, EntryId, FocusKey, FocusTarget, Fx, GroupId, Handled, InputEvent,
     InputKind, Key, LogicalState, Machine, Tick,
@@ -51,6 +51,9 @@ use crate::registry::{AppFx, ContentArg, ContentLike, ContentReq, HomeTab};
 pub struct WatchTile {
     pub row: WatchRow,
     pub state: TileState,
+    /// Whether the user's own libraries hold it: the card's availability badge
+    /// ([`super::tiles::paint`]), the "Available only" filter and the Availability sort.
+    pub avail: Availability,
     pub copy: Option<ServerMatch>,
 }
 
@@ -558,9 +561,9 @@ impl<H: ContentLike> CardSource<H> for Titles<'_> {
     fn progress(&self, i: usize) -> Option<f32> {
         self.page.cells.get(i)?.resume
     }
-    fn overlay(&self, p: Painter, i: usize, tile: &Tile, _measure: &dyn plx_machine::machine::Measure) {
+    fn overlay(&self, p: Painter, i: usize, tile: &Tile, measure: &dyn plx_machine::machine::Measure) {
         if let Some(t) = self.page.tiles.get(i) {
-            tiles::paint(p, t.state, tile);
+            tiles::paint(p, t.state, t.avail, tile, measure);
         }
     }
     /// Every cell is painted: a reserved one, whose row has not landed, as the skeleton poster
@@ -632,9 +635,9 @@ impl<H: ContentLike> CardSource<H> for GhostTitles<'_> {
     fn progress(&self, i: usize) -> Option<f32> {
         self.tiles.get(i).copied().flatten().and_then(|(_, c)| c.resume)
     }
-    fn overlay(&self, p: Painter, i: usize, tile: &Tile, _measure: &dyn plx_machine::machine::Measure) {
+    fn overlay(&self, p: Painter, i: usize, tile: &Tile, measure: &dyn plx_machine::machine::Measure) {
         if let Some((t, _)) = self.tiles.get(i).copied().flatten() {
-            tiles::paint(p, t.state, tile);
+            tiles::paint(p, t.state, t.avail, tile, measure);
         }
     }
     fn loaded(&self, i: usize) -> bool {

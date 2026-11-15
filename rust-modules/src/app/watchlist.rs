@@ -203,7 +203,7 @@ impl Bridge {
                 feed.list = None;
             }
             let tiles: Vec<WatchTile> = (0..view.len())
-                .filter_map(|i| Some(WatchTile { row: view.row(i)?.clone(), state: view.state(i)?, copy: view.copy(i) }))
+                .filter_map(|i| Some(WatchTile { row: view.row(i)?.clone(), state: view.state(i)?, avail: view.availability(i)?, copy: view.copy(i) }))
                 .collect();
             let mut now_facts = HashMap::new();
             for (i, tile) in tiles.iter().enumerate() {

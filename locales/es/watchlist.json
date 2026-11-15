@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Series",
   "watchlist.filter.show_all": "Todos",
   "watchlist.filter.show_released": "Estrenados",
-  "watchlist.filter.show_on_servers": "En tus servidores",
+  "watchlist.filter.show_on_servers": "Solo disponibles",
   "watchlist.action.add": "Añadir a la lista de seguimiento",
   "watchlist.action.add_show": "Añadir serie a la lista de seguimiento",
   "watchlist.action.on_list": "En la lista de seguimiento",
@@ -29,5 +29,8 @@
     "one": "· {count} aún no disponible",
     "many": "· {count} aún no disponibles",
     "other": "· {count} aún no disponibles"
-  }
+  },
+  "watchlist.avail.available": "Disponible",
+  "watchlist.avail.unavailable": "No disponible",
+  "watchlist.avail.unknown": "Por verificar"
 }

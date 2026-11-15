@@ -17,7 +17,7 @@
 
 use crate::viewstate::{ViewChange, ViewEdit, ViewFact};
 use crate::watchlist::ledger::{Intent, IntentLedger, PendingWrite, WriteOutcome};
-use crate::watchlist::model::{tile_state, Asked, Kind, MatchTable, ServerMatch, TileState, WatchRow};
+use crate::watchlist::model::{availability, tile_state, Asked, Availability, Kind, MatchTable, ServerMatch, TileState, WatchRow};
 use crate::watchlist::order::{sorted_filtered, FilterSpec, SortSpec};
 use crate::watchlist::{
     Failure, Landed, Tag, What, WatchlistAuth, WatchlistInput,
@@ -163,6 +163,8 @@ struct WatchlistState {
     released: Option<HashSet<String>>,
     table: MatchTable,
     states: Vec<TileState>,
+    /// Each row's [`Availability`] in the user's own libraries, derived with `states`.
+    avail: Vec<Availability>,
     facts: HashMap<(ServerId, i64), TileFacts>,
 
     ledger: IntentLedger,
@@ -218,6 +220,7 @@ impl WatchlistState {
             released: None,
             table: MatchTable::default(),
             states: Vec::new(),
+            avail: Vec::new(),
             facts: HashMap::new(),
 
             ledger: IntentLedger::new(),
@@ -532,9 +535,9 @@ impl WatchlistStore {
                 Intent::Remove => members.remove(&hex),
             };
         }
-        let states = &s.states;
+        let avail = &s.avail;
         let mut index = sorted_filtered(&s.rows, &s.sort, &s.filter, &|i| {
-            states.get(i).copied().is_some_and(on_your_servers)
+            avail.get(i).copied().unwrap_or(Availability::Unknown)
         });
         index.retain(|&i| members.contains(&s.rows[i].hex));
         s.members = members;
@@ -559,6 +562,7 @@ impl WatchlistStore {
                 state => state,
             })
             .collect();
+        s.avail = s.rows.iter().map(|r| availability(r, &s.table, io)).collect();
 
         self.refresh();
     }
@@ -1237,6 +1241,11 @@ impl WatchlistView<'_> {
 
     pub fn state(&self, i: usize) -> Option<TileState> {
         self.store.state.states.get(*self.store.state.index.get(i)?).copied()
+    }
+
+    /// The `i`-th row's availability in the user's own libraries (the card's badge).
+    pub fn availability(&self, i: usize) -> Option<Availability> {
+        self.store.state.avail.get(*self.store.state.index.get(i)?).copied()
     }
 
     /// The matched copy's watch state, once a read-back or a ViewChange has told the store.

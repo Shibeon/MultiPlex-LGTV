@@ -6,7 +6,7 @@
   "watchlist.filter.type_shows": "Sorozatok",
   "watchlist.filter.show_all": "Összes",
   "watchlist.filter.show_released": "Megjelent",
-  "watchlist.filter.show_on_servers": "Az Ön szerverein",
+  "watchlist.filter.show_on_servers": "Csak elérhetők",
   "watchlist.action.add": "Hozzáadás a Figyelőlistához",
   "watchlist.action.add_show": "Sorozat hozzáadása a Figyelőlistához",
   "watchlist.action.on_list": "A Figyelőlistán",
@@ -28,5 +28,8 @@
   "watchlist.page.unavailable": {
     "one": "· {count} még nem elérhető",
     "other": "· {count} még nem elérhető"
-  }
+  },
+  "watchlist.avail.available": "Elérhető",
+  "watchlist.avail.unavailable": "Nem elérhető",
+  "watchlist.avail.unknown": "Ellenőrizendő"
 }

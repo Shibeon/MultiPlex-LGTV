@@ -155,11 +155,38 @@ PMS guids are hex; the mock's default placeholder guids are not, which is why `m
 | ComingSoonMatched | not released, but a Reachable server has it | clock kept | Detail | card kind plus Remove |
 | NotOnAnyServer | released, every server on the roster answered "absent" | circle-slash; a 55% wash at rest, 25% on focus | Catalog | Catalog |
 | ServerOffline | matched earlier, every matching server now Unreachable | server-slash, cached progress | Catalog | Catalog (no Play or Mark watched) |
-| Unknown | no match and some server has not answered | none | Catalog | Catalog; excluded from "On your servers" |
+| Unknown | no match and some server has not answered | none | Catalog | Catalog; excluded from "Available only" |
 
 OK and hold read the drawn, committed `row.state`. An open Detail whose server dies keeps today's
 failure path. "Absent" needs the whole roster to have answered, so a silent server never produces
 "Not on your servers".
+
+## Availability in the user's own libraries
+
+Every card also says in words whether a library on the account's own servers holds the title (never a
+streaming service): `Availability` (`data/src/watchlist/model.rs`, `availability`), derived with the tile
+state from the same match table, at the same moments, and drawn as the shared fine-print chip over
+artwork (`widgets::tile_chip`) on the poster's top-left corner (`watchlist/tiles.rs`), the corner mark
+keeping the top-right:
+
+| answer | chip (en / fr) | when |
+|---|---|---|
+| Available | Available / Disponible | a copy is held on a Reachable server |
+| Unavailable | Not available / Indisponible | every server on the roster answered, none holds it (an announced title too) |
+| Unknown | To check / À vérifier | a lookup failed or has not run, the only copies are on Unreachable servers, or no server was asked |
+
+The join is the primary `plex://` guid only (`docs/pms-api.md` 2d): `imdb://`, `tmdb://` and `tvdb://`
+answer size 0 from `/library/all?guid=`, so they would only manufacture false "Not available" answers.
+A chunk whose lookup fails, or a row with no usable `ratingKey`, answers nothing for its guids, which
+stay Unknown. The lookups are the list worker's own batches (40 guids per request, per server and kind,
+one server after another), the table is per profile and per server, and it moves on what already
+moves it: a library change the server's feed reports (`What::Delta`, that server only), a roster
+change (`What::Rematch`), a reachability flip (re-derived without a request) and a profile switch (a
+new epoch). The Sort & Filter menu's Filter section calls the playable-now choice "Available only"
+("Disponibles uniquement"), and its Sort section has an Availability order (available, then to check,
+then not available, the default order kept inside each group; one way only, no direction word). The
+default order is still Date added, newest first. The mock's demo list shows all three
+(`tests/mock_pms.py`, `GARBLED_LOOKUP`).
 
 ## The write ledger
 
