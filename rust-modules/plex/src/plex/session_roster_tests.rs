@@ -457,6 +457,36 @@ fn only_the_account_owners_own_profile_may_refresh_the_roster_with_the_account_t
     assert!(!home("u-nobody").active_profile_is_admin());
 }
 
+/// **A managed Home profile is told by plex.tv's `restricted` flag on its own roster tile**, never
+/// by "not the admin": an ordinary (full) Home member is no administrator and is not managed
+/// either, and an unknown roster proves nothing. The top bar hides My list on this answer alone,
+/// so every case that cannot prove "managed" must answer `false` (the tabs stay).
+#[test]
+fn only_a_restricted_roster_tile_makes_the_watching_profile_managed() {
+    let home = |uuid: &str| Session {
+        client_id: "cid".into(),
+        account_token: "acct".into(),
+        user: UserRef { uuid: uuid.into(), ..Default::default() },
+        home_users: vec![
+            HomeUserRef { uuid: "u-owner".into(), title: "Owner".into(), admin: true, ..Default::default() },
+            HomeUserRef { uuid: "u-kid".into(), title: "Kid".into(), restricted: true, ..Default::default() },
+            HomeUserRef { uuid: "u-adult".into(), title: "Adult".into(), ..Default::default() },
+        ],
+        ..Default::default()
+    };
+    let user = |uuid: &str| UserRef { uuid: uuid.into(), ..Default::default() };
+    assert!(home("u-kid").profile_is_managed(None), "the persisted profile is the restricted tile");
+    assert!(home("u-owner").profile_is_managed(Some(&user("u-kid"))),
+        "the published profile outranks the persisted one, as it does for the chip's name");
+    assert!(!home("u-kid").profile_is_managed(Some(&user("u-owner"))), "the administrator");
+    assert!(!home("u-adult").profile_is_managed(None), "a full member is not managed");
+    assert!(!home("").profile_is_managed(None), "no Plex Home selection: the owner");
+    assert!(!home("u-nobody").profile_is_managed(None), "a uuid the roster does not hold proves nothing");
+    let mut unknown = home("u-kid");
+    unknown.home_users.clear();
+    assert!(!unknown.profile_is_managed(None), "an empty roster means unknown, not managed");
+}
+
 /// **Who lives in this house** — the ids the "Shared by …" rule asks
 /// `plex::servers::is_household` with, which is the Plex Home ROSTER and nothing else.
 ///

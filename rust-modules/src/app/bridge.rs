@@ -1525,7 +1525,7 @@ impl Bridge {
                 refresh_chrome(&mut self.chrome, &self.measure, self.directory.view(), None);
             }
             // The page's own pill: Home's is the first, and a library page's is its library's type.
-            self.chrome_selection = pill_of_arg(route, self.directory.view()).unwrap_or(0) as u32;
+            self.chrome_selection = pill_of_arg(route, self.directory.view(), self.profile_managed()).unwrap_or(0) as u32;
             let selected = self.navigation_presentation().view_tab.unwrap_or(self.chrome_selection) as i32;
             self.publish_strip(d, selected);
         } else {
@@ -2501,6 +2501,12 @@ fn start_jobs(&mut self, jobs: Vec<plx_data::stores::StoreJob>) -> usize {
 
     pub(crate) fn browse_directory(&self) -> plx_data::stores::browse::DirectoryView<'_> {
         self.directory.view()
+    }
+
+    /// The top bar's captured answer to "is the watching profile a managed Plex Home member?"
+    /// (`ChromeSnapshot::managed`), for a reader outside the bar that names a strip index.
+    pub(crate) fn profile_managed(&self) -> bool {
+        self.chrome.managed()
     }
 
     /// A fresh Hubs publication captured from this owner's store, for a caller that must not read
@@ -3623,7 +3629,7 @@ fn frame_ingest(
     // settled test, the navblur prototype). One writer, immediately after the container's own
     // frame, from the container's own transition — see `ui::nav`'s module doc.
     let tab = d.nav.tabs.stack.pending_dest()
-        .and_then(|arg| pill_of_arg(arg, rig.directory.view()));
+        .and_then(|arg| pill_of_arg(arg, rig.directory.view(), rig.profile_managed()));
     plx_ui::nav::publish(d.nav.tabs.stack.page_alpha(), d.nav.tabs.stack.chrome_alpha(), tab);
     // **The heartbeat's `route=` word IS the top page's own name** (§15.2). It used to be
     // `route_word(app.route)` with this line asserting the two agreed every frame; there is one
@@ -4517,8 +4523,9 @@ pub(crate) fn wears_tab_bar(arg: &AppArg) -> bool {
 /// The Library's pill is its TYPE, and the argument carries none (which library the grid shows is
 /// the `browse` store's business): the answer is the section the store is pointing at, which
 /// `nav_tab`'s `LibraryCmd::Enter` has already aimed.
-fn pill_of_arg(arg: &AppArg, directory: plx_data::stores::browse::DirectoryView<'_>) -> Option<usize> {
-    use crate::app::chrome::{pill_of, Pill};
+fn pill_of_arg(arg: &AppArg, directory: plx_data::stores::browse::DirectoryView<'_>, managed: bool) -> Option<usize> {
+    use crate::app::chrome::Pill;
+    let pill_of = |directory, pill| crate::app::chrome::pill_of(directory, managed, pill);
     match arg {
         AppArg::Home => pill_of(directory, Pill::Home),
         AppArg::Search => pill_of(directory, Pill::Search),
@@ -4565,12 +4572,15 @@ pub(crate) fn nav_tab(
     ret: Option<ReturnState<u32, PageMemory>>,
 ) {
     use crate::app::chrome::Pill;
+    // A managed Plex Home profile has no My list (`chrome::strip_keys`): whatever asks for it, a
+    // stale press, a boot trigger, lands on Home instead, as the Home pill's BACK does.
+    let tab = if tab == HomeTab::Watchlist && rig.profile_managed() { HomeTab::Home } else { tab };
     let arg = match tab {
         HomeTab::Home => {
             // Keep the pill the user was standing on under focus. An IDENTITY, not an index: a
             // pill can appear or disappear while the dip runs, and `HomeCmd::FocusStrip` is
             // delivered when Home MOUNTS, not now.
-            if let Some(pill) = focus_pill.filter(|pill| crate::app::chrome::pill_of(rig.directory.view(), *pill).is_some()) {
+            if let Some(pill) = focus_pill.filter(|pill| crate::app::chrome::pill_of(rig.directory.view(), rig.profile_managed(), *pill).is_some()) {
                 let want = match pill {
                     Pill::Home => HomeTab::Home,
                     Pill::Search => HomeTab::Search,
@@ -5547,6 +5557,9 @@ mod account_menu_route_tests;
 #[cfg(test)]
 #[path = "settings_pill_route_tests.rs"]
 mod settings_pill_route_tests;
+#[cfg(test)]
+#[path = "managed_profile_route_tests.rs"]
+mod managed_profile_route_tests;
 #[cfg(test)]
 #[path = "card_rest_route_tests.rs"]
 mod card_rest_route_tests;
