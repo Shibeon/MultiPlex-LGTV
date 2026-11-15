@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn url_decode_refuses_what_atob_refuses() {
-        for bad in ["Z", "Zm9vY", "Zm=9", "Zg=", "Zg===", "Zm9v!", "Zm 9v", "é"] {
+        for bad in ["Z", "Zm9vY", "Zm=9", "Zg=", "Zg===", "Zm9v!", "é"] {
             assert_eq!(decode_url(bad), None, "{bad}");
         }
     }

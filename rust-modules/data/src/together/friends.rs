@@ -1,16 +1,19 @@
-//! PROVISIONAL: the pieces of the web client's "sessions visible to friends" that are pure and
-//! protocol-neutral, kept apart because that protocol (the relay's `POST /friends`, `announce`,
-//! the key-request/key-grant ticket flow) is being redesigned so visibility is strictly between the
-//! host's Plex friends. Nothing in `TogetherSession` uses this module: a session this client opens is
-//! never announced. What is here is the web's `serverCredential`, `RelayBackoff` (driven by `dt`)
-//! and `findRelay` as a fold, with its rule that a relay's Plex server identifier is checked BEFORE
-//! any token is sent, and the grant crypto (`sealGrant`/`openGrant`: ECDH P-256, HKDF, AES-GCM),
-//! byte-for-byte the web's (`interop.json`, `grants`).
+//! PROVISIONAL, and behind the web client: the pure pieces of "sessions visible to friends". The web
+//! has since moved to a friends-only protocol (82328b6, af52bea, 08537b6): an announce carries the
+//! host's allow-list of Plex friend account ids, re-read from plex.tv on every refresh
+//! (`friendAllowList`, `friendsForAnnounce`), the relay checks each viewer's identity against it and
+//! shows the verified host name, and only a relay that says `friendsOnly` counts. This module has
+//! neither `friendAllowList` nor `friendsForAnnounce`, no announce and no listing request; it is
+//! not wired, and nothing in `TogetherSession` uses it: a session this client opens is never
+//! announced (`vis: false`). What is here: the web's `serverCredential`, `RelayBackoff` (driven by
+//! `dt`), `findRelay` as a fold (a relay's Plex server identifier is checked BEFORE any token is
+//! sent, and `friends` needs `friendsOnly`), and the grant crypto (`sealGrant`/`openGrant`: ECDH
+//! P-256, HKDF, AES-GCM), byte-for-byte the web's (`interop.json`, `grants`).
 
 use std::collections::BTreeMap;
 
 use plx_base::b64::{decode_url, encode_url};
-use plx_base::crypto::{self, EcdhSecret};
+use plx_base::crypto::{self, EcdhSecret, Zeroize};
 use plx_base::hkdf::hkdf_sha256;
 use serde::Serialize;
 use serde_json::Value;
@@ -162,8 +165,10 @@ pub struct GrantPayload {
 const GRANT_SALT: &[u8] = b"multiplex-together-grant-v1";
 
 fn grant_key(mine: &EcdhSecret, peer_pub: &str, info: &str) -> Option<[u8; 32]> {
-    let shared = mine.shared(&decode_url(peer_pub)?)?;
-    Some(hkdf_sha256(GRANT_SALT, &shared, info.as_bytes()))
+    let mut shared = mine.shared(&decode_url(peer_pub)?)?;
+    let key = hkdf_sha256(GRANT_SALT, &shared, info.as_bytes());
+    shared.zeroize();
+    Some(key)
 }
 
 /// The web's `sealGrant` with its two random draws handed in: the host's ephemeral secret
@@ -226,7 +231,7 @@ mod tests {
         let mut known = KnownRelays::new();
         let mut backoff = RelayBackoff::default();
         let mut f = RelaySearch::new(&s(&["wss://a.exemple.fr/multiplex-relay", "wss://a.exemple.fr", "wss://b.exemple.fr"]), None, &known, &backoff);
-        let got = run(&mut f, &[None, Some(r#"{"multiplex":"relay","found":[],"friends":true}"#), Some(r#"{"multiplex":"relay","found":[]}"#)], &mut known, &mut backoff);
+        let got = run(&mut f, &[None, Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true}"#), Some(r#"{"multiplex":"relay","found":[]}"#)], &mut known, &mut backoff);
         assert_eq!(got, Some(FoundRelay { relay: "wss://a.exemple.fr".into(), friends: true, server: None }));
         assert_eq!(known.get("wss://a.exemple.fr/multiplex-relay"), None);
         let mut f = RelaySearch::new(&s(&["wss://nope.exemple.fr"]), None, &known, &backoff);
@@ -238,13 +243,28 @@ mod tests {
         let mut known = KnownRelays::new();
         let mut backoff = RelayBackoff::default();
         let answers = [
-            Some(r#"{"multiplex":"relay","found":[],"friends":true,"server":"autre-serveur"}"#),
+            Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true,"server":"autre-serveur"}"#),
             Some(r#"{"multiplex":"relay","found":[],"friends":false}"#),
-            Some(r#"{"multiplex":"relay","found":[],"friends":true,"server":"srv-1"}"#),
+            Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true,"server":"srv-1"}"#),
         ];
         let mut f = RelaySearch::new(&s(&["wss://a.exemple.fr", "wss://b.exemple.fr", "wss://c.exemple.fr"]), Some("srv-1"), &known, &backoff);
         let got = run(&mut f, &answers, &mut known, &mut backoff);
         assert_eq!(got, Some(FoundRelay { relay: "wss://c.exemple.fr".into(), friends: true, server: Some("srv-1".into()) }));
+    }
+
+    /// A relay from before the friends-only protocol listed sessions to every user of the server:
+    /// `friends` alone is not enough, it must also say `friendsOnly` (the web's findRelay, 08537b6).
+    #[test]
+    fn a_relay_that_lists_to_every_user_does_not_count_as_listing_friends() {
+        let mut known = KnownRelays::new();
+        let mut backoff = RelayBackoff::default();
+        let old = Some(r#"{"multiplex":"relay","found":[],"friends":true,"server":"srv-1"}"#);
+        let odd = Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":"yes","server":"srv-1"}"#);
+        let mut f = RelaySearch::new(&s(&["wss://a.exemple.fr", "wss://b.exemple.fr"]), Some("srv-1"), &known, &backoff);
+        assert_eq!(run(&mut f, &[old, odd], &mut known, &mut backoff), None);
+        let mut f = RelaySearch::new(&s(&["wss://c.exemple.fr"]), None, &known, &backoff);
+        let got = run(&mut f, &[old], &mut known, &mut backoff).unwrap();
+        assert!(!got.friends);
     }
 
     #[test]
@@ -263,7 +283,7 @@ mod tests {
         assert!(RelaySearch::new(&x, None, &known, &backoff).relays().is_empty());
         backoff.advance(60_001);
         let mut f = RelaySearch::new(&x, Some("s"), &known, &backoff);
-        let got = run(&mut f, &[Some(r#"{"multiplex":"relay","found":[],"friends":true,"server":"s"}"#)], &mut known, &mut backoff);
+        let got = run(&mut f, &[Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true,"server":"s"}"#)], &mut known, &mut backoff);
         assert_eq!(got.map(|f| f.relay), Some("wss://x.exemple.fr".into()));
         assert!(!backoff.blocked("wss://x.exemple.fr"));
     }

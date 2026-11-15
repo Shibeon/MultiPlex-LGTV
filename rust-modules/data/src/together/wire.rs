@@ -16,6 +16,8 @@
 use serde::Serialize;
 use serde_json::Value;
 
+use super::sync::MAX_SAFE_CLOCK;
+
 /// What a participant watches, found again on each side by its Plex identifier.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SharedItem {
@@ -191,10 +193,11 @@ pub fn truthy(v: Option<&Value>) -> bool {
     }
 }
 
-/// `stampOf`'s clock half: a finite number >= 0, floored.
+/// `stampOf`'s clock half: a finite number >= 0, floored, and no larger than a JavaScript number
+/// holds exactly ([`MAX_SAFE_CLOCK`]), so counting on from it never overflows.
 fn clock_of(v: Option<&Value>) -> Option<u64> {
     let x = v.and_then(Value::as_f64)?;
-    (x.is_finite() && x >= 0.0).then(|| x.floor().min(u64::MAX as f64) as u64)
+    (x.is_finite() && x >= 0.0).then(|| (x.floor().min(MAX_SAFE_CLOCK as f64) as u64).min(MAX_SAFE_CLOCK))
 }
 
 /// `String(x).slice(0, 60)` for the display name (UTF-16 units approximated by chars).
@@ -225,7 +228,7 @@ pub fn read_message(plain: &[u8]) -> Option<Incoming> {
             item: o.get("item").and_then(SharedItem::read),
             stamp: clock_of(o.get("c")).map(|c| (c, o.get("by").and_then(Value::as_str).unwrap_or("").to_string())),
             vis: o.get("vis").and_then(Value::as_bool),
-            hc: num(o.get("hc")).max(0.0) as u64,
+            hc: clock_of(o.get("hc")).unwrap_or(0),
             want: truthy(o.get("want")),
             id,
         })),
@@ -272,6 +275,16 @@ mod tests {
             title: "Le Film".into(),
             sub: Some("2019".into()),
         }
+    }
+
+    /// A clock past what a JavaScript number holds exactly is read as `Number.MAX_SAFE_INTEGER`.
+    #[test]
+    fn huge_clocks_are_clamped_on_read() {
+        let safe = super::super::sync::MAX_SAFE_CLOCK;
+        let Some(Incoming::Tick(t)) = read_message(br#"{"t":"tick","id":"x","c":1e300,"by":"x","hc":1e300,"live":true}"#) else { panic!() };
+        assert_eq!((t.stamp.map(|s| s.0), t.hc), (Some(safe), safe));
+        let Some(Incoming::Intent(i)) = read_message(br#"{"t":"intent","id":"x","action":"play","c":18446744073709551615}"#) else { panic!() };
+        assert_eq!(i.c, Some(safe));
     }
 
     /// The README's `tick`, with every optional field, in the web's key order and number format.

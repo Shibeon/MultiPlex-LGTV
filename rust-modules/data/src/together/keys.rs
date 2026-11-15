@@ -7,7 +7,7 @@
 //! argument (the runner draws it).
 
 use plx_base::b64::{decode_url, encode_url};
-use plx_base::crypto;
+use plx_base::crypto::{self, Zeroize};
 use plx_base::hkdf::hkdf_sha256;
 
 use super::invite::{clean, Invite};
@@ -22,6 +22,12 @@ pub struct SessionKeys {
     pub room: String,
     pub owner: Option<String>,
     pub key: [u8; 32],
+}
+
+impl Drop for SessionKeys {
+    fn drop(&mut self) {
+        self.key.zeroize();
+    }
 }
 
 impl std::fmt::Debug for SessionKeys {
@@ -42,8 +48,10 @@ fn split(base: &[u8]) -> SessionKeys {
 /// host's Plex server identifier, then [`split`].
 pub fn derive_session(secret: &str, server_id: &str, iterations: u32) -> SessionKeys {
     let salt = format!("multiplex-together-v3|{server_id}");
-    let base = plx_base::sha256::pbkdf2_hmac_sha256(clean(secret).as_bytes(), salt.as_bytes(), iterations);
-    split(&base)
+    let mut base = plx_base::sha256::pbkdf2_hmac_sha256(clean(secret).as_bytes(), salt.as_bytes(), iterations);
+    let keys = split(&base);
+    base.zeroize();
+    keys
 }
 
 /// Room and key of an old invitation: v2 is [`split`] of its 96-bit secret, v1 carries both as is.
@@ -96,7 +104,7 @@ mod tests {
         assert_eq!(d.room.len(), 22);
         let v1 = Invite::V1 { relay: "wss://r".into(), room: "AAAAAAAAAAAAAAAAAAAAAA".into(), key: encode_url(&[7; 32]) };
         let d = derive_legacy(&v1).unwrap();
-        assert_eq!((d.room.as_str(), d.key, d.owner), ("AAAAAAAAAAAAAAAAAAAAAA", [7; 32], None));
+        assert_eq!((d.room.as_str(), d.key, d.owner.clone()), ("AAAAAAAAAAAAAAAAAAAAAA", [7; 32], None));
         assert_eq!(derive_legacy(&Invite::V3 { secret: "K7Q29XFD".into(), relay: None }), None);
     }
 }

@@ -14,8 +14,10 @@
 //!   this rule commanded measures the landing error, and when it is a plausible keyframe distance
 //!   ([`KEYFRAME_SLACK`] behind, [`KEYFRAME_AHEAD`] ahead) it is remembered and accepted: the
 //!   player is held to be where the session is, offset by that error, until the next seek or
-//!   gesture. An implausible landing is retried at most [`RESEEK_LIMIT`] times, then accepted too,
-//!   so no input makes the rule seek in a loop.
+//!   gesture. A landing outside that range is not a keyframe and is never accepted as slack: the
+//!   seek is commanded again, exactly [`RESEEK_LIMIT`] more times, after which the rule stops
+//!   seeking for that reference ([`TogetherSync::landing_failed`]) and keeps the last good slack,
+//!   so no input makes it seek in a loop. The next reference starts afresh.
 
 use super::wire::{IntentIn, SyncAction, TickIn};
 
@@ -31,8 +33,11 @@ pub const SETTLE_US: u64 = 1_500_000;
 pub const KEYFRAME_SLACK: f64 = 10.0;
 /// How far (s) after its target a landing is still taken as on target.
 pub const KEYFRAME_AHEAD: f64 = 0.5;
-/// Implausible landings re-sought before the error is accepted anyway.
+/// Re-seeks after a landing too far off to be a keyframe, before the rule stops seeking for that
+/// reference (the error is never accepted as slack).
 pub const RESEEK_LIMIT: u32 = 2;
+/// The largest clock a JavaScript peer holds exactly (`Number.MAX_SAFE_INTEGER`).
+pub const MAX_SAFE_CLOCK: u64 = (1 << 53) - 1;
 
 /// A command's stamp: Lamport clock and author.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -127,7 +132,10 @@ pub struct TogetherSync {
     landing: bool,
     /// Accepted landing error (s, positive = behind the session).
     slack: f64,
+    /// Re-seeks made for the current reference after implausible landings.
     reseeks: u32,
+    /// The current reference's seek kept missing: no more seeks until the next reference.
+    gave_up: bool,
 }
 
 impl TogetherSync {
@@ -144,6 +152,7 @@ impl TogetherSync {
             landing: false,
             slack: 0.0,
             reseeks: 0,
+            gave_up: false,
         }
     }
 
@@ -169,6 +178,11 @@ impl TogetherSync {
         self.seen.is_some()
     }
 
+    /// The last commanded seek kept missing (see [`RESEEK_LIMIT`]).
+    pub fn landing_failed(&self) -> bool {
+        self.gave_up
+    }
+
     /// The accepted keyframe landing error (s).
     pub fn slack(&self) -> f64 {
         self.slack
@@ -181,6 +195,7 @@ impl TogetherSync {
         self.landing = false;
         self.slack = 0.0;
         self.reseeks = 0;
+        self.gave_up = false;
     }
 
     pub fn detach(&mut self) {
@@ -219,28 +234,36 @@ impl TogetherSync {
 
     /// A reference learnt another way (the host's state handed with a grant).
     pub fn adopt(&mut self, time: f64, playing: bool, stamp: Stamp) {
+        let stamp = Stamp { c: safe(stamp.c), by: stamp.by };
         self.clock = self.clock.max(stamp.c);
-        self.sref = Some(SyncRef { time: finite(time), playing, at_us: self.now_us, stamp });
+        self.set_reference(SyncRef { time: finite(time), playing, at_us: self.now_us, stamp });
+    }
+
+    /// A new reference: a seek for it gets its own [`RESEEK_LIMIT`] retries.
+    fn set_reference(&mut self, r: SyncRef) {
+        self.sref = Some(r);
+        self.reseeks = 0;
+        self.gave_up = false;
     }
 
     /// Another participant's command. True when it becomes the reference (and is applied).
     pub fn on_intent(&mut self, m: &IntentIn, cmds: &mut Vec<PlayerCmd>) -> bool {
         let s = match m.c {
-            Some(c) => Stamp { c, by: m.id.clone() },
-            None => Stamp { c: self.clock + 1, by: m.id.clone() },
+            Some(c) => Stamp { c: safe(c), by: m.id.clone() },
+            None => Stamp { c: tick_clock(self.clock), by: m.id.clone() },
         };
         self.clock = self.clock.max(s.c);
         if self.sref.as_ref().is_some_and(|r| !newer(&s, &r.stamp)) {
             return false;
         }
-        self.sref = Some(SyncRef { time: finite(m.time), playing: m.playing, at_us: self.now_us, stamp: s });
+        self.set_reference(SyncRef { time: finite(m.time), playing: m.playing, at_us: self.now_us, stamp: s });
         self.apply(true, cmds);
         true
     }
 
     /// Another participant's tick.
     pub fn on_tick(&mut self, m: &TickIn, i_am_host: bool, cmds: &mut Vec<PlayerCmd>) -> TickVerdict {
-        let s = m.stamp.as_ref().map(|(c, by)| Stamp { c: *c, by: by.clone() });
+        let s = m.stamp.as_ref().map(|(c, by)| Stamp { c: safe(*c), by: by.clone() });
         if let Some(s) = &s {
             self.clock = self.clock.max(s.c);
         }
@@ -252,12 +275,12 @@ impl TogetherSync {
             if s.is_none() && !m.host {
                 return TickVerdict::Ignore;
             }
-            self.sref = Some(SyncRef { time, playing, at_us, stamp: s.unwrap_or_default() });
+            self.set_reference(SyncRef { time, playing, at_us, stamp: s.unwrap_or_default() });
             self.apply(true, cmds);
             return TickVerdict::Adopt;
         };
         if let Some(s) = s.as_ref().filter(|s| newer(s, &current)) {
-            self.sref = Some(SyncRef { time, playing, at_us, stamp: s.clone() });
+            self.set_reference(SyncRef { time, playing, at_us, stamp: s.clone() });
             self.apply(true, cmds);
             return TickVerdict::Adopt;
         }
@@ -286,19 +309,22 @@ impl TogetherSync {
         if self.landing && now >= self.applying_until_us {
             // The first settled observation after a seek this rule asked for: how far off it landed.
             self.landing = false;
+            self.last = Last { time, paused, at_us: now };
             if let Some(expected) = self.position() {
                 let err = expected - time;
                 if (-KEYFRAME_AHEAD..=KEYFRAME_SLACK).contains(&err) {
+                    // A keyframe away: hold the player there.
                     self.slack = err.max(0.0);
                     self.reseeks = 0;
-                } else if self.reseeks + 1 >= RESEEK_LIMIT {
-                    self.slack = err;
-                    self.reseeks = 0;
-                } else {
+                } else if self.reseeks < RESEEK_LIMIT {
+                    // Too far off to be a keyframe: seek again (the last good slack still applies).
                     self.reseeks += 1;
+                    self.apply(true, cmds);
+                } else {
+                    // Still missing: stop seeking for this reference, keep the last good slack.
+                    self.gave_up = true;
                 }
             }
-            self.last = Last { time, paused, at_us: now };
             return None;
         }
         if !self.was_ready {
@@ -316,11 +342,10 @@ impl TogetherSync {
             let jumped = (time - expected).abs() > JUMP;
             if paused != self.last.paused || jumped {
                 if online {
-                    self.clock += 1;
+                    self.clock = tick_clock(self.clock);
                     let c = self.clock;
-                    self.sref = Some(SyncRef { time, playing: !paused, at_us: now, stamp: Stamp { c, by: self.me.clone() } });
+                    self.set_reference(SyncRef { time, playing: !paused, at_us: now, stamp: Stamp { c, by: self.me.clone() } });
                     self.slack = 0.0;
-                    self.reseeks = 0;
                     let action = if jumped { SyncAction::Seek } else if paused { SyncAction::Pause } else { SyncAction::Play };
                     out = Some(IntentOut { action, time, playing: !paused, c });
                 }
@@ -342,11 +367,12 @@ impl TogetherSync {
         let diff = here + self.slack - expected;
         let paused = seen.obs.paused;
         let limit = if hard { HARD } else { SOFT };
-        if r.playing == paused || diff.abs() > limit {
+        if r.playing == paused || (diff.abs() > limit && !self.gave_up) {
             self.applying_until_us = now + SETTLE_US;
         }
         let mut obs = seen.obs;
-        if diff.abs() > limit {
+        let seek = diff.abs() > limit && !self.gave_up;
+        if seek {
             cmds.push(PlayerCmd::Seek(expected));
             obs.time = expected;
             self.landing = true;
@@ -360,10 +386,22 @@ impl TogetherSync {
             cmds.push(PlayerCmd::Pause);
             obs.paused = true;
         }
-        // Until the player reports again, it is where it was just told to be.
+        // Until the player reports again, it is where it was just told to be: the seek target, or
+        // where it already is (the session's position less the accepted slack). Recording the
+        // session's position instead would read the slack back as a jump, a seek gesture.
         self.seen = Some(Seen { obs, at_us: now });
-        self.last = Last { time: expected, paused: !r.playing, at_us: now };
+        self.last = Last { time: obs.time, paused: !r.playing, at_us: now };
     }
+}
+
+/// A peer's clock as a JavaScript number holds it exactly.
+fn safe(c: u64) -> u64 {
+    c.min(MAX_SAFE_CLOCK)
+}
+
+/// The next clock value, never past [`MAX_SAFE_CLOCK`].
+pub(crate) fn tick_clock(c: u64) -> u64 {
+    c.saturating_add(1).min(MAX_SAFE_CLOCK)
 }
 
 fn finite(x: f64) -> f64 {
@@ -722,9 +760,11 @@ mod tests {
         assert_eq!(a.player.seeks.len(), 2);
     }
 
-    /// A landing too far off to be a keyframe is retried, but only RESEEK_LIMIT times in all.
+    /// A landing too far off to be a keyframe (here 30 s early) is never taken as slack: the commanded
+    /// seek is retried exactly RESEEK_LIMIT times, then the rule stops seeking for that reference and
+    /// keeps the last good slack. A new command starts afresh.
     #[test]
-    fn an_implausible_landing_is_retried_a_bounded_number_of_times() {
+    fn an_implausible_landing_is_retried_exactly_reseek_limit_times_then_left() {
         let t0 = 12_000_000;
         let mut h = member("h", true, true, t0);
         let mut a = member("a", false, true, t0);
@@ -732,11 +772,89 @@ mod tests {
         let ih = h.gesture(|p, now| p.seek(900.0, now));
         a.at(100);
         a.on_intent(&ih);
-        for _ in 0..40 {
+        for _ in 0..60 {
             all(&mut [&mut h, &mut a], 500);
+            assert_eq!(a.poll(true), None, "a missed landing is not a gesture");
+            let th = h.tick();
+            a.on_tick(&th, false);
+        }
+        assert_eq!(a.player.seeks.len(), 1 + RESEEK_LIMIT as usize, "{:?}", a.player.seeks);
+        assert_eq!(a.sync.slack(), 0.0, "an implausible error is never accepted as slack");
+        assert!(a.sync.landing_failed());
+        let ih = h.gesture(|p, now| p.seek(100.0, now));
+        a.at(100);
+        a.on_intent(&ih);
+        assert_eq!(a.player.seeks.len(), 2 + RESEEK_LIMIT as usize);
+        assert!(!a.sync.landing_failed());
+    }
+
+    /// Once a keyframe slack is accepted, the player sits `slack` behind the session on purpose.
+    /// Nothing that re-applies the session without seeking may then read that offset as a jump
+    /// (a seek gesture that would drag everyone back): a not-ready blip, an adopted tick, an
+    /// intent within HARD.
+    #[test]
+    fn an_accepted_slack_is_never_read_back_as_a_gesture() {
+        let t0 = 13_000_000;
+        let mut h = member("h", true, true, t0);
+        let mut a = member("a", false, true, t0);
+        a.player.gop = 3.0;
+        let ih = h.gesture(|p, now| p.seek(600.0, now));
+        a.at(100);
+        a.on_intent(&ih);
+        let settle = |h: &mut Member, a: &mut Member, n: usize| {
+            for _ in 0..n {
+                all(&mut [&mut *h, &mut *a], 500);
+                assert_eq!(a.poll(true), None, "no gesture from the slack");
+            }
+        };
+        settle(&mut h, &mut a, 8);
+        assert!((a.sync.slack() - 3.0).abs() < 0.1, "{}", a.sync.slack());
+        let seeks = a.player.seeks.len();
+        // A not-ready blip (the pipeline rebuffers), then ready again.
+        let mut cmds = Vec::new();
+        let mut o = a.obs();
+        o.ready = false;
+        a.sync.poll(o, false, true, &mut cmds);
+        a.at(500);
+        h.at(500);
+        assert_eq!(a.poll(true), None);
+        settle(&mut h, &mut a, 4);
+        // A tick with a newer stamp at the session's position: adopted, within HARD.
+        let mut th = h.tick();
+        let (c, _) = th.stamp.clone().unwrap();
+        th.stamp = Some((c + 1, "h".into()));
+        a.at(10);
+        assert_eq!(a.on_tick(&th, false), TickVerdict::Adopt);
+        settle(&mut h, &mut a, 4);
+        // An intent at the session's position (a play while playing): within HARD.
+        let at = h.player.time(h.now);
+        let i = IntentIn { id: "h".into(), name: "h".into(), action: Some(SyncAction::Play), time: at, playing: true, item: None, c: Some(c + 2) };
+        a.at(10);
+        assert!(a.on_intent(&i));
+        settle(&mut h, &mut a, 4);
+        assert_eq!(a.player.seeks.len(), seeks, "none of these seeks: {:?}", a.player.seeks);
+    }
+
+    /// A peer's clock is a JavaScript number: one past 2^53 - 1 is not exact there, so it is read
+    /// clamped, and counting from it never overflows.
+    #[test]
+    fn a_huge_clock_is_clamped_and_never_overflows() {
+        let t0 = 14_000_000;
+        let mut a = member("a", false, true, t0);
+        let i = IntentIn { id: "z".into(), name: "z".into(), action: Some(SyncAction::Play), time: 5.0, playing: true, item: None, c: Some(u64::MAX) };
+        a.at(10);
+        assert!(a.on_intent(&i));
+        assert_eq!(a.sync.clock(), MAX_SAFE_CLOCK);
+        let old = IntentIn { c: None, ..i.clone() };
+        a.at(10);
+        a.on_intent(&old);
+        assert_eq!(a.sync.clock(), MAX_SAFE_CLOCK);
+        for _ in 0..4 {
+            a.at(500);
             a.poll(true);
         }
-        assert!(a.player.seeks.len() <= RESEEK_LIMIT as usize, "{:?}", a.player.seeks);
+        let out = a.gesture(|p, now| p.seek(50.0, now));
+        assert_eq!(out.c, Some(MAX_SAFE_CLOCK));
     }
 
     #[test]

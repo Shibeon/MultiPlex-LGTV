@@ -7,6 +7,7 @@
 //! on the web client, and the interop fixtures in `plx_data::together` hold both sides to the same
 //! bytes. Pure functions over byte slices, graded against the RFC's SHA-256 test cases.
 
+use crate::crypto::Zeroize;
 use crate::sha256::HmacKey;
 
 /// The largest output HKDF-Expand may produce with SHA-256: 255 blocks of 32 bytes.
@@ -36,16 +37,18 @@ pub fn expand(prk: &[u8; 32], info: &[u8], out: &mut [u8]) -> Option<()> {
         chunk.copy_from_slice(&block[..chunk.len()]);
         previous = block;
     }
+    previous.zeroize();
     Some(())
 }
 
 /// Extract then expand to `N` bytes (`N` at most [`HKDF_SHA256_MAX_OUT`], checked at compile time).
 pub fn hkdf_sha256<const N: usize>(salt: &[u8], ikm: &[u8], info: &[u8]) -> [u8; N] {
     const { assert!(N <= HKDF_SHA256_MAX_OUT) };
-    let prk = extract(salt, ikm);
+    let mut prk = extract(salt, ikm);
     let mut out = [0u8; N];
     // Cannot fail: N is bounded above.
     let _ = expand(&prk, info, &mut out);
+    prk.zeroize();
     out
 }
 

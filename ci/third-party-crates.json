@@ -256,11 +256,6 @@
      "copyright": "Copyright (c) 2020-2026 The RustCrypto Project Developers"
     },
     {
-     "name": "digest",
-     "licence": "MIT OR Apache-2.0",
-     "copyright": "Copyright (c) 2017-2025 RustCrypto Developers"
-    },
-    {
      "name": "either",
      "licence": "MIT OR Apache-2.0",
      "copyright": "Copyright (c) 2015 (the upstream notice names no holder)"
@@ -319,16 +314,6 @@
      "name": "hashbrown",
      "licence": "MIT OR Apache-2.0",
      "copyright": "Amanieu d'Antras"
-    },
-    {
-     "name": "hkdf",
-     "licence": "MIT OR Apache-2.0",
-     "copyright": "Copyright (c) 2015-2018 Vlad Filippov"
-    },
-    {
-     "name": "hmac",
-     "licence": "MIT OR Apache-2.0",
-     "copyright": "Copyright (c) 2017 Artyom Pavlov"
     },
     {
      "name": "hybrid-array",

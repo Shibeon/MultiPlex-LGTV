@@ -371,11 +371,11 @@
       ".cargo/config": null,
       ".cargo/config.toml": "82f061c716740e16cfee63a74d87159e0e0dc253e1092b87c54190c603515b14"
     },
-    "lock_sha256": "8b5fe5161e60e73da3be331d787c2b455d6e9a4c5d992c6713ce46255ad29b6b",
+    "lock_sha256": "39e2015b743677601f2033ff6906b65cced3a76b5f8852716f8280cd251de256",
     "manifests": {
       "Cargo.toml": "47a4564941555d54a3a9913c1adc3fbe65ef5c4d20e603e87d07a183fd095b84",
       "appkit/Cargo.toml": "a766316ee7bfe5ed9149d900cf59784253921ae72fddd1b29fefdc0f2c6a8758",
-      "base/Cargo.toml": "e9154bfbe44a2208cda96af0974bf241a837153a83f0ac85560bf11c188ed6fc",
+      "base/Cargo.toml": "104adbfe1b8669cff122be986c39a067ed29cb801807575ff07647f86ad2b857",
       "data/Cargo.toml": "d424f881ac35efeb483b5fd4c2fc8723639c6c5cc2943f12fb381b6ef901c32f",
       "gfx/Cargo.toml": "2b568b9d0b51158d52b86d490a13084df5e999beeb75d6dd71f45048ab7028b3",
       "machine/Cargo.toml": "53f234399c02229f77631983fe65a46a49375900cbc285049d9c88fcda1a7c55",

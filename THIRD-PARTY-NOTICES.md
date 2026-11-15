@@ -345,7 +345,6 @@ stated; election does not alter your rights under the other arms.
 | ctr | 0.10.1 | MIT OR Apache-2.0 | Copyright (c) 2018-2022 RustCrypto Developers |
 | ctutils | 0.4.8 | Apache-2.0 OR MIT | Copyright (c) 2025-2026 The RustCrypto Project Developers |
 | der | 0.8.3 | Apache-2.0 OR MIT | Copyright (c) 2020-2026 The RustCrypto Project Developers |
-| digest | 0.11.3 | MIT OR Apache-2.0 | Copyright (c) 2017-2025 RustCrypto Developers |
 | either | 1.18.0 | MIT OR Apache-2.0 | Copyright (c) 2015 (the upstream notice names no holder) |
 | elliptic-curve | 0.14.3 | Apache-2.0 OR MIT | Copyright (c) 2020-2026 RustCrypto Developers |
 | encoding_rs | 0.8.44 | (Apache-2.0 OR MIT) AND BSD-3-Clause | Mozilla Foundation. Its encoding tables derive from the WHATWG Encoding Standard, whose data files are BSD-3-Clause (`licenses/WHATWG-BSD-3-Clause.txt`) |
@@ -358,8 +357,6 @@ stated; election does not alter your rights under the other arms.
 | gimli | 0.34.0 | MIT OR Apache-2.0 | The `gimli` authors |
 | group | 0.14.0 | MIT/Apache-2.0 | Sean Bowe, Jack Grigg |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 | Amanieu d'Antras |
-| hkdf | 0.13.0 | MIT OR Apache-2.0 | Copyright (c) 2015-2018 Vlad Filippov |
-| hmac | 0.13.0 | MIT OR Apache-2.0 | Copyright (c) 2017 Artyom Pavlov |
 | hybrid-array | 0.4.15 | MIT OR Apache-2.0 | Copyright (c) 2022-2026 The RustCrypto Project Developers |
 | image | 0.25.10 | MIT OR Apache-2.0 | The image-rs Developers |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT | 2016–2017 The indexmap authors |

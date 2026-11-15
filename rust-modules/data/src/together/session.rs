@@ -29,13 +29,14 @@
 //! message (`wire`), so nothing here can send them.
 
 use std::collections::BTreeMap;
+use std::fmt;
 
 use plx_machine::machine::Handled;
 
 use super::invite::{format_invite, invite_text, parse_invite, relay_url, secret_from_bytes, Invite};
 use super::keys::{derive_legacy, SessionKeys, INVITE_ITERATIONS};
 use super::relay::{dedupe, relay_candidates, rooms_url, KnownRelays, RoomSearch, ServerInfo, MAX_ROOM_LOOKUP};
-use super::sync::{host_yields, PlayerCmd, PlayerObs, TogetherSync};
+use super::sync::{host_yields, tick_clock, PlayerCmd, PlayerObs, TogetherSync};
 use super::wire::{read_message, Bye, Incoming, Intent, Message, SharedItem, SyncAction, Tick};
 
 /// A presence every 3 s.
@@ -77,7 +78,7 @@ pub enum JoinError {
 }
 
 /// What the UI is told.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Notice {
     /// A session is open: the code to share (`full_code` carries the relay, host only).
     Opened { code: String, full_code: Option<String>, host: bool },
@@ -94,7 +95,6 @@ pub enum Notice {
     Left,
 }
 
-#[derive(Debug)]
 pub enum TogetherEvent {
     /// The frame time.
     Tick { dt_us: u64 },
@@ -122,7 +122,7 @@ pub enum TogetherEvent {
     Leave,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum TogetherFx {
     /// PBKDF2 + HKDF off the frame (`keys::derive_session`), answered `Derived`.
     Derive { tag: u32, secret: String, server: String, iterations: u32 },
@@ -155,7 +155,7 @@ pub struct Peer {
 }
 
 /// What the UI reads of a live session.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct View {
     pub code: String,
     pub full_code: Option<String>,
@@ -167,7 +167,7 @@ pub struct View {
     pub position: Option<f64>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct Live {
     me: Me,
     relay: String,
@@ -189,7 +189,7 @@ struct Live {
     last_want_reply_us: Option<u64>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct HostPlan {
     me: Me,
     relay: String,
@@ -198,7 +198,7 @@ struct HostPlan {
     tag: u32,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct JoinPlan {
     me: Me,
     code: String,
@@ -228,6 +228,125 @@ enum SealFor {
     Send(u32),
     /// The `bye` of a session left: send it, then close the socket.
     Farewell(u32),
+}
+
+// ---- Debug without secrets. An invitation code IS the session's secret, the random bytes of a
+// host become it, and a key opens every message: none of them is printed, like `SessionKeys`.
+
+const HIDDEN: &str = "<redacted>";
+
+impl fmt::Debug for Notice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Notice::Opened { full_code, host, .. } => {
+                f.debug_struct("Opened").field("code", &HIDDEN).field("full_code", &full_code.as_ref().map(|_| HIDDEN)).field("host", host).finish()
+            }
+            Notice::Status(s) => f.debug_tuple("Status").field(s).finish(),
+            Notice::Action { name, action } => f.debug_struct("Action").field("name", name).field("action", action).finish(),
+            Notice::HostChanged { host } => f.debug_struct("HostChanged").field("host", host).finish(),
+            Notice::Item(i) => f.debug_tuple("Item").field(i).finish(),
+            Notice::HostFailed => f.write_str("HostFailed"),
+            Notice::JoinFailed(e) => f.debug_tuple("JoinFailed").field(e).finish(),
+            Notice::Left => f.write_str("Left"),
+        }
+    }
+}
+
+impl fmt::Debug for TogetherEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TogetherEvent::Tick { dt_us } => f.debug_struct("Tick").field("dt_us", dt_us).finish(),
+            TogetherEvent::Host { me, relay, server, item, random } => f
+                .debug_struct("Host")
+                .field("me", me)
+                .field("relay", relay)
+                .field("server", server)
+                .field("item", item)
+                .field("random", &format_args!("<{} bytes>", random.len()))
+                .finish(),
+            TogetherEvent::Join { me, relay, server, servers, .. } => {
+                f.debug_struct("Join").field("me", me).field("code", &HIDDEN).field("relay", relay).field("server", server).field("servers", servers).finish()
+            }
+            TogetherEvent::Derived { tag, keys } => f.debug_struct("Derived").field("tag", tag).field("keys", keys).finish(),
+            TogetherEvent::RoomsAnswered { tag, body } => f.debug_struct("RoomsAnswered").field("tag", tag).field("body", body).finish(),
+            TogetherEvent::SocketOpened { conn } => f.debug_struct("SocketOpened").field("conn", conn).finish(),
+            TogetherEvent::SocketClosed { conn } => f.debug_struct("SocketClosed").field("conn", conn).finish(),
+            TogetherEvent::SocketBinary { conn, bytes } => f.debug_struct("SocketBinary").field("conn", conn).field("bytes", &bytes.len()).finish(),
+            TogetherEvent::Sealed { tag, bytes } => f.debug_struct("Sealed").field("tag", tag).field("bytes", &bytes.len()).finish(),
+            TogetherEvent::Opened { tag, plain } => f.debug_struct("Opened").field("tag", tag).field("plain", &plain.as_ref().map(Vec::len)).finish(),
+            TogetherEvent::Attach { item, obs } => f.debug_struct("Attach").field("item", item).field("obs", obs).finish(),
+            TogetherEvent::Player(o) => f.debug_tuple("Player").field(o).finish(),
+            TogetherEvent::Detach => f.write_str("Detach"),
+            TogetherEvent::ShareTitle(i) => f.debug_tuple("ShareTitle").field(i).finish(),
+            TogetherEvent::Leave => f.write_str("Leave"),
+        }
+    }
+}
+
+impl fmt::Debug for TogetherFx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TogetherFx::Derive { tag, server, iterations, .. } => {
+                f.debug_struct("Derive").field("tag", tag).field("secret", &HIDDEN).field("server", server).field("iterations", iterations).finish()
+            }
+            TogetherFx::HttpRooms { tag, url, timeout_ms } => f.debug_struct("HttpRooms").field("tag", tag).field("url", url).field("timeout_ms", timeout_ms).finish(),
+            TogetherFx::OpenSocket { conn, url } => f.debug_struct("OpenSocket").field("conn", conn).field("url", url).finish(),
+            TogetherFx::CloseSocket { conn } => f.debug_struct("CloseSocket").field("conn", conn).finish(),
+            TogetherFx::SendBinary { conn, bytes } => f.debug_struct("SendBinary").field("conn", conn).field("bytes", &bytes.len()).finish(),
+            TogetherFx::Seal { tag, plain, .. } => f.debug_struct("Seal").field("tag", tag).field("key", &HIDDEN).field("plain", plain).finish(),
+            TogetherFx::Open { tag, bytes, .. } => f.debug_struct("Open").field("tag", tag).field("key", &HIDDEN).field("bytes", &bytes.len()).finish(),
+            TogetherFx::Player(c) => f.debug_tuple("Player").field(c).finish(),
+            TogetherFx::Notice(n) => f.debug_tuple("Notice").field(n).finish(),
+        }
+    }
+}
+
+impl fmt::Debug for View {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("View")
+            .field("code", &HIDDEN)
+            .field("host", &self.host)
+            .field("status", &self.status)
+            .field("item", &self.item)
+            .field("peers", &self.peers)
+            .field("position", &self.position)
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for Live {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Live")
+            .field("me", &self.me)
+            .field("relay", &self.relay)
+            .field("keys", &self.keys)
+            .field("code", &HIDDEN)
+            .field("host", &self.host)
+            .field("host_claim", &self.host_claim)
+            .field("status", &self.status)
+            .field("peers", &self.peers)
+            .field("conn", &self.conn)
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for HostPlan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HostPlan").field("me", &self.me).field("relay", &self.relay).field("secret", &HIDDEN).field("tag", &self.tag).finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for JoinPlan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("JoinPlan")
+            .field("me", &self.me)
+            .field("code", &HIDDEN)
+            .field("ids", &self.ids)
+            .field("relays", &self.relays)
+            .field("derived", &self.derived)
+            .field("asked", &self.asked)
+            .finish_non_exhaustive()
+    }
 }
 
 /// The parts of the state every phase shares, moved out of the machine for one transition.
@@ -686,7 +805,7 @@ fn on_tick(live: &mut Live, dt_us: u64, desk: &mut Desk, fx: &mut Vec<TogetherFx
     // The host has gone: the first participant (by id) takes the hand.
     let me = live.me.id.as_str();
     if !live.host && live.status == Status::Open && !live.peers.is_empty() && live.peers.iter().all(|p| !p.host && p.id.as_str() > me) {
-        live.host_claim = live.sync.clock() + 1;
+        live.host_claim = tick_clock(live.sync.clock());
         live.host = true;
         fx.push(TogetherFx::Notice(Notice::HostChanged { host: true }));
     }
@@ -891,7 +1010,7 @@ mod tests {
         let out = g.take();
         let rooms: Vec<(u32, String)> = out.iter().filter_map(|f| if let TogetherFx::HttpRooms { tag, url, .. } = f { Some((*tag, url.clone())) } else { None }).collect();
         assert_eq!(rooms.len(), 1, "{out:?}");
-        let room = derive_session(code.trim_start_matches("MPX-"), "srv-1", ROUNDS).room;
+        let room = derive_session(code.trim_start_matches("MPX-"), "srv-1", ROUNDS).room.clone();
         assert_eq!(rooms[0].1, format!("https://relais.exemple.fr/rooms?ids={room}"));
         g.step(TogetherEvent::RoomsAnswered { tag: rooms[0].0, body: Some(format!(r#"{{"multiplex":"relay","found":["{room}"]}}"#)) });
         let out = g.take();
@@ -1151,6 +1270,34 @@ mod tests {
         assert_eq!(out[0], TogetherFx::Notice(Notice::Left));
         assert!(h.s.view().is_none());
         assert_eq!(h.step(TogetherEvent::Leave), Handled::No);
+    }
+
+    /// Nothing that can open a session prints in a log: not the secret (nor the code that carries
+    /// it), not the random bytes it came from, not the AES key.
+    #[test]
+    fn debug_output_never_carries_a_secret_or_a_key() {
+        let random: Vec<u8> = (0u8..32).collect();
+        let host = TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: random.clone() };
+        let mut d = TogetherSession::new();
+        let mut fx = Vec::new();
+        d.step(host, &mut fx);
+        let TogetherFx::Derive { secret, .. } = fx[0].clone() else { panic!("{fx:?}") };
+        let key = [0xab; 32];
+        let code = format_invite(&secret, None);
+        let dumps = [
+            format!("{:?}", TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random }),
+            format!("{:?}", TogetherEvent::Join { me: me("m", "H"), code: code.clone(), relay: String::new(), server: None, servers: Vec::new() }),
+            format!("{fx:?}"),
+            format!("{:?}", d.phase),
+            format!("{:?}", TogetherFx::Seal { tag: 1, key, plain: "{}".into() }),
+            format!("{:?}", TogetherFx::Open { tag: 1, key, bytes: vec![1, 2] }),
+            format!("{:?}", Notice::Opened { code: code.clone(), full_code: Some(format!("{code}@r.fr")), host: true }),
+        ];
+        let compact = secret.replace('-', "");
+        for dump in &dumps {
+            assert!(!dump.contains(&compact) && !dump.contains(&secret[..4]), "{dump}");
+            assert!(!dump.contains("171") && !dump.contains("0, 1, 2, 3"), "{dump}");
+        }
     }
 
     #[test]

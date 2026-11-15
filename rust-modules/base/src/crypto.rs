@@ -14,7 +14,12 @@
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
+use p256::elliptic_curve::point::AffineCoordinates;
 use p256::elliptic_curve::sec1::ToSec1Point;
+
+/// Wiping of secret buffers, re-exported from the curve crate's own dependency (no new package),
+/// for the keys and intermediate secrets built over this module.
+pub use p256::elliptic_curve::zeroize::Zeroize;
 
 /// Bytes of an AES-GCM IV (the web client's `new Uint8Array(12)`).
 pub const GCM_IV_LEN: usize = 12;
@@ -71,9 +76,13 @@ impl EcdhSecret {
     /// a point on the curve.
     pub fn shared(&self, peer: &[u8]) -> Option<[u8; 32]> {
         let peer = p256::PublicKey::from_sec1_bytes(peer).ok()?;
-        let shared = self.0.diffie_hellman(&peer);
+        // Plain ECDH (SEC 1, 3.3.1): x of secret * peer. Written over the curve arithmetic so the
+        // `ecdh` feature, and the HKDF/HMAC/digest crates it pulls in for an unused KDF, stay out.
+        let point = (peer.to_projective() * *self.0.to_nonzero_scalar()).to_affine();
+        let mut x = point.x();
         let mut out = [0u8; 32];
-        out.copy_from_slice(shared.raw_secret_bytes().as_slice());
+        out.copy_from_slice(x.as_slice());
+        x.as_mut_slice().zeroize();
         Some(out)
     }
 }

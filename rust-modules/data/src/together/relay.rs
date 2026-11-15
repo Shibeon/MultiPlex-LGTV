@@ -130,7 +130,9 @@ pub fn rooms_url(relay: &str, rooms: &[String]) -> String {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RoomsAnswer {
     pub found: Vec<String>,
-    /// The relay lists friends' sessions, and of which Plex server (`server`).
+    /// The relay lists sessions to the host's Plex friends only (`friends` AND `friendsOnly`, as the
+    /// web's `findRelay` requires since 08537b6: an older relay listed them to every user of the
+    /// server), and of which Plex server (`server`).
     pub friends: bool,
     pub server: Option<String>,
 }
@@ -145,7 +147,8 @@ impl RoomsAnswer {
         let found = v.get("found")?.as_array()?.iter().filter_map(|x| x.as_str().map(str::to_string)).collect();
         Some(RoomsAnswer {
             found,
-            friends: v.get("friends").and_then(Value::as_bool) == Some(true),
+            friends: v.get("friends").and_then(Value::as_bool) == Some(true)
+                && v.get("friendsOnly").and_then(Value::as_bool) == Some(true),
             server: v.get("server").and_then(Value::as_str).map(str::to_string),
         })
     }
