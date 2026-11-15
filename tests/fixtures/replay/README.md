@@ -721,12 +721,27 @@ SAME with every difference counter at zero on three consecutive runs, one of the
 
 The section gap raised to 96 px (`theme::space::SECTION`, so `consts::SECTION_AIR` 56 and
 `consts::SHELF_FOOT` 78), the person page's header-to-first-shelf gap set to `space::XL`, and the
-removal of the wheel's row mapping (`plx_ui::wheel` and every `DrawFrame::pan_zone`) move the tree
-digest every frame folds: all three anchors diverged with every named difference counter at zero
-(`1-boot-home-chip-grid` 468 of 484 frames, `6-settings-family` 1085 of 1097,
-`12-filmography-detail-return` 1033 of 1045), while the base commit's simulator replayed all three
-SAME. The anchors were recorded afresh on the unchanged shape (`tests/focusfp.sh --rec --only 1,6,12`
-on the Linux release simulator under Xvfb, 350 ms keys, 1 s boot settle, 1.5 s final settle).
-`multiplex-rec check` accepted all three; only each `rec-0000.jsonl` was replaced (manifests
-unchanged, `anchor: true` kept); Replay, Targets and Resolve are SAME with every difference counter
-at zero at 1920x1080 (the 960x540 CI window was not run here).
+removal of the wheel's row mapping (`plx_ui::wheel` and every `DrawFrame::pan_zone`) moved the tree
+digest every frame folds without moving the shape: all three anchors diverged with every named
+difference counter at zero (`1-boot-home-chip-grid` 468 of 484 frames, `6-settings-family` 1085 of
+1097, `12-filmography-detail-return` 1033 of 1045), while the base commit's simulator replayed all
+three SAME. The three recordings were recorded afresh (`tests/focusfp.sh --rec --only 1,6,12` on the
+Linux release simulator under Xvfb, 350 ms keys, 1 s boot settle, 1.5 s final settle), passed
+`multiplex-rec check`, and only each `rec-0000.jsonl` was replaced, the manifests and `anchor: true`
+kept; Replay, Targets and Resolve were SAME at 1920x1080 on that tree.
+
+The same branch then added each My list tile's availability to `WatchlistScreen`'s canon
+(`tiles:[{guid,state,avail,elem}]`), a SHAPE bump: `SCREEN_SHAPES_PIN` 0x086d_35c6_7e98_86f1 →
+0x1097_dde4_cf49_0664 and the recorder's frozen vectors re-derived, `FP_PRIOR` 8932796983854629004 →
+16966599510782656729 and `FP_V6` 15834642128357272210 → 5721615536593523891. None of the three flows
+mounts My list, so no recorded frame hashes a tile and the bump moves the fingerprint alone. That was
+shown, not assumed: the three recordings above replayed SAME on the build before the bump, and the
+SAME bytes replay SAME (every difference counter zero, `diverged=0`) on the build after it once each
+manifest's `state_fp` reads the new `FP_V6`; the manifest diff is that one line per fixture, written
+by hand rather than by `multiplex-rec rerecord` (the recordings were not re-taken), and the old
+manifests' refusal on the new build was not separately observed. The later changes on the branch (the
+player's primary Play plate in `TransportButton`, two merges of `main`) move neither the shape nor any
+recorded frame of these flows. On the committed head, `tests/replay_fixtures.py` on the Linux release
+simulator under Xvfb reports `3 fixtures, 6 replays, 0 failures` with every replay `verdict=SAME` and
+every difference counter zero at the CI window (`--window 960x540`) and at 1920x1080
+(`1-boot-home-chip-grid` 412 frames, `6-settings-family` 1014, `12-filmography-detail-return` 1039).
