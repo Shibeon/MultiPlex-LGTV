@@ -221,7 +221,63 @@ pub fn resolve_on_load_thread(plan: PcmLead) -> Option<i64> {
     if let Some(line) = resolved.log_line() {
         plx_base::eventlog::log(&line);
     }
+    // The read the lead made answers a pending probe too: one bus call per Load at most.
+    note_sound_output(resolved.output.as_deref());
     Some(resolved.ns)
+}
+
+/// Settle a pending sound-output probe (`OpenStream::probe_sound_output`) with the answer `output`
+/// of a read already made (`None`: no answer). Nothing when no probe is pending.
+fn note_sound_output(output: Option<&str>) {
+    use std::sync::atomic::Ordering;
+    if !crate::shared::FEED_SHARED.sound_output_probe.swap(false, Ordering::AcqRel) {
+        return;
+    }
+    let verdict = sound_output_verdict(plx_platform::devcaps::audio_stack(), output);
+    crate::shared::FEED_SHARED.sound_output.store(verdict.code(), Ordering::Release);
+    plx_base::eventlog::log(&format!(
+        "audio mode: sound output {} -> {verdict:?} for a decode in the app", output.unwrap_or("unreadable")
+    ));
+}
+
+/// After the Load returned, on its Load thread: settle a probe the lead's own read did not already
+/// answer. On a stack with a planned lead the read is one bus call (`tv::sound::output`, a 300 ms
+/// budget but no bound on the hub's registration), so it runs on a detached worker of its own: the
+/// Load thread returns at once, and a teardown that joins it (`native_executor`'s `join_media`) never
+/// waits on the settings service. The verdict is the set's, not the session's, so an answer that
+/// lands after the session ended is still right. A stack with no lead answers inline, with no read.
+pub fn probe_sound_output_after_load() {
+    use std::sync::atomic::Ordering;
+    if !crate::shared::FEED_SHARED.sound_output_probe.load(Ordering::Acquire) {
+        return;
+    }
+    if !plx_platform::devcaps::audio_stack().plans_pcm_lead() {
+        note_sound_output(None);
+        return;
+    }
+    let spawned = plx_base::task::spawn_small("sound-probe", || {
+        note_sound_output(plx_platform::tv::sound::output().as_deref());
+    });
+    if !spawned {
+        // No thread: no probe this Load. The verdict stays what it was (no decode while unknown).
+        crate::shared::FEED_SHARED.sound_output_probe.store(false, Ordering::Release);
+        plx_base::eventlog::log("audio mode: sound output probe skipped (worker thread refused)");
+    }
+}
+
+/// The probe's verdict on a set whose audio stack is `stack`, whose sound output read answered
+/// `output` (`None`: no answer, or not read): [`SoundOutput::NoLead`] on a stack that plans no lead
+/// for the app's PCM (`AudioStack::plans_pcm_lead`), else the output's
+/// ([`SoundOutput::of_read`] with `devcaps::mode_decode_output_ok`). PURE.
+///
+/// [`SoundOutput::NoLead`]: plx_playback_contract::feed::SoundOutput::NoLead
+/// [`SoundOutput::of_read`]: plx_playback_contract::feed::SoundOutput::of_read
+pub fn sound_output_verdict(stack: AudioStack, output: Option<&str>) -> plx_playback_contract::feed::SoundOutput {
+    use plx_playback_contract::feed::SoundOutput;
+    if !stack.plans_pcm_lead() {
+        return SoundOutput::NoLead;
+    }
+    SoundOutput::of_read(output, plx_platform::devcaps::mode_decode_output_ok)
 }
 
 /// The plan for a Load that declared `audio` on a set whose audio stack is `stack`, given the dev
@@ -241,5 +297,52 @@ pub fn pcm_lead_plan(audio: &str, override_ms: Option<&str>, stack: AudioStack) 
         AudioStack::Liblxa | AudioStack::AudioSinkNew => PcmLead::FromOutput(stack),
         AudioStack::LgAudioSink => PcmLead::Fixed(stack),
         AudioStack::AdecSink | AudioStack::Other | AudioStack::Unknown => PcmLead::NoLead(stack),
+    }
+}
+
+#[cfg(test)]
+mod mode_decode_probe_tests {
+    use super::*;
+    use plx_playback_contract::feed::SoundOutput;
+
+    const STACKS: [AudioStack; 6] = [
+        AudioStack::Liblxa, AudioStack::LgAudioSink, AudioStack::AudioSinkNew,
+        AudioStack::AdecSink, AudioStack::Other, AudioStack::Unknown,
+    ];
+
+    /// A stack plans a lead for the app's PCM exactly when `pcm_lead_plan` gives a PCM Load one, so
+    /// the audio-mode decode and the lead can never disagree about a stack.
+    #[test]
+    fn a_stack_plans_a_pcm_lead_exactly_where_the_lead_plan_has_one() {
+        for stack in STACKS {
+            let planned = !matches!(pcm_lead_plan("PCM", None, stack), PcmLead::NoLead(_));
+            assert_eq!(stack.plans_pcm_lead(), planned, "{stack:?}");
+        }
+    }
+
+    /// The probe's verdict by stack and output: the speakers and Bluetooth on a stack with a lead are
+    /// the only `Local`; a stack with no lead is `NoLead` whatever the output.
+    #[test]
+    fn the_probe_is_local_only_on_the_sets_own_outputs_of_a_stack_with_a_lead() {
+        for stack in STACKS {
+            for (output, local) in [
+                (Some("tv_speaker"), true), (Some("bt_soundbar"), true),
+                (Some("external_arc"), false), (Some("external_optical"), false), (None, false),
+            ] {
+                let want = if !stack.plans_pcm_lead() {
+                    SoundOutput::NoLead
+                } else if local {
+                    SoundOutput::Local
+                } else {
+                    SoundOutput::NotLocal
+                };
+                assert_eq!(sound_output_verdict(stack, output), want, "{stack:?} {output:?}");
+            }
+        }
+        assert_eq!(sound_output_verdict(AudioStack::AdecSink, Some("tv_speaker")), SoundOutput::NoLead);
+        assert_eq!(sound_output_verdict(AudioStack::Liblxa, Some("external_arc")), SoundOutput::NotLocal);
+        for v in [SoundOutput::Unknown, SoundOutput::Local, SoundOutput::NotLocal, SoundOutput::NoLead] {
+            assert_eq!(SoundOutput::from_code(v.code()), v);
+        }
     }
 }

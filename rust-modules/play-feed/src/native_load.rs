@@ -55,6 +55,7 @@ pub fn load_thread(
     pcm_lead: PcmLead,
 ) {
     load_thread_with(sink, payload, native_epoch, receipt, pcm_lead, crate::pcm_lead::resolve_on_load_thread);
+    crate::pcm_lead::probe_sound_output_after_load();
 }
 
 fn load_thread_with(

@@ -1076,6 +1076,9 @@ pub fn pump(ps: &mut crate::route::PlaybackSession, pa: &mut super::adapter::Pla
     pa.drain_abr(ps);
     // The viewer's audio mode reaches the demuxer's PCM without a reload (`super::audio_processing`).
     pa.sync_audio_processing(super::audio_processing(crate::route::audio_mode()));
+    // ...and who decodes the sound follows the mode: a reload when that changes, the safety net when
+    // the app's decode falls behind (`super::sync_audio_mode_decode`).
+    super::sync_audio_mode_decode(ps, pa);
     // Capture before a terminal release can clear the callback mailbox, then capture every
     // surviving/replacement Engine after the frame, including its early-return paths. A callback
     // or timeout raised during this tick must reach reports before the app observes Error.

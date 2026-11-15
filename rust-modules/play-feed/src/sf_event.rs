@@ -101,12 +101,15 @@ pub fn source_aspect(bytes: &[u8]) -> Option<(u32, u32)> {
     Some((u32::try_from(num / a).ok()?, u32::try_from(den / a).ok()?))
 }
 
-/// What the pipeline said it set up for a speed session's audio, from its audio-info callback
+/// What the pipeline said it set up for a speed session's audio, or a decode for an audio mode's
+/// (`FEED_SHARED.mode_decode`, the same stereo 48 kHz declaration), from its audio-info callback
 /// (`audio/x-raw … <kHz> <channels> …`). 48 kHz stereo is what the payload declared; anything
 /// else means the declaration was not understood — measured: `"sampleRate":48000` came back as
 /// 44.099998 and the audio drifted and resynced every few seconds.
 fn note_speed_audio_report(b: &[u8]) {
-    if FEED_SHARED.applied_rate_permille.load(Relaxed) == RATE_NORMAL || !b.starts_with(b"audio/") {
+    let judged = FEED_SHARED.applied_rate_permille.load(Relaxed) != RATE_NORMAL
+        || FEED_SHARED.mode_decode.load(Relaxed);
+    if !judged || !b.starts_with(b"audio/") {
         return;
     }
     let text = String::from_utf8_lossy(b);
@@ -448,6 +451,7 @@ mod tests {
             fn drop(&mut self) {
                 FEED_SHARED.applied_rate_permille.store(RATE_NORMAL, Relaxed);
                 FEED_SHARED.speed_audio_verdict.store(SPEED_AUDIO_UNKNOWN, Relaxed);
+                FEED_SHARED.mode_decode.store(false, Relaxed);
             }
         }
         let _restore = Restore;
@@ -465,6 +469,11 @@ mod tests {
         assert_eq!(verdict(1500, b"audio/mpeg (null) (null) 0.000000 0 (null)"), SPEED_AUDIO_BAD);
         assert_eq!(verdict(RATE_NORMAL, drift), SPEED_AUDIO_UNKNOWN, "1x is never judged");
         assert_eq!(verdict(1500, b"{\"video\":1}"), SPEED_AUDIO_UNKNOWN, "not an audio report");
+        // ...except a 1x Load that decodes for the audio mode: the same PCM declaration, the same check
+        FEED_SHARED.mode_decode.store(true, Relaxed);
+        assert_eq!(verdict(RATE_NORMAL, good), SPEED_AUDIO_OK);
+        assert_eq!(verdict(RATE_NORMAL, drift), SPEED_AUDIO_BAD, "a mode decode's PCM is judged at 1x");
+        FEED_SHARED.mode_decode.store(false, Relaxed);
     }
 
     #[test]

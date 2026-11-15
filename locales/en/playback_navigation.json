@@ -62,5 +62,21 @@
   "settings.playback.audio_mode.voice": {
     "value": "Clear voices",
     "description": "Choice for the Audio mode setting: the dialogue is lifted above the music and effects. A table row label, so short."
+  },
+  "settings.playback.audio_mode_decode": {
+    "value": "Decode for audio modes",
+    "description": "Playback setting title (Settings > Playback). Whether the app decodes a compressed soundtrack itself while an audio mode (Night mode, Clear voices) is on, so the mode can act on it; default On. A table row label, so short."
+  },
+  "settings.playback.audio_mode_decode.copy": {
+    "value": "With an audio mode on, the app decodes the sound itself so the mode works on most films. The sound is then stereo, without Atmos. Never towards a receiver.",
+    "description": "Explanation of the Decode for audio modes setting. When on and an audio mode is chosen, the app decodes AAC, Dolby Digital, Dolby Digital Plus, DTS and Opus tracks itself and plays them as stereo (a surround track is mixed down, Dolby Atmos is lost); it never does so when the sound goes to an AV receiver or soundbar over HDMI or optical."
+  },
+  "settings.playback.audio_mode_decode.on": {
+    "value": "On",
+    "description": "Choice for the Decode for audio modes setting: the app decodes the sound while an audio mode is on."
+  },
+  "settings.playback.audio_mode_decode.off": {
+    "value": "Off",
+    "description": "Choice for the Decode for audio modes setting: the television keeps decoding the sound; the audio mode acts only where the app already decodes it."
   }
 }

@@ -14,5 +14,9 @@
   "settings.playback.audio_mode.copy": "Ночной режим выравнивает громкость: громкие сцены тише, тихие диалоги громче. «Чёткая речь» выделяет диалоги. Не действует, если звук декодирует телевизор или ресивер.",
   "settings.playback.audio_mode.off": "Выкл.",
   "settings.playback.audio_mode.night": "Ночной режим",
-  "settings.playback.audio_mode.voice": "Чёткая речь"
+  "settings.playback.audio_mode.voice": "Чёткая речь",
+  "settings.playback.audio_mode_decode": "Декодировать в аудиорежимах",
+  "settings.playback.audio_mode_decode.copy": "Когда включён аудиорежим, приложение само декодирует звук, чтобы режим работал на большинстве фильмов. Звук тогда стерео, без Atmos. Никогда для ресивера.",
+  "settings.playback.audio_mode_decode.on": "Включено",
+  "settings.playback.audio_mode_decode.off": "Выключено"
 }

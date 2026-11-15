@@ -109,7 +109,7 @@ fn every_field_row_pushes_its_picker_and_nothing_else() {
     let mut playback = PreferencesPage::new(EntryId(0), Kind::Playback, &crate::registry::capture_fixture());
     let mut audio = loaded_audio_page(&account);
     for (page, fields) in [
-        (&mut playback, vec![PickerKind::Quality, PickerKind::DirectPlay, PickerKind::HdrOverlay, PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::DolbyVision, PickerKind::UriEngine, PickerKind::AudioMode]),
+        (&mut playback, vec![PickerKind::Quality, PickerKind::DirectPlay, PickerKind::HdrOverlay, PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::DolbyVision, PickerKind::UriEngine, PickerKind::AudioMode, PickerKind::AudioModeDecode]),
         (&mut audio, vec![PickerKind::AudioLanguage, PickerKind::SubtitleMode, PickerKind::SubtitleLanguage, PickerKind::ForcedSubtitles, PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor]),
     ] {
         for field in fields {
@@ -291,6 +291,41 @@ fn the_playback_engine_row_defaults_to_standard_and_its_picker_saves_the_opt_in(
     plx_media::route::restore_uri_engine(prior);
 }
 
+/// The "Decode for audio modes" row: On by default, its picker lists On and Off with the live one
+/// checked, choosing Off asks the app to save exactly that, and its sentence says the app decodes the
+/// sound for a mode, in stereo, and never towards a receiver.
+#[test]
+fn the_audio_decode_row_defaults_to_on_and_its_picker_saves_the_choice() {
+    use plx_plex::plex::session::AudioModeDecode;
+    let _serial = plx_base::testlock::serial();
+    let _en = plx_platform::i18n::language_on_this_thread_for_test(plx_platform::i18n::Preference::En);
+    let _session = plx_plex::plex::session::TempSession::new("pref-audio-decode");
+    let prior = plx_media::route::audio_mode_decode_choice();
+    plx_media::route::restore_audio_mode_decode(AudioModeDecode::On);
+
+    let prefs = AudioPreferences::default();
+    assert_eq!(field_readout(PickerKind::AudioModeDecode, Quality::Original, DirectPlayMode::Auto, Some(&prefs)), "On");
+    assert_eq!(field_options(PickerKind::AudioModeDecode, Quality::Original, DirectPlayMode::Auto, Some(&prefs)), [
+        ("On".to_string(), Value::AudioModeDecode(AudioModeDecode::On)),
+        ("Off".to_string(), Value::AudioModeDecode(AudioModeDecode::Off))]);
+    assert_eq!(PickerKind::AudioModeDecode.title(), "Decode for audio modes");
+    assert_eq!(PickerKind::AudioModeDecode.parent(), SettingsPage::Playback);
+    let copy = PickerKind::AudioModeDecode.copy();
+    assert!(copy.contains("decodes the sound") && copy.contains("stereo") && copy.contains("receiver"), "the hint: {copy}");
+
+    let mut picker = PickerPage::new(EntryId(0), PickerKind::AudioModeDecode, &crate::registry::capture_fixture());
+    let emitted = drive(&mut picker, ScreenEvent::Activate(1), 1);
+    plx_media::route::restore_audio_mode_decode(prior);
+    let saved = emitted.into_iter().find_map(|e| match e.fx {
+        Fx::App(AppFx::Preferences(PreferenceCmd::Choose(plx_media::route::Choice::AudioModeDecode(v), _))) => Some(v),
+        _ => None,
+    });
+    assert_eq!(saved, Some(AudioModeDecode::Off));
+    plx_media::route::restore_audio_mode_decode(AudioModeDecode::Off);
+    assert_eq!(field_readout(PickerKind::AudioModeDecode, Quality::Original, DirectPlayMode::Auto, Some(&prefs)), "Off");
+    plx_media::route::restore_audio_mode_decode(prior);
+}
+
 /// The Audio mode row: Off by default, the picker lists Off, Night mode and Clear voices with the
 /// live one checked, and choosing Clear voices asks the app to save exactly that. The Settings row is
 /// always listed (the More menu is the one that hides it where the app does not decode the sound), and
@@ -359,7 +394,7 @@ fn playback_rows_are_read_only_while_no_profile_is_seated() {
     let mut page = PreferencesPage::new(EntryId(0), Kind::Playback, &crate::registry::capture_fixture());
     assert_eq!(page.copy, plx_platform::i18n::msg::settings_playback_unseated(), "the page says to choose a profile");
     for field in [PickerKind::Quality, PickerKind::DirectPlay, PickerKind::HdrOverlay,
-        PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::DolbyVision, PickerKind::UriEngine, PickerKind::AudioMode] {
+        PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::DolbyVision, PickerKind::UriEngine, PickerKind::AudioMode, PickerKind::AudioModeDecode] {
         let key = RowId::Field(field).key().0;
         let row = page.form.index_of(&RowId::Field(field)).expect("the row is still listed");
         assert!(disabled_rows(&page)[row], "{field:?}: disabled");
@@ -491,7 +526,7 @@ fn video_and_playback_lists_video_player_and_up_next() {
     let all = FieldListInputs { marker_prefs: granted, ..inputs_of(Kind::Playback, None) };
     assert_eq!(fields_of(&all), vec![
         PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine,
-        PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode,
+        PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode,
         PickerKind::NextEpisode, PickerKind::DeckPress,
     ]);
     let groups = groups_listed(&all);
@@ -511,7 +546,7 @@ fn intro_and_credits_skip_rows_follow_their_grants_in_the_player_group() {
     let none = inputs_of(Kind::Playback, None);
     assert_eq!(fields_of(&none), vec![
         PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine,
-        PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::AudioMode, PickerKind::NextEpisode, PickerKind::DeckPress]);
+        PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::NextEpisode, PickerKind::DeckPress]);
     let intro = FieldListInputs { marker_prefs: MarkerPrefsView { scope: 2, intro_granted: true, ..Default::default() }, ..inputs_of(Kind::Playback, None) };
     assert_eq!(fields_of(&intro).iter().filter(|f| matches!(f, PickerKind::IntroSkip | PickerKind::CreditsSkip)).collect::<Vec<_>>(), [&PickerKind::IntroSkip]);
     let both = FieldListInputs { marker_prefs: MarkerPrefsView { scope: 2, intro_granted: true, credits_granted: true, ..Default::default() }, ..inputs_of(Kind::Playback, None) };
@@ -584,7 +619,7 @@ fn every_field_list_row_states_its_own_sentence() {
     let sentence = |kind, id: Option<&RowId>, status, force, whose: &Whose|
         row_sentence(kind, id, page, status, if force { DirectPlayMode::Forced } else { DirectPlayMode::Auto }, whose).into_owned();
     for field in [PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking,
-        PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::NextEpisode, PickerKind::DeckPress] {
+        PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::NextEpisode, PickerKind::DeckPress] {
         assert_eq!(sentence(Kind::Playback, Some(&RowId::Field(field)), false, false, &seated), field.copy(), "{field:?}");
     }
     for field in [PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor] {

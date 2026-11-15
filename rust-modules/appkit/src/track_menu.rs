@@ -2480,8 +2480,9 @@ use plx_data::metadata::track_label::Kind;
 /// from a log. Whether a track is converted is the planner's capability answer for THIS playback's
 /// attempt (`route::audio_converted_by_server`, which reads `ps`). A surround track the APP decodes
 /// (`route::audio_decoded_in_app`: a codec the recovery put in force as its very last rung, or the
-/// `appdecodelossy` debug trigger; never Force Direct Play, which refuses a surround track the set
-/// cannot decode instead of mixing it down) says it plays in stereo, since the descriptor ("DTS 5.1")
+/// `appdecodelossy` debug trigger, where Force Direct Play refuses a surround track the set cannot
+/// decode instead of mixing it down; or the viewer's audio mode, whose decode mixes down under Force
+/// too, `devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX`) says it plays in stereo, since the descriptor ("DTS 5.1")
 /// would otherwise promise a layout the downmix does not keep; the server mark outranks it. Always ONE line: the
 /// longest label is graded against the panel by `converted_audio_sub_lines_fit_the_panel_in_every_language`.
 fn audio_sub_line(ps: &plx_media::route::PlaybackSession, sub: String, s: &metadata::Stream) -> String {

@@ -488,6 +488,7 @@ pub fn launch_native_open(
         presentation_rearm_pending: false,
         max_fed_video_pts: 0,
         max_fed_audio_pts: 0,
+        mode_decode_short_since: None,
         audio_start_fp: None,
         audio_stale_dropped: 0,
         pcm_sink_lead_ns: lead_at_start,
@@ -997,6 +998,59 @@ fn lane_starved(priming: bool, max_fed: i64, seek_base: i64, prime_ns: i64, pres
     }
 }
 
+
+/// The video lead above which a short audio lane is the app's audio decode falling behind, not the
+/// network or the file: the demuxer reads both lanes from one stream, so with a second of video in
+/// hand the bytes were there and only the audio decode is missing.
+pub const MODE_DECODE_VIDEO_HEALTHY_NS: i64 = 1_000_000_000;
+
+/// How long the audio lane of a decode for an audio mode may stay short ([`mode_decode_short`])
+/// before the session says the decode is behind (`FeedRaw::mode_decode_behind`) and the pump puts the
+/// television's decoder back. 1.5 s: longer than one position report's jitter ([`FEED_LOW_WATER_NS`]
+/// is a single report), shorter than the PCM lane's lead of a few seconds, so the switch happens
+/// before the sound has run dry.
+pub const MODE_DECODE_BEHIND_MS: u32 = 1_500;
+
+/// **Whether the audio lane of a decode for an audio mode is short while the video lane is not** —
+/// the sign the app's decode does not keep up. Not while priming (the lanes are filling), and not
+/// while nothing has presented (no lead to judge). PURE.
+pub fn mode_decode_short(priming: bool, max_fed_audio: i64, max_fed_video: i64, pres: i64) -> bool {
+    !priming
+        && pres != PRES_NONE
+        && max_fed_audio - pres < FEED_LOW_WATER_NS
+        && max_fed_video - pres >= MODE_DECODE_VIDEO_HEALTHY_NS
+}
+
+/// Whether a lane short since `since` (`vclock_ms`) has been short long enough at `now` to call the
+/// decode behind ([`MODE_DECODE_BEHIND_MS`]). PURE.
+pub fn mode_decode_behind_for(since: u32, now: u32) -> bool {
+    now.wrapping_sub(since) >= MODE_DECODE_BEHIND_MS
+}
+
+/// The safety net's watch, once a tick on the audio lane of a session that decodes for an audio mode
+/// (`FEED_SHARED.mode_decode`): latch `mode_decode_behind` once the lane has been short for
+/// [`MODE_DECODE_BEHIND_MS`]. Nothing for any other session.
+fn watch_mode_decode(eng: &mut Engine, pres: i64) {
+    let shared = eng.shared;
+    if !shared.mode_decode.load(Ordering::Relaxed) || shared.mode_decode_behind.load(Ordering::Relaxed) {
+        return;
+    }
+    if !mode_decode_short(eng.prime_play, eng.max_fed_audio_pts, eng.max_fed_video_pts, pres) {
+        eng.mode_decode_short_since = None;
+        return;
+    }
+    let now = crate::shared::vclock_ms();
+    let since = *eng.mode_decode_short_since.get_or_insert(now);
+    if mode_decode_behind_for(since, now) {
+        plx_base::eventlog::log(&format!(
+            "audio mode: the app's audio decode is behind (audio lead {}ms, video lead {}ms for {}ms); \
+             the television decodes it again",
+            (eng.max_fed_audio_pts - pres) / 1_000_000, (eng.max_fed_video_pts - pres) / 1_000_000,
+            now.wrapping_sub(since)
+        ));
+        shared.mode_decode_behind.store(true, Ordering::Release);
+    }
+}
 
 /// One lane's share of a tick's feeding: [`FEED_LANE_SLICE_US`] from the lane's start.
 struct FeedSlice {
@@ -1777,6 +1831,7 @@ fn feed_audio_lane(mt: &MainThread, eng: &mut Engine, hooks: &FeedHooks) {
         crate::shared::vclock_ms(),
         shared.applied_rate_permille.load(Ordering::Relaxed),
     );
+    watch_mode_decode(eng, pres);
     let slice = FeedSlice::begin(hooks.feed_clock_us);
     let mut fed = 0;
     while fed < 120 {
@@ -2128,6 +2183,15 @@ pub fn prepare_native_open(
             if let Some(f) = pcm {
                 plx_base::eventlog::log(&crate::pcm_decode_line(&codec, &f));
             }
+            // A decode for the viewer's audio mode (`OpenStream::mode_decode`), and whether this Load's
+            // thread reads the sound output (`pcm_lead::probe_sound_output_after_load`). Both after the
+            // session's reset, before the Load thread exists.
+            let mode_decode = pcm.is_some() && open.mode_decode;
+            shared.mode_decode.store(mode_decode, Ordering::Release);
+            shared.sound_output_probe.store(open.probe_sound_output, Ordering::Release);
+            if mode_decode {
+                plx_base::eventlog::log(&format!("audio mode: {codec} decoded in the app for the viewer's audio mode"));
+            }
             shared.dg_load_a.store(audio.diagnostic, Ordering::Relaxed);
             // App-decoded audio (`pcm`) and a speed session (`ff::SpeedDecoder`) both declare PCM;
             // `load_audio` has already put that into the declared name and the lead plan with it.
@@ -2242,6 +2306,28 @@ mod audio_stale_ahead_tests {
         let far = VIDEO + 11_000_000_000;
         assert!(!audio_stale_ahead(far, true, VIDEO, false), "the late-starting track's own start");
         assert!(!audio_stale_ahead(far, false, 0, false), "nothing to measure against before video is accepted");
+    }
+}
+
+#[cfg(test)]
+mod mode_decode_watch_tests {
+    use super::*;
+
+    /// **The safety net's evidence**: the audio lane of a decode for an audio mode short while the
+    /// video lane holds a second, for 1.5 s. A network stall starves both lanes and is not the decode;
+    /// priming and a session with nothing presented have no lead to judge.
+    #[test]
+    fn a_short_audio_lane_beside_a_healthy_video_lane_is_the_decode_falling_behind() {
+        let ms = |v: i64| v * 1_000_000;
+        let pres = ms(10_000);
+        assert!(mode_decode_short(false, pres + ms(100), pres + ms(1_500), pres), "audio 100 ms, video 1.5 s");
+        assert!(!mode_decode_short(false, pres + ms(400), pres + ms(1_500), pres), "audio above its low-water mark");
+        assert!(!mode_decode_short(false, pres + ms(100), pres + ms(300), pres), "both short: the network, not the decode");
+        assert!(!mode_decode_short(true, pres + ms(100), pres + ms(1_500), pres), "priming");
+        assert!(!mode_decode_short(false, 0, ms(1_500), PRES_NONE), "nothing presented");
+        assert!(!mode_decode_behind_for(1_000, 1_000 + MODE_DECODE_BEHIND_MS - 1));
+        assert!(mode_decode_behind_for(1_000, 1_000 + MODE_DECODE_BEHIND_MS));
+        assert!(mode_decode_behind_for(u32::MAX - 100, MODE_DECODE_BEHIND_MS), "across the clock's wrap");
     }
 }
 
