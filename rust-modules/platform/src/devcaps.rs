@@ -2707,7 +2707,11 @@ mod tests {
                 assert_eq!(app_decoded_by_ffmpeg_name(n).map(|c| c.id), Some(c.id));
             }
         }
-        assert!(app_decoded_by_ffmpeg_name("ac3").is_none(), "a hardware codec is not app-decoded");
+        assert!(
+            !APP_DECODED.iter().any(|c| c.codecs.contains(&"ac3")),
+            "a hardware codec is not an APP_DECODED row: AC-3 is decoded only for an audio mode (MODE_DECODED)"
+        );
+        assert_eq!(app_decoded_by_ffmpeg_name("ac3").map(|c| (c.id, c.lossy)), Some(("ac3", true)));
     }
 
     /// **The lossy policy.** DTS is app-decoded (in force) only on a value that put it there: the

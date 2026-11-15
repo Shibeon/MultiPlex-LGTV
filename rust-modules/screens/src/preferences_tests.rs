@@ -350,7 +350,7 @@ fn the_audio_mode_row_defaults_to_off_and_its_picker_saves_the_mode() {
     assert_eq!(PickerKind::AudioMode.parent(), SettingsPage::Playback);
     assert!(PickerKind::AudioMode.copy().contains("receiver"), "the hint: {}", PickerKind::AudioMode.copy());
 
-    let mut picker = PickerPage::new(EntryId(0), PickerKind::AudioMode, PickerKind::AudioModeDecode, &crate::registry::capture_fixture());
+    let mut picker = PickerPage::new(EntryId(0), PickerKind::AudioMode, &crate::registry::capture_fixture());
     let emitted = drive(&mut picker, ScreenEvent::Activate(2), 1);
     plx_media::route::restore_audio_mode(prior);
     let saved = emitted.into_iter().find_map(|e| match e.fx {

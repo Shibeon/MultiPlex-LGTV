@@ -15,7 +15,7 @@
   "settings.playback.audio_mode.off": "Desativado",
   "settings.playback.audio_mode.night": "Modo noturno",
   "settings.playback.audio_mode.voice": "Vozes nítidas",
-  "settings.playback.audio_mode_decode": "Descodificação para os modos de áudio",
+  "settings.playback.audio_mode_decode": "Descodificar para modos de áudio",
   "settings.playback.audio_mode_decode.copy": "Com um modo de áudio ativo, a app descodifica ela própria o som para que o modo se aplique à maioria dos filmes. O som passa a estéreo, sem Atmos. Nunca para um recetor.",
   "settings.playback.audio_mode_decode.on": "Ativado",
   "settings.playback.audio_mode_decode.off": "Desativado"
