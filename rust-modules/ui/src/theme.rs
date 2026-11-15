@@ -695,7 +695,7 @@ impl Material {
 /// menu has to survive is exactly a busy one: laddered over a shelf of artwork, the row ink runs
 /// 7.2 : 8.7 : 10.3 : 11.8 : 13.5 to one across the five, and what the eye reads is where the
 /// artwork stops competing with the words. At `Thick` a poster's title lettering still comes
-/// through under "Remove from Deck"; at `UltraThick` the rows are clean while the artwork's shapes
+/// through under "Remove from Continue Watching"; at `UltraThick` the rows are clean while the artwork's shapes
 /// are still there, so it reads as glass rather than as paint. The reference agrees — iOS's own
 /// context menu passes almost nothing of the page behind it.
 ///

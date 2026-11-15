@@ -242,7 +242,7 @@ the macOS simulator are valuable, but they cannot prove every device behavior.
   one a given install, or a given profile on it, has. In the default the card's hold menu opens ON a
   Play/Resume row, so hold-then-OK plays too. That press is how two separate sessions started
   real playback on the owner's account. Seeding, scrobbling, unscrobbling, marking watched and
-  "Remove from Deck" are all writes to a household's actual viewing record — the managed and Guest profiles
+  "Remove from Continue Watching" are all writes to a household's actual viewing record — the managed and Guest profiles
   are real users too. When screenshot or demo work needs particular content, mock the server.
   So is the plex.tv Watchlist: a debug build refuses every add/remove unless the mock's discover
   stand-in is armed or `multiplex-watchlist-live` exists in the install's runtime root. **Never
