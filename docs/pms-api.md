@@ -1473,7 +1473,16 @@ Client behavior expected by PMS (matches official clients):
     bumps `viewCount` and clears `viewOffset`. Otherwise `stopped` stores its own `time`, even a lower
     one and even on an already-watched item. The detail read, `/children`, `allLeaves`, OnDeck and the
     PlayQueue row all return the same `viewOffset`.
-- simpler alternative (also unverified live): `GET /:/progress?key={ratingKey}&identifier=com.plexapp.plugins.library&time={ms}&state=stopped` — sets progress only; note plexapi warns `time=0` is ignored
+  - **Consequence: a restart quit under the floor leaves the OLD resume point standing.** Played to
+    45:00, quit (stored), reopened from the beginning, quit 5 s in: the `stopped` at 5 s is dropped
+    and every surface reads 45:00 back (owner report on v0.12.0). The only call that clears a
+    `viewOffset` is `/:/unscrobble` (below; it clears `viewCount` too). So the stop worker
+    (`route::ScrobbleWork`, rule `plx_data::viewstate::restart_owes_resume_reset`) follows such a
+    `stopped` with an unscrobble when the play-queue row said, at play start, that the server held
+    a resume point at or past 120 s, the stop is under 120 s and below it, and the title was NOT
+    watched. A watched title being rewatched is left alone (the unscrobble would discard its watched
+    state), so its old resume point still stands after such a restart.
+- simpler alternative (also unverified live): `GET /:/progress?key={ratingKey}&identifier=com.plexapp.plugins.library&time={ms}&state=stopped` — sets progress only; note plexapi warns `time=0` is ignored ("Use markPlayed or markUnplayed to achieve that goal"), and the harness found the same live: a `time=0` or `time=1` progress PUT answers 200 and the old offset survives, `/:/unscrobble` is the only reset (`tests/run.py`, `pms_unscrobble`)
 - mark watched/unwatched without a time: `GET /:/scrobble?key={ratingKey}&identifier=com.plexapp.plugins.library` / `/:/unscrobble?...`
 
 ---
