@@ -3304,6 +3304,7 @@ impl DetailScreen {
                 let sec = section::SectionId::Episode.raw();
                 let top = self.section_top(sec, d, f.cx.measure) - self.scroll.pos;
                 let zone = plx_ui::wheel::PanZone {
+                    row: plx_ui::wheel::row_id(&(self.entry, sec)),
                     rect: Rect::new(0.0, top, plx_ui::consts::SCR_W, self.block_h(sec, d, f.cx.measure)),
                     scroll: self.episode_scroll.pos,
                     max: self.episode_max_scroll(d),

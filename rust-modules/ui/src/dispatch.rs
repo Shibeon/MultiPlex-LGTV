@@ -1905,8 +1905,12 @@ where
         let hit_page = self.hit_page();
         plx_gfx::gfx::set_video_plane_frame(was_video_plane);
         if !plx_gfx::gfx::blur_source_pass() {
-            // A surface over the page owns the wheel: the page's rows take none of it.
-            let page_rows = hit_page && !self.surface_up();
+            // A surface over the page owns the wheel: the page's rows take none of it. Nor does a
+            // page that does not glide: the application eases a row's notch only on a gliding page
+            // (`Screen::glides`), so a row elsewhere (the player's Chapters strip) would swallow it.
+            let page_rows = hit_page && !self.surface_up()
+                && self.owner_entry().and_then(|e| self.nav.entry(e)).and_then(|e| e.inst.as_ref())
+                    .is_some_and(|i| i.screen.glides());
             self.input.hit.fill(if hit_page { stops } else { Vec::new() });
             self.input.hit.fill_pans(if page_rows { pans } else { Vec::new() });
             self.input.hit.swap();

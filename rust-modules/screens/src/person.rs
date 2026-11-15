@@ -13,9 +13,10 @@
 //! normal store landing rebuilds this page without reopening it.
 //!
 //! The Filmography route (`screens::filmography`, `ContentArg::Filmography`) is no longer offered
-//! here: its departments are this page's rows. It stays registered because its shape is part of
-//! the recorded state fingerprint the replay anchors carry (`app::recorder::state_fp`); it goes
-//! with the next anchor re-recording.
+//! here: its departments are this page's rows. It stays only because replay anchor
+//! `12-filmography-detail-return` (`tests/focusfp.sh` flow 12) and the dev `filmography` trigger
+//! open it directly; removing it means re-pointing flow 12 at a credit-row card and recording that
+//! anchor afresh.
 //!
 //! **The biography sheet left in phase 10** (`screens::person_bio`, `ContentPanel::Bio`): it is a
 //! `Style::Alert` surface on the container tree, so its input, its phase and its teardown are the

@@ -344,7 +344,7 @@ mod wheel_row_tests {
     use plx_ui::wheel::PanZone;
 
     fn row() -> PanZone {
-        PanZone { rect: plx_ui::Rect::new(0.0, 300.0, 1920.0, 400.0), scroll: 0.0, max: 3000.0, pitch: 280.0 }
+        PanZone { row: 1, rect: plx_ui::Rect::new(0.0, 300.0, 1920.0, 400.0), scroll: 0.0, max: 3000.0, pitch: 280.0 }
     }
 
     /// The application's half of the wheel rule: a notch over a row that scrolls is the row's, and
@@ -376,7 +376,7 @@ mod wheel_row_tests {
         let fits = PanZone { max: 0.0, ..row() };
         assert!(!p.wheel_row(-1, Some(&fits), now), "a row that fits never takes it");
         assert!(!p.wheel_row(-1, None, now), "off every row, the page's");
-        let below = PanZone { rect: plx_ui::Rect::new(0.0, 800.0, 1920.0, 400.0), ..row() };
+        let below = PanZone { row: 2, rect: plx_ui::Rect::new(0.0, 800.0, 1920.0, 400.0), ..row() };
         assert!(!p.wheel_row(-1, Some(&below), now), "a zone that is not under the pointer is not its");
         p.dpad_mode = true;
         assert!(!p.wheel_row(-1, Some(&row()), now), "the D-pad owns focus: the page's");

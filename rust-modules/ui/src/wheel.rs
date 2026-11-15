@@ -33,6 +33,9 @@ const END_EPS: f32 = 0.5;
 /// (screen space, the cascade's translate and clip folded in, like a stop).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PanZone {
+    /// Which row this is, stable while the row stays the same row: its band moves (the caption band
+    /// opens as focus enters it, the page scrolls under it) and a glide must still know it.
+    pub row: u64,
     /// Where the row's cards are on screen: the band the pointer must be over.
     pub rect: Rect,
     /// The row's horizontal scroll, px.
@@ -87,6 +90,15 @@ pub fn route(notch: i32, zone: Option<&PanZone>, pending: f32) -> WheelMove {
     WheelMove::Row(if notch < 0 { dx } else { -dx })
 }
 
+/// A row's [`PanZone::row`] from whatever names it stably (its page entry and first card, its
+/// page and section). Unkeyed, so the number is the same for the same row all run long.
+pub fn row_id<T: std::hash::Hash>(of: &T) -> u64 {
+    use std::hash::Hasher;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    of.hash(&mut h);
+    h.finish()
+}
+
 /// The topmost zone under the point, in draw order (the last registered wins, as a stop does).
 pub fn zone_at(zones: &[PanZone], x: f32, y: f32) -> Option<&PanZone> {
     zones.iter().rev().find(|z| z.covers(x, y))
@@ -99,15 +111,16 @@ pub fn zone_at(zones: &[PanZone], x: f32, y: f32) -> Option<&PanZone> {
 /// A row's own glide moves it directly ([`crate::card_row::CardRow::glide`]), so a notch delivered
 /// whole would jump it; this is the spring between the two. Quick notches add to one target, and
 /// [`pending`](Self::pending) is the part not delivered yet, which [`route`] counts toward the end.
-/// A notch over a DIFFERENT row drops what the last one had left: the wheel follows the pointer.
+/// A notch over a DIFFERENT row ([`PanZone::row`]) drops what the last one had left: the wheel
+/// follows the pointer.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WheelGlide {
     /// The whole move the notches asked for since the glide began, px.
     target: f32,
     /// How much of it the spring has delivered (`pos`), and how fast.
     spring: Spring,
-    /// Where the notch was turned (the point the row is found by), and the row's band there.
-    at: Option<(f32, f32, Rect)>,
+    /// Where the notch was turned (the point the row is found by), and which row it was.
+    at: Option<(f32, f32, u64)>,
 }
 
 impl WheelGlide {
@@ -116,17 +129,17 @@ impl WheelGlide {
     /// The px of the move not handed out yet, for the row under `(x, y)` (`0` over another row).
     pub fn pending(&self, zone: Option<&PanZone>) -> f32 {
         match (self.at, zone) {
-            (Some((_, _, rect)), Some(z)) if rect == z.rect => self.target - self.spring.pos,
+            (Some((_, _, row)), Some(z)) if row == z.row => self.target - self.spring.pos,
             _ => 0.0,
         }
     }
 
     /// A notch's `dx` ([`WheelMove::Row`]) over `zone`, turned at `(x, y)`.
     pub fn add(&mut self, dx: f32, x: f32, y: f32, zone: &PanZone) {
-        if !matches!(self.at, Some((_, _, rect)) if rect == zone.rect) {
+        if !matches!(self.at, Some((_, _, row)) if row == zone.row) {
             *self = Self::IDLE;
         }
-        self.at = Some((x, y, zone.rect));
+        self.at = Some((x, y, zone.row));
         self.target += dx;
     }
 
@@ -156,7 +169,7 @@ mod tests {
     use super::*;
 
     fn zone(scroll: f32, max: f32) -> PanZone {
-        PanZone { rect: Rect::new(0.0, 100.0, 1920.0, 375.0), scroll, max, pitch: 280.0 }
+        PanZone { row: 1, rect: Rect::new(0.0, 100.0, 1920.0, 375.0), scroll, max, pitch: 280.0 }
     }
 
     #[test]
@@ -219,12 +232,28 @@ mod tests {
         assert!(left > 0.0 && left < 560.0, "{left}");
         g.add(560.0, 0.0, 200.0, &z);
         assert!((g.pending(Some(&z)) - (left + 560.0)).abs() < 1e-3, "the second notch adds to the first");
-        let other = PanZone { rect: Rect::new(0.0, 600.0, 1920.0, 375.0), ..z };
+        let other = PanZone { row: 2, rect: Rect::new(0.0, 600.0, 1920.0, 375.0), ..z };
         assert_eq!(g.pending(Some(&other)), 0.0, "another row has nothing pending");
         g.add(-560.0, 0.0, 700.0, &other);
         assert_eq!(g.pending(Some(&other)), -560.0, "what the first row had left is dropped");
         g.stop();
         assert_eq!(g.step(1.0 / 60.0), None);
+    }
+
+    /// The row's band moves while it glides (its caption band opens as focus enters it, the page
+    /// scrolls under it): a second notch over the SAME row adds to what is left, never drops it.
+    #[test]
+    fn a_row_whose_band_moves_keeps_its_pending_notch() {
+        let z = zone(0.0, 2000.0);
+        let mut g = WheelGlide::IDLE;
+        g.add(560.0, 0.0, 200.0, &z);
+        g.step(1.0 / 60.0);
+        let left = g.pending(Some(&z));
+        assert!(left > 0.0, "{left}");
+        let moved = PanZone { rect: Rect::new(0.0, 80.0, 1920.0, 400.0), ..z };
+        assert!((g.pending(Some(&moved)) - left).abs() < 1e-3, "the same row, its band moved: still pending");
+        g.add(560.0, 0.0, 200.0, &moved);
+        assert!((g.pending(Some(&moved)) - (left + 560.0)).abs() < 1e-3, "the second notch adds to the first");
     }
 
     #[test]

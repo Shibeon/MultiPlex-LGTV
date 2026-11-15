@@ -93,7 +93,10 @@ verdict as `land_diffs`.
 
 The **anchors** include `1-boot-home-chip-grid`, `6-settings-family` (Privacy toggle and Legal
 document navigation), and `12-filmography-detail-return` (the owned Filmography surface, a
-library-matched credit opened in Detail, and both BACK steps). Phase 7 rerecorded the existing anchors
+library-matched credit opened in Detail, and both BACK steps). The person page no longer offers
+the Filmography (its departments are the page's credit rows); flow 12 opens it through the dev
+`filmography` trigger, which with this anchor is all that keeps the route, and removing it means
+re-pointing flow 12 at a credit-row card and recording the anchor afresh. Phase 7 rerecorded the existing anchors
 after an observed loader refusal and added the content-return anchor. **Phase 11 rerecorded all
 three onto schema 2**, which carries the landing schedule above. **The product Resolve milestone
 rerecorded them onto schema 3**, adding a typed, bit-exact Width/Cap/Line measurement table, one

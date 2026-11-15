@@ -1805,8 +1805,10 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
             }
             // Over a row that scrolls sideways the notch is the ROW's (`plx_ui::wheel`): wheel
             // down shows more on the right, until the row's end, where it is the page's again. The
-            // hit map holds the rows only while no surface is up and the page takes the pointer.
-            let owned = super::bridge::search_owns_input(&app.pages) || super::bridge::owns_input(&app.pages);
+            // hit map holds the rows only while no surface is up and the page takes the pointer
+            // and glides (`Screen::glides`); a held button pauses the glide, so it takes none either.
+            let owned = !app.ptr.button_down
+                && (super::bridge::search_owns_input(&app.pages) || super::bridge::owns_input(&app.pages));
             let zone = app.ptr.edge.at().and_then(|(x, y)| app.pages.input.hit.pan_at(x, y).copied());
             if owned && app.ptr.wheel_row(dy, zone.as_ref(), app.last_input) {
                 return;
