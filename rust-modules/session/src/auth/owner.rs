@@ -913,6 +913,7 @@ pub fn write_user(w: &mut Canon, user: &UserRef) {
 pub fn write_tile(w: &mut Canon, user: &UserTile) {
     w.u64(user.id as u64).str(&user.uuid).str(&user.title).str(&user.thumb)
         .bool(user.protected).bool(user.admin);
+    if user.restricted { w.str("restricted"); }
 }
 
 pub fn write_profile(w: &mut Canon, profile: &plx_plex::plex::session::ProfileCreds) {
@@ -958,6 +959,9 @@ pub fn write_persisted(w: &mut Canon, s: &PersistedSession) {
     for user in &s.home_users {
         w.u64(user.id as u64).str(&user.uuid).str(&user.title).str(&user.thumb)
             .bool(user.protected).bool(user.admin);
+        // Only when set, like `language` below: a roster with no managed member keeps the digest
+        // every earlier build recorded.
+        if user.restricted { w.str("restricted"); }
     }
     w.seq(s.profiles.len());
     for profile in &s.profiles { write_profile(w, profile); }
@@ -1106,6 +1110,7 @@ impl<'a> LegacyV5Projection<'a> {
         for user in self.users {
             w.u64(user.id as u64).str(&user.uuid).str(&user.title).str(&user.thumb)
                 .bool(user.protected).bool(user.admin);
+            if user.restricted { w.str("restricted"); }
         }
         w.str(&self.error).bool(self.pin_denied).bool(self.authorized_in_flow)
             .bool(self.signin_active).bool(self.apply_pending).bool(self.code_replaced)
@@ -1132,6 +1137,7 @@ impl<'a> LegacyV5Projection<'a> {
                 CaptureIntent::Profile { tile, pin } => {
                     w.u8(1).u64(tile.id as u64).str(&tile.uuid).str(&tile.title).str(&tile.thumb)
                         .bool(tile.protected).bool(tile.admin);
+                    if tile.restricted { w.str("restricted"); }
                     w.option(pin.as_ref(), |w, pin| { w.str(pin); });
                 }
                 CaptureIntent::Endpoint { sid } => { w.u8(2).u32(u32::from(*sid)); }
@@ -1177,6 +1183,7 @@ impl<'a> LegacyV5Projection<'a> {
                 for user in users {
                     w.u64(user.id as u64).str(&user.uuid).str(&user.title).str(&user.thumb)
                         .bool(user.protected).bool(user.admin);
+                    if user.restricted { w.str("restricted"); }
                 }
             });
             w.bool(delta.clear_error).bool(delta.activate_profile).bool(delta.complete_signin)
@@ -5044,6 +5051,24 @@ mod tests {
         let mut b = a.clone();
         b.persisted.language = plx_platform::i18n::Preference::Be;
         assert_ne!(a.hash(), b.hash());
+    }
+
+    /// A managed member's `restricted` flag is part of the recorded state, in the persisted roster
+    /// and in the picker's live tiles alike; it is written only when set, so the pinned legacy
+    /// digests of rosters without one do not move.
+    #[test]
+    fn a_managed_flag_changes_the_recorded_session_hash() {
+        use plx_machine::machine::LogicalState;
+        let mut a = SessionInit::captured(PersistedSession::default());
+        a.persisted.home_users = vec![plx_plex::plex::session::HomeUserRef { uuid: "u-kid".into(),
+            ..Default::default() }];
+        a.users = vec![UserTile { uuid: "u-kid".into(), ..Default::default() }];
+        let mut roster = a.clone();
+        roster.persisted.home_users[0].restricted = true;
+        assert_ne!(a.hash(), roster.hash());
+        let mut tiles = a.clone();
+        tiles.users[0].restricted = true;
+        assert_ne!(a.hash(), tiles.hash());
     }
 
     #[test]
