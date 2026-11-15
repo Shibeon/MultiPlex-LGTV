@@ -1292,8 +1292,11 @@ fn grid_library_search_heroidx_arm(app: &mut App, _fr: &mut Frame) {
         // `multiplex-plextv` redirect, which Discover follows); a dev-token boot with neither armed
         // has its Discover reads refused, logged at boot as `discover: base=real reads=refused`.
         // `tools/tv-session.sh --mock-plextv` arms both.
+        // Through the strip's own door (`nav_tab`), so a managed profile, which has no My list,
+        // boots onto Home.
         if plx_base::devtrig::flag("watchlist") {
-            crate::app::bridge::nav_select_tab(&mut app.pages, AppArg::Watchlist);
+            crate::app::bridge::nav_tab(&mut app.pages, &mut app.bridge,
+                plx_screens::registry::HomeTab::Watchlist, None, None);
         }
         // `/tmp/multiplex-catalog=<24 hex>` — boot straight onto the catalog page of that title (a
         // `ContentArg::Catalog` push over Home, as a Watchlist tile's OK opens it). The page reads
@@ -2429,7 +2432,7 @@ pub(crate) fn nav_osc_tick(app: &mut App, now: u32) {
             }
             AppArg::Library => {
                 let origin = crate::app::chrome::pill_at(
-                    app.bridge.browse_directory(), 1);
+                    app.bridge.browse_directory(), app.bridge.profile_managed(), 1);
                 crate::app::bridge::nav_tab(&mut app.pages, &mut app.bridge,
                     HomeTab::Home, Some(origin), None);
             }
@@ -2669,7 +2672,7 @@ fn push_bench_close(app: &mut App, opened: bench::PushTarget) {
             crate::app::bridge::nav_pop(&mut app.pages);
         }
         bench::PushTarget::Library => {
-            let origin = crate::app::chrome::pill_at(app.bridge.browse_directory(), 1);
+            let origin = crate::app::chrome::pill_at(app.bridge.browse_directory(), app.bridge.profile_managed(), 1);
             crate::app::bridge::nav_tab(&mut app.pages, &mut app.bridge, HomeTab::Home, Some(origin), None);
         }
     }

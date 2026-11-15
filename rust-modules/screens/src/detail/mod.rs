@@ -321,6 +321,10 @@ pub struct DetailScreen {
     watchlist: plx_data::catalog::Membership,
     /// The loaded item's catalog id (movie or show guid, decoded once), mirrored for the app's feed.
     watchlist_hex: Option<[u8; 12]>,
+    /// The watching profile is a managed Plex Home member (`ScreenInputs::managed`, read each
+    /// tick): the More menu has no Watchlist row and the feed is handed no title. Derived from the
+    /// host's inputs, so never hashed.
+    no_watchlist: bool,
     season_metrics: season::Metrics,
     about_rows: about::Rows,
     /// The page's own keyed ground. Deliberately a bare [`AmbientWash`] and not the shared
@@ -642,6 +646,7 @@ impl DetailScreen {
             ctl_pop: CtlPop::new(),
             watchlist: plx_data::catalog::Membership::Unknown,
             watchlist_hex: None,
+            no_watchlist: false,
             season_metrics: season::Metrics::new(),
             about_rows: about::Rows::new(),
             ground,
@@ -2096,7 +2101,7 @@ fn row_move(index: usize, len: usize, dir: Dir) -> Option<usize> {
     }
 }
 
-impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Machine<H> for DetailScreen {
+impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike + crate::registry::ScreenInputsLike> Machine<H> for DetailScreen {
     type Ev = ScreenEvent<H>;
 
     fn step(&mut self, ev: &Self::Ev, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) -> Handled {
@@ -2582,7 +2587,7 @@ impl DetailScreen {
     }
 }
 
-impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike> Screen<H> for DetailScreen {
+impl<H: ContentLike + crate::registry::MetadataLike + PlayerLike + crate::registry::ScreenInputsLike> Screen<H> for DetailScreen {
     /// The Related / collection shelf card only; a season tab or an episode is not a catalog item.
     fn focused_card<'a>(&self, cx: &Cx<'a, H>, focus: Option<plx_machine::machine::FocusKey<u32>>, at: Option<At>) -> Option<plx_ui::screen::FocusedCard<'a>> {
         let item = self.focused_related(focus, <H as crate::registry::MetadataLike>::metadata(cx))?;
@@ -3889,7 +3894,7 @@ impl DetailScreen {
         self.strip_seat.done = done;
     }
 
-    fn tick<H: ContentLike + crate::registry::MetadataLike + PlayerLike>(&mut self, t: Tick, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) {
+    fn tick<H: ContentLike + crate::registry::MetadataLike + PlayerLike + crate::registry::ScreenInputsLike>(&mut self, t: Tick, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) {
         let meta = H::metadata(cx);
         if std::mem::take(&mut self.upcoming.dirty) {
             // The app handed new upcoming cells: key them (and let go of the ones that left)
@@ -3922,8 +3927,11 @@ impl DetailScreen {
         self.ctl_pop.step(hero_index, dt);
         self.season_pop
             .step(matches!(focused, Some(Located::Season(_))).then_some(0), dt);
-        // The identity the app's Watchlist feed reads.
-        self.watchlist_hex = self.detail(meta).and_then(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid));
+        // The identity the app's Watchlist feed reads; none for a managed profile, which is offered
+        // no Watchlist (no row, so no membership to read).
+        self.no_watchlist = H::screen_inputs(cx).managed;
+        self.watchlist_hex = self.detail(meta).filter(|_| !self.no_watchlist)
+            .and_then(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid));
 
         self.episode_cells.step(
             match focused {
@@ -4421,7 +4429,8 @@ impl DetailScreen {
             trailer: self.detail(meta).is_some_and(|d| hero::trailer_play(d).is_some()),
             alt: self.alt_available(meta),
             mark,
-            watchlist: self.detail(meta).is_some_and(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid).is_some()),
+            watchlist: !self.no_watchlist
+                && self.detail(meta).is_some_and(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid).is_some()),
         }
     }
 
