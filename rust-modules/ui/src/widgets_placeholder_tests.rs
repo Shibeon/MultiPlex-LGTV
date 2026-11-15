@@ -121,6 +121,19 @@ fn a_person_the_server_has_no_headshot_of_is_absence_and_counts_nothing() {
     assert_eq!(f.count, 1, "a key behind a missing texture is a fetch in flight: {f:?}");
 }
 
+/// A Home member plex.tv sent no picture for is absence (the picker draws their initial on it); a
+/// member whose picture is still on its way is a wait, as any thumb is. An empty `Thumb` key, by
+/// contrast, stays counted (the module doc's fail-fast rule).
+#[test]
+fn an_avatar_with_no_picture_is_absence_and_one_loading_is_a_wait() {
+    let f = drawn(Art::Avatar { sid: 0, key: "", res: (300, 300) });
+    assert_eq!(f.count, 0, "a member with no picture is not a wait: {f:?}");
+    let f = drawn(Art::Avatar { sid: 0, key: "/photo/x", res: (300, 300) });
+    assert_eq!((f.count, f.of(Reason::CardGround)), (1, 1), "{f:?}");
+    let f = drawn(Art::Thumb { sid: 0, key: "", res: (300, 300) });
+    assert_eq!(f.count, 1, "an empty Thumb key is still counted: {f:?}");
+}
+
 #[test]
 fn a_recording_pass_over_a_card_counts_nothing() {
     let f = placeholder::capture_declared(|| {

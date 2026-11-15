@@ -133,6 +133,9 @@ const NAME_DY: f32 = AvatarRow::STYLE.h
     + theme::space::MD;
 /// The caption line's offset below `ROW_Y`: one name line and a `space::XS` under the name band.
 const CAPTION_DY: f32 = NAME_DY + theme::size::LABEL as f32 + theme::space::XS;
+/// The width a name or caption line may take under its avatar: the tile's pitch less a little air
+/// either side, so it never meets the neighbouring tile's.
+const LINE_W: f32 = AvatarRow::STYLE.w + AvatarRow::STYLE.gap - 12.0;
 const PIN_LEN: usize = 4;
 const FOOTER_Y: f32 = 780.0;
 const FOOTER_H: f32 = 60.0;
@@ -799,7 +802,7 @@ impl ProfilesScreen {
     }
 
     fn avatar_art(u: &auth::UserTile, sid: plx_plex::plex::ServerId) -> Art<'_> {
-        Art::Thumb {
+        Art::Avatar {
             sid: sid.raw(),
             key: &u.thumb,
             res: (300, 300),
@@ -1260,14 +1263,10 @@ impl ProfilesScreen {
         }
     }
 
-    /// The caption, elided to the name's own width so a long translation never runs into the
-    /// neighbouring tile's.
-    fn draw_caption(p: Painter, caption: Option<&str>, cx: f32, measure: &dyn plx_machine::machine::Measure) {
-        let Some(c) = caption else { return };
-        let line = plx_gfx::text::elide_by(c, AvatarRow::STYLE.w + AvatarRow::STYLE.gap - 12.0, false, |t| {
-            measure.width_str(t, theme::size::CAPTION, false)
-        });
-        let Ok(t) = CString::new(line) else { return };
+    /// The caption: app text, which never elides in a shipped language (`ui/CLAUDE.md`), so every
+    /// translation fits [`LINE_W`] whole (`every_caption_fits_its_line_whole_in_every_language`).
+    fn draw_caption(p: Painter, caption: Option<&str>, cx: f32) {
+        let Some(t) = caption.and_then(|c| CString::new(c).ok()) else { return };
         p.text(
             t.as_ptr(),
             cx,
@@ -1293,7 +1292,7 @@ impl ProfilesScreen {
         };
         let name = plx_gfx::text::elide_by(
             &u.title,
-            AvatarRow::STYLE.w + AvatarRow::STYLE.gap - 12.0,
+            LINE_W,
             false,
             |t| measure.width_str(t, theme::size::LABEL, focused),
         );
@@ -1823,7 +1822,7 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), false, f.measure);
             Self::draw_face(p, u, rect);
             Self::draw_name(p, u, cx_, false, f.measure);
-            Self::draw_caption(p, self.caption(u), cx_, f.measure);
+            Self::draw_caption(p, self.caption(u), cx_);
             f.stop(
                 p,
                 Stop {
@@ -1849,7 +1848,7 @@ impl<H: AuthLike> Screen<H> for ProfilesScreen {
                 AvatarRow::STYLE.h,
             );
             Self::draw_name(p, u, cx_, true, f.measure);
-            Self::draw_caption(p, self.caption(u), cx_, f.measure);
+            Self::draw_caption(p, self.caption(u), cx_);
             // the click dip folds into the focused avatar's pop (1.0 when idle)
             let rect = self.row.draw(p, i, base, Self::avatar_art(u, H::screen_inputs(f.cx).current_server), true, f.measure);
             Self::draw_face(p, u, rect);
@@ -1999,7 +1998,7 @@ mod retained_input_tests {
         let user = auth::UserTile { thumb: "avatar".into(), ..Default::default() };
         let server = plx_plex::plex::ServerId::from_raw(71);
         match ProfilesScreen::avatar_art(&user, server) {
-            Art::Thumb { sid, key, res } => {
+            Art::Avatar { sid, key, res } => {
                 assert_eq!(sid, server.raw());
                 assert_eq!(key, "avatar");
                 assert_eq!(res, (300, 300));
@@ -2022,5 +2021,21 @@ mod retained_input_tests {
         assert_eq!(s.caption(&tile("owner", true, false)), Some(msg::settings_profiles_owner()));
         assert_eq!(s.caption(&tile("kid", false, true)), Some(msg::settings_profiles_managed()));
         assert_eq!(s.caption(&tile("member", false, false)), None);
+    }
+
+    /// The three captions are app text, so each fits its line under the avatar WHOLE in every
+    /// shipped language, measured the way the device sums advances.
+    #[test]
+    fn every_caption_fits_its_line_whole_in_every_language() {
+        use plx_base::fontcov::advances::ShippedMeasure;
+        use plx_machine::machine::Measure;
+        use plx_platform::i18n::msg;
+        for language in plx_platform::i18n::SHIPPED {
+            let _guard = plx_platform::i18n::language_on_this_thread_for_test(language);
+            for c in [msg::settings_profiles_current(), msg::settings_profiles_owner(), msg::settings_profiles_managed()] {
+                let w = ShippedMeasure.width_str(c, theme::size::CAPTION, false);
+                assert!(w <= LINE_W, "{}: {c:?} is {w:.0} px, past the {LINE_W:.0} under an avatar", language.tag());
+            }
+        }
     }
 }
