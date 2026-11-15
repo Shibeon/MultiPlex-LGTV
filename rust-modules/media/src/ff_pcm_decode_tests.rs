@@ -263,10 +263,16 @@ fn a_file_that_contradicts_the_declared_load_is_refused_not_played_wrong() {
     // 24-bit audio declared as 16 would be truncated: refused at the first frame
     let why = unsafe { decode_file(&wide, PcmOut::exact(48_000, 16, 2)) }.expect_err("truncation");
     assert!(why.contains("24") || why.contains("32-bit"), "{why}");
-    // a codec outside the app-decoded set never opens a PcmDecoder
-    let ac3 = encode(&scratch.0, "x.mkv", S16, 48_000, 2, &signal(S16, 2, 9_000), "ac3", &[]);
-    let why = unsafe { decode_file(&ac3, PcmOut::exact(48_000, 16, 2)) }.expect_err("ac3");
+    // a codec outside the app-decoded set never opens a PcmDecoder (MP2 is in neither
+    // `devcaps::APP_DECODED` nor `devcaps::MODE_DECODED`)
+    let mp2 = encode(&scratch.0, "x.mkv", S16, 48_000, 2, &signal(S16, 2, 9_000), "mp2", &[]);
+    let why = unsafe { decode_file(&mp2, PcmOut::exact(48_000, 16, 2)) }.expect_err("mp2");
     assert!(why.contains("not an app-decoded codec"), "{why}");
+    // AC-3 is decoded in the app while an audio mode asks for it (`devcaps::MODE_DECODED`): it
+    // opens, and comes out as the lossy shape, stereo 48 kHz S16
+    let ac3 = encode(&scratch.0, "y.mkv", S16, 48_000, 2, &signal(S16, 2, 9_000), "ac3", &[]);
+    let got = unsafe { decode_file(&ac3, PcmOut::exact(48_000, 16, 2)) }.unwrap_or_else(|why| panic!("ac3: {why}"));
+    assert!(!got.is_empty(), "ac3: decoded nothing");
 }
 
 /// **DTS, the lossy entry**: a 5.1 core goes in, stereo 48 kHz S16 comes out, for a 48 kHz and a

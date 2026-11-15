@@ -1258,6 +1258,7 @@ mod prime_livelock_tests {
             presentation_rearm_pending: false,
             max_fed_video_pts: 0,
             max_fed_audio_pts: 0,
+            mode_decode_short_since: None,
             audio_start_fp: None,
             audio_stale_dropped: 0,
             pcm_sink_lead_ns: 0,
