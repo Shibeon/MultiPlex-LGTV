@@ -371,27 +371,27 @@
       ".cargo/config": null,
       ".cargo/config.toml": "82f061c716740e16cfee63a74d87159e0e0dc253e1092b87c54190c603515b14"
     },
-    "lock_sha256": "c56af60124266be5ee0b7dfa7ae81b4f0ff38b047fe672f40a009f6e1c22d3d3",
+    "lock_sha256": "c7c6c8e8bf66ddafb5caa0551ef2369fee8047d0c66d20c923dfcf0045e5f19d",
     "manifests": {
-      "Cargo.toml": "fbeb900767c6d3a7091b0366cdaf79753f45384be9b39a649dd8e7decbf40fb6",
-      "appkit/Cargo.toml": "1e3a33f392110f269537b12f12879c6bc15309aca304b189d6b0346edf8a1186",
-      "base/Cargo.toml": "ebe0b95553bd44f33f422f7d8e22b75ddeb53c7ee81bbe738f675690694568f7",
-      "data/Cargo.toml": "90a763a8a9e22bda7e95f8ede4dc10ec6e92a62b90bd0fd2e622c617d75ec6c7",
-      "gfx/Cargo.toml": "c8889dd95a481938966c41635f85702695ce9c59956381768e6c56d215d8fc0e",
-      "machine/Cargo.toml": "0bc99e95272916b8d00e1a8dad81440bc4998de12ccd9a00e7853f438c813d03",
-      "media-codecs/Cargo.toml": "503c8681289314b5c8a63195aad6796cbad93fcb3eedd8d7cba9e8ed0233783f",
+      "Cargo.toml": "47a4564941555d54a3a9913c1adc3fbe65ef5c4d20e603e87d07a183fd095b84",
+      "appkit/Cargo.toml": "a766316ee7bfe5ed9149d900cf59784253921ae72fddd1b29fefdc0f2c6a8758",
+      "base/Cargo.toml": "b32551990832b0f04e53435a3ed78e500faf55668247c62f635a7772e16cf276",
+      "data/Cargo.toml": "d424f881ac35efeb483b5fd4c2fc8723639c6c5cc2943f12fb381b6ef901c32f",
+      "gfx/Cargo.toml": "2b568b9d0b51158d52b86d490a13084df5e999beeb75d6dd71f45048ab7028b3",
+      "machine/Cargo.toml": "53f234399c02229f77631983fe65a46a49375900cbc285049d9c88fcda1a7c55",
+      "media-codecs/Cargo.toml": "b531b0320b4a56a08d5601ae2415b4ba902e08005ae1f1ed19859250995be175",
       "media/Cargo.toml": "2b3bb41264db9b9f30869015dfe0dd6656147c432728c9ea9301988c710a4202",
-      "net/Cargo.toml": "bfdb3a08200642eeeafc9762733718c407529f26dce8a7b90665bc77ac928171",
-      "platform/Cargo.toml": "4181b79fa53a7ff6e8b0157f4d1ffe258737896603d267b4802551dee0812472",
+      "net/Cargo.toml": "789659c7837d40ac67cf34b23e18a90e73d5371652a8b215c5666fc59309bc98",
+      "platform/Cargo.toml": "38d9ffbc33b8aa7386577b6f4dd08eb1e3d18f74f67b52e2197b0625f3e0b9b4",
       "play-feed/Cargo.toml": "b85320257da74a1affd81238b8fb6caa7f28960181d5ea0e07704ceef4800515",
       "play-uri/Cargo.toml": "107832fa33c96b7d2a4150c294aea9cd40954c3aabf66f809fc771bb52f5c280",
       "playback-contract/Cargo.toml": "bde335ea645552d4f7481b007b80204ecb5bb592caaca22af58a8361cd050dcf",
-      "plex/Cargo.toml": "886ef07d7de8881d1a01666ea6aea70f228b5e0c8b8bbfc79b8693c59e1c8af7",
-      "screens/Cargo.toml": "ebe7f8c0d22492de6bd494cfa760dd99999bfd616b7952e753fe5a26dafc6a73",
-      "session/Cargo.toml": "331a64ed32fbc88988e4c1c33c7b9aa954deab219d1e74fbdec70a4c30690e61",
-      "storage/Cargo.toml": "8865be804f87c69c5ab6fdf3f3f5388b8bfc254195329623c7b1f5cf614e3e81",
-      "telemetry/Cargo.toml": "19ccd3f933efcda0052c8f0fdd9c9275c566f6d445e77a1049d0c3bd16e71b36",
-      "ui/Cargo.toml": "0957d2057cadbd522ae2ee2446727c9c4022c75fba9cfb2347fd341a10fdacf4"
+      "plex/Cargo.toml": "0e36f7273341c2d7dc63ef28d4c4820784b58b9481b3ba03050c36795b5a8245",
+      "screens/Cargo.toml": "916d0d1ee8d4cefe63ce81d2bc6875efac279142025b8b1cd27341ac255f2c71",
+      "session/Cargo.toml": "7774e39baba85f2f7788483f6bfed7cb9ed46e4ee24c88c8ec16400a1c05d2a0",
+      "storage/Cargo.toml": "112a8940e0ec58fee938bfa4e9f2701d850f882ecab7491532a4cb5a54a773b2",
+      "telemetry/Cargo.toml": "03c2f84bb7094fa7c03bb805330ad5a75c9ceb873da8b8b49c2d5dd3cf67a9de",
+      "ui/Cargo.toml": "2fe01d952993f20ecf879e6f4cca033f4d27945c289be6a1dacdd877322b4352"
     },
     "owners": {
       "Cargo.toml": {
@@ -407,7 +407,7 @@
         ],
         "edition": "2021",
         "lib": "src/lib.rs",
-        "lib_sha256": "c3e5773952ed1dc138ed7806383bda16d88d3c3d470729aa011d7b645738852d"
+        "lib_sha256": "d73ea95cd3d0cd30ac86a300e4ac21eeb8e2a8e6979f4dba33cff55ac622c3f0"
       },
       "data/Cargo.toml": {
         "dependency": [
@@ -422,7 +422,7 @@
         ],
         "edition": "2021",
         "lib": "data/src/lib.rs",
-        "lib_sha256": "13b19b51177935c316df61913c418233f371b2faf6e7d993cbdbe539e2d4360f"
+        "lib_sha256": "c8ba8dc07cde4593b5d8c5d2c8e0f88ec06928139ca0058470db6ec45b1ba76d"
       },
       "media/Cargo.toml": {
         "dependency": [
@@ -437,7 +437,7 @@
         ],
         "edition": "2021",
         "lib": "media/src/lib.rs",
-        "lib_sha256": "37046486175719577d4ea0fda178dfc577b63c49ba70f472b5fccdd56ce3f3c7"
+        "lib_sha256": "636cebb90d07a9648535820a498a9bc717e43a71251e73fc242acd013c9d6b2d"
       },
       "net/Cargo.toml": {
         "dependency": [
@@ -479,7 +479,7 @@
         ],
         "edition": "2021",
         "lib": "platform/src/lib.rs",
-        "lib_sha256": "0836abd640849f56afbe66af39632b28648609e6464fda0bd4c51087c1070acb"
+        "lib_sha256": "f031cd1d676b5253215cf61f835d3502fcd5ab0f573d51629ea31f45760a76a4"
       },
       "play-feed/Cargo.toml": {
         "dependency": [
@@ -494,7 +494,7 @@
         ],
         "edition": "2021",
         "lib": "play-feed/src/lib.rs",
-        "lib_sha256": "0696be5d9415fe4e8139470340ed9d92371a5bb90517baeac2ccee90eefd90f3"
+        "lib_sha256": "0e43c6206ccc6f8f01cfd8167c6628ea783469c3a3ad66c6476457fb2f083a2e"
       },
       "play-uri/Cargo.toml": {
         "dependency": [
@@ -524,7 +524,7 @@
         ],
         "edition": "2021",
         "lib": "plex/src/lib.rs",
-        "lib_sha256": "b90aa3a18b5a6479734ff0fc7143308657bb0d24eceb0b128375037c3b3a6f68"
+        "lib_sha256": "c0b9b89259e1d3c261dfa8761ccd4d8709961dc82a1c19c71e181421c93b9a9a"
       },
       "screens/Cargo.toml": {
         "dependency": [
@@ -554,7 +554,7 @@
         ],
         "edition": "2021",
         "lib": "session/src/lib.rs",
-        "lib_sha256": "aabf46f0171754643b3e7f246a4270b388a0f205b9263705eadb1e033d03066d"
+        "lib_sha256": "fcb3d6f5181856be867aa08d9d31165c3d04974ec54224c538318739d7b2e2b0"
       },
       "storage/Cargo.toml": {
         "dependency": [
@@ -572,7 +572,7 @@
         ],
         "edition": "2021",
         "lib": "storage/src/main.rs",
-        "lib_sha256": "94278ac8964b3825227f444691995278474e97b0802c4fec6dbddba6fe9a29e7"
+        "lib_sha256": "c351f0f28ae0b6b1ba4e148fe8e28c137db2b9345fc1431d45466cbce672a299"
       },
       "telemetry/Cargo.toml": {
         "dependency": [
@@ -587,7 +587,7 @@
         ],
         "edition": "2021",
         "lib": "telemetry/src/lib.rs",
-        "lib_sha256": "7fd06b717cbe02de1a755dcf0bb3c6098335768854898fba343ccc79484098a7"
+        "lib_sha256": "6e605dae573d10e158b63a3e0fa64ceabb7a99f831464d060ae1d249a2b248c3"
       },
       "ui/Cargo.toml": {
         "dependency": [
@@ -602,7 +602,7 @@
         ],
         "edition": "2021",
         "lib": "ui/src/lib.rs",
-        "lib_sha256": "c77775a6faa9583579ee576ea9f9a51a7b9c92d7ef692161761c1e471faf3873"
+        "lib_sha256": "c99645ef0204e2d51235e89c96c5bdc3a8df3be27e02d1f4840092741fc4fb7c"
       }
     },
     "text_hashing": "sha256-utf8-bytes-crlf-to-lf-local-root-version-v1"
