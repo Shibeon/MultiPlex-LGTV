@@ -340,8 +340,8 @@ impl FormId for Action {
             Action::None => 0,
             Action::ToggleStats => 1,
             Action::SendDiagnostics => 2,
-            // 30..=44: the folded commands, one key each (each of `open_tracks`'s two tabs is its own row) (the four a package can never fold are listed so a
-            // new command cannot compile without claiming one)
+            // 30..=44: the folded commands, one key each, and one per tab of `open_tracks` (each tab is its own
+            // row); the four a package can never fold are listed so a new command cannot compile without claiming one
             Action::Hud(command) => match command {
                 HudCommand::Previous => 30,
                 HudCommand::Next => 31,
