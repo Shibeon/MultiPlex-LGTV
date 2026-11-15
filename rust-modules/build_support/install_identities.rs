@@ -38,10 +38,11 @@ pub fn emit(path: &Path) {
             object_ids.insert(object.to_owned()),
             "duplicate DB8 object_id {object:?} for flavor {name}"
         );
-        // The id an install's record had before it was renamed, read once to carry the record
-        // over (`storage_service::backend::Backend::adopt_legacy_record`) and never written. The
-        // stable install's is `plxstate.stable`, which PlxNative (`com.beb.plxnative`) also uses,
-        // so the record found there is adopted only when its kind is this install's own.
+        // The id an install's record had before it was renamed, read once per helper process to
+        // carry the record over (`storage_service::backend::Backend::adopt_legacy_record`), which
+        // then purges the old copy. The stable and nightly installs' are `plxstate.stable` and
+        // `plxstate.night`, which PlxNative (`com.beb.plxnative`) and its nightly also use, so the
+        // object found there is copied or purged only when its kind is this install's own.
         let legacy = match identity.get("legacy_object_id") {
             None => None,
             Some(id) => {

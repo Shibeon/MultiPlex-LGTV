@@ -17,15 +17,17 @@ pub const LEDGER_CAPACITY: usize = 16;
 
 // Install identities come from the packaging manifest via `build_support/install_identities.rs`,
 // called from each package's build.rs (the platform crate and the storage helper).
-// MultiPlex 0.11.0 moved the stable record from plxstate.stable to mpxstate.stable: DB8 ids are
-// global across kinds, and PlxNative (com.beb.plxnative), which may be installed beside MultiPlex,
-// keeps its own state under plxstate.stable. `Flavor::legacy_object_id` names the old id, read once
-// by `Backend::adopt_legacy_record` and adopted only when the object there is MultiPlex's own kind.
+// MultiPlex 0.11.0 moved the stable record from plxstate.stable to mpxstate.stable and the nightly
+// one from plxstate.night to mpxstate.night (the same 14 bytes): DB8 ids are global across kinds,
+// and PlxNative (com.beb.plxnative, and its nightly), which may be installed beside MultiPlex, keeps
+// its own state under the old ids. `Flavor::legacy_object_id` names the old id, read once per helper
+// process by `Backend::adopt_legacy_record`, which copies and then purges the object there only when
+// it is MultiPlex's own kind.
 // Compatibility: plxstate.debug is a live DB8 key and must never change. The allowlist
-// landed in 6f78842e (2026-09-17), before nightly in 1c96bb7e (2026-09-19). Nightly now uses
+// landed in 6f78842e (2026-09-17), before nightly in 1c96bb7e (2026-09-19). Nightly first used
 // plxstate.night (14 bytes): on webOS 4.10.2, the earlier 16-byte ID failed get with -995
 // (generated base64 ID), and the 18-byte ID failed put with -3968 ("Invalid _id length").
-// Neither ID ever stored anything, so there is nothing to migrate.
+// Neither of those two ever stored anything, so there is nothing to migrate from them.
 // Flavor is serialized as snake_case. An old binary rejects the unknown "nightly" variant
 // (decode returns Invalid, not empty state); separate object IDs keep stable/debug from reading
 // nightly records in normal use, so neither existing namespace is rewritten on downgrade.
@@ -1064,13 +1066,14 @@ mod tests {
     #[test]
     fn exact_ids_and_key_names() {
         // MultiPlex's stable record is not PlxNative's: DB8 ids are global across kinds, and
-        // PlxNative (com.beb.plxnative) keeps its own state under `plxstate.stable`.
+        // PlxNative (com.beb.plxnative, and its nightly) keeps its own state under `plxstate.stable`
+        // (`plxstate.night`).
         assert_eq!(Flavor::Stable.object_id().as_bytes(), b"mpxstate.stable");
         assert_eq!(Flavor::Stable.legacy_object_id(), Some("plxstate.stable"));
         assert_eq!(Flavor::Debug.legacy_object_id(), None);
-        assert_eq!(Flavor::Nightly.legacy_object_id(), None);
         assert_eq!(Flavor::Debug.object_id().as_bytes(), b"plxstate.debug");
-        assert_eq!(Flavor::Nightly.object_id().as_bytes(), b"plxstate.night");
+        assert_eq!(Flavor::Nightly.object_id().as_bytes(), b"mpxstate.night");
+        assert_eq!(Flavor::Nightly.legacy_object_id(), Some("plxstate.night"));
         assert_eq!(Flavor::Stable.object_id().len(), 15);
         assert_eq!(Flavor::Debug.object_id().len(), 14);
         assert_eq!(Flavor::Nightly.object_id().len(), 14);

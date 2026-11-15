@@ -103,6 +103,12 @@ reaches that server at the same address, or when the app returns from the backgr
 bookmark of its own for where you stopped watching: playback position is held by your Plex Media
 Server.
 
+The sign-in and settings are kept in the television's app database under a record name of
+MultiPlex's own. Earlier MultiPlex builds used a name that PlxNative also uses. When MultiPlex
+starts, it asks the database once for that old name. If the record there is MultiPlex's own, it
+moves it to the new name and deletes the old copy; if it is PlxNative's, or the database refuses,
+MultiPlex does not keep, change or delete it.
+
 Those lifetimes differ. Signing out removes the sign-in, the servers registered with it and their
 tokens, every profile's own cached server access token(s) and PIN check, the cached profile pictures
 and other downloaded artwork, and your answers about unencrypted connections. Switching between the

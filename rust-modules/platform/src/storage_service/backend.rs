@@ -84,6 +84,12 @@ pub struct Backend<R> {
     /// Whether [`Backend::adopt_legacy_record`] has settled for this helper process.
     legacy_settled: bool,
 }
+/// What [`Backend::adopt_legacy_record`] found under the old id.
+enum Legacy {
+    Ours(Value),
+    NotOurs,
+    Unknown,
+}
 struct RetiredKey {
     operation: Generation,
     digest: String,
@@ -128,15 +134,23 @@ impl<R: Rpc> Backend<R> {
             legacy_settled: false,
         }
     }
-    /// **Carry this install's record over from its pre-rename DB8 id, once, and never touch a
-    /// record that is not ours.** The stable install kept its state under `mpxstate.stable` until
-    /// 0.11.0; PlxNative (`com.beb.plxnative`) keeps its own under that same id, and DB8 ids are
-    /// global across kinds. So, when the current id holds nothing: read the old id, and only when
-    /// the object there belongs to this service's own kind, decode it, readdress it and `put` it
-    /// under the current id WITHOUT a `_rev` (a create: it cannot overwrite anything, and a record
-    /// that appeared meanwhile wins). The old id is never written or deleted, whoever owns it. A
-    /// refused or failed read of the old id, an object of another kind, or one that does not
-    /// decode is not ours, and settles the question for this process. Best effort and silent:
+    /// **Carry this install's record over from its pre-rename DB8 id, then purge the old copy;
+    /// never keep, write or delete a record that is not ours.** The stable and nightly installs kept
+    /// their state under `plxstate.stable` and `plxstate.night` until 0.11.0. PlxNative
+    /// (`com.beb.plxnative`, and its nightly) keeps its own under those same ids, and DB8 ids are
+    /// global across kinds. So, once per helper process: `get` the old id, and act only when the
+    /// object there is of this service's own kind. Then, while the current id is empty, decode and
+    /// readdress it and `put` it under the current id WITHOUT a `_rev` (a create: it cannot
+    /// overwrite anything, and a record that appeared meanwhile wins) and read the current id back.
+    /// Once the current id holds a valid record (or the old one does not decode), re-read the old
+    /// object, check its kind again and `del` it with `purge: true`, so no plaintext token kept
+    /// there outlives a sign-out or Delete all local data (webOS DB8 API reference: `del` takes
+    /// `ids` and `purge`; a `get` of an object the caller may not access answers -3999 and a refused
+    /// `del` -3963).
+    ///
+    /// A definite answer settles the question for the process: the old id empty, an object of
+    /// another kind, or a `get` refused with -3999/-3963. A transport error or any other refusal (a
+    /// busy database) leaves it open, and the next connection asks again. Best effort and silent:
     /// failing to adopt leaves the install signed out, which a sign-in repairs.
     pub fn adopt_legacy_record(&mut self) {
         if self.legacy_settled {
@@ -146,28 +160,65 @@ impl<R: Rpc> Backend<R> {
             self.legacy_settled = true;
             return;
         };
-        match self.rpc.call("luna://com.palm.db/get", &json!({"ids":[self.flavor.object_id()]})) {
-            Ok(reply) if reply["returnValue"] == true => {
-                if reply["results"].as_array().is_none_or(|r| !r.is_empty()) {
-                    self.legacy_settled = true;
+        let ours = json!(format!("{}:1", self.service));
+        let object = match self.legacy_object(legacy, &ours) {
+            Legacy::Ours(object) => object,
+            Legacy::NotOurs => {
+                self.legacy_settled = true;
+                return;
+            }
+            Legacy::Unknown => return,
+        };
+        let decoded = object["state"]
+            .as_str()
+            .and_then(|bytes| CanonicalState::decode_legacy(bytes.as_bytes(), self.flavor).ok());
+        if let Some(state) = decoded {
+            let current = match self.load_inner() {
+                Ok(current) => current,
+                Err(_) => return,
+            };
+            if current.is_none() {
+                let _ = self.put_state(None, &state);
+                // Purge the old copy only once the current id is known to hold a record.
+                if !matches!(self.load_inner(), Ok(Some(_))) {
                     return;
                 }
             }
-            // The current id could not be read: try again on the next connection.
-            _ => return,
         }
-        self.legacy_settled = true;
-        let Ok(reply) = self.rpc.call("luna://com.palm.db/get", &json!({"ids":[legacy]})) else { return };
+        // Re-read immediately before the purge: whatever is under the old id now must still be
+        // of this service's own kind.
+        match self.legacy_object(legacy, &ours) {
+            Legacy::Ours(_) => {}
+            Legacy::NotOurs => {
+                self.legacy_settled = true;
+                return;
+            }
+            Legacy::Unknown => return,
+        }
+        match self.rpc.call("luna://com.palm.db/del", &json!({"ids":[legacy],"purge":true})) {
+            Ok(reply) if reply["returnValue"] == true => self.legacy_settled = true,
+            _ => {}
+        }
+    }
+    fn legacy_object(&mut self, legacy: &str, ours: &Value) -> Legacy {
+        let reply = match self.rpc.call("luna://com.palm.db/get", &json!({"ids":[legacy]})) {
+            Ok(reply) => reply,
+            Err(_) => return Legacy::Unknown,
+        };
         if reply["returnValue"] != true {
-            return;
+            // -3999 "access denied": an object this service may not read, so not its own.
+            return match reply["errorCode"].as_i64() {
+                Some(-3999 | -3963) => Legacy::NotOurs,
+                _ => Legacy::Unknown,
+            };
         }
-        let Some([object]) = reply["results"].as_array().map(Vec::as_slice) else { return };
-        if object["_kind"] != json!(format!("{}:1", self.service)) || object["_id"] != json!(legacy) {
-            return;
+        match reply["results"].as_array().map(Vec::as_slice) {
+            Some([object]) if object["_kind"] == *ours && object["_id"] == json!(legacy) => {
+                Legacy::Ours(object.clone())
+            }
+            Some(_) => Legacy::NotOurs,
+            None => Legacy::Unknown,
         }
-        let Some(bytes) = object["state"].as_str() else { return };
-        let Ok(state) = CanonicalState::decode_legacy(bytes.as_bytes(), self.flavor) else { return };
-        let _ = self.put_state(None, &state);
     }
     pub fn setup(&mut self) -> Result<(), ErrorCode> {
         // The registered service is both the DB8 caller and the private kind owner. This exact
@@ -1582,66 +1633,195 @@ mod tests {
         );
     }
 
-    /// A record kept under the stable install's pre-0.11 id, `plxstate.stable`, by a kind other
-    /// than MultiPlex's own is PlxNative's (`com.beb.plxnative`), and is data, never touched.
-    fn legacy_record(kind: &str) -> Value {
-        let mut state = CanonicalState::new(Flavor::Stable, Generation([1; 16]));
-        state.id = "plxstate.stable".into();
-        json!({"returnValue":true,"results":[{
-            "_id":"plxstate.stable","_kind":kind,"_rev":4,
-            "state":serde_json::to_string(&state).unwrap()
-        }]})
+    const OURS: &str = "app.multiplex.native.storage:1";
+    const PLXNATIVE: &str = "com.beb.plxnative.storage:1";
+
+    /// A DB8 that keeps objects by id, global across kinds, as the real one does. A private kind
+    /// belongs to its owner: `get` of another kind's object answers -3999 ("db: access denied")
+    /// and `del` of it -3963 ("db: permission denied") (webOS DB8 API reference, `get`/`del`)
+    /// when `private_other` is set, and returns the object as data otherwise, so the code cannot
+    /// lean on DB8 to refuse. `faults` replaces the reply of the call with that index.
+    struct Db8 {
+        objects: std::collections::BTreeMap<String, Value>,
+        calls: Vec<(String, Value)>,
+        faults: std::collections::HashMap<usize, Result<Value, ErrorCode>>,
+        private_other: bool,
+        next_rev: u64,
     }
-    fn empty_get() -> Result<Value, ErrorCode> {
-        Ok(json!({"returnValue":true,"results":[]}))
+    impl Db8 {
+        fn with(objects: &[(&str, &str, Flavor)]) -> Self {
+            let mut db = Db8 { objects: Default::default(), calls: vec![], faults: Default::default(),
+                private_other: false, next_rev: 4 };
+            for &(id, kind, flavor) in objects {
+                let mut state = CanonicalState::new(flavor, Generation([1; 16]));
+                state.id = id.into();
+                db.objects.insert(id.into(), json!({"_id":id,"_kind":kind,"_rev":3,
+                    "state":serde_json::to_string(&state).unwrap()}));
+            }
+            db
+        }
+        fn uris(&self) -> Vec<&str> {
+            self.calls.iter().map(|(uri, _)| uri.as_str()).collect()
+        }
+    }
+    impl Rpc for Db8 {
+        fn call(&mut self, uri: &str, payload: &Value) -> Result<Value, ErrorCode> {
+            self.calls.push((uri.into(), payload.clone()));
+            if let Some(fault) = self.faults.remove(&(self.calls.len() - 1)) {
+                return fault;
+            }
+            match uri {
+                "luna://com.palm.db/get" => {
+                    let id = payload["ids"][0].as_str().unwrap();
+                    match self.objects.get(id) {
+                        Some(o) if self.private_other && o["_kind"] != OURS =>
+                            Ok(json!({"returnValue":false,"errorCode":-3999})),
+                        Some(o) => Ok(json!({"returnValue":true,"results":[o]})),
+                        None => Ok(json!({"returnValue":true,"results":[]})),
+                    }
+                }
+                "luna://com.palm.db/put" => {
+                    let mut object = payload["objects"][0].clone();
+                    let id = object["_id"].as_str().unwrap().to_owned();
+                    let current = self.objects.get(&id).map(|o| o["_rev"].clone());
+                    if current != object.get("_rev").cloned() {
+                        return Ok(json!({"returnValue":false,"errorCode":-3961}));
+                    }
+                    self.next_rev += 1;
+                    object["_rev"] = json!(self.next_rev);
+                    self.objects.insert(id.clone(), object);
+                    Ok(json!({"returnValue":true,"results":[{"id":id,"rev":self.next_rev}]}))
+                }
+                "luna://com.palm.db/del" => {
+                    let id = payload["ids"][0].as_str().unwrap();
+                    match self.objects.get(id) {
+                        Some(o) if o["_kind"] != OURS =>
+                            Ok(json!({"returnValue":false,"errorCode":-3963})),
+                        Some(_) => {
+                            self.objects.remove(id);
+                            Ok(json!({"returnValue":true,"results":[{"id":id}]}))
+                        }
+                        None => Ok(json!({"returnValue":true,"results":[]})),
+                    }
+                }
+                _ => panic!("unexpected RPC {uri}"),
+            }
+        }
+    }
+    fn db8_backend(db: Db8, flavor: Flavor) -> Backend<Db8> {
+        Backend::new(db, flavor, "app.multiplex.native.storage".into())
+    }
+    fn sign_out(b: &mut Backend<Db8>) {
+        let (rev, state) = b.load().unwrap().expect("a record under the current id");
+        let request = commit(Expectation::Present {
+            db_rev: rev.to_string(),
+            epoch: state.epoch.to_string(),
+            auth_generation: "01".repeat(16),
+        });
+        assert!(matches!(b.dispatch(request), Response::Commit { status: CommitStatus::Committed, .. }));
     }
 
     #[test]
-    fn our_own_legacy_stable_record_is_copied_to_the_new_id_and_never_written_back() {
-        let mut b = backend(vec![
-            empty_get(),
-            Ok(legacy_record("app.multiplex.native.storage:1")),
-            Ok(json!({"returnValue":true,"results":[{"id":"mpxstate.stable","rev":5}]})),
-        ]);
-        b.adopt_legacy_record();
-        assert_eq!(b.rpc.calls.len(), 3);
-        assert_eq!(b.rpc.calls[0], ("luna://com.palm.db/get".into(), json!({"ids":["mpxstate.stable"]})));
-        assert_eq!(b.rpc.calls[1], ("luna://com.palm.db/get".into(), json!({"ids":["plxstate.stable"]})));
-        assert_eq!(b.rpc.calls[2].0, "luna://com.palm.db/put");
-        let object = &b.rpc.calls[2].1["objects"][0];
-        assert_eq!(object["_id"], "mpxstate.stable");
-        assert_eq!(object["_kind"], "app.multiplex.native.storage:1");
-        assert!(object.get("_rev").is_none(), "a fresh put never overwrites an existing record");
-        assert!(b.rpc.calls[2].1.get("force").is_none());
-        let moved = CanonicalState::decode(object["state"].as_str().unwrap().as_bytes(), Flavor::Stable).unwrap();
-        assert_eq!(moved.id, "mpxstate.stable");
-        assert_eq!(moved.auth_generation, Generation([1; 16]));
-        // Once per helper process.
-        b.adopt_legacy_record();
-        assert_eq!(b.rpc.calls.len(), 3);
-    }
-
-    #[test]
-    fn plxnatives_record_is_never_adopted_written_or_deleted() {
-        for legacy in [
-            Ok(legacy_record("com.beb.plxnative.storage:1")),
-            Ok(legacy_record("other:1")),
-            // Another app's private kind may refuse the read outright.
-            Ok(json!({"returnValue":false,"errorCode":-3963})),
-            Err(ErrorCode::Unavailable),
+    fn our_own_legacy_record_moves_to_the_new_id_and_the_old_one_is_purged() {
+        for (flavor, legacy, current) in [
+            (Flavor::Stable, "plxstate.stable", "mpxstate.stable"),
+            (Flavor::Nightly, "plxstate.night", "mpxstate.night"),
         ] {
-            let mut b = backend(vec![empty_get(), legacy]);
+            let mut b = db8_backend(Db8::with(&[(legacy, OURS, flavor)]), flavor);
             b.adopt_legacy_record();
-            assert_eq!(b.rpc.calls.len(), 2, "only the two reads: {:?}", b.rpc.calls);
-            assert!(b.rpc.calls.iter().all(|(uri, _)| uri == "luna://com.palm.db/get"));
+            let calls = &b.rpc.calls;
+            assert_eq!(calls[0], ("luna://com.palm.db/get".into(), json!({"ids":[legacy]})));
+            let put = calls.iter().find(|(uri, _)| uri == "luna://com.palm.db/put").unwrap();
+            let object = &put.1["objects"][0];
+            assert_eq!(object["_id"], current);
+            assert!(object.get("_rev").is_none(), "a create never overwrites an existing record");
+            assert!(put.1.get("force").is_none());
+            let moved = CanonicalState::decode(object["state"].as_str().unwrap().as_bytes(), flavor).unwrap();
+            assert_eq!(moved.id, current);
+            assert_eq!(moved.auth_generation, Generation([1; 16]));
+            // The old object is re-read and its kind re-checked immediately before it is purged.
+            let n = calls.len();
+            assert_eq!(calls[n - 2], ("luna://com.palm.db/get".into(), json!({"ids":[legacy]})));
+            assert_eq!(calls[n - 1], ("luna://com.palm.db/del".into(), json!({"ids":[legacy],"purge":true})));
+            assert!(!b.rpc.objects.contains_key(legacy), "the plaintext record under the old id is gone");
+            // Once per helper process.
+            b.adopt_legacy_record();
+            assert_eq!(b.rpc.calls.len(), n);
+            // Signing out (and Delete all local data, the same clear) leaves nothing under the old id.
+            sign_out(&mut b);
+            assert_eq!(b.rpc.objects.keys().collect::<Vec<_>>(), [current]);
         }
     }
 
     #[test]
-    fn adoption_reads_only_the_new_id_once_it_exists_and_nothing_for_other_flavours() {
-        let mut b = backend(vec![Ok(record(3))]);
+    fn an_own_legacy_record_left_beside_a_current_one_is_purged_without_touching_the_current_one() {
+        let db = Db8::with(&[("plxstate.stable", OURS, Flavor::Stable), ("mpxstate.stable", OURS, Flavor::Stable)]);
+        let current = db.objects["mpxstate.stable"].clone();
+        let mut b = db8_backend(db, Flavor::Stable);
         b.adopt_legacy_record();
-        assert_eq!(b.rpc.calls.len(), 1);
+        assert!(!b.rpc.uris().contains(&"luna://com.palm.db/put"));
+        assert_eq!(b.rpc.objects.get("mpxstate.stable"), Some(&current));
+        assert!(!b.rpc.objects.contains_key("plxstate.stable"));
+    }
+
+    #[test]
+    fn plxnatives_record_is_never_adopted_written_or_deleted() {
+        for private in [false, true] {
+            for kind in [PLXNATIVE, "other:1"] {
+                let mut db = Db8::with(&[("plxstate.stable", kind, Flavor::Stable)]);
+                db.private_other = private;
+                let before = db.objects.clone();
+                let mut b = db8_backend(db, Flavor::Stable);
+                b.adopt_legacy_record();
+                assert_eq!(b.rpc.uris(), ["luna://com.palm.db/get"], "one read, nothing else");
+                assert_eq!(b.rpc.objects, before);
+                // A definite answer settles the question for the process.
+                b.adopt_legacy_record();
+                assert_eq!(b.rpc.calls.len(), 1);
+            }
+        }
+        // Even when the object under the old id is a different one by the time of the purge, the
+        // purge is not sent: the first read is answered with our own record, the re-read with
+        // PlxNative's.
+        let ours = Db8::with(&[("plxstate.stable", OURS, Flavor::Stable)]).objects["plxstate.stable"].clone();
+        let mut db = Db8::with(&[("plxstate.stable", PLXNATIVE, Flavor::Stable)]);
+        let theirs = db.objects["plxstate.stable"].clone();
+        db.faults.insert(0, Ok(json!({"returnValue":true,"results":[ours]})));
+        let mut b = db8_backend(db, Flavor::Stable);
+        b.adopt_legacy_record();
+        assert!(!b.rpc.uris().contains(&"luna://com.palm.db/del"), "{:?}", b.rpc.uris());
+        assert_eq!(b.rpc.objects["plxstate.stable"], theirs);
+    }
+
+    #[test]
+    fn a_transient_failure_retries_adoption_on_the_next_connection_instead_of_abandoning_it() {
+        // Every call of a full adoption fails once, in turn, as a transport error and as a DB8
+        // refusal that is not an access denial (a busy database, say).
+        let full = {
+            let mut b = db8_backend(Db8::with(&[("plxstate.stable", OURS, Flavor::Stable)]), Flavor::Stable);
+            b.adopt_legacy_record();
+            b.rpc.calls.len()
+        };
+        for at in 0..full {
+            for fault in [Err(ErrorCode::Unavailable), Ok(json!({"returnValue":false,"errorCode":-986}))] {
+                let mut db = Db8::with(&[("plxstate.stable", OURS, Flavor::Stable)]);
+                db.faults.insert(at, fault.clone());
+                let mut b = db8_backend(db, Flavor::Stable);
+                b.adopt_legacy_record();
+                b.adopt_legacy_record();
+                assert!(!b.rpc.objects.contains_key("plxstate.stable"), "fault at call {at}: {:?}", b.rpc.uris());
+                let (_, state) = b.load().unwrap().expect("adopted after the retry");
+                assert_eq!(state.auth_generation, Generation([1; 16]));
+            }
+        }
+    }
+
+    #[test]
+    fn adoption_asks_nothing_more_once_the_old_id_is_empty_and_nothing_for_other_flavours() {
+        let mut b = db8_backend(Db8::with(&[("mpxstate.stable", OURS, Flavor::Stable)]), Flavor::Stable);
+        b.adopt_legacy_record();
+        b.adopt_legacy_record();
+        assert_eq!(b.rpc.calls, [("luna://com.palm.db/get".into(), json!({"ids":["plxstate.stable"]}))]);
         let mut debug = Backend::new(Mock { replies: VecDeque::new(), calls: vec![] }, Flavor::Debug,
             "app.multiplex.native.debug.storage".into());
         debug.adopt_legacy_record();

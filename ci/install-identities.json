@@ -13,6 +13,7 @@
   {
     "name": "nightly",
     "app_id": "app.multiplex.native.nightly",
-    "object_id": "plxstate.night"
+    "object_id": "mpxstate.night",
+    "legacy_object_id": "plxstate.night"
   }
 ]
