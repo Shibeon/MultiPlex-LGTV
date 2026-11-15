@@ -275,5 +275,11 @@
   "browse.detail.minutes_left": "{minutes} perc van hátra",
   "browse.detail.upcoming_airs": "Adásba kerül: {date}",
   "browse.detail.upcoming_air_date_unknown": "Az adás dátuma ismeretlen",
-  "browse.detail.upcoming_title_tba": "A cím később derül ki"
+  "browse.detail.upcoming_title_tba": "A cím később derül ki",
+  "browse.person.acting": "Színészet",
+  "browse.person.appearances": "Szereplések",
+  "browse.person.producing": "Produceri munka",
+  "browse.person.directing": "Rendezés",
+  "browse.person.other_credits": "Egyéb közreműködés",
+  "browse.person.available": "Elérhető a MultiPlexben"
 }

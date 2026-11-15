@@ -275,5 +275,11 @@
   "browse.detail.minutes_left": "Noch {minutes} Min.",
   "browse.detail.upcoming_airs": "Ausstrahlung am {date}",
   "browse.detail.upcoming_air_date_unknown": "Ausstrahlungsdatum unbekannt",
-  "browse.detail.upcoming_title_tba": "Titel wird noch bekannt gegeben"
+  "browse.detail.upcoming_title_tba": "Titel wird noch bekannt gegeben",
+  "browse.person.acting": "Schauspiel",
+  "browse.person.appearances": "Auftritte",
+  "browse.person.producing": "Produktion",
+  "browse.person.directing": "Regie",
+  "browse.person.other_credits": "Weitere Mitwirkung",
+  "browse.person.available": "Verfügbar in MultiPlex"
 }

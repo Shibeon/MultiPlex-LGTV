@@ -64,6 +64,10 @@ fn covers<K>(stop: &Stop<K>, x: f32, y: f32) -> bool {
 pub struct HitMap<K> {
     front: Vec<Stop<K>>,
     back: Vec<Stop<K>>,
+    /// The horizontal rows the last presented frame drew ([`crate::wheel::PanZone`]), double-buffered
+    /// with the stops: where the wheel scrolls a row instead of the page.
+    pans_front: Vec<crate::wheel::PanZone>,
+    pans_back: Vec<crate::wheel::PanZone>,
     /// The D-pad was used since the pointer last moved far enough: hover is suppressed.
     pub dpad_mode: bool,
     dpad_at: (f32, f32),
@@ -85,6 +89,8 @@ impl<K: Copy + Eq> HitMap<K> {
         Self {
             front: Vec::new(),
             back: Vec::new(),
+            pans_front: Vec::new(),
+            pans_back: Vec::new(),
             dpad_mode: false,
             dpad_at: (0.0, 0.0),
             last: (0.0, 0.0),
@@ -97,10 +103,22 @@ impl<K: Copy + Eq> HitMap<K> {
         self.back = stops;
     }
 
+    /// The draw's horizontal rows for this frame, into the BACK map (with [`Self::fill`]).
+    pub fn fill_pans(&mut self, pans: Vec<crate::wheel::PanZone>) {
+        self.pans_back = pans;
+    }
+
     /// A frame presented: the back map is what the panel shows.
     pub fn swap(&mut self) {
         std::mem::swap(&mut self.front, &mut self.back);
         self.back.clear();
+        std::mem::swap(&mut self.pans_front, &mut self.pans_back);
+        self.pans_back.clear();
+    }
+
+    /// The topmost horizontal row the last PRESENTED frame drew under the point, if any.
+    pub fn pan_at(&self, x: f32, y: f32) -> Option<&crate::wheel::PanZone> {
+        crate::wheel::zone_at(&self.pans_front, x, y)
     }
 
     /// The map a click resolves against (the last PRESENTED frame's).

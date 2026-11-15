@@ -141,26 +141,34 @@ fn the_legacy_band_is_the_unchanged_geometry() {
     }
 }
 
-/// **The room the caption rule counts under a card is the gap the shared shelf pitch keeps there.**
-/// `room_for` assumes the next shelf's heading (or the next grid row's tile) rests `UNDER_LABEL_AIR`
-/// past the band, which is what `ROW_PITCH_FIXED` (every shelf column's fixed part) and the grid's
-/// pitch carry. The owners that build their own flow pin themselves to the same numbers: the person
+/// **The room the caption rule counts under a card is the gap the shared grid pitch keeps there,
+/// and a shelf keeps the section air more.** `room_for` assumes the next grid row's tile (or the
+/// next shelf's heading) rests at least `UNDER_LABEL_AIR` past the band: the grid's pitch carries
+/// exactly that, and `ROW_PITCH_FIXED` (every shelf column's fixed part) carries `SECTION_AIR` on
+/// top, the larger gap between stacked sections, so a caption that fits a grid fits a shelf. The owners that build their own flow pin themselves to the same numbers: the person
 /// page (`a_shelf_here_pitches_like_a_shelf_on_home`), Search (`layout::block_h` against `ROW_PITCH`),
 /// the Library's shelves (`shelf_pitch_keeps_the_shared_air`), Detail's section gaps
 /// (`a_shelf_is_followed_by_the_shared_air`), and `Stack::frame`, which refuses a page whose shelf keeps
 /// less than that air under it while another shelf stands below.
 #[test]
 fn the_rules_room_is_the_gap_the_shared_pitch_keeps_under_a_card() {
-    use crate::consts::{CARD_DY, CARD_H, ROW_PITCH, TITLE_DY, UNDER_LABEL_AIR};
+    use crate::consts::{CARD_DY, CARD_H, ROW_PITCH, SECTION_AIR, TITLE_DY, UNDER_LABEL_AIR};
     let above_the_next = TITLE_DY + CARD_DY + CARD_H;
     for band in [card_row::LEGACY_BAND_H, 0.0, 80.0, 112.0] {
         for e in [0.0, 0.25, 0.5, 1.0] {
             let room = card_row::room_for(band, e, 0.0);
             let pitch_gap = card_row::ROW_PITCH_FIXED + card_row::under_band_for(band, e) - above_the_next;
-            assert!((room - pitch_gap).abs() < 1e-3, "band {band} e {e}: the rule counts {room} under a card, the pitch keeps {pitch_gap}");
+            assert!(
+                (room + SECTION_AIR - pitch_gap).abs() < 1e-3,
+                "band {band} e {e}: the rule counts {room} under a card, the pitch keeps {pitch_gap} (the section air more)"
+            );
         }
     }
-    assert_eq!(ROW_PITCH - above_the_next, card_row::room_for(card_row::LEGACY_BAND_H, 1.0, 0.0), "a focused shelf's pitch is the rule's room at the legacy band");
+    assert_eq!(
+        ROW_PITCH - above_the_next,
+        card_row::room_for(card_row::LEGACY_BAND_H, 1.0, 0.0) + SECTION_AIR,
+        "a focused shelf's pitch is the rule's room at the legacy band, and the section air"
+    );
     assert_eq!(card_row::room_for(card_row::LEGACY_BAND_H, 0.0, 0.0), LABEL_BAND_COLLAPSED + UNDER_LABEL_AIR, "a collapsed band keeps the air");
     let grid = poster_grid::Geom::DEFAULT;
     assert_eq!(grid.pitch() - grid.h, LABEL_BAND_COLLAPSED + UNDER_LABEL_AIR, "a grid row keeps the same air under its band");

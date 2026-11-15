@@ -77,7 +77,7 @@ pub(super) fn block_h(kind: Kind, band: f32) -> f32 {
     HEAD_TO_ROW + style(kind).h + caption_band(band)
 }
 pub(super) fn caption_band(band: f32) -> f32 {
-    plx_ui::consts::UNDER_LABEL_AIR + band
+    plx_ui::consts::SHELF_FOOT + band
 }
 pub(super) fn recent(slot: usize, scroll: f32) -> Rect {
     Rect::new(

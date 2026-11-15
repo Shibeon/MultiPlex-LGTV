@@ -1,11 +1,22 @@
-//! The owned person page for restructure phase 7. Its measured header keeps the Filmography
-//! action below the biography in the text column. Shelves, biography panel and animation share
+//! The owned person page for restructure phase 7. Under its measured header the page is one
+//! horizontal shelf per category, as Home is: **Available on MultiPlex** (the person's films and
+//! shows on the viewer's own servers, the merged Movies then Shows of every source), then the
+//! credits plex.tv knows of, one row each for Acting, Appearances, Producing, Directing and Other
+//! credits ([`plx_data::person::credit_rows`]). Every row is a `cards::Shelf` in the page's
+//! `cards::Stack`: ONE line whatever its length, walked by Left/Right, Up/Down between rows and to
+//! the header, the engine remembering the card per row. A credit a server holds opens its Detail
+//! page; one no server holds opens its catalog page. Shelves, biography panel and animation share
 //! the UI system, while navigation and focus are explicit contracts:
 //! the engine is the only cursor, card keys preserve item identity across store reshapes, and page
-//! changes leave through `ContentReq` effects. Filmography is a separate modal `Screen`; this page
-//! presents it and never imports or stores a sibling screen. The Person owner observes the
+//! changes leave through `ContentReq` effects. The Person owner observes the
 //! visible session generation and retires credential-bound metadata on identity changes; its
-//! normal store landing rebuilds this page and the filmography without reopening either.
+//! normal store landing rebuilds this page without reopening it.
+//!
+//! The Filmography route (`screens::filmography`, `ContentArg::Filmography`) is no longer offered
+//! here: its departments are this page's rows. It stays only because replay anchor
+//! `12-filmography-detail-return` (`tests/focusfp.sh` flow 12) and the dev `filmography` trigger
+//! open it directly; removing it means re-pointing flow 12 at a credit-row card and recording that
+//! anchor afresh.
 //!
 //! **The biography sheet left in phase 10** (`screens::person_bio`, `ContentPanel::Bio`): it is a
 //! `Style::Alert` surface on the container tree, so its input, its phase and its teardown are the
@@ -16,7 +27,7 @@
 
 use std::ffi::CString;
 
-use plx_data::person::{Person, NSHELF};
+use plx_data::person::{Credit, Person, CREDIT_ROWS, NSHELF};
 use plx_plex::plex::ServerId;
 use plx_data::pms::PmsMovie;
 use plx_data::stores::person::PersonCmd;
@@ -24,7 +35,6 @@ use plx_ui::cards::{RowStyle, TileLabel};
 use plx_ui::cards::{CardEvent, CardSource, Kind, SectionSpec, Stack, StackEvent, StackPage};
 use plx_ui::consts::*;
 use plx_ui::label::{Label, VAlign};
-use plx_ui::linked_heading::LinkedHeading;
 use plx_machine::machine::{
     Canon, Cx, Edge, Effects, EntryId, GroupId, Handled, InputEvent, InputKind, Key, Leave,
     LogicalState, Machine, Measure, Tick,
@@ -36,6 +46,8 @@ use plx_ui::screen::{
 };
 #[cfg(test)]
 use plx_ui::screen::Enter;
+#[cfg(test)]
+use plx_data::person::CreditRow;
 use plx_ui::text_view::TextView;
 use plx_ui::hstack::Item;
 use plx_ui::theme;
@@ -53,34 +65,37 @@ use super::registry::{
 // -------------------------------------------------------------------------------------------
 
 const HEADER_ELEM: u32 = 0;
-const ENTRY_ELEM: u32 = 1;
 const FIRST_CARD_ELEM: u32 = 0x1000;
+/// How many credit rows the page can stack ([`CREDIT_ROWS`]).
+const NCREDIT: usize = CREDIT_ROWS.len();
+/// Every shelf the page can show: the local row and the credit rows.
+const NROWS: usize = 1 + NCREDIT;
 
 /// The page's sections, in document order, and the focus group each is known by. The ids are the
 /// page's and fixed per section kind (the engine remembers a cursor per `(entry, group)`, and a
-/// fresh mount targets `GroupId(0)`, the Filmography pill): a shelf keeps its id whichever other
-/// shelves exist. `groups()` lists them in document order: header, pill, then the shelves.
+/// fresh mount targets `GroupId(0)`, the header): a shelf keeps its id whichever other shelves
+/// exist. `groups()` lists them in document order: header, then the shelves.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Sec {
-    /// The header band: portrait, name, facts, biography (one focus element), and the Filmography
-    /// pill's room. Drawn by the page, in the flow from the top of the document.
+    /// The header band: portrait, name, facts and biography (one focus element). Drawn by the page,
+    /// in the flow from the top of the document.
     Head,
-    /// The Filmography pill: a zero-height focus element that sits inside the head's block
-    /// ([`StackPage::reveal_with`]); its pill is drawn with the header.
-    Entry,
     /// The skeleton / empty read-out in the shelves' place, while no shelf has content.
     State,
     /// The air between the header band and the first shelf. The air under a shelf is its own foot
     /// ([`StackPage::shelf_foot`]), so two shelves are adjacent sections.
     Gap,
-    /// The shelf of this kind (0 = Movies, 1 = Shows).
-    Shelf(usize),
+    /// Available on MultiPlex: the person's titles on the viewer's own servers.
+    Local,
+    /// The credit row at this index of [`CREDIT_ROWS`].
+    Credits(usize),
 }
 
-const HEADER_GROUP: GroupId = GroupId(1);
-const ENTRY_GROUP: GroupId = GroupId(0);
-/// Group of the shelf of each kind (movies, shows).
-const SHELF_GROUP: [GroupId; NSHELF] = [GroupId(2), GroupId(3)];
+const HEADER_GROUP: GroupId = GroupId(0);
+/// Group of the Available on MultiPlex shelf.
+const LOCAL_GROUP: GroupId = GroupId(1);
+/// Group of each credit row, by its index in [`CREDIT_ROWS`].
+const CREDIT_GROUP: [GroupId; NCREDIT] = [GroupId(2), GroupId(3), GroupId(4), GroupId(5), GroupId(6)];
 /// Sections with no focus element still carry a distinct id ([`SectionSpec::group`]); none is listed.
 const STATE_GROUP: GroupId = GroupId(8);
 const GAP_GROUP: GroupId = GroupId(9);
@@ -94,8 +109,10 @@ pub(crate) mod cards_harness; // Tier 2 card conformance (cards_conformance_test
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Located {
     Header,
-    Entry,
-    Shelf(usize, usize),
+    /// Card `i` of the Available on MultiPlex shelf (Movies, then Shows).
+    Local(usize),
+    /// Card `i` of credit row `row` ([`CREDIT_ROWS`] index).
+    Credit(usize, usize),
 }
 
 // -------------------------------------------------------------------------------------------
@@ -130,74 +147,68 @@ const BIO_LEAD: f32 = 40.0;
 const HL_PAD_X: f32 = 26.0;
 const HL_PAD_Y: f32 = 24.0;
 const BIO_MORE_GAP: f32 = theme::space::LG;
-// The owner's reference mock, 2026-09-19: the Filmography pill sits one rung under the shelf
-// heading below it, not the full `XL` region gap the band and its first shelf shipped with — the
-// pill is part of the header's own block, not a separate section.
-const BAND_GAP_TO_SHELF: f32 = theme::space::MD;
-/// The air under a shelf that has another under it ([`StackPage::shelf_foot`]): the label band's air,
-/// which keeps the pitch Home's shelves have.
-const SHELF_GAP: f32 = UNDER_LABEL_AIR;
+/// The air between the header block and the first shelf's heading: one shelf section to the next
+/// is [`theme::space::SECTION`], and the header is the page's first section.
+const BAND_GAP_TO_SHELF: f32 = theme::space::SECTION;
+/// The air under a shelf that has another under it ([`StackPage::shelf_foot`]): the label band's
+/// air and the section air, which keeps the pitch Home's shelves have ([`SECTION_AIR`]).
+const SHELF_GAP: f32 = SHELF_FOOT;
 const SHELF_LABEL_H: f32 = TITLE_DY + CARD_DY;
 const SHELF_STYLE: RowStyle = RowStyle::HOME;
-
-// The owner's reference mock, 2026-09-19: the bio-to-pill gap drops two rungs from `LG` to `SM` —
-// the pill reads as the header block's own closing line, not a new section starting under it.
-const ENTRY_GAP: f32 = theme::space::SM;
 
 
 // -------------------------------------------------------------------------------------------
 // pure store-shape predicates (ported from `ui/person.rs`, `Scene`-independent already there)
 // -------------------------------------------------------------------------------------------
 
-/// The shelf kinds that have content, in flow order, and how many.
-fn present(p: &Person) -> ([usize; NSHELF], usize) {
-    let mut v = [0usize; NSHELF];
-    let mut n = 0;
+/// How many titles the Available on MultiPlex shelf holds: the Movies, then the Shows.
+fn local_len(p: &Person) -> usize {
+    (0..NSHELF).map(|k| p.shelf(k).len()).sum()
+}
+
+/// Card `i` of the Available on MultiPlex shelf as `(kind, index in that kind's shelf)`.
+fn local_at(p: &Person, i: usize) -> Option<(usize, usize)> {
+    let mut i = i;
     for k in 0..NSHELF {
-        if !p.shelf(k).is_empty() {
-            v[n] = k;
+        let n = p.shelf(k).len();
+        if i < n {
+            return Some((k, i));
+        }
+        i -= n;
+    }
+    None
+}
+
+fn local_item(p: &Person, i: usize) -> Option<&PmsMovie> {
+    local_at(p, i).and_then(|(k, j)| p.shelf(k).get(j))
+}
+
+/// The engine identity of a credit card: its row and its catalog id, interned with the page's
+/// card keys under no server (a credit is plex.tv's, not a server's). A title credited in two rows
+/// is two cards; [`plx_data::person::credit_rows`] keeps one card per title within a row.
+fn credit_key(row: usize, c: &Credit) -> String {
+    if c.catalog_id.is_empty() {
+        format!("credit/{row}/title/{}/{}", c.year, c.title)
+    } else {
+        format!("credit/{row}/{}", c.catalog_id)
+    }
+}
+
+/// The shelves that have content, in page order: Available on MultiPlex, then each credit row.
+fn shelves_present(local: usize, credits: &[Vec<Credit>; NCREDIT]) -> ([Sec; NROWS], usize) {
+    let mut v = [Sec::Local; NROWS];
+    let mut n = 0;
+    if local > 0 {
+        v[n] = Sec::Local;
+        n += 1;
+    }
+    for (r, row) in credits.iter().enumerate() {
+        if !row.is_empty() {
+            v[n] = Sec::Credits(r);
             n += 1;
         }
     }
     (v, n)
-}
-
-fn nshelves(p: &Person) -> usize {
-    present(p).1
-}
-
-/// Is there a real, resolved Filmography entry to enter? (`p.credited` gates it — see
-/// [`entry_reachable`] for the PENDING half this alone cannot answer.) Pure over the two facts
-/// that decide it, so [`has_entry_of`] is testable with no `Person` in scope — `Person`'s own
-/// `credits`/`srcs`/`roster_gen` fields are private to `plx_data::person`, so a host test outside
-/// that module cannot build one by hand; the two existing `#[cfg(test)]` seams it exposes
-/// (`install_for_test`/`install_credits_for_test`) both force `credited = true`, so the PENDING
-/// half of this predicate can only be exercised through its pure form today.
-fn has_entry_of(credited: bool, filmography_total: usize) -> bool {
-    credited && filmography_total > 0
-}
-
-fn has_entry(p: &Person) -> bool {
-    has_entry_of(p.credited, plx_data::person::filmography_total(p))
-}
-
-/// **Should the entry row be OFFERED at all right now** — present or merely still pending an
-/// answer? This is `groups()`'s own question, not `has_entry`'s: the legacy `Scene::on_entry` HELD
-/// focus on the entry row through the whole credits load (mounting there — module doc — "the one
-/// landing spot data arriving underneath cannot move") and only gave it up once the answer was
-/// genuinely in. Under the engine this is expressed as "does the entry GROUP exist yet", which the
-/// reconcile step (mirroring legacy's `clamp_focus`) evicts focus from the moment this turns false
-/// while `has_entry` is also false.
-///
-/// Mirrors legacy's release condition exactly, inverted: `clamp_focus` released `on_entry` when
-/// `(p.credited || p.guid.is_empty()) && !has_entry(p)`, i.e. it stayed held while
-/// `!(p.credited || p.guid.is_empty()) || has_entry(p)`.
-fn entry_reachable_of(credited: bool, guid_empty: bool, has_entry: bool) -> bool {
-    has_entry || !(credited || guid_empty)
-}
-
-fn entry_reachable(p: &Person) -> bool {
-    entry_reachable_of(p.credited, p.guid.is_empty(), has_entry(p))
 }
 
 // -------------------------------------------------------------------------------------------
@@ -216,18 +227,16 @@ struct HeaderFlow {
     meta_y: Option<f32>,
     life_y: Option<f32>,
     bio_y: Option<f32>,
-    entry_y: Option<f32>,
 }
 
-/// Pure over the facts it needs, so it is testable with no `Person`/`PersonScreen` in scope — see
-/// [`has_entry_of`]'s doc for why that matters here specifically (the PENDING header state, which
-/// this decides the placeholder geometry for, has no live `Person` seam to exercise it through).
+/// Pure over the facts it needs, so it is testable with no `Person`/`PersonScreen` in scope (the
+/// PENDING header state, which this decides the placeholder geometry for, has no live `Person`
+/// seam to exercise it through).
 fn header_flow(
     pending: bool,
     bio: &str,
     has_roles: bool,
     has_life: bool,
-    has_entry: bool,
     measure: &dyn Measure,
 ) -> HeaderFlow {
     let mut f = HeaderFlow::default();
@@ -246,7 +255,7 @@ fn header_flow(
     // One stack, so a missing line takes its gap with it. The name and meta lines own the gap BELOW
     // them (`after`): the name leaves META_GAP to whatever follows it (the meta line, or the life
     // line when there is no meta) and the meta line leaves LIFE_GAP to the life line; the
-    // biography keeps BIO_GAP, and the entry ENTRY_GAP, whichever lines above them are absent. The
+    // biography keeps BIO_GAP whichever lines above it are absent. The
     // life line draws at `CAPTION` (see `draw_header`'s loop), not `LABEL` — advancing by the wrong
     // rung's cap height left a few px of drift between the pending skeleton's reserved band and the
     // loaded line's actual one.
@@ -255,7 +264,6 @@ fn header_flow(
         presence(has_meta, measure.cap_h(theme::size::LABEL)).after(LIFE_GAP),
         presence(has_life, measure.cap_h(theme::size::CAPTION)),
         presence(has_bio, bio_h).before(BIO_GAP),
-        presence(has_entry, LinkedHeading::HEIGHT).before(ENTRY_GAP),
     ];
     let stack = VStack::new(&items, 0.0, Anchor::Top(0.0));
     // The bottom of the last line as the spans stand (`y + h`), not `stack.height()`: the sum the
@@ -265,7 +273,6 @@ fn header_flow(
     f.meta_y = stack.span(1).map(|(y, _)| y);
     f.life_y = stack.span(2).map(|(y, _)| y);
     f.bio_y = stack.span(3).map(|(y, _)| y);
-    f.entry_y = stack.span(4).map(|(y, _)| y);
     let bare = !pending && f.meta_y.is_none() && f.life_y.is_none() && f.bio_y.is_none();
     f.exp_d = if bare { PORTRAIT_BARE } else { PORTRAIT_EXP };
     f.exp_h = y.max(f.exp_d);
@@ -273,7 +280,7 @@ fn header_flow(
         f.portrait_y = (f.exp_h - f.exp_d) * 0.5;
         let ty = (f.exp_h - y) * 0.5;
         f.name_y = ty;
-        for v in [&mut f.meta_y, &mut f.life_y, &mut f.bio_y, &mut f.entry_y]
+        for v in [&mut f.meta_y, &mut f.life_y, &mut f.bio_y]
             .into_iter()
             .flatten()
         {
@@ -320,53 +327,104 @@ fn cstr_elide(s: &str, w: f32, sz: std::os::raw::c_int, bold: std::os::raw::c_in
 // the shelf's content, for `plx_ui::cards::Shelf`
 // -------------------------------------------------------------------------------------------
 
-/// One shelf's cards, read over the store's person and the page's element interning. The engine
-/// element of a card is stable for the catalog item's identity ([`CardKeys`]), so a landing may
-/// move an item between shelves without moving the engine cursor off that item: each shelf's
-/// `index_of` simply stops (or starts) answering for it.
-struct ShelfCards<'a> {
-    person: &'a Person,
-    kind: usize,
-    cards: &'a CardKeys,
+/// One shelf's cards, read over the store's person (or the page's credit rows) and the page's
+/// element interning. The engine element of a card is stable for its identity ([`CardKeys`]), so a
+/// landing may move an item along or between shelves without moving the engine cursor off it: each
+/// shelf's `index_of` simply stops (or starts) answering for it.
+enum ShelfCards<'a> {
+    /// Available on MultiPlex: the person's Movies then Shows on the viewer's servers.
+    Local { person: &'a Person, cards: &'a CardKeys },
+    /// Credit row `row` ([`CREDIT_ROWS`] index): plex.tv's credits, the art through the ORIGIN
+    /// server's photo transcoder (`sid`), as the Filmography route's preview fetched it.
+    Credits { row: usize, credits: &'a [Credit], sid: ServerId, cards: &'a CardKeys },
+}
+
+/// A credit card's state line: the role (a character or a job) and the year, whichever are known.
+fn credit_state(c: &Credit) -> Option<String> {
+    match (c.role.is_empty(), c.year) {
+        (true, 0) => None,
+        (true, y) => Some(y.to_string()),
+        (false, 0) => Some(c.role.clone()),
+        (false, y) => Some(format!("{} · {y}", c.role)),
+    }
 }
 
 impl<H: ContentLike> CardSource<H> for ShelfCards<'_> {
     fn len(&self) -> usize {
-        self.person.shelf(self.kind).len()
+        match self {
+            Self::Local { person, .. } => local_len(person),
+            Self::Credits { credits, .. } => credits.len(),
+        }
     }
     fn elem(&self, i: usize) -> u32 {
-        self.person
-            .shelf(self.kind)
-            .get(i)
-            .and_then(|m| self.cards.elem_for(m.sid, &m.rk))
-            .unwrap_or(HEADER_ELEM)
+        match self {
+            Self::Local { person, cards } => local_item(person, i).and_then(|m| cards.elem_for(m.sid, &m.rk)),
+            Self::Credits { row, credits, cards, .. } => {
+                credits.get(i).and_then(|c| cards.elem_for(ServerId::UNSET, &credit_key(*row, c)))
+            }
+        }
+        .unwrap_or(HEADER_ELEM)
     }
     fn index_of(&self, e: &u32) -> Option<usize> {
-        let id = self.cards.get(*e)?;
-        self.person
-            .shelf(self.kind)
-            .iter()
-            .position(|m| plx_plex::plex::same_item((m.sid, m.rk.as_str()), (id.sid, id.rk.as_str())))
+        match self {
+            Self::Local { person, cards } => {
+                let id = cards.get(*e)?;
+                (0..NSHELF).flat_map(|k| person.shelf(k).iter()).position(|m| {
+                    plx_plex::plex::same_item((m.sid, m.rk.as_str()), (id.sid, id.rk.as_str()))
+                })
+            }
+            Self::Credits { row, credits, cards, .. } => {
+                let id = cards.get(*e)?;
+                if id.sid != ServerId::UNSET {
+                    return None;
+                }
+                credits.iter().position(|c| credit_key(*row, c) == id.rk)
+            }
+        }
     }
     fn art(&self, i: usize) -> Art<'_> {
-        Art::Poster(self.person.shelf(self.kind).get(i).map(tile_facts::of))
+        match self {
+            Self::Local { person, .. } => Art::Poster(local_item(person, i).map(tile_facts::of)),
+            Self::Credits { credits, sid, .. } => match credits.get(i).filter(|c| !c.thumb.is_empty()) {
+                Some(c) => Art::Thumb { sid: sid.raw(), key: &c.thumb, res: plx_ui::widgets::POSTER_RES },
+                None => Art::Poster(None),
+            },
+        }
     }
-    /// A filmography poster follows the Under posters setting through the one builder. The character
+    /// Every poster here follows the Under posters setting through the one builder. The character
     /// the credit plays is the PAGE's own state for the tile (the way a Continue Watching tile's time
-    /// left is), so it is the details line under every setting but Nothing; a credit with no
+    /// left is), so it is the details line under every setting but Nothing; a local title with no
     /// character (every crew credit, and every credit before the roles batch lands) reads the picked
-    /// fact like any other poster.
+    /// fact like any other poster. A credit row's tile states its role and its year.
     fn label(&self, i: usize) -> TileLabel {
-        match self.person.shelf(self.kind).get(i) {
-            Some(m) => {
-                let role = Some(self.person.role(self.kind, i)).filter(|role| !role.is_empty()).map(str::to_owned);
-                crate::registry::captions::label(&crate::registry::captions::policy(), &tile_facts::caption_facts(m), role)
-            }
-            None => TileLabel::default(),
+        let policy = crate::registry::captions::policy();
+        match self {
+            Self::Local { person, .. } => match local_at(person, i) {
+                Some((kind, j)) => {
+                    let m = &person.shelf(kind)[j];
+                    let role = Some(person.role(kind, j)).filter(|role| !role.is_empty()).map(str::to_owned);
+                    crate::registry::captions::label(&policy, &tile_facts::caption_facts(m), role)
+                }
+                None => TileLabel::default(),
+            },
+            Self::Credits { credits, .. } => match credits.get(i) {
+                Some(c) => {
+                    let facts = plx_ui::caption_policy::CaptionFacts {
+                        title: Some(c.title.clone()),
+                        year: (c.year > 0).then_some(c.year),
+                        ..Default::default()
+                    };
+                    crate::registry::captions::label(&policy, &facts, credit_state(c))
+                }
+                None => TileLabel::default(),
+            },
         }
     }
     fn progress(&self, i: usize) -> Option<f32> {
-        self.person.shelf(self.kind).get(i).and_then(|m| m.resume_frac())
+        match self {
+            Self::Local { person, .. } => local_item(person, i).and_then(|m| m.resume_frac()),
+            Self::Credits { .. } => None,
+        }
     }
 }
 
@@ -374,13 +432,24 @@ impl<H: ContentLike> CardSource<H> for ShelfCards<'_> {
 // the screen
 // -------------------------------------------------------------------------------------------
 
-/// Which groups the page links, as of the store's last landing: whether the Filmography entry is
-/// offered, and the shelf kinds that have content, in flow order.
-#[derive(Clone, Copy, Default)]
+/// Which groups the page links, as of the store's last landing: the shelves that have content, in
+/// page order.
+#[derive(Clone, Copy)]
 struct Reach {
-    entry: bool,
-    kinds: [usize; NSHELF],
+    rows: [Sec; NROWS],
     n: usize,
+}
+
+impl Default for Reach {
+    fn default() -> Self {
+        Self { rows: [Sec::Local; NROWS], n: 0 }
+    }
+}
+
+impl Reach {
+    fn rows(&self) -> &[Sec] {
+        &self.rows[..self.n]
+    }
 }
 
 /// The page's content and the state its sections read. The `Stack` is the screen's other field so
@@ -424,8 +493,13 @@ struct Page {
     /// rather than blank) — drawn through `widgets::dotted_run`, which owns the `·` ink itself, so
     /// this is never joined into one string the way `name_c`/the shelf-count runs are.
     life_parts: Vec<String>,
-    shelf_count_c: [CString; NSHELF],
-    entry_count_c: CString,
+    /// Each shelf's heading and count runs, by [`Page::row_slot`]: Available on MultiPlex, then
+    /// the credit rows.
+    row_title_c: [CString; NROWS],
+    row_count_c: [CString; NROWS],
+    /// The credit rows ([`plx_data::person::credit_rows`]), rebuilt when the store's revision moves:
+    /// the availability join under them changes as sources land.
+    credits: [Vec<Credit>; NCREDIT],
     header: HeaderFlow,
     header_dirty: bool,
     /// What the page's links are made of; the screen turns it into group ids ([`PersonScreen::links`]).
@@ -544,8 +618,9 @@ impl Page {
             spin_phase: plx_machine::motion::Phase::default(),
             name_c: CString::default(),
             life_parts: Vec::new(),
-            shelf_count_c: [CString::default(), CString::default()],
-            entry_count_c: CString::default(),
+            row_title_c: Default::default(),
+            row_count_c: Default::default(),
+            credits: Default::default(),
             header: HeaderFlow::default(),
             header_dirty: true,
             reach: Reach::default(),
@@ -584,6 +659,10 @@ impl Page {
         };
         let shelved = (0..NSHELF).flat_map(|kind| p.shelf(kind).iter());
         self.cards.intern_all(shelved.map(|item| (item.sid, item.rk.as_str())), "person");
+        let credited: Vec<String> = self.credits.iter().enumerate()
+            .flat_map(|(row, credits)| credits.iter().map(move |c| credit_key(row, c)))
+            .collect();
+        self.cards.intern_all(credited.iter().map(|k| (ServerId::UNSET, k.as_str())), "person");
     }
 
     fn refresh_store_cache<H: PersonLike>(&mut self, cx: &Cx<'_, H>) {
@@ -600,9 +679,10 @@ impl Page {
         }
         self.synced = Some(revision);
         self.layout_gen += 1;
+        self.credits = plx_data::person::credit_rows(person);
         self.sync_card_keys(cx);
-        let (kinds, n) = present(person);
-        self.reach = Reach { entry: entry_reachable(person), kinds, n };
+        let (rows, n) = shelves_present(local_len(person), &self.credits);
+        self.reach = Reach { rows, n };
     }
 
     pub fn restore(&mut self, memory: &CardPageMemory) {
@@ -655,30 +735,41 @@ impl Page {
         if elem == HEADER_ELEM {
             return Some(Located::Header);
         }
-        if elem == ENTRY_ELEM {
-            return Some(Located::Entry);
-        }
         let id = self.cards.get(elem)?;
-        for kind in 0..NSHELF {
-            if let Some(col) = p.shelf(kind).iter().position(|m| {
-                plx_plex::plex::same_item((m.sid, m.rk.as_str()), (id.sid, id.rk.as_str()))
-            }) {
-                return Some(Located::Shelf(kind, col));
-            }
+        if id.sid == ServerId::UNSET && id.rk.starts_with("credit/") {
+            return self.credits.iter().enumerate().find_map(|(row, credits)| {
+                credits.iter().position(|c| credit_key(row, c) == id.rk).map(|i| Located::Credit(row, i))
+            });
         }
-        None
+        (0..NSHELF)
+            .flat_map(|k| p.shelf(k).iter())
+            .position(|m| plx_plex::plex::same_item((m.sid, m.rk.as_str()), (id.sid, id.rk.as_str())))
+            .map(Located::Local)
     }
 
+    /// The focus key of card `col` of the Available on MultiPlex shelf.
     #[cfg(test)]
-    fn shelf_key(&self, p: &Person, kind: usize, col: usize) -> plx_machine::machine::FocusKey<u32> {
-        let elem = p
-            .shelf(kind)
+    fn local_key(&self, p: &Person, col: usize) -> plx_machine::machine::FocusKey<u32> {
+        let elem = local_item(p, col).and_then(|m| self.elem_for(m)).unwrap_or(HEADER_ELEM);
+        plx_machine::machine::FocusKey { entry: self.entry, elem }
+    }
+
+    /// The focus key of card `col` of credit row `row`.
+    #[cfg(test)]
+    fn credit_card_key(&self, row: CreditRow, col: usize) -> plx_machine::machine::FocusKey<u32> {
+        let elem = self.credits[row.index()]
             .get(col)
-            .and_then(|m| self.elem_for(m))
+            .and_then(|c| self.cards.elem_for(ServerId::UNSET, &credit_key(row.index(), c)))
             .unwrap_or(HEADER_ELEM);
-        plx_machine::machine::FocusKey {
-            entry: self.entry,
-            elem,
+        plx_machine::machine::FocusKey { entry: self.entry, elem }
+    }
+
+    /// Where shelf `k`'s heading runs live in [`Self::row_title_c`] / [`Self::row_count_c`].
+    fn row_slot(k: Sec) -> Option<usize> {
+        match k {
+            Sec::Local => Some(0),
+            Sec::Credits(r) => Some(1 + r),
+            _ => None,
         }
     }
 
@@ -705,16 +796,16 @@ impl Page {
             self.life_parts.push(plx_platform::i18n::msg::browse_person_died(&died));
         }
 
-        for k in 0..NSHELF {
-            self.shelf_count_c[k] = match p.total(k) {
-                0 => CString::default(),
-                n => CString::new(plx_platform::i18n::current().number(n as i64)).unwrap_or_default(),
-            };
-        }
-        self.entry_count_c = match plx_data::person::filmography_total(p) {
+        let count = |n: usize| match n {
             0 => CString::default(),
             n => CString::new(plx_platform::i18n::current().number(n as i64)).unwrap_or_default(),
         };
+        self.row_title_c[0] = CString::new(plx_platform::i18n::msg::browse_person_available()).unwrap_or_default();
+        self.row_count_c[0] = count((0..NSHELF).map(|k| p.total(k)).sum());
+        for (r, row) in CREDIT_ROWS.iter().enumerate() {
+            self.row_title_c[1 + r] = CString::new(row.title()).unwrap_or_default();
+            self.row_count_c[1 + r] = count(self.credits[r].len());
+        }
     }
 
     fn remeasure_header(&mut self, p: &Person, measure: &dyn Measure) {
@@ -724,7 +815,6 @@ impl Page {
             &p.bio,
             !p.roles.is_empty(),
             !self.life_parts.is_empty(),
-            has_entry(p),
             measure,
         );
         self.header_dirty = false;
@@ -733,7 +823,7 @@ impl Page {
 
     fn focused_movie_in<'a>(&self, p: &'a Person, elem: Option<u32>) -> Option<&'a PmsMovie> {
         match elem.and_then(|e| self.locate(p, e))? {
-            Located::Shelf(kind, col) => p.shelf(kind).get(col),
+            Located::Local(col) => local_item(p, col),
             _ => None,
         }
     }
@@ -754,7 +844,7 @@ impl Page {
     }
 
     /// The actual drawn/clickable header band. `place` and the hit-map stop both return this exact
-    /// rectangle; the Filmography pill overlaps it but is registered later and therefore wins z.
+    /// rectangle.
     fn header_rect(&self) -> Rect {
         Rect::new(
             MARGIN_X,
@@ -762,30 +852,6 @@ impl Page {
             SCR_W - 2.0 * MARGIN_X,
             self.header.exp_h.max(1.0),
         )
-    }
-
-    /// **Regression (phase-7 port): the pill belongs in the TEXT column.** Before the port
-    /// (`894f20f8^:rust-modules/src/ui/person.rs`'s `draw_entry`) it drew at `col_x`, the same x
-    /// the name and roles start at; the port dropped that and both this rect and the draw call
-    /// below fell back to bare `MARGIN_X` — under the circular portrait. `col_x(self.header.
-    /// exp_d)` is the one expression both read, so the drawn pill and its focus/hit rect cannot
-    /// disagree about where it sits.
-    /// The Filmography entry: the shared linked-heading control, titled from the catalog.
-    fn entry_heading(&self) -> LinkedHeading<'_> {
-        LinkedHeading::entry(plx_platform::i18n::msg::browse_person_filmography(), self.entry_count_c.to_str().unwrap_or(""))
-    }
-
-    /// The Filmography pill's focus/hit rect; `section_y` is the screen y of the [`Sec::Entry`]
-    /// section, which sits at the bottom of the head's block (so the page's scroll is
-    /// `HEADER_TOP + exp_h - section_y`).
-    fn entry_rect(&self, measure: &dyn Measure, section_y: f32) -> Rect {
-        let x = col_x(self.header.exp_d);
-        let Some(ey) = self.header.entry_y else {
-            return Rect::new(x, HEADER_TOP, 0.0, 1.0);
-        };
-        let entry = self.entry_heading();
-        let measured = entry.measure(measure);
-        entry.face_rect(x, section_y - self.header.exp_h + ey, 0.0, &measured)
     }
 
     /// The Tick work that precedes the stack's layout: the store cache, the header measure and
@@ -872,30 +938,22 @@ impl Page {
         focus == Some(HEADER_ELEM) && self.header_marked && self.bio_more()
     }
 
-    fn activate_entry<H: ContentLike + PersonLike>(&mut self, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) {
-        let Some(p) = self.person(cx) else {
-            return;
-        };
-        if has_entry(p) {
-            fx.push(plx_machine::machine::Fx::App(AppFx::Content(
-                ContentReq::Present(ContentArg::Filmography {
-                    sid: self.sid,
-                    key: self.key.clone(),
-                }),
-            )));
-        }
-    }
-
-    /// A press committed on card `elem`: leave for its detail page.
+    /// A press committed on card `elem`: leave for its Detail page — a credit a server holds opens
+    /// that server's copy (the Filmography route's rule, [`Credit::local`]) — or, for a credit no
+    /// server holds, for its catalog page (`ContentArg::Catalog`, the page a Watchlist title no
+    /// server holds opens). A credit with no catalog id opens nothing.
     fn open_card<H: ContentLike + PersonLike>(&self, elem: u32, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) {
-        let item = self.person(cx).and_then(|p| self.focused_movie_in(p, Some(elem)));
-        if let Some(m) = item {
-            fx.push(plx_machine::machine::Fx::App(AppFx::Content(
-                ContentReq::Push(ContentArg::Detail {
-                    sid: m.sid,
-                    rk: m.rk.clone(),
-                }),
-            )));
+        let Some(p) = self.person(cx) else { return };
+        let arg = match self.locate(p, elem) {
+            Some(Located::Local(col)) => local_item(p, col).map(|m| ContentArg::Detail { sid: m.sid, rk: m.rk.clone() }),
+            Some(Located::Credit(row, col)) => self.credits[row].get(col).and_then(|c| match &c.local {
+                Some((sid, rk)) => Some(ContentArg::Detail { sid: *sid, rk: rk.clone() }),
+                None => plx_data::watchlist::decode_hex(&c.catalog_id).map(|hex| ContentArg::Catalog { hex }),
+            }),
+            _ => None,
+        };
+        if let Some(arg) = arg {
+            fx.push(plx_machine::machine::Fx::App(AppFx::Content(ContentReq::Push(arg))));
         }
     }
 
@@ -1002,22 +1060,15 @@ impl Page {
                 }
             }
         }
-        if let Some(y) = flow.entry_y {
-            // Same x the name/roles/life column starts at (`col_x_`, above) — never bare
-            // `MARGIN_X`, which is the pre-phase-7 regression `entry_rect`'s doc explains.
-            let entry = self.entry_heading();
-            let measured = entry.measure(measure);
-            entry.draw(p, col_x_, y, f32::from(focus_elem == Some(ENTRY_ELEM)), &measured, measure);
-        }
     }
 
-    /// Shelf `kind`'s heading and count, drawn in the shelf block's own space (`lift` is how far
-    /// the focused tile makes it rise); the tiles are the stack's.
-    fn draw_shelf_heading(&self, p: Painter, kind: usize, lift: f32, measure: &dyn plx_machine::machine::Measure) {
+    /// Shelf `slot`'s heading and count ([`Self::row_slot`]), drawn in the shelf block's own space
+    /// (`lift` is how far the focused tile makes it rise); the tiles are the stack's.
+    fn draw_shelf_heading(&self, p: Painter, slot: usize, lift: f32, measure: &dyn plx_machine::machine::Measure) {
         plx_ui::cards::draw_heading_c(
             p,
-            shelf_title()[kind],
-            &self.shelf_count_c[kind],
+            &self.row_title_c[slot],
+            &self.row_count_c[slot],
             c"",
             MARGIN_X,
             -lift,
@@ -1028,11 +1079,11 @@ impl Page {
 
     /// The skeleton / empty read-out where the first shelf would be, `y` being that shelf's top.
     fn draw_shelf_state(&self, p: Painter, env: &Env, person: &Person, y: f32) {
-        if present(person).1 > 0 {
+        if self.reach.n > 0 {
             return;
         }
         let band = Rect::new(0.0, y, SCR_W, CARD_H);
-        if !person.landed {
+        if !person.landed || !(person.credited || person.guid.is_empty()) {
             let phase = plx_ui::widgets::skeleton_phase(self.spin_ms as u32);
             plx_ui::widgets::skeleton_bar(
                 p,
@@ -1061,9 +1112,6 @@ impl Page {
 
 }
 
-/// Shelves, in flow order. Kind 0 = Movies, 1 = Shows.
-fn shelf_title() -> [&'static std::ffi::CStr; NSHELF] { [plx_platform::i18n::msg::browse_kind_movies_c(), plx_platform::i18n::msg::browse_kind_shows_c()] }
-
 // -------------------------------------------------------------------------------------------
 // the sections / Machine / Screen
 // -------------------------------------------------------------------------------------------
@@ -1072,12 +1120,12 @@ impl<H: ContentLike + PersonLike> StackPage<H> for Page {
     type Key = Sec;
     type Cards<'a> = ShelfCards<'a>;
 
-    /// Everything `sections` reads: the store's content, the header's measure (a remeasure moves
-    /// `layout_gen`), whether a person is on show and which of its facts offer the entry.
+    /// Everything `sections` reads: the store's content (its revision, and the shelves the page
+    /// derived from it), the header's measure (a remeasure moves `layout_gen`) and whether a person
+    /// is on show.
     fn revision(&self, cx: &Cx<'_, H>) -> u64 {
         let flags = self.person(cx).map_or(0, |p| {
-            let (_, n) = present(p);
-            1 | (n as u64) << 1 | u64::from(entry_reachable(p)) << 4 | u64::from(p.credited) << 5 | u64::from(p.landed) << 6
+            1 | (self.reach.n as u64) << 1 | u64::from(p.credited) << 5 | u64::from(p.landed) << 6
         });
         H::person(cx).revision().wrapping_mul(1_000_003).wrapping_add(self.layout_gen).wrapping_mul(128).wrapping_add(flags)
     }
@@ -1096,43 +1144,52 @@ impl<H: ContentLike + PersonLike> StackPage<H> for Page {
 
     fn sections(&self, cx: &Cx<'_, H>, out: &mut Vec<SectionSpec<Sec>>) {
         let person = self.person(cx);
-        let (kinds, n) = person.map_or(([0; NSHELF], 0), present);
+        let rows = if person.is_some() { self.reach.rows() } else { &[] };
         out.push(SectionSpec::new(Sec::Head, Kind::Custom { height: HEADER_TOP + self.header.exp_h, focusable: person.is_some() }, HEADER_GROUP));
-        out.push(SectionSpec::new(Sec::Entry, Kind::Custom { height: 0.0, focusable: person.is_some_and(entry_reachable) }, ENTRY_GROUP));
         out.push(SectionSpec::new(Sec::State, Kind::Custom { height: 0.0, focusable: false }, STATE_GROUP));
-        if n > 0 {
+        if !rows.is_empty() {
             out.push(SectionSpec::new(Sec::Gap, Kind::Custom { height: BAND_GAP_TO_SHELF, focusable: false }, GAP_GROUP));
         }
-        for &kind in &kinds[..n] {
-            out.push(SectionSpec::new(Sec::Shelf(kind), Kind::Shelf { style: &SHELF_STYLE, heading: SHELF_LABEL_H }, SHELF_GROUP[kind]));
+        for &k in rows {
+            let group = match k {
+                Sec::Credits(r) => CREDIT_GROUP[r],
+                _ => LOCAL_GROUP,
+            };
+            out.push(SectionSpec::new(k, Kind::Shelf { style: &SHELF_STYLE, heading: SHELF_LABEL_H }, group));
         }
     }
 
-    /// Every shelf but the last keeps the label band's air under it, so the next shelf stands at
-    /// Home's pitch; the last ends where its block does (the page rests it one margin above the
-    /// bottom edge). The shelves present are read the way `sections` reads them.
-    fn shelf_foot(&self, cx: &Cx<'_, H>, k: Sec) -> f32 {
-        let (kinds, n) = self.person(cx).map_or(([0; NSHELF], 0), present);
-        match k {
-            Sec::Shelf(kind) if kinds[..n].last() != Some(&kind) => SHELF_GAP,
+    /// Every shelf but the last keeps the label band's air and the section air under it, so the
+    /// next shelf stands at Home's pitch; the last ends where its block does (the page rests it one
+    /// margin above the bottom edge). The shelves present are read the way `sections` reads them.
+    fn shelf_foot(&self, _cx: &Cx<'_, H>, k: Sec) -> f32 {
+        match self.reach.rows().last() {
+            Some(&last) if last != k && matches!(k, Sec::Local | Sec::Credits(_)) => SHELF_GAP,
             _ => 0.0,
         }
     }
 
-    /// The entry-row-gone-under-focus fallback: the first PRESENT shelf's own head, else the header.
+    /// The shelf-gone-under-focus fallback: the first PRESENT shelf's own head, else the header.
     fn fallback(&self, _cx: &Cx<'_, H>, out: &mut Vec<Sec>) {
-        out.extend((0..NSHELF).map(Sec::Shelf));
+        out.push(Sec::Local);
+        out.extend((0..NCREDIT).map(Sec::Credits));
         out.push(Sec::Head);
     }
 
-    /// Every filmography shelf is a row of posters: they follow the Under posters setting.
+    /// Every shelf here is a row of posters: they follow the Under posters setting.
     fn caption_policy(&self, k: Sec) -> Option<plx_ui::caption_policy::CaptionPolicy> {
-        matches!(k, Sec::Shelf(_)).then(crate::registry::captions::policy)
+        matches!(k, Sec::Local | Sec::Credits(_)).then(crate::registry::captions::policy)
     }
 
     fn cards<'a>(&'a self, cx: &'a Cx<'_, H>, k: Sec) -> Option<ShelfCards<'a>> {
         match k {
-            Sec::Shelf(kind) => self.person(cx).map(|person| ShelfCards { person, kind, cards: &self.cards }),
+            Sec::Local => self.person(cx).map(|person| ShelfCards::Local { person, cards: &self.cards }),
+            Sec::Credits(row) => self.person(cx).map(|_| ShelfCards::Credits {
+                row,
+                credits: &self.credits[row],
+                sid: self.sid,
+                cards: &self.cards,
+            }),
             _ => None,
         }
     }
@@ -1140,46 +1197,37 @@ impl<H: ContentLike + PersonLike> StackPage<H> for Page {
     fn elem_of(&self, k: Sec) -> Option<u32> {
         match k {
             Sec::Head => Some(HEADER_ELEM),
-            Sec::Entry => Some(ENTRY_ELEM),
             _ => None,
         }
     }
 
+    /// Only a title a server holds has an item menu: a credit row's card is plex.tv's.
     fn card_has_menu(&self, cx: &Cx<'_, H>, _k: Sec, elem: &u32) -> bool {
         let key = plx_machine::machine::FocusKey { entry: self.entry, elem: *elem };
         self.focused_item(Some(key), cx).is_some_and(crate::registry::item_has_menu)
     }
 
-    /// The pill is part of the head's block: focusing it reveals the whole band.
-    fn reveal_with(&self, k: Sec) -> Option<Sec> {
-        (k == Sec::Entry).then_some(Sec::Head)
-    }
-
-    fn focus_rect(&self, cx: &Cx<'_, H>, k: Sec, section: Rect) -> Rect {
+    fn focus_rect(&self, _cx: &Cx<'_, H>, k: Sec, section: Rect) -> Rect {
         match k {
             Sec::Head => self.header_rect(),
-            Sec::Entry => self.entry_rect(cx.measure, section.y),
             _ => section,
         }
     }
 
-    fn plain_group(&self, cx: &Cx<'_, H>, k: Sec, id: GroupId, extent: Rect) -> GroupSpec {
+    fn plain_group(&self, _cx: &Cx<'_, H>, k: Sec, id: GroupId, extent: Rect) -> GroupSpec {
         let (extent, edge) = match k {
             // the zero-width anchor: DOWN projects to the first shelf tile without making the
             // drawn biography impossible to click
             Sec::Head => (self.header_anchor(), [EdgeRule::Stop, EdgeRule::Geometric, EdgeRule::Stop, EdgeRule::Stop]),
-            _ => {
-                let down = if self.person(cx).is_some_and(|p| nshelves(p) > 0) { EdgeRule::Geometric } else { EdgeRule::Stop };
-                (extent, [EdgeRule::Geometric, down, EdgeRule::Stop, EdgeRule::Stop])
-            }
+            _ => (extent, [EdgeRule::Geometric, EdgeRule::Stop, EdgeRule::Stop, EdgeRule::Stop]),
         };
         GroupSpec { id, kind: GroupKind::Free, seat: Seat::First, reachable: AxisMask::VERTICAL, edge, extent, len: 1, elem: ElemKind::Bare }
     }
 
     fn draw_heading(&self, k: Sec, f: &mut DrawFrame<'_, '_, H>, r: Rect, lift: f32) {
-        if let Sec::Shelf(kind) = k {
+        if let Some(slot) = Self::row_slot(k) {
             let p = f.painter.alpha(f.page_alpha).translate(0.0, r.y);
-            self.draw_shelf_heading(p, kind, lift, f.measure);
+            self.draw_shelf_heading(p, slot, lift, f.measure);
         }
     }
 
@@ -1191,13 +1239,13 @@ impl<H: ContentLike + PersonLike> StackPage<H> for Page {
             Sec::Head => {
                 // the focused band is never culled, as the column's own cull has it
                 let top = r.y + HEADER_TOP;
-                let held = matches!(cur.and_then(|e| self.locate(person, e)), Some(Located::Header | Located::Entry));
+                let held = matches!(cur.and_then(|e| self.locate(person, e)), Some(Located::Header));
                 if held || plx_ui::on_axis(top, self.header.exp_h, SCR_H, 0.0) {
                     self.draw_header(p.translate(0.0, top), person, cur, f.measure);
                 }
             }
             Sec::State => self.draw_shelf_state(p, &Env::inert(), person, r.y + BAND_GAP_TO_SHELF),
-            Sec::Entry | Sec::Gap | Sec::Shelf(_) => {}
+            Sec::Gap | Sec::Local | Sec::Credits(_) => {}
         }
     }
 }
@@ -1222,6 +1270,9 @@ impl<H: ContentLike + PersonLike> Machine<H> for PersonScreen {
     type Ev = ScreenEvent<H>;
     fn step(&mut self, ev: &Self::Ev, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) -> Handled {
         // The content the stack reads is current before it reads it for this event.
+        // The rows are derived from the store at its revision (`refresh_store_cache` returns at
+        // once when that has not moved), so any event, a remount's first included, lays the stack
+        // over the rows the store holds now.
         let mut live = false;
         match ev {
             ScreenEvent::Tick(t) => live = self.page.pre_tick(t.dt(), cx),
@@ -1229,7 +1280,7 @@ impl<H: ContentLike + PersonLike> Machine<H> for PersonScreen {
                 self.page.header_dirty = true;
                 self.page.refresh_store_cache(cx);
             }
-            _ => {}
+            _ => self.page.refresh_store_cache(cx),
         }
         let card = match self.stack.on(&self.page, ev, cx, fx) {
             Some(StackEvent::Card(_, card)) => Some(card),
@@ -1281,10 +1332,8 @@ impl<H: ContentLike + PersonLike> Machine<H> for PersonScreen {
                 Handled::Yes
             }
             ScreenEvent::Activate(e) => {
-                match self.page.person(cx).and_then(|p| self.page.locate(p, *e)) {
-                    Some(Located::Header) => self.page.activate_header(cx, fx),
-                    Some(Located::Entry) => self.page.activate_entry(cx, fx),
-                    _ => {}
+                if let Some(Located::Header) = self.page.person(cx).and_then(|p| self.page.locate(p, *e)) {
+                    self.page.activate_header(cx, fx);
                 }
                 Handled::Yes
             }
@@ -1386,8 +1435,8 @@ impl<H: ContentLike + PersonLike> Screen<H> for PersonScreen {
             return;
         }
         self.page.amb.draw(p, Rect::FULL);
-        // Stops register in z order, section by section in document order: the header band, the
-        // Filmography pill, then each shelf's tiles (a shelf wholly off the screen registers none).
+        // Stops register in z order, section by section in document order: the header band, then
+        // each shelf's tiles (a shelf wholly off the screen registers none).
         self.stack.view(&self.page).paint(f);
     }
     fn render(&self) -> RenderStrategy {
@@ -1404,27 +1453,19 @@ impl<H: ContentLike + PersonLike> Screen<H> for PersonScreen {
     }
     fn links(&self, out: &mut Vec<Link>) {
         let reach = self.page.reach;
-        let kinds = &reach.kinds[..reach.n];
+        let rows = reach.rows();
         let mut link = |from: Sec, dir: Dir, to: Sec| {
             if let (Some(from), Some(to)) = (self.stack.group(from), self.stack.group(to)) {
                 out.push(Link { from, dir, to });
             }
         };
-        let first = kinds.first().map(|&k| Sec::Shelf(k));
-        if reach.entry {
-            link(Sec::Head, Dir::Down, Sec::Entry);
-            link(Sec::Entry, Dir::Up, Sec::Head);
-            if let Some(first) = first {
-                link(Sec::Entry, Dir::Down, first);
-                link(first, Dir::Up, Sec::Entry);
-            }
-        } else if let Some(first) = first {
+        if let Some(&first) = rows.first() {
             link(Sec::Head, Dir::Down, first);
             link(first, Dir::Up, Sec::Head);
         }
-        for pair in kinds.windows(2) {
-            link(Sec::Shelf(pair[0]), Dir::Down, Sec::Shelf(pair[1]));
-            link(Sec::Shelf(pair[1]), Dir::Up, Sec::Shelf(pair[0]));
+        for pair in rows.windows(2) {
+            link(pair[0], Dir::Down, pair[1]);
+            link(pair[1], Dir::Up, pair[0]);
         }
     }
     fn memory_at(&self, _focus: Option<plx_machine::machine::FocusKey<u32>>) -> PageMemory {
@@ -1526,8 +1567,24 @@ mod tests {
         (store, s)
     }
 
+    /// The focus key of card `col` of the person's `kind` titles (0 Movies, 1 Shows) on the one
+    /// Available on MultiPlex shelf, where the Shows follow the Movies.
     fn focus_of(s: &PersonScreen, store: &plx_data::stores::person::PersonStore, kind: usize, col: usize) -> plx_machine::machine::FocusKey<u32> {
-        s.page.shelf_key(store.view().current().unwrap(), kind, col)
+        let p = store.view().current().unwrap();
+        let at = (0..kind).map(|k| p.shelf(k).len()).sum::<usize>() + col;
+        s.page.local_key(p, at)
+    }
+
+    /// The focus key of card `col` of credit row `row`.
+    fn credit_of(s: &PersonScreen, row: CreditRow, col: usize) -> plx_machine::machine::FocusKey<u32> {
+        s.page.credit_card_key(row, col)
+    }
+
+    /// Install `groups` as plex.tv's credits and let the page and its stack take them in.
+    fn credit(s: &mut PersonScreen, store: &mut plx_data::stores::person::PersonStore, groups: &[(&str, usize)]) {
+        store.install_credits_for_test(groups);
+        s.page.refresh_store_cache(&cx(&FixtureMeasure, store.view()));
+        lay(s, store, &FixtureMeasure);
     }
 
     /// Feed `ev` to the screen with the engine focus on `focus`.
@@ -1579,7 +1636,7 @@ mod tests {
     }
 
     /// The hold hint (`ui::hold_hint`) on a Person shelf card: it stands after the dwell on a
-    /// settled card, not on the Filmography pill (not a card), not while a menu owns focus, and
+    /// settled card, not on the header (not a card), not while a menu owns focus, and
     /// not a second time this run.
     #[test]
     fn the_hold_hint_stands_on_a_resting_shelf_card_once_per_install() {
@@ -1600,19 +1657,14 @@ mod tests {
         // negatives first: a stand spends the run's latch and would make them vacuous
         rest(&mut s, plx_machine::machine::FocusKey { entry: EntryId(900), elem: 0 }, 4.0);
         assert!(!s.stack.hint_visible() && !plx_ui::hold_hint::shown_this_run(), "never while a menu owns focus");
-        rest(&mut s, plx_machine::machine::FocusKey { entry: EntryId(0), elem: ENTRY_ELEM }, 4.0);
-        assert!(!s.stack.hint_visible() && !plx_ui::hold_hint::shown_this_run(), "never on the Filmography pill");
+        rest(&mut s, plx_machine::machine::FocusKey { entry: EntryId(0), elem: HEADER_ELEM }, 4.0);
+        assert!(!s.stack.hint_visible() && !plx_ui::hold_hint::shown_this_run(), "never on the header");
         rest(&mut s, card, 3.6);
         assert!(s.stack.hint_visible(), "after the dwell, on a settled card");
         rest(&mut s, plx_machine::machine::FocusKey { entry: EntryId(900), elem: 0 }, 1.0);
         assert!(!s.stack.hint_visible(), "a menu taking focus hides it");
         rest(&mut s, card, 4.0);
         assert!(!s.stack.hint_visible(), "and not a second time on a Person page this run");
-    }
-
-    /// The Filmography pill's focus/hit rect where the page now has it.
-    fn entry_rect_of(s: &PersonScreen, store: &plx_data::stores::person::PersonStore, m: &dyn Measure) -> Rect {
-        Focusable::<PersonHost>::place(s, &ENTRY_ELEM, &cx(m, store.view()), At::Drawn).unwrap().rect
     }
 
     #[test]
@@ -1636,12 +1688,12 @@ mod tests {
             let context = cx(measure, store.view());
             let mut groups = Vec::new();
             Focusable::<PersonHost>::groups(&s, &context, &mut groups);
-            assert_eq!(groups.len(), 4);
+            assert_eq!(groups.len(), 3, "the header, Available on MultiPlex and Acting");
             let mut bits = Vec::new();
             for g in groups {
                 bits.extend([g.extent.x, g.extent.y, g.extent.w, g.extent.h].map(f32::to_bits));
             }
-            for key in [HEADER_ELEM, ENTRY_ELEM, focus_of(&s, &store, 0, 0).elem, focus_of(&s, &store, 1, 0).elem] {
+            for key in [HEADER_ELEM, focus_of(&s, &store, 0, 0).elem, focus_of(&s, &store, 1, 0).elem, credit_of(&s, CreditRow::Acting, 0).elem] {
                 for at in [At::Drawn, At::SpringTarget] {
                     let p = Focusable::<PersonHost>::place(&s, &key, &context, at).unwrap();
                     bits.extend([p.rect.x, p.rect.y, p.rect.w, p.rect.h].map(f32::to_bits));
@@ -1826,48 +1878,8 @@ mod tests {
         }
     }
 
-    /// **The mount-on-entry-pill rule's PENDING half** (module doc, point 2 of `ui/person.rs`'s
-    /// own doc): with no filmography answered yet but a guid to ask plex.tv with,
-    /// `entry_reachable_of` holds the entry group open even though `has_entry_of` is false — which
-    /// is exactly what lets a fresh mount's default `FirstInGroup(GroupId(0))` target
-    /// (`ENTRY_GROUP`) have somewhere to land before credits have answered at all.
-    #[test]
-    fn a_fresh_mount_holds_the_entry_group_pending_credits() {
-        assert!(
-            entry_reachable_of(false, false, false),
-            "no credits answer yet, but a guid to ask plex.tv with — the hold must not release early"
-        );
-    }
-
-    /// Once credits settle with nothing found, the entry group releases and `reconcile` hands
-    /// focus to the first present shelf — `clamp_focus`'s `p.credited || p.guid.is_empty()` gate.
-    #[test]
-    fn the_entry_group_releases_once_credits_settle_with_nothing_found() {
-        let _serial = plx_base::testlock::serial();
-        let (mut store, mut s) = seed(1, 0);
-        let p = store.view().current().unwrap();
-        assert!(!has_entry(p), "no credits were installed");
-        assert!(
-            !entry_reachable(p),
-            "credited=true (install_for_test) with zero total: settled and empty"
-        );
-        let m = FixtureMeasure;
-        let want = plx_machine::machine::FocusKey {
-            entry: EntryId(0),
-            elem: ENTRY_ELEM,
-        };
-        let got = Focusable::<PersonHost>::reconcile(&s, want, &cx(&m, store.view()));
-        assert_eq!(
-            got,
-            focus_of(&s, &store, 0, 0),
-            "falls to the first present shelf's own head"
-        );
-        let _ = &mut s;
-        store.run(PersonCmd::Close);
-    }
-
     /// **`focused_item`/`focused_target` split** — mining `ui/person.rs`'s own regression: the
-    /// header/entry rows hold no card at all, so a shelf tile's identity is the only thing OK
+    /// header holds no card at all, so a shelf tile's identity is the only thing OK
     /// should ever navigate to.
     #[test]
     fn focused_movie_answers_only_for_a_shelf_row() {
@@ -1879,12 +1891,11 @@ mod tests {
                 elem: HEADER_ELEM
             }), &cx(&FixtureMeasure, store.view()))
             .is_none());
-        assert!(s
-            .focused_item(Some(plx_machine::machine::FocusKey {
-                entry: s.page.entry,
-                elem: ENTRY_ELEM
-            }), &cx(&FixtureMeasure, store.view()))
-            .is_none());
+        credit(&mut s, &mut store, &[("Actor", 2)]);
+        assert!(
+            s.focused_item(Some(credit_of(&s, CreditRow::Acting, 0)), &cx(&FixtureMeasure, store.view())).is_none(),
+            "a credit row's card is plex.tv's: no server's item"
+        );
         assert_eq!(
             s.focused_item(Some(focus_of(&s, &store, 0, 0)), &cx(&FixtureMeasure, store.view()))
                 .map(|m| m.rk.as_str()),
@@ -1921,7 +1932,7 @@ mod tests {
         );
         assert_eq!(
             s.page.locate(store.view().current().unwrap(), got.elem),
-            Some(Located::Shelf(0, 4))
+            Some(Located::Local(4))
         );
 
         // the identity is gone entirely: falls back to clamping the SAME kind's own bounds
@@ -1951,134 +1962,6 @@ mod tests {
         store.run(PersonCmd::Close);
     }
 
-    /// **Regression: the Filmography entry pill must draw in the TEXT column, not under the
-    /// portrait.** Before phase-7 (`894f20f8^:rust-modules/src/ui/person.rs`) `draw_entry` was
-    /// called at `col_x`, the same x the name/roles start at; the phase-7 port dropped that and
-    /// drew — and hit-tested — the pill at bare `MARGIN_X` instead, under the circular portrait.
-    /// `entry_rect` is the one seam both the draw call and the focus/hit rect read, so fixing it
-    /// here fixes both at once.
-    #[test]
-    fn the_entry_pill_sits_in_the_text_column_not_under_the_portrait() {
-        let _serial = plx_base::testlock::serial();
-        let (mut store, mut s) = seed(1, 0);
-        store.install_credits_for_test(&[("Actor", 3)]);
-        let m = FixtureMeasure;
-        let p = store.view().current().unwrap();
-        s.page.remeasure_header(p, &m);
-        assert_eq!(
-            s.page.header.exp_d, PORTRAIT_EXP,
-            "the header must be in its expanded band for this assertion to mean anything"
-        );
-        lay(&mut s, &store, &m);
-        let rect = entry_rect_of(&s, &store, &m);
-        assert_eq!(
-            rect.x,
-            col_x(PORTRAIT_EXP),
-            "the pill must sit in the text column, exactly where the name/roles start"
-        );
-        store.run(PersonCmd::Close);
-    }
-
-    /// The Filmography entry follows the biography's text column, and in the compact header with
-    /// no biography it stays in the centred identity stack.
-    #[test]
-    fn person_filmography_entry_follows_the_biography_text_column() {
-        let measure = FixtureMeasure;
-        let long = "A long biography whose visible lines must all remain above Filmography. ".repeat(60);
-        for (pending, bio) in [(false, "Short biography."), (false, long.as_str()), (true, "")] {
-            let flow = header_flow(pending, bio, true, true, true, &measure);
-            let entry_y = flow.entry_y.expect("credits offer the entry");
-            let biography_top = flow.bio_y.expect("biography or its placeholder is present");
-            let biography_h = if pending { BIO_LEAD * BIO_LINES as f32 }
-                else { bio_view(bio, 1.0, &measure).measure_h(BIO_W) };
-            assert!(col_x(flow.exp_d) >= MARGIN_X + flow.exp_d + BAND_GAP,
-                "the action must sit under the text, not the portrait");
-            assert!((entry_y - biography_top - biography_h - ENTRY_GAP).abs() < 0.01);
-            assert!(flow.exp_h >= entry_y + LinkedHeading::HEIGHT, "the next shelf clears the action");
-        }
-        let bare = header_flow(false, "", false, false, true, &measure);
-        let entry_y = bare.entry_y.unwrap();
-        assert!((entry_y - bare.name_y - measure.cap_h(theme::size::DISPLAY) - ENTRY_GAP).abs() < 0.01,
-            "without biography the centered identity and action remain one text stack");
-        assert!(bare.exp_h >= entry_y + LinkedHeading::HEIGHT);
-    }
-
-    /// Every shipped translation of the entry, and the expanded pseudo-locale, fits at rest and
-    /// focused inside the safe frame at its existing size.
-    #[test]
-    fn person_filmography_entry_keeps_translated_labels_and_focus_inside_the_safe_frame() {
-        let measure = FixtureMeasure;
-        let flow = header_flow(false, "A short biography.", true, false, true, &measure);
-        let mut labels = Vec::new();
-        for preference in plx_platform::i18n::SHIPPED {
-            let locale = plx_platform::i18n::LocaleContext::resolve(preference, None, None, None, None);
-            labels.push(plx_platform::i18n::msg::browse_person_filmography_in(&locale).to_owned());
-        }
-        labels.push("[!! Fïlmöögrááphy !!]".to_owned());
-        for label in &labels {
-            let entry = LinkedHeading::entry(label, "9 223 372 036 854 775 807");
-            let measured = entry.measure(&measure);
-            let y = HEADER_TOP + flow.entry_y.unwrap();
-            for focus in [0.0, 1.0] {
-                assert!(inside_safe(entry.face_rect(col_x(flow.exp_d), y, focus, &measured)),
-                    "{label:?} at focus {focus} must keep the safe inset");
-            }
-        }
-    }
-
-    /// The entry stop is appended after the shelf stops, so a stale unscrolled pill rectangle
-    /// wins their overlap in `HitMap`'s last-stop z-order. Put a first-shelf tile exactly under
-    /// that stale rectangle: the live, scrolled entry geometry must leave the click with the tile.
-    #[test]
-    fn a_scrolled_filmography_stop_does_not_steal_the_first_shelf_tile() {
-        use plx_ui::hit::{HitMap, PointerKind};
-        use plx_ui::screen::DrawFrame;
-
-        let _serial = plx_base::testlock::serial();
-        let (mut store, mut s) = seed(2, 0);
-        store.install_credits_for_test(&[("Actor", 3)]);
-        let measure = FixtureMeasure;
-        s.page.refresh_store_cache(&cx(&measure, store.view()));
-        s.page.remeasure_header(store.view().current().unwrap(), &measure);
-        s.page.header.exp_d = PORTRAIT_BARE;
-        lay(&mut s, &store, &measure);
-        let key = focus_of(&s, &store, 0, 1);
-        settle_shelves(&mut s, &store, key, 120);
-
-        let stale_entry = entry_rect_of(&s, &store, &measure);
-        let initial_tile = Focusable::<PersonHost>::place(
-            &s, &key.elem, &cx(&measure, store.view()), At::Drawn)
-            .expect("the seeded first-shelf tile is drawn");
-        let scroll = initial_tile.rect.cy() - stale_entry.cy();
-        assert!(scroll > 0.0, "the shelf starts below Filmography");
-        jump_to(&mut s, scroll);
-
-        let context = cx(&measure, store.view());
-        let tile = Focusable::<PersonHost>::place(&s, &key.elem, &context, At::Drawn)
-            .expect("the scrolled first-shelf tile remains drawn");
-        let stale_overlap = stale_entry.intersect(tile.rect);
-        assert!(stale_overlap.w > 0.0 && stale_overlap.h > 0.0,
-            "the fixture must reproduce the stale pill/tile overlap");
-        let (x, y) = (stale_overlap.cx(), stale_overlap.cy());
-        let mut frame = DrawFrame::new(&context, plx_ui::Painter::root());
-        page_stops(&s, &mut frame);
-        let mut hit = HitMap::new();
-        hit.fill(frame.into_stops());
-        hit.swap();
-        let resolved = hit.resolve(Some(s.page.entry), PointerKind::Click, x, y, None);
-        assert_eq!(resolved.hit, Some(key), "the tile must remain above no stale pill stop");
-
-        let entry = entry_rect_of(&s, &store, &measure);
-        let past = s.stack.scroll() + entry.y + entry.h + 1.0;
-        jump_to(&mut s, past);
-        let context = cx(&measure, store.view());
-        let mut frame = DrawFrame::new(&context, plx_ui::Painter::root());
-        page_stops(&s, &mut frame);
-        assert!(frame.stops().iter().all(|stop| stop.key.elem != ENTRY_ELEM),
-            "an entry wholly above the viewport registers no pointer stop");
-        store.run(PersonCmd::Close);
-    }
-
     /// **Header pending vs answered-with-nothing vs answered-fully** — `header_flow`'s three
     /// states, mined from `ui/person.rs`'s own module doc ("Every header line below the name is
     /// optional… a header line is drawn only when it has content").
@@ -2086,12 +1969,12 @@ mod tests {
     fn header_flow_distinguishes_pending_from_answered_empty_from_answered_full() {
         let m = FixtureMeasure;
         // answered, with nothing: no reserved space for the meta/life/bio lines at all.
-        let flow = header_flow(false, "", false, false, false, &m);
+        let flow = header_flow(false, "", false, false, &m);
         assert!(flow.meta_y.is_none() && flow.life_y.is_none() && flow.bio_y.is_none());
 
         // pending: not yet asked at all — reserves the full placeholder stack even though every
         // cached run is still empty.
-        let pending_flow = header_flow(true, "", false, false, false, &m);
+        let pending_flow = header_flow(true, "", false, false, &m);
         assert!(
             pending_flow.meta_y.is_some()
                 && pending_flow.life_y.is_some()
@@ -2103,7 +1986,7 @@ mod tests {
         );
 
         // answered, WITH content: the runs actually drive the reserved space.
-        let full_flow = header_flow(false, "", true, false, false, &m);
+        let full_flow = header_flow(false, "", true, false, &m);
         assert!(full_flow.meta_y.is_some());
         assert!(full_flow.life_y.is_none(), "no life facts were given");
     }
@@ -2120,40 +2003,21 @@ mod tests {
         let m = FixtureMeasure;
         let long = "A biography far longer than the header's three lines can hold. ".repeat(40);
         for (bio, want) in [(long.as_str(), true), ("One short line.", false)] {
-            let flow = header_flow(false, bio, false, false, false, &m);
+            let flow = header_flow(false, bio, false, false, &m);
             assert_eq!(flow.bio_truncated, bio_view(bio, 1.0, &m).truncates(BIO_W));
             assert_eq!(flow.bio_truncated, want, "fixture sanity for {:.20}", bio);
             s.page.header = flow;
             s.page.header_dirty = false;
             assert_eq!(s.page.bio_more(), want);
         }
-        s.page.header = header_flow(false, &long, false, false, false, &m);
+        s.page.header = header_flow(false, &long, false, false, &m);
         s.page.header_dirty = true;
         assert!(!s.page.bio_more(), "a header awaiting its remeasure offers no panel yet");
         store.run(PersonCmd::Close);
     }
 
-    /// The Filmography entry pill's group vanishes the instant the header releases it — the two
-    /// must never both answer "present" (which would let focus land on nothing drawn) nor both
-    /// answer "absent" while data is still pending (which would strand a fresh mount nowhere).
-    #[test]
-    fn entry_reachable_matches_has_entry_once_credits_settle() {
-        assert!(
-            entry_reachable_of(false, false, false),
-            "pending: held open"
-        );
-        assert!(
-            !entry_reachable_of(true, false, false),
-            "settled with nothing: released"
-        );
-        assert!(
-            entry_reachable_of(true, false, true),
-            "settled WITH something: reachable via has_entry"
-        );
-    }
-
-    /// A page with NO shelves at all still walks header ↔ entry, and OK on either does nothing to
-    /// the (nonexistent) catalog focus — `focused_movie` must answer `None` throughout.
+    /// A page with NO shelves at all holds the header alone, and OK on it does nothing to the
+    /// (nonexistent) catalog focus — `focused_movie` must answer `None` throughout.
     #[test]
     fn a_page_with_no_shelves_answers_no_focused_movie_anywhere() {
         let _serial = plx_base::testlock::serial();
@@ -2162,12 +2026,6 @@ mod tests {
             .focused_item(Some(plx_machine::machine::FocusKey {
                 entry: s.page.entry,
                 elem: HEADER_ELEM
-            }), &cx(&FixtureMeasure, store.view()))
-            .is_none());
-        assert!(s
-            .focused_item(Some(plx_machine::machine::FocusKey {
-                entry: s.page.entry,
-                elem: ENTRY_ELEM
             }), &cx(&FixtureMeasure, store.view()))
             .is_none());
         assert!(s
@@ -2890,8 +2748,10 @@ mod tests {
         store.run(PersonCmd::Close);
     }
 
+    /// OK on the header, Hold on a card and Back leave through their content effects with no
+    /// latch; the header no longer offers the Filmography route (its departments are the rows).
     #[test]
-    fn entry_back_and_hold_emit_their_content_effects_without_latches() {
+    fn back_and_hold_emit_their_content_effects_and_the_header_opens_no_filmography() {
         let _serial = plx_base::testlock::serial();
         let (mut store, mut s) = seed(1, 0);
         store.install_credits_for_test(&[("Actor", 7)]);
@@ -2919,7 +2779,7 @@ mod tests {
         };
 
         assert_eq!(
-            run(&mut s, ScreenEvent::Activate(ENTRY_ELEM), None),
+            run(&mut s, ScreenEvent::Activate(HEADER_ELEM), None),
             Handled::Yes
         );
         let card = focus_of(&s, &store, 0, 0);
@@ -2945,12 +2805,10 @@ mod tests {
         assert_eq!(run(&mut s, back, Some(card)), Handled::Yes);
         drop(run);
 
-        assert!(out.iter().any(|st| matches!(
+        assert!(!out.iter().any(|st| matches!(
             &st.fx,
-            plx_machine::machine::Fx::App(AppFx::Content(ContentReq::Present(
-                ContentArg::Filmography { sid, key }
-            ))) if *sid == ServerId::UNSET && key == "161"
-        )));
+            plx_machine::machine::Fx::App(AppFx::Content(ContentReq::Present(ContentArg::Filmography { .. })))
+        )), "nothing on the page presents the Filmography route any more");
         assert!(out.iter().any(|st| matches!(
             &st.fx,
             plx_machine::machine::Fx::App(AppFx::Content(ContentReq::ItemMenu))
@@ -2988,9 +2846,9 @@ mod tests {
     }
 
     /// A landed page entered the way the container enters a fresh mount (`FirstInGroup(GroupId(0))`)
-    /// opens on the Filmography pill: group 0 is the pill's, whatever else the page holds.
+    /// opens on the header: group 0 is the header's, whatever rows the page holds.
     #[test]
-    fn a_fresh_mount_of_a_landed_page_seats_the_filmography_pill() {
+    fn a_fresh_mount_of_a_landed_page_seats_the_header() {
         let _serial = plx_base::testlock::serial();
         let (mut store, mut s) = seed(2, 1);
         store.install_credits_for_test(&[("Actor", 3)]);
@@ -3007,28 +2865,36 @@ mod tests {
         ) else {
             panic!("a landed page must seat");
         };
-        assert_eq!(to, plx_machine::machine::FocusKey { entry: EntryId(0), elem: ENTRY_ELEM });
+        assert_eq!(to, plx_machine::machine::FocusKey { entry: EntryId(0), elem: HEADER_ELEM });
         store.run(PersonCmd::Close);
     }
 
-    /// A shelf's group id belongs to its kind, not to which other shelves the page holds: the
-    /// engine remembers a cursor per `(entry, group)`.
+    /// A shelf's group id belongs to its row, not to which other rows the page holds: the engine
+    /// remembers a cursor per `(entry, group)`. Movies and Shows are one row.
     #[test]
     fn a_shelf_keeps_its_group_id_whichever_other_shelves_exist() {
         let _serial = plx_base::testlock::serial();
-        let group_of_kind = |movies: usize, shows: usize, kind: usize| {
-            let (store, s) = seed(movies, shows);
+        let group_of = |movies: usize, shows: usize, credits: &[(&str, usize)], card: &dyn Fn(&PersonScreen, &plx_data::stores::person::PersonStore) -> plx_machine::machine::FocusKey<u32>| {
+            let (mut store, mut s) = seed(movies, shows);
+            if !credits.is_empty() {
+                credit(&mut s, &mut store, credits);
+            }
             let context = cx(&FixtureMeasure, store.view());
-            let elem = focus_of(&s, &store, kind, 0).elem;
-            let g = Focusable::<PersonHost>::group_of(&s, &elem, &context);
-            let mut store = store;
+            let g = Focusable::<PersonHost>::group_of(&s, &card(&s, &store).elem, &context);
+            drop(context);
             store.run(PersonCmd::Close);
             g
         };
-        assert!(group_of_kind(1, 1, 1).is_some());
-        assert_eq!(group_of_kind(1, 1, 1), group_of_kind(0, 1, 1), "Shows with and without Movies");
-        assert_eq!(group_of_kind(1, 1, 0), group_of_kind(1, 0, 0), "Movies with and without Shows");
-        assert_ne!(group_of_kind(1, 1, 0), group_of_kind(1, 1, 1));
+        let movie = |s: &PersonScreen, st: &plx_data::stores::person::PersonStore| focus_of(s, st, 0, 0);
+        let show = |s: &PersonScreen, st: &plx_data::stores::person::PersonStore| focus_of(s, st, 1, 0);
+        let acting = |s: &PersonScreen, _: &plx_data::stores::person::PersonStore| credit_of(s, CreditRow::Acting, 0);
+        let directing = |s: &PersonScreen, _: &plx_data::stores::person::PersonStore| credit_of(s, CreditRow::Directing, 0);
+        assert_eq!(group_of(1, 1, &[], &movie), Some(LOCAL_GROUP));
+        assert_eq!(group_of(1, 1, &[], &show), Some(LOCAL_GROUP), "Shows share the Movies' row");
+        assert_eq!(group_of(0, 1, &[], &show), Some(LOCAL_GROUP), "Shows without Movies");
+        assert_eq!(group_of(1, 0, &[("Actor", 2)], &acting), group_of(0, 0, &[("Actor", 2)], &acting), "Acting with and without local titles");
+        assert_eq!(group_of(0, 0, &[("Director", 1)], &directing), group_of(0, 0, &[("Actor", 1), ("Director", 1)], &directing));
+        assert_ne!(group_of(0, 0, &[("Actor", 1), ("Director", 1)], &acting), group_of(0, 0, &[("Actor", 1), ("Director", 1)], &directing));
     }
 
     /// With no person to show, reconcile answers the header (never the bare `want`).
@@ -3061,7 +2927,7 @@ mod tests {
         s.page.refresh_store_cache(&cx(&m, store.view()));
         settle_shelves(&mut s, &store, got, 1);
         let got = Focusable::<PersonHost>::reconcile(&s, got, &cx_at(&m, store.view(), got));
-        assert_eq!(got, focus_of(&s, &store, 0, 0), "past the end, the last card left in the SAME section");
+        assert_eq!(got, focus_of(&s, &store, 1, 0), "past the end, the last card left in the SAME row (its Shows follow its Movies)");
         store.run(PersonCmd::Close);
     }
 
@@ -3074,30 +2940,31 @@ mod tests {
         let mut groups = Vec::new();
         Focusable::<PersonHost>::groups(&s, &context, &mut groups);
         let group = |s: &PersonScreen, k: Sec| s.stack.group(k).unwrap();
-        assert!(groups.iter().any(|g| g.id == group(&s, Sec::Shelf(0)) && g.len == 3));
-        assert!(s.stack.group(Sec::Shelf(1)).is_none(), "no shelf of that kind, no section");
+        assert!(groups.iter().any(|g| g.id == group(&s, Sec::Local) && g.len == 3));
+        assert!(s.stack.group(Sec::Credits(0)).is_none(), "no credits in that row, no section");
         let last = focus_of(&s, &store, 0, 2);
         assert!(matches!(
             Focusable::<PersonHost>::neighbour(&s, last, Dir::Right, &context),
             Step::Edge
         ));
         drop(context);
-        store.install_credits_for_test(&[("Actor", 3)]);
-        s.page.refresh_store_cache(&cx(&measure, store.view()));
-        lay(&mut s, &store, &measure);
+        credit(&mut s, &mut store, &[("Actor", 3), ("Director", 2)]);
         let mut links = Vec::new();
         Screen::<PersonHost>::links(&s, &mut links);
-        assert!(links.iter().any(|link| {
-            link.from == group(&s, Sec::Entry) && link.dir == Dir::Down && link.to == group(&s, Sec::Shelf(0))
-        }));
+        let linked = |from: Sec, dir: Dir, to: Sec| links.iter().any(|l| l.from == group(&s, from) && l.dir == dir && l.to == group(&s, to));
+        let (acting, directing) = (Sec::Credits(CreditRow::Acting.index()), Sec::Credits(CreditRow::Directing.index()));
+        assert!(linked(Sec::Head, Dir::Down, Sec::Local) && linked(Sec::Local, Dir::Up, Sec::Head), "the header and the first row");
+        assert!(linked(Sec::Local, Dir::Down, acting) && linked(acting, Dir::Up, Sec::Local));
+        assert!(linked(acting, Dir::Down, directing) && linked(directing, Dir::Up, acting), "an absent row is skipped");
+        assert_eq!(links.len(), 6, "nothing links to a row that is not there: {links:?}");
         store.run(PersonCmd::Close);
     }
 
-    /// A landing may move the focused item from one shelf to the other. The engine element is the
-    /// item's identity, so focus stays on it; the shelf it left lets go of the lift and the shelf it
-    /// joined adopts it at the full pop (no frame shows two lifted tiles, none shows it collapsed).
+    /// A landing may move the focused item from the Movies to the Shows, and so along the row. The
+    /// engine element is the item's identity, so focus stays on it and it keeps the full pop at its
+    /// new place (no frame shows two lifted tiles, none shows it collapsed).
     #[test]
-    fn an_item_that_changes_shelf_in_a_landing_keeps_focus_and_is_lifted_on_its_new_shelf() {
+    fn an_item_that_changes_kind_in_a_landing_keeps_focus_and_is_lifted_at_its_new_place() {
         let _serial = plx_base::testlock::serial();
         let (mut store, mut s) = seed(2, 1);
         let m = FixtureMeasure;
@@ -3113,22 +2980,23 @@ mod tests {
         // "m0" leaves the movies and joins the shows.
         store.install_for_test(vec![item("m1")], vec![item("s0"), item("m0")]);
         s.page.refresh_store_cache(&cx(&m, store.view()));
-        assert_eq!(s.page.locate(store.view().current().unwrap(), moved.elem), Some(Located::Shelf(1, 1)));
+        assert_eq!(s.page.locate(store.view().current().unwrap(), moved.elem), Some(Located::Local(2)));
         let now = Focusable::<PersonHost>::reconcile(&s, moved, &cx_at(&m, store.view(), moved));
         assert_eq!(now, moved, "the cursor stays on the item across shelves");
         settle_shelves(&mut s, &store, moved, 1);
-        assert_eq!(lift(&s, &store, 1, moved.elem), Some(SHELF_STYLE.focus_scale), "adopted whole on its new shelf");
+        assert_eq!(lift(&s, &store, 1, moved.elem), Some(SHELF_STYLE.focus_scale), "lifted whole at its new place");
         let other = focus_of(&s, &store, 0, 0);
-        assert_eq!(lift(&s, &store, 0, other.elem), Some(1.0), "the movies shelf shows nothing lifted");
+        assert_eq!(lift(&s, &store, 0, other.elem), Some(1.0), "the card that took its old place is not lifted");
         settle_shelves(&mut s, &store, moved, 120);
         assert!(Focusable::<PersonHost>::place(&s, &moved.elem, &cx_at(&m, store.view(), moved), At::Drawn).is_some());
         store.run(PersonCmd::Close);
     }
 
     /// A page whose header has its measured band (or `exp_h`, to pin the other portrait), with two
-    /// shelves, the stack laid out over it.
+    /// shelves (Available on MultiPlex and Acting), the stack laid out over it.
     fn shelved_page(exp_h: f32) -> (plx_data::stores::person::PersonStore, PersonScreen) {
-        let (store, mut s) = seed(3, 3);
+        let (mut store, mut s) = seed(3, 3);
+        credit(&mut s, &mut store, &[("Actor", 3)]);
         let m = FixtureMeasure;
         s.page.remeasure_header(store.view().current().unwrap(), &m);
         s.page.header.exp_h = exp_h;
@@ -3153,7 +3021,7 @@ mod tests {
     fn reaching_the_second_shelf_scrolls_it_fully_into_view_and_no_further() {
         let _serial = plx_base::testlock::serial();
         let (mut store, mut s) = shelved_page(PORTRAIT_EXP);
-        let key = focus_of(&s, &store, 1, 0);
+        let key = credit_of(&s, CreditRow::Acting, 0);
         settle_shelves(&mut s, &store, key, 480);
         assert!(s.stack.scroll() > 0.0);
         let placed = Focusable::<PersonHost>::place(&s, &key.elem, &cx_at(&FixtureMeasure, store.view(), key), At::SpringTarget)
@@ -3175,10 +3043,10 @@ mod tests {
         assert_eq!(SHELF_LABEL_H, TITLE_DY + CARD_DY);
     }
 
-    /// **The first filmography shelf's caption stops short of the heading of the shelf under it.**
-    /// A Down from the Movies shelf onto the Shows shelf lifts the Shows heading while the Movies
-    /// caption is still leaving, and an Up back does the reverse; at the 112 px band no caption line
-    /// of the Movies shelf ends below the Shows heading's drawn top (`SectionFrame::below_rise`).
+    /// **The first shelf's caption stops short of the heading of the shelf under it.** A Down from
+    /// Available on MultiPlex onto Acting lifts the Acting heading while the first shelf's caption
+    /// is still leaving, and an Up back does the reverse; at the 112 px band no caption line of the
+    /// first shelf ends below the Acting heading's drawn top (`SectionFrame::below_rise`).
     #[test]
     fn a_shelfs_caption_keeps_clear_of_the_next_shelfs_lifted_heading() {
         use crate::registry::captions::TEST_UNDER_POSTERS;
@@ -3186,7 +3054,7 @@ mod tests {
         let _serial = plx_base::testlock::serial();
         TEST_UNDER_POSTERS.with(|cell| cell.set(Some(UnderPosters { title: true, details: Details::YearLength.movie_parts(), show_details: Details::YearLength.show_parts(), sort_value: false })));
         let (mut store, mut s) = shelved_page(PORTRAIT_EXP);
-        let (movies, shows) = (focus_of(&s, &store, 0, 0), focus_of(&s, &store, 1, 0));
+        let (movies, shows) = (focus_of(&s, &store, 0, 0), credit_of(&s, CreditRow::Acting, 0));
         settle_shelves(&mut s, &store, movies, 120);
         let (mut worst, mut lines, mut from) = (f32::MIN, 0, movies);
         for frame in 0..130 {
@@ -3198,7 +3066,7 @@ mod tests {
             settle_shelves(&mut s, &store, from, 1);
             let cxv = cx_at(&FixtureMeasure, store.view(), from);
             let f = DrawFrame::new(&cxv, Painter::root());
-            let (first, second) = (Sec::Shelf(0), Sec::Shelf(1));
+            let (first, second) = (Sec::Local, Sec::Credits(CreditRow::Acting.index()));
             let above = s.stack.shelf_frame(&s.page, &cxv, first).expect("the Movies shelf");
             let heading = s.stack.shelf_frame(&s.page, &cxv, second).expect("the Shows shelf").y - SHELF_LABEL_H
                 - s.stack.shelf(second).expect("the Shows shelf").heading_lift();
@@ -3221,7 +3089,8 @@ mod tests {
     fn a_painted_shelf_heading_keeps_the_pad_between_title_dot_and_count() {
         let _g = plx_base::testlock::serial();
         let (_store, mut s) = seed(2, 2);
-        s.page.shelf_count_c = [std::ffi::CString::new("22").unwrap(), std::ffi::CString::default()];
+        s.page.row_count_c = Default::default();
+        s.page.row_count_c[0] = std::ffi::CString::new("22").unwrap();
         let paint = |kind: usize| {
             let mut runs = plx_ui::draw_census::capture_runs(|| {
                 s.page.draw_shelf_heading(Painter::recording(), kind, 0.0, &plx_ui::widgets::LegacyMeasure);
@@ -3230,7 +3099,7 @@ mod tests {
             runs
         };
         let counted = paint(0);
-        assert_eq!(counted.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), [shelf_title()[0].to_str().unwrap(), "\u{b7}", "22"]);
+        assert_eq!(counted.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), [s.page.row_title_c[0].to_str().unwrap(), "\u{b7}", "22"]);
         assert_eq!(counted[0].at.x, MARGIN_X);
         for pair in counted.windows(2) {
             let gap = pair[1].at.x - (pair[0].at.x + pair[0].at.w);
@@ -3241,18 +3110,153 @@ mod tests {
     }
 
     /// The header's gaps ride the item, not its neighbour: with no life line the biography keeps
-    /// BIO_GAP under the meta line, and with no biography the entry keeps ENTRY_GAP under the life line.
+    /// BIO_GAP under the meta line, and with no biography the header ends at the life line.
     #[test]
     fn header_gaps_survive_an_absent_neighbour() {
         let m = FixtureMeasure;
         let label = m.cap_h(theme::size::LABEL);
-        let no_life = header_flow(false, "A biography.", true, false, false, &m);
+        let no_life = header_flow(false, "A biography.", true, false, &m);
         assert_eq!(no_life.life_y, None);
         let (meta, bio) = (no_life.meta_y.unwrap(), no_life.bio_y.unwrap());
         assert!((bio - meta - label - BIO_GAP).abs() < 0.01);
-        let no_bio = header_flow(false, "", true, true, true, &m);
+        let no_bio = header_flow(false, "", true, true, &m);
         assert_eq!(no_bio.bio_y, None);
-        let (life, entry) = (no_bio.life_y.unwrap(), no_bio.entry_y.unwrap());
-        assert!((entry - life - m.cap_h(theme::size::CAPTION) - ENTRY_GAP).abs() < 0.01);
+        let life = no_bio.life_y.unwrap();
+        assert!((no_bio.exp_h - (life + m.cap_h(theme::size::CAPTION))).abs() < 0.01 || no_bio.exp_h == no_bio.exp_d,
+            "the life line is the last line of the text column");
+    }
+
+    /// **Every row is ONE line, whatever its length.** A hundred and twenty Acting credits stand on
+    /// one row: every card's resting place shares the row's top, Right walks from each card to the
+    /// next all the way to the last, and only the last answers the row's edge. Under the header the
+    /// rows read in the page's order: Available on MultiPlex, then Acting, Appearances, Producing,
+    /// Directing and Other credits, each present row a shelf of its own.
+    #[test]
+    fn every_row_is_one_line_however_long_and_walks_to_its_last_card() {
+        let _serial = plx_base::testlock::serial();
+        let (mut store, mut s) = seed(2, 1);
+        credit(&mut s, &mut store, &[("Other", 2), ("Director", 1), ("Actor", 120), ("Producer", 3), ("Self", 4)]);
+        assert_eq!(
+            s.page.reach.rows(),
+            [Sec::Local, Sec::Credits(0), Sec::Credits(1), Sec::Credits(2), Sec::Credits(3), Sec::Credits(4)],
+            "the rows in the page's order, whatever order plex.tv sent the departments in"
+        );
+        let context = cx(&FixtureMeasure, store.view());
+        let mut groups = Vec::new();
+        Focusable::<PersonHost>::groups(&s, &context, &mut groups);
+        let acting = groups.iter().find(|g| g.id == CREDIT_GROUP[CreditRow::Acting.index()]).expect("the Acting row");
+        assert_eq!(acting.len, 120, "every credit is a card of the one row");
+        let first = credit_of(&s, CreditRow::Acting, 0);
+        let top = Focusable::<PersonHost>::place(&s, &first.elem, &context, At::SpringTarget).unwrap().rest_rect.y;
+        let mut at = first;
+        for i in 1..120 {
+            let Step::Move(next) = Focusable::<PersonHost>::neighbour(&s, at, Dir::Right, &context) else {
+                panic!("Right from card {} stopped short of the end", i - 1);
+            };
+            assert_eq!(next, credit_of(&s, CreditRow::Acting, i), "Right is the next card of the row");
+            let placed = Focusable::<PersonHost>::place(&s, &next.elem, &context, At::SpringTarget).unwrap();
+            assert_eq!(placed.rest_rect.y, top, "card {i} stands on the row's one line");
+            at = next;
+        }
+        assert!(matches!(Focusable::<PersonHost>::neighbour(&s, at, Dir::Right, &context), Step::Edge), "the last card is the row's end");
+        drop(context);
+        store.run(PersonCmd::Close);
+    }
+
+    /// **Up and Down walk the rows as Home's do.** Down from the header lands on the first row,
+    /// Right walks it, Down goes to the card of the next row under it and Up comes back to the card
+    /// the first row was left on (each row keeps its own scroll, and the shared engine projects a
+    /// vertical move between card rows), then Up again reaches the header: the page's links and the
+    /// stack's groups, nothing of its own.
+    #[test]
+    fn up_and_down_walk_the_rows_and_come_back_to_the_card_left() {
+        let _serial = plx_base::testlock::serial();
+        let (mut store, mut s) = seed(6, 0);
+        credit(&mut s, &mut store, &[("Actor", 6)]);
+        let mut links = Vec::new();
+        Screen::<PersonHost>::links(&s, &mut links);
+        let mut engine = plx_ui::focus::FocusEngine::new();
+        let owner = InputOwner::Entry(EntryId(0));
+        let go = |engine: &mut plx_ui::focus::FocusEngine<u32>, s: &PersonScreen, dir: Dir| {
+            let context = Cx { focus: engine.read(owner), ..cx(&FixtureMeasure, store.view()) };
+            match engine.move_dir(owner, s, &links, dir, &context) {
+                plx_ui::focus::Outcome::Moved { to, .. } => Some(to),
+                _ => None,
+            }
+        };
+        let context = cx(&FixtureMeasure, store.view());
+        engine.enter(owner, &s, plx_machine::machine::FocusTarget::FirstInGroup(GroupId(0)), None, &context);
+        drop(context);
+        assert_eq!(engine.current(owner).map(|k| k.elem), Some(HEADER_ELEM), "the page opens on the header");
+        let row_of = |k: Option<plx_machine::machine::FocusKey<u32>>| {
+            let context = cx(&FixtureMeasure, store.view());
+            k.and_then(|k| Focusable::<PersonHost>::group_of(&s, &k.elem, &context))
+        };
+        let landed = go(&mut engine, &s, Dir::Down);
+        assert_eq!(row_of(landed), Some(LOCAL_GROUP), "Down from the header: the first row");
+        while go(&mut engine, &s, Dir::Left).is_some() {}
+        go(&mut engine, &s, Dir::Right);
+        assert_eq!(go(&mut engine, &s, Dir::Right), Some(focus_of(&s, &store, 0, 2)), "Right walks the row");
+        assert_eq!(go(&mut engine, &s, Dir::Down), Some(credit_of(&s, CreditRow::Acting, 2)), "Down: the next row's card under it");
+        assert_eq!(go(&mut engine, &s, Dir::Right), Some(credit_of(&s, CreditRow::Acting, 3)));
+        assert_eq!(go(&mut engine, &s, Dir::Left), Some(credit_of(&s, CreditRow::Acting, 2)));
+        assert_eq!(go(&mut engine, &s, Dir::Up), Some(focus_of(&s, &store, 0, 2)), "Up: back to the card the row was left on");
+        assert_eq!(go(&mut engine, &s, Dir::Up), Some(plx_machine::machine::FocusKey { entry: EntryId(0), elem: HEADER_ELEM }), "Up from the first row: the header");
+        store.run(PersonCmd::Close);
+    }
+
+    /// A card leaves for its page: a local title for its Detail, a credit a server holds for that
+    /// server's Detail, a credit no server holds for its catalog page, and a credit with no catalog
+    /// id for nothing.
+    #[test]
+    fn a_card_opens_its_detail_or_its_catalog_page() {
+        let _serial = plx_base::testlock::serial();
+        let (mut store, mut s) = seed(1, 0);
+        credit(&mut s, &mut store, &[("Actor", 3)]);
+        let sid = ServerId::from_raw(3);
+        s.page.credits[0][0].local = Some((sid, "4242".into()));
+        s.page.credits[0][1].catalog_id = "5d776b59ad5437001f79c6f8".into();
+        s.page.credits[0][2].catalog_id = String::new();
+        s.page.sync_card_keys(&cx(&FixtureMeasure, store.view()));
+        let opened = |s: &PersonScreen, key: plx_machine::machine::FocusKey<u32>| {
+            let mut present = plx_machine::present::Present::new();
+            let mut out: Vec<plx_machine::machine::Stamped<PersonHost>> = Vec::new();
+            let mut fx = Effects::new(&mut out, plx_machine::machine::MachineId::Instance(plx_machine::machine::InstanceId(0)), &mut present);
+            s.page.open_card(key.elem, &cx(&FixtureMeasure, store.view()), &mut fx);
+            drop(fx);
+            out.into_iter().filter_map(|st| match st.fx {
+                plx_machine::machine::Fx::App(AppFx::Content(ContentReq::Push(arg))) => Some(arg),
+                _ => None,
+            }).collect::<Vec<_>>()
+        };
+        assert!(matches!(&opened(&s, focus_of(&s, &store, 0, 0))[..], [ContentArg::Detail { rk, .. }] if rk == "m0"));
+        assert!(matches!(&opened(&s, credit_of(&s, CreditRow::Acting, 0))[..], [ContentArg::Detail { sid: at, rk }] if *at == sid && rk == "4242"),
+            "a credit a server holds opens that server's copy");
+        let hex = plx_data::watchlist::decode_hex("5d776b59ad5437001f79c6f8").unwrap();
+        assert!(matches!(&opened(&s, credit_of(&s, CreditRow::Acting, 1))[..], [ContentArg::Catalog { hex: h }] if *h == hex),
+            "a credit no server holds opens its catalog page");
+        assert!(opened(&s, credit_of(&s, CreditRow::Acting, 2)).is_empty(), "no catalog id, nowhere to go");
+        store.run(PersonCmd::Close);
+    }
+
+    /// Every row registers the band the Magic Remote wheel scrolls it by (`plx_ui::wheel`): a row
+    /// that fits on screen says it has nowhere to go, a long one says how far it can.
+    #[test]
+    fn every_row_registers_its_wheel_band() {
+        let _serial = plx_base::testlock::serial();
+        let (mut store, mut s) = seed(3, 0);
+        credit(&mut s, &mut store, &[("Actor", 40)]);
+        let key = credit_of(&s, CreditRow::Acting, 0);
+        settle_shelves(&mut s, &store, key, 240);
+        let context = cx_at(&FixtureMeasure, store.view(), key);
+        let mut frame = DrawFrame::new(&context, Painter::root());
+        page_stops(&s, &mut frame);
+        let acting = Focusable::<PersonHost>::place(&s, &key.elem, &context, At::Drawn).unwrap().rect;
+        let zone = plx_ui::wheel::zone_at(frame.pans(), acting.cx(), acting.cy()).expect("the Acting row's band is under its card");
+        assert_eq!(zone.max, SHELF_STYLE.max_scroll(40), "a long row can go as far as its last card");
+        assert!(zone.max > 0.0);
+        assert!(frame.pans().iter().any(|z| z.max == 0.0), "the three local titles fit: that row has nowhere to go");
+        drop(context);
+        store.run(PersonCmd::Close);
     }
 }

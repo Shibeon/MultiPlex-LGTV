@@ -79,6 +79,7 @@ pub mod nav; // the page transition's PRESENTATION, published once a frame from 
 pub mod breadcrumb; // 'Films > Collections' crumb (PR5)
 pub mod hstack; // one gap between a run of measured items (UIStackView spacing)
 pub mod vstack; // the same stack top to bottom (VStack/VFlow over hstack's engine) + the alert head ladder
+pub mod wheel; // the Magic Remote wheel over a horizontal row: the zones rows register and the pure row-or-page rule
 pub mod page_header; // the page header row: one layout, paint, focus group and motion for the Library, Collections, Recommended and Watchlist pages
 pub mod page_regions; // the column NAV/HEADER/CONTENT/RAIL: one table for the pages' links, BACK and first seat
 pub mod caption_policy; // "Under posters": what a focused poster's caption band shows and how tall it is (CONTRACT FREEZE: P3 fills)
@@ -195,7 +196,7 @@ pub const LAND_REL: f32 = 1.0 / 16384.0;
 
 /// One animated scalar, delegating to the existing critically-damped C spring so
 /// motion is byte-identical. "Springs live in views": a view owns one per value.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct Spring {
     pub pos: f32,
     pub vel: f32,

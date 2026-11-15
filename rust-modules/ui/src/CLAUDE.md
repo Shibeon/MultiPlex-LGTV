@@ -87,6 +87,10 @@ arguments, and its time is the `dt` it is handed.
      the owner's `Focusable` contract (`screen.rs`: `neighbour`, `Link`, `EdgeRule`, `Seat`). A
      screen declares its groups and edges; it never matches a direction key to move focus between
      regions.
+   - **The Magic Remote wheel over a sideways row**: `wheel.rs` (`route`, the pure decision;
+     `WheelGlide`, the notch eased on `K_SCROLL`). A row that scrolls sideways registers its band
+     with `DrawFrame::pan_zone` (`cards::Shelf` does it for every shelf) and answers the
+     `InputKind::Pan` it already takes from the pointer's edge glide; it never reads the wheel itself.
    - **Cold text before it is shown** (a destination's strings meeting the glyph cache in the first
      visible frame): the shared prewarm — a recording walk (`record_walk`, `Painter::recording`)
      drained by `plx_gfx::text::drain_prewarm` under the frame's budget. A route dip does it for its
@@ -755,7 +759,7 @@ tried first. None of it is reconstructable from the code without repeating the m
 ## Card marks — three marks, three meanings, and no card may blur them
 
 Library All uses the shared caption-band policy for movies, shows, seasons and collections (so does every other POSTER tile: Home's shelves,
-Recommended's poster shelves, Search's poster rows, the person page's filmography, Detail's Related and collection shelves and the Collection
+Recommended's poster shelves, Search's poster rows, the person page's rows (Available on MultiPlex and its credit rows), Detail's Related and collection shelves and the Collection
 screen's members; `Shelf::set_caption_policy(Some(policy))` sizes the band a shelf reserves and the caption block it reveals by
 `caption_policy::band_h`, and a `Stack` page hands it to a shelf or grid section through `StackPage::caption_policy`; a shelf or grid with
 no policy (`None`: a landscape still row or a headshot row, and the Library's Episodes listing, a grid of stills) keeps the legacy 114 px
@@ -773,7 +777,10 @@ a move hands the title over from the departing row to the arriving one with no l
 it AS DRAWN: a grid measures to the drawn top of the tile below (its live pop and press), and the owner
 of stacked shelves hands each one the lift of the next shelf's heading (`SectionFrame::below_rise`;
 `Stack`, Home, Recommended and Detail do; a `Stack` page keeps its shelves adjacent, the air under one its
-`StackPage::shelf_foot`, never a `Custom` gap section between two); `GridBands::closing` names the card a closing band's caption belongs to.
+`StackPage::shelf_foot`, never a `Custom` gap section between two; that foot is `consts::SHELF_FOOT`, the label air and the
+`consts::SECTION_AIR` that makes a resting shelf's posters stand `theme::space::SECTION` (56 px) above the next heading on every
+stacked-shelf page, where a grid's rows keep the `space::LG` block gap; `RowStyle::foot` is the one exception, the Continue
+Watching stills row keeping its board's gap); `GridBands::closing` names the card a closing band's caption belongs to.
 Live and target geometry include these bands, so painting, paging, scrolling and restored
 viewports agree. Episode rows use landscape stills; the Continue Watching row's is `RowStyle::STILL`
 (the episode cell at `theme::STILL_RADIUS`; the focused still only pops, and every other tile stands at its
@@ -891,8 +898,8 @@ Its docstring states what it cannot see.
   `child_top(i)` stacks the *present* blocks' `block_h()` heights (via `Column::height`) from
   `CONTENT_TOP` with one of THREE gaps, and which one is `section_gap`'s whole job: `SECTION_GAP`
   between ordinary sections, `TAB_EP_GAP` where the season tabs hug their episodes, and
-  `consts::UNDER_LABEL_AIR` after a SHELF section (Related, Cast, Extras), which already carries its
-  own label band — stacking a region gap on top of that band is the double-count that made every gap
+  `consts::SHELF_FOOT` after a SHELF section (Related, Cast, Extras), which already carries its
+  own label band (the foot is the label air and the section air every stacked shelf keeps) — stacking a region gap on top of that band is the double-count that made every gap
   below the hero read as a hole. To resize/space
   a section, change its `block_h` (content-derived — e.g. Related tracks `REL_H`=`CARD_H`) or the gap —
   never reintroduce a hard-coded per-section Y. `ScrollColumn::draw` culls off-screen sections with

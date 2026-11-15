@@ -188,7 +188,10 @@ fn grade_shelf_bands(w: &mut World, surface: &str, focused: &str, next: &str) {
         let top = |text: &str| drawn.words.iter().find(|(words, _)| words == text).unwrap_or_else(|| panic!(
             "{surface}: premise: the heading {text:?} is drawn (title {title}, {details:?}): {:?}", drawn.words)).1.y;
         let (from, to) = (top(focused), top(next));
-        for run in drawn.runs.iter().filter(|run| run.at.y > from && run.at.y < to) {
+        // The hold hint (`plx_ui::hold_hint`) is a capsule standing over the page at the screen's
+        // foot, not part of the shelf's flow: its runs are no caption, whatever heading lies under it.
+        let hint_top = plx_ui::consts::SCR_H - plx_ui::hold_hint::BOTTOM - plx_ui::hold_hint::HEIGHT;
+        for run in drawn.runs.iter().filter(|run| run.at.y > from && run.at.y < to && run.at.y < hint_top) {
             let bottom = run.at.y + run.at.h.max(run.size as f32);
             assert!(bottom <= to, "{surface}: {:?} ends at {bottom} under the next heading at {to} (title {title}, {details:?})", run.text);
         }
@@ -285,16 +288,18 @@ fn search_opens_the_band_its_setting_asks_for() {
     grade_shelf_bands(&mut w, "Search", Kind::Movie.title(), Kind::Show.title());
 }
 
-/// The person page's filmography: the Movies shelf is the focused one, the Shows shelf below it.
+/// The person page's rows: Available on MultiPlex is the focused shelf, the Acting row below it.
 #[test]
-fn the_filmography_opens_the_band_its_setting_asks_for() {
+fn the_person_page_opens_the_band_its_setting_asks_for() {
     use plx_platform::i18n::msg;
     let sid = plx_plex::plex::ServerId::UNSET;
     let show = plx_data::pms::PmsMovie { kind: 1, ..member(sid, "s1") };
     let mut w = World::person_page("band-person", vec![member(sid, "m1"), member(sid, "m2")], vec![show], &["", ""]);
+    w.bridge.stores.person.install_credits_for_test(&[("Actor", 3)]);
+    w.frames(60);
     let _cell = Cell::default();
-    focus_first_poster(&mut w, "Filmography");
-    grade_shelf_bands(&mut w, "Filmography", msg::browse_kind_movies(), msg::browse_kind_shows());
+    focus_first_poster(&mut w, "Person");
+    grade_shelf_bands(&mut w, "Person", msg::browse_person_available(), msg::browse_person_acting());
 }
 
 // ── Detail names what the server did not: a season 0 and an episode with no number ───────────────

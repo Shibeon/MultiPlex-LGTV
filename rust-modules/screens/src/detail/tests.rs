@@ -3018,7 +3018,7 @@ fn cached_section_tops_match_the_stacking_walk() {
     // region gap stacked on top of it. Hard-coding `SECTION_GAP` here is what made this test read
     // the layout as 42px out when the shelves stopped double-spacing.
     let gap = |above: i32, below: i32| DetailScreen::section_gap(above, Some(below));
-    assert_eq!(gap(4, 3), plx_ui::consts::UNDER_LABEL_AIR, "a shelf brings its own band");
+    assert_eq!(gap(4, 3), plx_ui::consts::SHELF_FOOT, "a shelf brings its own band, and keeps the section air");
     assert_eq!(gap(2, 4), super::SECTION_GAP, "a bare list does not");
 
     assert_eq!(seasons, screen.content_top(&measure, test_store().view()));
@@ -3038,8 +3038,10 @@ fn cached_section_tops_match_the_stacking_walk() {
     clear();
 }
 
-/// **A shelf section is followed by exactly the shared air, whatever section comes next.** The caption
-/// rule counts the collapsed band and `UNDER_LABEL_AIR` under a card (`card_row::room_for`): Related,
+/// **A shelf section is followed by exactly the shared air, whatever section comes next**: the
+/// shelf foot every stacked page keeps (`consts::SHELF_FOOT`, the label air and the section air). The
+/// caption rule counts the collapsed band and `UNDER_LABEL_AIR` under a card (`card_row::room_for`),
+/// less than that foot, so its room holds wherever a shelf stands: Related,
 /// Extras and the collection's members keep that much between their tiles and the next section's top
 /// (their block's collapsed band and the gap after it); the cast row keeps more, because it draws a name
 /// under every headshot (`cast::block_h`).
@@ -3049,9 +3051,9 @@ fn a_shelf_is_followed_by_the_shared_air() {
     let air = ui_cards::LABEL_BAND_COLLAPSED + UNDER_LABEL_AIR;
     for above in [3, 4, 6, 7] {
         for below in [3, 4, 5, 6, 7] {
-            assert_eq!(DetailScreen::section_gap(above, Some(below)), UNDER_LABEL_AIR, "section {above} above section {below}");
+            assert_eq!(DetailScreen::section_gap(above, Some(below)), plx_ui::consts::SHELF_FOOT, "section {above} above section {below}");
         }
-        assert_eq!(DetailScreen::section_gap(above, None), UNDER_LABEL_AIR, "the last section's air is the same");
+        assert_eq!(DetailScreen::section_gap(above, None), plx_ui::consts::SHELF_FOOT, "the last section's air is the same");
     }
     assert_eq!(related::block_h(0.0) - related::LABEL_H - ui_cards::RowStyle::HOME.h + UNDER_LABEL_AIR, air, "Related");
     assert_eq!(collection::block_h(0.0), related::block_h(0.0), "the collection's members");

@@ -275,5 +275,11 @@
   "browse.detail.minutes_left": "Nog {minutes} min",
   "browse.detail.upcoming_airs": "Uitzending op {date}",
   "browse.detail.upcoming_air_date_unknown": "Uitzenddatum onbekend",
-  "browse.detail.upcoming_title_tba": "Titel volgt nog"
+  "browse.detail.upcoming_title_tba": "Titel volgt nog",
+  "browse.person.acting": "Acteerwerk",
+  "browse.person.appearances": "Optredens",
+  "browse.person.producing": "Productie",
+  "browse.person.directing": "Regie",
+  "browse.person.other_credits": "Overige credits",
+  "browse.person.available": "Beschikbaar in MultiPlex"
 }

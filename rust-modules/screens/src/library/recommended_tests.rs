@@ -236,7 +236,9 @@ fn shelf_pitch_keeps_the_shared_air() {
             for style in [&RowStyle::EPISODE, &RowStyle::STILL] {
                 // …under a shorter tile, and under the footer line a still carries below its art
                 let shorter = RowStyle::HOME.h - style.h;
-                assert!((shelf_pitch(style, band, expanded) - (want - shorter + style.under_tile)).abs() < 1e-3, "landscape, band {band} expanded {expanded}");
+                // (a still row keeps its board's foot, not the section air: `RowStyle::foot`)
+                let foot = RowStyle::HOME.foot() - style.foot();
+                assert!((shelf_pitch(style, band, expanded) - (want - shorter + style.under_tile - foot)).abs() < 1e-3, "landscape, band {band} expanded {expanded}");
             }
         }
     }
