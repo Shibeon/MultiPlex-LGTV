@@ -301,9 +301,12 @@ fn the_window_reread_waits_for_the_outgoing_stop_within_its_bound() {
     // The outgoing episode's stop is announced and still on its way.
     let stop = TIMELINE_STOP_FENCE.announce();
     let waiting = continuation.clone().awaiting(TIMELINE_STOP_FENCE.announced());
+    // The reader's clock starts with the main thread's sleep, not inside the spawned closure: a
+    // thread scheduled late would otherwise start counting after part of the sleep had passed and
+    // read under 250 ms although it did wait for the stop (CI, 2026-11-15: 244.6 ms).
+    let started = std::time::Instant::now();
     let read = std::thread::scope(|scope| {
         let reader = scope.spawn(|| {
-            let started = std::time::Instant::now();
             let _ = waiting.refreshed_within(client, Duration::from_secs(20));
             started.elapsed()
         });
