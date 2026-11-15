@@ -1117,32 +1117,29 @@ pub(crate) fn content_back(
     }
 }
 
-/// **The page moves the Watchlist asks for** — BACK to Home and the strip's pills — shared with the
-/// tests' pump for the reason [`library_navigation`] is.
+/// **The page moves the Watchlist asks for** — BACK to Home, the strip's pills and the account
+/// chip — performed by the one top-bar routing every bar page shares ([`bar_page_navigation`]);
+/// any other request is handed back with its `ret`. Shared with the tests' pump for the reason
+/// [`library_navigation`] is.
 pub(crate) fn watchlist_navigation(
     pages: &mut plx_ui::dispatch::Dispatcher<bridge::AppHost>, rig: &mut bridge::Bridge,
     request: &plx_screens::watchlist::page::WatchlistOut, ret: ReturnState<u32, PageMemory>,
 ) -> Option<ReturnState<u32, PageMemory>> {
     use plx_screens::watchlist::page::WatchlistOut;
-    match request {
-        WatchlistOut::Back => bridge::nav_tab(pages, rig, HomeTab::Home, None, Some(ret)),
-        WatchlistOut::Tab(tab) => {
-            if !rig.search_tab_available(*tab) || matches!(tab, HomeTab::Watchlist) { return None; }
-            match tab {
-                HomeTab::Home => bridge::nav_home_pill(pages, rig, Some(ret)),
-                other => bridge::nav_tab(pages, rig, *other, None, Some(ret)),
-            }
-        }
-        WatchlistOut::Account => chip_activate(pages),
+    let request = match request {
+        WatchlistOut::Back => ContentReq::LeaveToHome,
+        WatchlistOut::Tab(tab) => ContentReq::Tab(*tab),
+        WatchlistOut::Account => ContentReq::Account,
         _ => return Some(ret),
-    }
+    };
+    bar_page_navigation(pages, rig, &AppArg::Watchlist, &request, ret);
     None
 }
 
 /// **A top-bar page's moves** (`ContentReq::Tab`, `ContentReq::Account`, `ContentReq::LeaveToHome`),
-/// the same ones the Watchlist's own requests make ([`watchlist_navigation`]): BACK to Home, the
-/// strip's pills (not the page `route` already is, nor one the profile has no such page for), and
-/// the account chip. Shared with the tests' pump.
+/// the ONE routing for every page that wears the bar (the Watchlist's own requests come through
+/// [`watchlist_navigation`]): BACK to Home, the strip's pills (not the page `route` already is,
+/// nor one the profile has no such page for), and the account chip. Shared with the tests' pump.
 pub(crate) fn bar_page_navigation(
     pages: &mut plx_ui::dispatch::Dispatcher<bridge::AppHost>, rig: &mut bridge::Bridge, route: &AppArg,
     request: &ContentReq, ret: ReturnState<u32, PageMemory>,
