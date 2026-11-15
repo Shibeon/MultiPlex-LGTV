@@ -7190,7 +7190,7 @@ pub fn stream_audio(ps: &PlaybackSession) -> Option<crate::player::recovery::Str
     (!codec.is_empty()).then(|| crate::player::recovery::StreamAudio {
         codec,
         channels: u32::try_from(stream_achannels(ps)).unwrap_or(0),
-        app_decoded_lossy: stream_pcm_is_lossy(ps),
+        app_decoded_lossy: load_pcm_is_lossy(ps),
     })
 }
 /// The SOURCE's video, when the pipeline was fed it whole, for the failed-open ladder
@@ -7403,27 +7403,52 @@ pub struct ModeDecodeFacts {
     pub codec: bool,
     /// The track is the app's already ([`stream_pcm`]: FLAC, ALAC, LPCM, a lossy row in force).
     pub app_pcm: bool,
-    /// The last read of the sound output (`FeedRaw::sound_output`).
+    /// The last sound-output probe's verdict (`PlayerReadout::sound_output`, which a reload's reset
+    /// keeps): `Local` is the only one the app decodes on; it also says the set's audio stack plans a
+    /// lead for the app's PCM (`SoundOutput::NoLead` otherwise).
     pub output: plx_playback_contract::feed::SoundOutput,
     /// The safety net took the decode away from this title (`PlayerReadout::mode_decode_refused`).
     pub refused: bool,
+    /// The decode mixes the track down (`devcaps::app_decode_mixes_down` of the channels the Load
+    /// declares, [`stream_achannels`]): allowed for a mode only by
+    /// `devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX`.
+    pub mixes_down: bool,
 }
 
 impl ModeDecodeFacts {
-    /// **Whether the app could decode this track for an audio mode**, whatever the mode is: the
-    /// More menu offers the mode on it ([`crate::player::audio_mode_offered`]) and, with a mode on, the
-    /// Load declares PCM for it ([`audio_mode_decode`]). An output not read yet is no refusal: the
-    /// first decode's Load thread reads it, and an output that is not the set's own takes the decode
-    /// back at once (`player::sync_audio_mode_decode`). PURE.
-    pub fn available(&self) -> bool {
+    /// **Whether the track is one the app could decode for an audio mode, the sound output aside**:
+    /// the profile lets it, the Feed at 1x on a whole file, a codec the app can decode that is not
+    /// already its own, and no safety-net refusal on the title. What the Load thread probes the output
+    /// for ([`ModeDecodeFacts::probes`]). PURE.
+    pub fn eligible(&self) -> bool {
         self.decode == plx_plex::plex::session::AudioModeDecode::On
             && self.feed
             && self.normal_rate
             && self.plain_source
             && self.codec
             && !self.app_pcm
-            && self.output != plx_playback_contract::feed::SoundOutput::NotLocal
             && !self.refused
+            && (!self.mixes_down || plx_platform::devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX)
+    }
+
+    /// **Whether the app could decode this track for an audio mode**, whatever the mode is: the
+    /// More menu offers the mode on it ([`crate::player::audio_mode_offered`]) and, with a mode on, the
+    /// Load declares PCM for it ([`audio_mode_decode`]). Only once a probe said the sound plays on the
+    /// set itself, on a stack with a planned PCM lead ([`SoundOutput::Local`]): an output not read
+    /// yet is no decode, so the first Load of a run feeds the compressed track and probes, and a
+    /// receiver on ARC or optical never receives a PCM Load. PURE.
+    ///
+    /// [`SoundOutput::Local`]: plx_playback_contract::feed::SoundOutput::Local
+    pub fn available(&self) -> bool {
+        self.eligible() && self.output == plx_playback_contract::feed::SoundOutput::Local
+    }
+
+    /// **Whether this Load's thread probes the sound output** (`OpenStream::probe_sound_output`), with
+    /// the viewer's `mode`: an [`eligible`](Self::eligible) track, and either no verdict yet or a mode
+    /// on (so an output changed since, a receiver unplugged, is seen at the next Load). PURE.
+    pub fn probes(&self, mode: AudioMode) -> bool {
+        self.eligible()
+            && (self.output == plx_playback_contract::feed::SoundOutput::Unknown || mode != AudioMode::Off)
     }
 
     /// Whether, with the viewer's `mode`, the Load decodes this track in the app. PURE.
@@ -7441,8 +7466,9 @@ pub fn mode_decode_facts(ps: &PlaybackSession) -> ModeDecodeFacts {
         plain_source: !is_preview(ps) && !is_segmented_hls(ps),
         codec: plx_platform::devcaps::mode_decodes_codec(&ps.stream_acodec),
         app_pcm: stream_pcm(ps).is_some(),
-        output: ps.readout().raw().sound_output,
+        output: ps.readout().sound_output(),
         refused: ps.readout().mode_decode_refused(ps.cur_sid, &ps.cur_rk),
+        mixes_down: plx_platform::devcaps::app_decode_mixes_down(stream_achannels(ps)),
     }
 }
 
@@ -7465,6 +7491,15 @@ pub fn set_stream_acodec_for_test(ps: &mut PlaybackSession, codec: &str) {
 /// the one on screen: the Feed is the engine by construction there. MAIN THREAD.
 pub fn audio_mode_decode_for_feed_load(ps: &PlaybackSession) -> bool {
     ModeDecodeFacts { feed: true, ..mode_decode_facts(ps) }.wanted(audio_mode())
+}
+
+/// **Whether a Feed Load of this session declares the LOSSY decode's PCM**: a lossy row in force
+/// ([`stream_pcm_is_lossy`]) or a decode for the viewer's audio mode
+/// ([`audio_mode_decode_for_feed_load`]). The ONE answer the Load (`player::feed_open`'s
+/// `pcm_is_lossy`) and the failed-open ladder's fact ([`stream_audio`]'s `app_decoded_lossy`) both take,
+/// so a refused PCM Load of a mode-decoded track is never read as the set's own decoder refusing it.
+pub fn load_pcm_is_lossy(ps: &PlaybackSession) -> bool {
+    stream_pcm_is_lossy(ps) || audio_mode_decode_for_feed_load(ps)
 }
 
 /// PURE half of [`stream_pcm`]: the carried track must be the same codec, with a stated rate and
@@ -7499,55 +7534,107 @@ mod mode_decode_rule_tests {
     use plx_playback_contract::feed::SoundOutput;
     use plx_plex::plex::session::AudioModeDecode;
 
-    fn facts() -> ModeDecodeFacts {
+    /// An AC-3 stereo track on the Feed at 1x, the profile's decode on, a probe that said the set's own
+    /// speakers: the one row every other row changes a single fact of.
+    fn speakers() -> ModeDecodeFacts {
         ModeDecodeFacts {
             decode: AudioModeDecode::On, feed: true, normal_rate: true, plain_source: true, codec: true,
-            app_pcm: false, output: SoundOutput::Local, refused: false,
+            app_pcm: false, output: SoundOutput::Local, refused: false, mixes_down: false,
         }
     }
 
-    /// **The decision table**: mode × codec × output (a receiver may take the bitstream) × the profile's
-    /// choice × engine, and the rest of the rule. The app decodes for the mode only with a mode on, the
-    /// choice On, the Feed at 1x on a whole file, a codec it can decode that is not already its own,
-    /// the set's own output (or one not read yet), and no safety-net refusal on the title. "Available"
-    /// is the same rule without the mode: what the More menu offers the mode on.
+    /// **The decision table**, row by row: (what, facts, eligible, available, probed with a mode on,
+    /// probed with the mode Off). `available` is what the More menu offers the mode on; with a mode on
+    /// it is what the Load decodes (`wanted`). A probe decides nothing by itself: it reads the output
+    /// for the next decision.
     #[test]
     fn the_app_decodes_for_a_mode_only_where_every_fact_allows_it() {
-        for mode in AudioMode::LADDER {
-            for codec in [true, false] {
-                for output in [SoundOutput::Unknown, SoundOutput::Local, SoundOutput::NotLocal] {
-                    for decode in AudioModeDecode::LADDER {
-                        for feed in [true, false] {
-                            let f = ModeDecodeFacts { codec, output, decode, feed, ..facts() };
-                            let available = codec && output != SoundOutput::NotLocal
-                                && decode == AudioModeDecode::On && feed;
-                            assert_eq!(f.available(), available, "{f:?}");
-                            assert_eq!(f.wanted(mode), available && mode != AudioMode::Off, "{mode:?} {f:?}");
-                        }
-                    }
-                }
-            }
+        let rows: [(&str, ModeDecodeFacts, bool, bool, bool, bool); 14] = [
+            ("the set's speakers or Bluetooth", speakers(), true, true, true, false),
+            ("no probe yet: the first Load of a run feeds compressed and probes",
+                ModeDecodeFacts { output: SoundOutput::Unknown, ..speakers() }, true, false, true, true),
+            ("a receiver on ARC or optical: never decoded, re-probed only with a mode on",
+                ModeDecodeFacts { output: SoundOutput::NotLocal, ..speakers() }, true, false, true, false),
+            ("a stack with no planned PCM lead (adecsink, Realtek, MStar, not known)",
+                ModeDecodeFacts { output: SoundOutput::NoLead, ..speakers() }, true, false, true, false),
+            ("the profile turned the decode off",
+                ModeDecodeFacts { decode: AudioModeDecode::Off, ..speakers() }, false, false, false, false),
+            ("the URI engine: the set fetches and decodes the file",
+                ModeDecodeFacts { feed: false, ..speakers() }, false, false, false, false),
+            ("a codec the app has no decoder for (MP2)",
+                ModeDecodeFacts { codec: false, ..speakers() }, false, false, false, false),
+            ("a speed session decodes its own audio",
+                ModeDecodeFacts { normal_rate: false, ..speakers() }, false, false, false, false),
+            ("a trailer or segmented HLS is not a whole file",
+                ModeDecodeFacts { plain_source: false, ..speakers() }, false, false, false, false),
+            ("FLAC is the app's already",
+                ModeDecodeFacts { app_pcm: true, ..speakers() }, false, false, false, false),
+            ("the safety net refused this title",
+                ModeDecodeFacts { refused: true, ..speakers() }, false, false, false, false),
+            ("a 5.1 track on the speakers: mixed down, by the audio-mode exception to #1082",
+                ModeDecodeFacts { mixes_down: true, ..speakers() }, true, true, true, false),
+            ("a 5.1 track, no probe yet",
+                ModeDecodeFacts { mixes_down: true, output: SoundOutput::Unknown, ..speakers() }, true, false, true, true),
+            ("a refused title on a receiver",
+                ModeDecodeFacts { refused: true, output: SoundOutput::NotLocal, ..speakers() }, false, false, false, false),
+        ];
+        assert!(plx_platform::devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX, "the rows above assume the owner's 2026-11-15 exception");
+        for (what, f, eligible, available, probes_on, probes_off) in rows {
+            assert_eq!(f.eligible(), eligible, "eligible: {what}");
+            assert_eq!(f.available(), available, "available: {what}");
+            assert!(!f.wanted(AudioMode::Off), "mode Off never decodes: {what}");
+            assert_eq!(f.wanted(AudioMode::Night), available, "Night: {what}");
+            assert_eq!(f.wanted(AudioMode::Voice), available, "Voice: {what}");
+            assert_eq!(f.probes(AudioMode::Night), probes_on, "probe, mode on: {what}");
+            assert_eq!(f.probes(AudioMode::Off), probes_off, "probe, mode Off: {what}");
         }
-        for (what, f) in [
-            ("a speed session decodes its own audio", ModeDecodeFacts { normal_rate: false, ..facts() }),
-            ("a trailer or segmented HLS is not a whole file", ModeDecodeFacts { plain_source: false, ..facts() }),
-            ("FLAC is the app's already", ModeDecodeFacts { app_pcm: true, ..facts() }),
-            ("the safety net refused this title", ModeDecodeFacts { refused: true, ..facts() }),
-        ] {
-            assert!(!f.available() && !f.wanted(AudioMode::Night) && !f.wanted(AudioMode::Voice), "{what}");
-        }
-        assert!(facts().wanted(AudioMode::Night) && facts().wanted(AudioMode::Voice));
-        assert!(!facts().wanted(AudioMode::Off), "Off never decodes: the television keeps its bitstream");
     }
 
-    /// The session's facts: an idle session plays nothing the rule could decode, and the profile's
-    /// choice and the readout's output reach the facts as they are.
+    /// The session's facts: an idle session plays nothing the rule could decode, and the readout's
+    /// sticky verdict, not the raw a reset clears, is the output the rule reads.
     #[test]
     fn the_session_facts_read_the_codec_engine_and_output() {
-        let ps = PlaybackSession::IDLE;
+        let mut ps = PlaybackSession::IDLE;
         let f = mode_decode_facts(&ps);
         assert!(!f.feed && !f.codec && !f.refused && f.output == SoundOutput::Unknown && f.normal_rate);
         assert!(!audio_mode_decode(&ps) && !audio_mode_decode_for_feed_load(&ps), "nothing to decode");
+        ps.step_readout(crate::player::readout::ReadoutEvent::FactsIngested(plx_playback_contract::feed::FeedRaw {
+            sound_output: SoundOutput::NotLocal, ..plx_playback_contract::feed::FeedRaw::IDLE
+        }));
+        ps.step_readout(crate::player::readout::ReadoutEvent::SessionReset);
+        assert_eq!(mode_decode_facts(&ps).output, SoundOutput::NotLocal, "a reload's reset keeps the verdict");
+    }
+
+    /// **The failed-open ladder's fact is the Load's answer**: a PCM Load declared for the viewer's
+    /// mode is the app's lossy decode (`StreamAudio::app_decoded_lossy`), so its refusal is never read
+    /// as the set's own decoder refusing DTS, Opus or AC-3 (`player::recovery`). With the mode Off the
+    /// same track is the set's.
+    #[test]
+    fn a_mode_decoded_load_is_the_apps_lossy_decode_for_the_ladder() {
+        use plx_plex::plex::session::AudioMode;
+        let _serial = plx_base::testlock::serial();
+        struct Restore(AudioMode, AudioModeDecode);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                restore_audio_mode(self.0);
+                restore_audio_mode_decode(self.1);
+            }
+        }
+        let _restore = Restore(audio_mode(), audio_mode_decode_choice());
+        restore_audio_mode_decode(AudioModeDecode::On);
+        let mut ps = PlaybackSession::IDLE;
+        ps.step_readout(crate::player::readout::ReadoutEvent::FactsIngested(plx_playback_contract::feed::FeedRaw {
+            sound_output: SoundOutput::Local, ..plx_playback_contract::feed::FeedRaw::IDLE
+        }));
+        for codec in ["dca", "opus", "ac3"] {
+            set_stream_codecs(&mut ps, "h264", codec);
+            restore_audio_mode(AudioMode::Off);
+            assert!(!load_pcm_is_lossy(&ps) && !stream_audio(&ps).unwrap().app_decoded_lossy, "{codec}, mode Off: the set's");
+            restore_audio_mode(AudioMode::Night);
+            assert!(!stream_pcm_is_lossy(&ps), "{codec}: no lossy row in force");
+            assert!(load_pcm_is_lossy(&ps), "{codec}, Night: the Load declares the lossy PCM");
+            assert!(stream_audio(&ps).unwrap().app_decoded_lossy, "{codec}: the ladder reads the same answer");
+        }
     }
 }
 
@@ -9337,11 +9424,29 @@ pub fn audio_converted_by_server(ps: &PlaybackSession, codec: &str, channels: i6
 /// **Does the app decode this track itself, to stereo?** The track menu's "played in stereo" mark: a
 /// lossy track the attempt's capability value decodes in the app
 /// ([`Caps::app_decodes_lossy_track`](plx_platform::devcaps::Caps::app_decodes_lossy_track)) is fed as a
-/// stereo mix whatever its layout. A surround track gets that mark only from the recovery's last rung (or
-/// the `appdecodelossy` debug trigger): Force Direct Play never mixes one down. Reads the ATTEMPT, as
-/// [`audio_converted_by_server`] does.
+/// stereo mix whatever its layout. A surround track gets that mark from the recovery's last rung (or
+/// the `appdecodelossy` debug trigger), where Force Direct Play never mixes one down, and from the
+/// viewer's audio mode, which does under Force too (`devcaps::AUDIO_MODE_OVERRIDES_NO_DOWNMIX`): with a
+/// mode on, a track the app would decode for it ([`ModeDecodeFacts::wanted`] with this track's codec and
+/// channels) plays as that stereo mix. Reads the ATTEMPT, as [`audio_converted_by_server`] does, and the
+/// live mode.
 pub fn audio_decoded_in_app(ps: &PlaybackSession, codec: &str, channels: i64, sample_rate: i64) -> bool {
     ps.attempt_caps().app_decodes_lossy_track(codec, channels, sample_rate, forced_direct_play(ps))
+        || mode_decodes_track(ps, codec, channels)
+}
+
+/// Whether, with the viewer's audio mode, the app decodes a track of `codec` with `channels` channels
+/// for the mode on this session's engine and output ([`ModeDecodeFacts::wanted`], the track's own
+/// codec and width in place of the fed one's; a track the app decodes anyway is the caps' answer, not
+/// this one). MAIN THREAD.
+fn mode_decodes_track(ps: &PlaybackSession, codec: &str, channels: i64) -> bool {
+    ModeDecodeFacts {
+        codec: plx_platform::devcaps::mode_decodes_codec(codec),
+        app_pcm: false,
+        mixes_down: plx_platform::devcaps::app_decode_mixes_down(channels),
+        ..mode_decode_facts(ps)
+    }
+    .wanted(audio_mode())
 }
 
 /// Select a rung. MAIN THREAD (it writes the session).

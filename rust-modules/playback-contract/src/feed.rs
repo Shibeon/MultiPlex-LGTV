@@ -28,7 +28,7 @@
 //! | `native_audio_refused`, `decoder_revoked` | one-shot takes | **raw counters** ([`FeedRaw::native_audio_refusals`], [`FeedRaw::decoder_revocations`]): the feed counts each edge, the player's readout holds how many it has taken |
 //! | `file_size`, `applied_rate_permille`, `speed_audio_verdict`, `dg_vpres_ct`, `dg_vpres_gap_sum`, `dg_vpres_gap_ct`, `pts_shift` | no `AttemptFacts` field | **raw**, in [`FeedRaw`]; the three presentation counters are diagnostics only (the heartbeat's liveness line differences two samples: the tick count, and the mean gap as sum over gap count) |
 //! | `app_pcm_audio` (the demuxer's `DemuxEffect::AppPcmAudio`) | no `AttemptFacts` field | **raw**, in [`FeedRaw`]: `false` is both "not said yet" and "the television decodes the sound", and either hides the More menu's audio-mode entry (`player::audio_mode_offered`) |
-//! | `sound_output`, `mode_decode`, `mode_decode_behind` (the Load thread's read of the sound output, its decision to decode for an audio mode, the audio lane's verdict on that decode) | no `AttemptFacts` field | **raw**, in [`FeedRaw`]: the route's audio-mode decode rule (`route::audio_mode_decode`) and the pump's safety net read them; `sound_output` is a fact about the set and survives the session's reset |
+//! | `sound_output`, `mode_decode`, `mode_decode_behind` (the Load thread's read of the sound output, its decision to decode for an audio mode, the audio lane's verdict on that decode) | no `AttemptFacts` field | **raw**, in [`FeedRaw`]: the pump's safety net reads `mode_decode`/`mode_decode_behind`; `sound_output` is a fact about the set the feed keeps across the session's reset, but the raw copy is reset with it, so the route's audio-mode decode rule (`route::audio_mode_decode`) reads the readout's sticky copy (`PlayerReadout::sound_output`) |
 //! | `stage`, `load_thread_finished`, `route_actions_ready` (the Engine's own fields, not mailboxes) | none | **raw**, in [`LoadRaw`] (`FeedRaw::load`), which `FeedBackend::sample` fills beside the mailbox half: a `None` stage, a finished Load thread and "not ready" each mean something the idle default would lose, and the session's reset returns them to [`LoadRaw::IDLE`] |
 //! | `native_load_abandoned` | the Load a teardown parked | **terminal fact**: `AttemptFacts::load_abandoned`, recorded by the teardown's own ingestion, because the live phase outlives the session reset and the readout does not |
 //!
@@ -174,9 +174,11 @@ pub struct OpenStream {
     /// The lossy PCM declared in `feed_payload` is a decode for the viewer's audio mode
     /// (`route::audio_mode_decode`), of a track the television would decode itself.
     pub mode_decode: bool,
-    /// The Load thread reads the television's sound output for this open (`FeedRaw::sound_output`):
-    /// the track is one the app could decode for a mode, and the verdict is not known yet or a mode is
-    /// on. Read after the Load returns (or with the PCM lead's own read), so the start does not wait.
+    /// This open probes the television's sound output (`FeedRaw::sound_output`): the track is one the
+    /// app could decode for a mode, and the verdict is not known yet or a mode is on
+    /// (`route::ModeDecodeFacts::probes`). Answered by the PCM lead's own read before the Load, else by a
+    /// detached worker the Load thread starts once the Load returned, so neither the start nor a
+    /// teardown waits for it.
     pub probe_sound_output: bool,
     pub audio_channels: i64,
     pub feed_payload: PayloadFacts,
@@ -544,9 +546,12 @@ pub struct FeedRaw {
     /// a session that feeds the compressed audio to the television's decoder, and after the
     /// session's reset. The player's More menu shows its audio-mode entry only while this is true.
     pub app_pcm_audio: bool,
-    /// What the last read of the television's sound output said about decoding for an audio mode
-    /// ([`SoundOutput`]). The Load thread reads it only for a Load that decodes for a mode, and the
-    /// value outlives the session's reset: it is the set's, not the session's.
+    /// What the last probe of the television's sound output said about decoding for an audio mode
+    /// ([`SoundOutput`]), `Unknown` until one ran, for an open that asks
+    /// (`OpenStream::probe_sound_output`). The FEED keeps its verdict across the session's reset (it is
+    /// the set's, not the session's), but this copy is the raw: the player's readout resets it to
+    /// [`FeedRaw::IDLE`] with every `SessionReset`, so the route reads the readout's own sticky copy
+    /// (`PlayerReadout::sound_output`), which only a probe's answer changes.
     pub sound_output: SoundOutput,
     /// This session's Load declared PCM so that the viewer's audio mode reaches a track the television
     /// would otherwise decode (`OpenStream::mode_decode`, and the output allowed it). `false` before the
@@ -554,7 +559,7 @@ pub struct FeedRaw {
     pub mode_decode: bool,
     /// The audio lane of a [`FeedRaw::mode_decode`] session ran short while the video lane was not:
     /// the app's decode is not keeping up. Latched for the session; the pump's safety net then puts
-    /// the television's decoder back (`player::audio_mode_decode_behind`).
+    /// the television's decoder back (`player::sync_audio_mode_decode`).
     pub mode_decode_behind: bool,
 }
 
@@ -570,18 +575,21 @@ pub enum SoundOutput {
     /// Any other output (HDMI ARC, optical, ...), where a receiver may take the bitstream, or a read
     /// that gave no answer: the app never decodes for a mode there.
     NotLocal,
+    /// The set's audio stack plans no lead for the app's PCM (`devcaps::AudioStack::plans_pcm_lead`):
+    /// whatever the output, the app never decodes for a mode there, and the output is not read.
+    NoLead,
 }
 
 impl SoundOutput {
     pub const fn code(self) -> u8 {
-        match self { Self::Unknown => 0, Self::Local => 1, Self::NotLocal => 2 }
+        match self { Self::Unknown => 0, Self::Local => 1, Self::NotLocal => 2, Self::NoLead => 3 }
     }
     /// The verdict on a read that answered `output` (`None`: no answer).
     pub fn of_read(output: Option<&str>, local: impl Fn(&str) -> bool) -> Self {
         if output.is_some_and(local) { Self::Local } else { Self::NotLocal }
     }
     pub const fn from_code(code: u8) -> Self {
-        match code { 1 => Self::Local, 2 => Self::NotLocal, _ => Self::Unknown }
+        match code { 1 => Self::Local, 2 => Self::NotLocal, 3 => Self::NoLead, _ => Self::Unknown }
     }
 }
 

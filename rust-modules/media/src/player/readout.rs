@@ -53,6 +53,11 @@ pub struct PlayerReadout {
     /// television decodes them again until the app restarts (`player::sync_audio_mode_decode`).
     /// Grows by one per title the safety net fired on, which is the whole of its growth.
     mode_decode_refused: Vec<(plx_plex::plex::ServerId, String)>,
+    /// The last answer of a sound-output probe (`FeedRaw::sound_output`), `Unknown` until one came.
+    /// Unlike the raw it survives [`ReadoutEvent::SessionReset`]: the output is the set's, and a reload
+    /// resets the raw before the next Load is captured, so a copy that went with it would make every
+    /// reload's capture see `Unknown` again (the route's decode rule reads this one).
+    sound_output: plx_playback_contract::feed::SoundOutput,
     /// The viewer's playback speed in thousandths (1000 = 1x).
     play_rate_permille: i32,
     /// The feed's raw observations from the last ingestion.
@@ -297,6 +302,7 @@ impl PlayerReadout {
         speed_unsupported: false,
         rate_reload: false,
         mode_decode_refused: Vec::new(),
+        sound_output: plx_playback_contract::feed::SoundOutput::Unknown,
         play_rate_permille: RATE_NORMAL,
         raw: FeedRaw::IDLE,
         seek_epoch: 0,
@@ -334,6 +340,10 @@ impl PlayerReadout {
     pub fn rate_reload(&self) -> bool { self.rate_reload }
     pub fn play_rate_permille(&self) -> i32 { self.play_rate_permille }
     pub fn raw(&self) -> &FeedRaw { &self.raw }
+
+    /// The sound-output verdict the last probe gave, kept across resets ([`PlayerReadout::sound_output`]
+    /// field doc).
+    pub fn sound_output(&self) -> plx_playback_contract::feed::SoundOutput { self.sound_output }
     /// The side reader gave up and nobody has taken that yet.
     pub fn side_reader_failed(&self) -> bool {
         edge_pending(self.raw.side_failures, self.taken_side_failures)
@@ -508,6 +518,9 @@ impl PlayerReadout {
                     // The callback gate counts only the replacement Load here. A seeded
                     // target without a report from the new Load leaves frames at zero.
                     self.reload_seek_ns = None;
+                }
+                if raw.sound_output != plx_playback_contract::feed::SoundOutput::Unknown {
+                    self.sound_output = raw.sound_output;
                 }
                 self.raw = raw;
             }
@@ -718,6 +731,22 @@ mod tests {
     /// The safety net's memory: per title (server and ratingKey), for the life of the process (a new
     /// item and a session's reset keep it), once per title, and it arms the reload that lands on the
     /// television's decoder.
+    /// A sound-output probe's answer outlives the session's reset (the raw does not), and only another
+    /// answer replaces it: an `Unknown` raw (a reset, a Load that did not probe) leaves it.
+    #[test]
+    fn the_sound_output_verdict_survives_the_reset_a_reload_makes() {
+        use plx_playback_contract::feed::SoundOutput;
+        let probed = |o| ReadoutEvent::FactsIngested(FeedRaw { sound_output: o, ..FeedRaw::IDLE });
+        let mut r = stepped(&[probed(SoundOutput::NotLocal), ReadoutEvent::SessionReset]);
+        assert_eq!(r.raw().sound_output, SoundOutput::Unknown, "the raw went with the reset");
+        assert_eq!(r.sound_output(), SoundOutput::NotLocal, "the verdict did not");
+        r.step(probed(SoundOutput::Unknown));
+        assert_eq!(r.sound_output(), SoundOutput::NotLocal, "a raw with no probe changes nothing");
+        r.step(probed(SoundOutput::Local));
+        assert_eq!(r.sound_output(), SoundOutput::Local, "a new answer does");
+        assert_eq!(stepped(&[]).sound_output(), SoundOutput::Unknown, "nothing probed yet");
+    }
+
     #[test]
     fn a_refused_audio_decode_is_remembered_per_title_and_arms_one_reload() {
         let (a, b) = (plx_plex::plex::ServerId::from_raw(0), plx_plex::plex::ServerId::from_raw(1));

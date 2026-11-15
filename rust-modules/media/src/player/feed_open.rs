@@ -142,7 +142,7 @@ impl FeedOpenRequest {
                 path: source.path,
                 video_codec: route::stream_vcodec(ps),
                 audio_codec,
-                pcm_is_lossy: route::stream_pcm_is_lossy(ps) || mode_decode,
+                pcm_is_lossy: route::load_pcm_is_lossy(ps),
                 mode_decode,
                 probe_sound_output: probe_sound_output(ps),
                 audio_channels,
@@ -182,16 +182,10 @@ impl FeedOpenRequest {
     }
 }
 
-/// **Whether this Load's thread reads the sound output** (`OpenStream::probe_sound_output`): the track
-/// is one the app could decode for an audio mode on this Load, the output aside, and either nothing
-/// has been read yet or a mode is on (an output that changed since is then seen at this Load). Not
-/// for a title the safety net took the decode from, nor with the profile's decode off. MAIN THREAD.
+/// **Whether this Load probes the sound output** (`OpenStream::probe_sound_output`): the
+/// rule's own answer for the Feed Load being captured (`route::ModeDecodeFacts::probes`). MAIN THREAD.
 fn probe_sound_output(ps: &route::PlaybackSession) -> bool {
-    use plx_playback_contract::feed::SoundOutput;
-    let facts = route::ModeDecodeFacts { feed: true, output: SoundOutput::Unknown, ..route::mode_decode_facts(ps) };
-    facts.available()
-        && (route::mode_decode_facts(ps).output == SoundOutput::Unknown
-            || route::audio_mode() != plx_plex::plex::session::AudioMode::Off)
+    route::ModeDecodeFacts { feed: true, ..route::mode_decode_facts(ps) }.probes(route::audio_mode())
 }
 
 /// Whether the `dvnonode` diagnostic holds back the `DolbyHdrInfo` node of a Load that declares one

@@ -213,7 +213,7 @@ pub fn app_decoded_by_ffmpeg_name(name: &str) -> Option<&'static AppDecoded> {
 /// in force): they are decoded only while the viewer asks for a mode, to the lossy rows' one shape
 /// (stereo 48 kHz S16, `ff_pcm::STEREO_48K`). DTS is the mode set too, through its [`APP_DECODED`] row
 /// ([`mode_decodes_codec`]). Unmeasured on the set (`measured: None`): the pump's safety net falls back
-/// to the television's decoder when the decode does not keep up (`player::audio_mode_decode_behind`).
+/// to the television's decoder when the decode does not keep up (`player::sync_audio_mode_decode`).
 /// E-AC-3's Atmos (JOC) objects are not rendered by FFmpeg's `eac3`: its bed is decoded and mixed
 /// down, so a mode on an Atmos track plays it as stereo without Atmos (the Settings hint says so).
 pub const MODE_DECODED: &[AppDecoded] = &[
@@ -231,8 +231,10 @@ pub fn mode_decodes_codec(codec: &str) -> bool {
 }
 
 /// **The sound outputs a decode for an audio mode may play through**, by the name the settings
-/// service gives them (`tv::sound`): the television's own speakers and Bluetooth, the two outputs the
-/// app's PCM was filmed on (`plx_play_feed::pcm_lead::PCM_LEAD_BY_OUTPUT`), and where nothing is
+/// service gives them (`tv::sound`): the television's own speakers and Bluetooth, the two outputs
+/// whose PCM lead was filmed, on the `liblxa` stack only (`plx_play_feed::pcm_lead::PCM_LEAD_BY_OUTPUT`;
+/// the other stacks with a planned lead reuse those figures unmeasured, and a stack with no planned
+/// lead never decodes for a mode at all, [`AudioStack::plans_pcm_lead`]), and where nothing is
 /// passed through: the set renders PCM there whatever it is fed. Every other output (HDMI ARC/eARC,
 /// optical, a wired line out, LG Sound Sync) can carry the compressed bitstream to a receiver, and
 /// which of them does (the set's digital output setting) is not read here: the app never decodes for
@@ -352,9 +354,25 @@ pub fn audio_track_fits(codec: &str, channels: i64, sample_rate: i64) -> bool {
 /// planner ([`Caps::app_decodes_lossy_track`]), the failed-open ladder (`player::recovery`'s order of
 /// the app decode and the manual encode, and Force Direct Play's rung) and the track menu's "played in
 /// stereo" mark all ask this, so none of them can disagree about which tracks are mixed.
+///
+/// **One recorded exception: the viewer's audio mode** ([`AUDIO_MODE_OVERRIDES_NO_DOWNMIX`]). With
+/// Night or Voice on, the app decodes a surround track the set would decode itself, Force Direct Play
+/// or not, and mixes it down (`plx_media::route::audio_mode_decode`): the mode only ever decodes
+/// towards the set's own speakers or Bluetooth ([`MODE_DECODE_OUTPUTS`]), which play stereo anyway, so
+/// the mix loses no layout the viewer would have heard. Provisional owner decision, 2026-11-15.
 pub fn app_decode_mixes_down(channels: i64) -> bool {
     !(1..=i64::from(PCM_MAX_CHANNELS)).contains(&channels)
 }
+
+/// **Whether an audio mode overrides the never-downmix rule** ([`app_decode_mixes_down`], #1082):
+/// `true` lets the mode's decode (`plx_media::route::ModeDecodeFacts`) mix a surround track down,
+/// under Auto and Force Direct Play alike. The rule exists so that a viewer with surround speakers
+/// keeps the layout; the mode decodes only towards outputs that are stereo already (the set's speakers,
+/// Bluetooth A2DP: [`MODE_DECODE_OUTPUTS`]), so nothing audible is lost there. Provisional owner
+/// decision (2026-11-15), which the owner may revisit: setting this `false` makes the mode decode only
+/// tracks of at most two channels, and the mode is then not offered on a surround track the set
+/// decodes. The ONE switch of that exception: nothing else gates on it.
+pub const AUDIO_MODE_OVERRIDES_NO_DOWNMIX: bool = true;
 
 const CAPS_TABLE: &str = "/etc/umediaserver/device_codec_capability_config.json";
 
@@ -853,7 +871,9 @@ impl Caps {
     /// Force Direct Play of a source [`app_decode_mixes_down`] says is mixed down. Force Direct Play
     /// never mixes a surround source down (owner, 2026-10-28, #1082): it plays what the set decodes or
     /// shows the refusal. Auto's last rung may, and so may the explicit `appdecodelossy` debug trigger
-    /// ([`AppLossy::All`]), which exists to measure a decode on any file.
+    /// ([`AppLossy::All`]), which exists to measure a decode on any file. The viewer's audio mode is the
+    /// one exception, outside this gate: its decode is its own rule, and it mixes down under Force Direct
+    /// Play too, by [`AUDIO_MODE_OVERRIDES_NO_DOWNMIX`] (the outputs it decodes for are stereo already).
     pub fn app_may_mix_down(&self, channels: i64, forced: bool) -> bool {
         !(forced && app_decode_mixes_down(channels)) || self.app_lossy == AppLossy::All
     }
@@ -1477,6 +1497,15 @@ pub enum AudioStack {
 }
 
 impl AudioStack {
+    /// Whether the app's PCM on this stack has a planned audio lead (`plx_play_feed::pcm_lead::pcm_lead_plan`
+    /// plans one from the output or a fixed figure): `liblxa`, `lgaudiosink` and 2018's
+    /// `audiosink_new`. On the others (2016/2017's `adecsink`, Realtek, MStar, a stack not known) the
+    /// PCM plays with no lead, so its lip sync is unknown, and the app never decodes a track the set
+    /// would decode itself just for an audio mode there. PURE.
+    pub fn plans_pcm_lead(self) -> bool {
+        matches!(self, Self::Liblxa | Self::LgAudioSink | Self::AudioSinkNew)
+    }
+
     /// The word the event log uses for it.
     pub fn label(self) -> &'static str {
         match self {
