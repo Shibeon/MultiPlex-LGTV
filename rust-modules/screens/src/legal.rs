@@ -53,8 +53,15 @@ impl Page {
             Self::Contact => plx_platform::i18n::msg::settings_legal_contact_title(),
         }
     }
+    /// The page's sub-line in a build with a reporting destination.
+    #[cfg(test)]
     fn subtitle(self) -> &'static str {
+        self.subtitle_for(false)
+    }
+    /// The page's sub-line in this build: `telemetry_absent` is `ScreenInputs::telemetry_absent`.
+    fn subtitle_for(self, telemetry_absent: bool) -> &'static str {
         match self {
+            Self::Privacy if telemetry_absent => plx_platform::i18n::msg::settings_legal_privacy_subtitle_local(),
             Self::Privacy => plx_platform::i18n::msg::settings_legal_privacy_subtitle(),
             Self::OpenSource => plx_platform::i18n::msg::settings_legal_opensource_subtitle(),
             Self::Ffmpeg => plx_platform::i18n::msg::settings_legal_ffmpeg_subtitle(),
@@ -63,9 +70,15 @@ impl Page {
             Self::Contact => plx_platform::i18n::msg::settings_legal_contact_subtitle(),
         }
     }
+    /// The page's text in a build with a reporting destination.
+    #[cfg(test)]
     pub fn body(self) -> &'static str {
+        self.body_for(false)
+    }
+    /// The page's text in this build: `telemetry_absent` is `ScreenInputs::telemetry_absent`.
+    pub fn body_for(self, telemetry_absent: bool) -> &'static str {
         match self {
-            Self::Privacy => &PRIVACY,
+            Self::Privacy => privacy_policy(telemetry_absent),
             Self::OpenSource => &OPEN_SOURCE,
             Self::Ffmpeg => &FFMPEG,
             Self::Source => &SOURCE,
@@ -76,9 +89,13 @@ impl Page {
 }
 
 /// The full privacy policy — the one narrative the consent screen's Privacy policy row also
-/// opens, so the two doors cannot disagree.
-pub fn privacy_policy() -> &'static str {
-    &PRIVACY
+/// opens, so the two doors cannot disagree. **Which policy is the build's fact**
+/// (`ScreenInputs::telemetry_absent`): a build with no reporting destination compiled in — every
+/// MultiPlex release — gets [`PRIVACY_LOCAL`], which describes no optional report, no identifier
+/// and no reporting choice, and lists every connection the app makes (`PRIVACY.md`); a build with
+/// one keeps the full policy of the optional reports it can send.
+pub fn privacy_policy(telemetry_absent: bool) -> &'static str {
+    if telemetry_absent { &PRIVACY_LOCAL } else { &PRIVACY }
 }
 
 static PRIVACY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| [
@@ -108,6 +125,36 @@ static PRIVACY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| [
     plx_platform::i18n::msg::settings_legal_privacy_uninstall(),
     plx_platform::i18n::msg::settings_legal_privacy_uninstall_body()
 ].join("\n\n"));
+/// [`privacy_policy`] for a build with no reporting destination: the same sections where they are
+/// true of it (Plex services and Continue Watching artwork, servers, the unencrypted-connection
+/// answer), its own text where the reporting build's names reports, identifiers or choices, and
+/// the connections `PRIVACY.md` lists.
+static PRIVACY_LOCAL: std::sync::LazyLock<String> = std::sync::LazyLock::new(privacy_local_text);
+fn privacy_local_text() -> String {
+    [
+    plx_platform::i18n::msg::settings_legal_privacy_responsible(),
+    plx_platform::i18n::msg::settings_legal_privacy_responsible_body_local(),
+    plx_platform::i18n::msg::settings_legal_privacy_no_reports(),
+    plx_platform::i18n::msg::settings_legal_privacy_no_reports_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_plex(),
+    plx_platform::i18n::msg::settings_legal_privacy_plex_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_plex_hosts_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_plex_link(),
+    plx_platform::i18n::msg::settings_legal_privacy_servers(),
+    plx_platform::i18n::msg::settings_legal_privacy_servers_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_other(),
+    plx_platform::i18n::msg::settings_legal_privacy_other_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_local(),
+    plx_platform::i18n::msg::settings_legal_privacy_local_body_local(),
+    plx_platform::i18n::msg::settings_legal_privacy_plaintext_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_retention(),
+    plx_platform::i18n::msg::settings_legal_privacy_retention_body_local(),
+    plx_platform::i18n::msg::settings_legal_privacy_processing(),
+    plx_platform::i18n::msg::settings_legal_privacy_processing_body_local(),
+    plx_platform::i18n::msg::settings_legal_privacy_uninstall(),
+    plx_platform::i18n::msg::settings_legal_privacy_uninstall_body_local()
+    ].join("\n\n")
+}
 static OPEN_SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| format!("{}\n\n{}", plx_platform::i18n::msg::settings_legal_opensource_body(), include_str!("../../../LICENSE")));
 static FFMPEG: std::sync::LazyLock<&'static str> = std::sync::LazyLock::new(plx_platform::i18n::msg::settings_legal_ffmpeg_body);
 static SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| plx_platform::i18n::msg::settings_legal_source_body(build_sha()));
@@ -180,8 +227,12 @@ impl Page {
 
 /// **The sentence the Legal index states for the focused row**: the document's old sub-line, else
 /// the page's own. A pure function of the focused row.
+#[cfg(test)]
 fn index_sentence(id: Option<Page>) -> &'static str {
-    id.map_or_else(plx_platform::i18n::msg::settings_legal_copy, Page::subtitle)
+    index_sentence_for(id, false)
+}
+fn index_sentence_for(id: Option<Page>, telemetry_absent: bool) -> &'static str {
+    id.map_or_else(plx_platform::i18n::msg::settings_legal_copy, |p| p.subtitle_for(telemetry_absent))
 }
 
 /// The Legal index as a [`Form`]: every document is a `Nav` row pushing its `Document` page.
@@ -203,6 +254,8 @@ pub struct LegalIndex {
     form: FormTable<Page, (), SettingsPage>,
     /// The sentence beside the table ([`index_sentence`]); this only fades between its answers.
     follow: FollowCopy,
+    /// The build fact the Privacy row's sentence follows (`ScreenInputs::telemetry_absent`).
+    telemetry_absent: bool,
     state: IndexState,
 }
 
@@ -221,7 +274,13 @@ impl LogicalState for IndexState {
 }
 
 impl LegalIndex {
+    #[cfg(test)]
     pub fn new(entry: EntryId) -> Self {
+        Self::for_build(entry, false)
+    }
+
+    /// The index for this build: `telemetry_absent` is `ScreenInputs::telemetry_absent`.
+    pub fn for_build(entry: EntryId, telemetry_absent: bool) -> Self {
         let mut form = FormTable::new(super::registry::BAND);
         form.table.compact = false;
         form.table.board_metrics(true);
@@ -230,11 +289,12 @@ impl LegalIndex {
         form.table.list_focused = true;
         let sel = form.key_at(form.table.sel.max(0) as usize).unwrap_or(RowKey(0));
         // the page opens on its first row's sentence at once, nothing fading
-        let follow = FollowCopy::new(index_sentence(form.selected_id().copied()));
+        let follow = FollowCopy::new(index_sentence_for(form.selected_id().copied(), telemetry_absent));
         Self {
             entry,
             form,
             follow,
+            telemetry_absent,
             state: IndexState { sel },
         }
     }
@@ -270,7 +330,7 @@ impl Machine<InnerHost> for LegalIndex {
                 if let Some(key) = self.form.key_at(self.form.table.sel.max(0) as usize) {
                     self.state.sel = key;
                 }
-                self.follow.follow(index_sentence(self.form.selected_id().copied()));
+                self.follow.follow(index_sentence_for(self.form.selected_id().copied(), self.telemetry_absent));
                 Handled::Yes
             }
             ScreenEvent::Activate(key) => {
@@ -381,15 +441,21 @@ impl LogicalState for DocState {
 }
 
 impl DocumentPage {
+    #[cfg(test)]
     pub fn legal(entry: EntryId, i: u8) -> Self {
+        Self::legal_for_build(entry, i, false)
+    }
+
+    /// A Legal page for this build: `telemetry_absent` is `ScreenInputs::telemetry_absent`.
+    pub fn legal_for_build(entry: EntryId, i: u8, telemetry_absent: bool) -> Self {
         let page = Page::ALL[(i as usize).min(Page::ALL.len() - 1)];
         Self {
             entry,
             reader: DocumentReader::new(),
             crumb: plx_platform::i18n::msg::settings_legal_title(),
             title: page.title(),
-            subtitle: page.subtitle(),
-            body: Cow::Borrowed(page.body()),
+            subtitle: page.subtitle_for(telemetry_absent),
+            body: Cow::Borrowed(page.body_for(telemetry_absent)),
             qr: None,
             guide_caption: None,
             layout: RouteLayout::settings_page(),
@@ -666,6 +732,51 @@ mod tests {
         // token and, for a PIN-protected profile, a one-way check of the PIN — never the PIN.
         assert!(p.contains("server access token"), "the policy never mentions per-profile offline access");
         assert!(p.contains("PIN"), "the policy never mentions the PIN check");
+    }
+
+    /// **The policy of a build with no reporting destination names no report it cannot send, and
+    /// every connection the app makes** (`PRIVACY.md`, "What MultiPlex connects to"). Every
+    /// MultiPlex release is such a build (`telemetry: none` in `release.yml`), so this is the
+    /// policy people read; checked in every shipped language, since a translation is where a
+    /// leftover Sentry or PostHog sentence would survive.
+    #[test]
+    fn the_policy_of_a_build_without_reporting_names_no_report_and_every_connection() {
+        let p = Page::Privacy.body_for(true);
+        assert_eq!(p, privacy_policy(true));
+        for gone in ["Sentry", "PostHog", "Crash report ID", "Analytics ID", "Send report", "OPTIONAL", "optional report"] {
+            assert!(!p.contains(gone), "the no-reporting policy still says {gone:?}");
+        }
+        for claim in [
+            "NO CRASH REPORTS AND NO ANALYTICS",
+            "plex.tv:",
+            "clients.plex.tv",
+            "discover.provider.plex.tv",
+            "metadata.provider.plex.tv",
+            "what you typed",
+            "Continue Watching",
+            "github.com",
+            "no update check",
+            "client identifier",
+            "recent searches",
+            "server access token",
+            "PIN",
+            "RETENTION",
+            "UNINSTALLING",
+        ] {
+            assert!(p.contains(claim), "the no-reporting policy never mentions {claim:?}");
+        }
+        assert!(!Page::Privacy.subtitle_for(true).contains("report"));
+        assert_ne!(privacy_policy(true), privacy_policy(false));
+        for language in plx_platform::i18n::SHIPPED {
+            let _guard = plx_platform::i18n::language_on_this_thread_for_test(language);
+            let text = privacy_local_text();
+            for gone in ["Sentry", "PostHog"] {
+                assert!(!text.contains(gone), "{}: the no-reporting policy names {gone}", language.tag());
+            }
+            for host in ["clients.plex.tv", "discover.provider.plex.tv", "metadata.provider.plex.tv", "github.com"] {
+                assert!(text.contains(host), "{}: the no-reporting policy omits {host}", language.tag());
+            }
+        }
     }
 
     #[test]

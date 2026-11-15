@@ -1692,9 +1692,8 @@ fn sweep_local_files(persistent: impl IntoIterator<Item = std::path::PathBuf>,
         }
     }
     failures.extend(erase_runtime_logs(runtime_root));
-    // Logs and recordings a pre-rename build wrote under `plxnative-*`: boot removes them too, but
-    // a sweep must not rely on the boot having run since an older build last wrote one.
-    failures.extend(plx_base::paths::remove_legacy_runtime_files(runtime_root));
+    // No `plxnative-*` name is swept: those are PlxNative's (`com.beb.plxnative`), which writes
+    // them in the same `/tmp` (`docs/two-installs.md` §6.8).
     failures
 }
 
@@ -1791,22 +1790,29 @@ mod delete_all_tests {
         assert!(persistent.iter().chain([&log, &rec]).all(|p| p.exists()));
     }
 
+    /// **Delete all local data never deletes a `plxnative-*` file.** Those names are PlxNative's
+    /// (`com.beb.plxnative`), which writes them in the same `/tmp` the stable install's runtime root
+    /// is; a sweep of MultiPlex's data removes MultiPlex's own `multiplex-*` names only.
     #[test]
-    fn delete_all_local_data_sweeps_the_pre_rename_logs_and_recordings() {
-        let root = std::env::temp_dir().join(format!(".plx-delete-legacy-runtime-{}", std::process::id()));
+    fn delete_all_local_data_leaves_plxnative_files_alone() {
+        let root = std::env::temp_dir().join(format!(".plx-delete-coexist-runtime-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir(&root).unwrap();
-        for name in plx_base::paths::legacy_runtime_file::LOGS {
+        let names = ["plxnative-events.log", "plxnative-crash.log", "plxnative-stderr.log", "plxnative-rec"];
+        for name in names {
             std::fs::write(root.join(name), name.as_bytes()).unwrap();
         }
-        let recordings = root.join(plx_base::paths::legacy_runtime_file::RECORDINGS);
+        let recordings = root.join("plxnative-recordings");
         std::fs::create_dir(&recordings).unwrap();
         std::fs::write(recordings.join("segment-0"), b"frames").unwrap();
+        let ours = root.join(plx_base::paths::runtime_file::EVENTS);
+        std::fs::write(&ours, b"ours").unwrap();
 
         let leftovers = sweep_local_files(Vec::new(), &root);
         assert!(leftovers.is_empty(), "{leftovers:?}");
-        assert!(plx_base::paths::legacy_runtime_file::LOGS.iter().all(|name| !root.join(name).exists()));
-        assert!(!recordings.exists());
+        assert!(names.iter().all(|name| root.join(name).exists()), "a plxnative-* file was removed");
+        assert!(recordings.join("segment-0").exists());
+        assert!(!ours.exists(), "MultiPlex's own log is still swept");
         let _ = std::fs::remove_dir_all(root);
     }
 

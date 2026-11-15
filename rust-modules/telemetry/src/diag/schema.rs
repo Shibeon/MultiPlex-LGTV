@@ -1142,7 +1142,7 @@ mod tests {
 
     /// The privacy document lists every event this build can emit.
     ///
-    /// `PRIVACY.md` promises, as a binding term, that the literal structure sent is documented
+    /// `docs/optional-reporting.md` promises that the literal structure sent is documented
     /// there *before* it ships. This is that promise as a test: add a variant, and the document
     /// has to gain a row in the same change or `make check` fails. It reads the file from the
     /// repository root rather than embedding a copy, so the two cannot drift.
@@ -1152,19 +1152,19 @@ mod tests {
             .parent()
             .and_then(std::path::Path::parent)
             .expect("rust-modules/telemetry has a repository root above it")
-            .join("PRIVACY.md");
-        let doc = std::fs::read_to_string(&root).expect("PRIVACY.md is readable");
+            .join("docs/optional-reporting.md");
+        let doc = std::fs::read_to_string(&root).expect("docs/optional-reporting.md is readable");
         let want = privacy_table();
         assert!(
             doc.contains(&want),
-            "PRIVACY.md's schema table is not the one this build would send. The document is the \
-             OUTPUT of `diag::schema::EVENT_SPECS`, so the fix is to paste the block below over \
-             the table in PRIVACY.md — not to edit the registry to match the document.\n\n{want}"
+            "docs/optional-reporting.md's schema table is not the one this build would send. The \
+             document is the OUTPUT of `diag::schema::EVENT_SPECS`, so the fix is to paste the block \
+             below over the table there — not to edit the registry to match the document.\n\n{want}"
         );
         let context = privacy_context_table();
         assert!(
             doc.contains(&context),
-            "PRIVACY.md does not contain the generated usage context table:\n\n{context}"
+            "docs/optional-reporting.md does not contain the generated usage context table:\n\n{context}"
         );
     }
 

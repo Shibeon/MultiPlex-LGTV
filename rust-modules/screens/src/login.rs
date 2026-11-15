@@ -703,6 +703,11 @@ struct Report {
     last_resolve: Option<(u32, u32)>,
     /// The control group's focus pops, by slot (primary, Details).
     pop: CtlPop<2>,
+    /// Whether this build can send a report at all: false when no reporting destination is
+    /// compiled in (`ScreenInputs::telemetry_absent`, read at mount). Without one the screen never
+    /// asks, resolves every offer as declined and never offers *Send report*: a press would send
+    /// nothing. *Details* still shows the support line, which is read off the screen.
+    can_send: bool,
 }
 
 /// What the one [`DecisionAlert`] is showing: the report QUESTION the screen asks once per offer,
@@ -730,6 +735,7 @@ impl Report {
             alert_for: None,
             last_resolve: None,
             pop: CtlPop::new(),
+            can_send: true,
         }
     }
 
@@ -761,9 +767,9 @@ impl Report {
         out
     }
 
-    /// Whether a press on *Send report* would be accepted now.
+    /// Whether a press on *Send report* would be accepted now: never in a build that cannot send.
     fn sendable(&self) -> bool {
-        self.offer.as_ref().is_some_and(|o| o.sendable())
+        self.can_send && self.offer.as_ref().is_some_and(|o| o.sendable())
     }
 
     /// The Report ID a person can quote, once the report has one.
@@ -944,6 +950,13 @@ pub struct LoginScreen {
 }
 
 impl LoginScreen {
+    /// Whether this build can send a sign-in report (see `Report::can_send`). The registry
+    /// passes `!ScreenInputs::telemetry_absent`.
+    pub fn with_reporting(mut self, can_send: bool) -> Self {
+        self.report.can_send = can_send;
+        self
+    }
+
     pub fn new(entry: EntryId, auth: auth::SessionRead<'_>) -> Self {
         let mut s = Self {
             entry,
@@ -1177,9 +1190,15 @@ impl LoginScreen {
                 && self.report.last_resolve != Some((o.id, revision))
             {
                 self.report.last_resolve = Some((o.id, revision));
-                let permission = plx_telemetry::telemetry::consent::report_permission_now(
-                    plx_telemetry::telemetry::consent::ONBOARDING_REPORT_SCOPE,
-                );
+                // A build with nowhere to send a report declines it: Session then keeps nothing
+                // and asks nothing.
+                let permission = if self.report.can_send {
+                    plx_telemetry::telemetry::consent::report_permission_now(
+                        plx_telemetry::telemetry::consent::ONBOARDING_REPORT_SCOPE,
+                    )
+                } else {
+                    plx_telemetry::telemetry::consent::Permission::Declined
+                };
                 fx.push(Fx::App(AppFx::Session(auth::SessionCmd::ResolveIncident {
                     id: o.id,
                     permission,
@@ -1189,6 +1208,7 @@ impl LoginScreen {
             // An eligible plaintext-only server is a CHOICE, not a failure: the read-out asks
             // it through *Connect*, and the report stays one press away behind *Details*.
             if matches!(o.state, S::Offered { .. })
+                && self.report.can_send
                 && !self.plaintext_eligible()
                 && !self.report.alert.visible()
                 && self.report.alert_for != Some(o.id)
@@ -1506,7 +1526,8 @@ impl LoginScreen {
         }
         self.report.alert.dismiss();
         if self.report.sheet == Sheet::Details {
-            if let Some(o) = self.report.offer.as_ref().filter(|o| send && o.sendable()) {
+            let sendable = self.report.sendable();
+            if let Some(o) = self.report.offer.as_ref().filter(|_| send && sendable) {
                 plx_base::eventlog::log("login: user sent a sign-in report from Details");
                 fx.push(Fx::App(AppFx::Session(auth::SessionCmd::ReportIncident { id: o.id })));
             }
@@ -1520,6 +1541,7 @@ impl LoginScreen {
         }
         if let Some(o) = &self.report.offer {
             let id = o.id;
+            let send = send && self.report.can_send;
             fx.push(Fx::App(AppFx::Session(if send {
                 auth::SessionCmd::ReportIncident { id }
             } else {
@@ -3625,6 +3647,42 @@ impl AuthLike for SessionHost {
         failed.error = Arc::from("Can’t reach Plex");
         failed.incident = Some(incident(state, plx_telemetry::telemetry::incident::IncidentKind::PinCreate));
         failed
+    }
+
+    /// **A build with no reporting destination never offers to send a report** (every MultiPlex
+    /// release: `ScreenInputs::telemetry_absent`). A press on *Send report* there would send
+    /// nothing, so the question is never asked, a pending offer is resolved as declined, and
+    /// *Details* keeps only the support line and *Close*.
+    #[test]
+    fn a_build_without_a_reporting_destination_never_offers_to_send_a_report() {
+        use auth::owner::IncidentState as S;
+        use plx_ui::decision_alert::Answers;
+        let _serial = plx_base::testlock::serial();
+        let m = plx_ui::fixture::FixtureMeasure;
+        let offered = S::Offered { revision: plx_telemetry::telemetry::consent::revision() };
+        for state in [S::Pending, offered, S::NotNow, S::Dropped, S::Failed] {
+            let failed = failed_with(state.clone());
+            let mut s = LoginScreen::new(EntryId(0), failed.read()).with_reporting(false);
+            let (_, fx) = step_ev_with(&mut s, &tick_ev(16), &failed, InstanceId(0), &m);
+            assert!(!enters_group(&fx, ALERT_GROUP), "{state:?}: the report question is asked");
+            assert!(!s.report.alert.is_open(), "{state:?}: an alert opened by itself");
+            for st in &fx {
+                if let Fx::App(AppFx::Session(auth::SessionCmd::ResolveIncident { permission, .. })) = &st.fx {
+                    assert_eq!(*permission, plx_telemetry::telemetry::consent::Permission::Declined,
+                        "{state:?}: resolved as anything but declined");
+                }
+            }
+            step_ev_with(&mut s, &ScreenEvent::Activate(DETAILS), &failed, InstanceId(0), &m);
+            assert!(s.report.alert.is_open() && s.report.sheet == Sheet::Details, "{state:?}: Details still opens");
+            assert_eq!(s.report.alert.answers(), Answers::One, "{state:?}: Details offers Send report");
+            let mut buf: Vec<Stamped<SessionHost>> = Vec::new();
+            {
+                let mut present = Present::new();
+                let mut fx = Effects::new(&mut buf, MachineId::Instance(InstanceId(0)), &mut present);
+                s.alert_answer(true, &mut fx);
+            }
+            assert!(!sends(&buf), "{state:?}: a report was sent");
+        }
     }
 
     /// **Details opens the card** — the one alert, as the Details sheet, with focus sent to its

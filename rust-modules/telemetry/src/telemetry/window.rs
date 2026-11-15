@@ -380,7 +380,7 @@ mod tests {
     /// silently vanish from a crash report, and the count is pinned so the set grows on purpose.
     #[test]
     fn every_stage_round_trips_the_sanitiser() {
-        assert_eq!(Stage::ALL.len(), 20, "the closed label set changed: update PRIVACY.md too");
+        assert_eq!(Stage::ALL.len(), 20, "the closed label set changed: update docs/optional-reporting.md too");
         let mut seen = std::collections::HashSet::new();
         for stage in Stage::ALL {
             assert!(seen.insert(stage.code()), "duplicate wire label {}", stage.code());

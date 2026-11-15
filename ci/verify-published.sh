@@ -84,8 +84,11 @@ PY
   gh release view "$TAG" --json body --jq .body 2>/dev/null | grep "$SHA" >/dev/null \
     && ok "the release note quotes this hash" || bad "the note's hash is not the published artifact's"
 
-  # Who built it. A person's name here means the gates did not run.
-  UP=$(gh api "repos/GLinnik21/plx-native/releases/tags/$TAG" --jq '[.assets[].uploader.login] | unique | join(",")' 2>/dev/null)
+  # Who built it. A person's name here means the gates did not run. The repository is the one this
+  # run publishes to (GITHUB_REPOSITORY in CI), else the checkout's own GitHub repository — never a
+  # hard-coded name, which in a fork asks the upstream project about a tag it does not have.
+  REPO="${GITHUB_REPOSITORY:-$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)}"
+  UP=$(gh api "repos/$REPO/releases/tags/$TAG" --jq '[.assets[].uploader.login] | unique | join(",")' 2>/dev/null)
   [ "$UP" = "github-actions[bot]" ] && ok "assets uploaded by CI" \
     || bad "assets uploaded by '$UP' — hand-published, so the build/verify gates were skipped"
 

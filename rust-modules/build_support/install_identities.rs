@@ -18,7 +18,9 @@ pub fn emit(path: &Path) {
     let mut variants = String::new();
     let mut apps = String::new();
     let mut objects = String::new();
+    let mut legacies = String::new();
     let mut object_ids = std::collections::HashSet::new();
+    let mut legacy_ids = Vec::new();
     for identity in identities {
         let name = identity["name"].as_str().expect("flavor name");
         assert!(!name.is_empty() && name.bytes().all(|b| b.is_ascii_lowercase()));
@@ -36,9 +38,27 @@ pub fn emit(path: &Path) {
             object_ids.insert(object.to_owned()),
             "duplicate DB8 object_id {object:?} for flavor {name}"
         );
+        // The id an install's record had before it was renamed, read once per helper process to
+        // carry the record over (`storage_service::backend::Backend::adopt_legacy_record`), which
+        // then purges the old copy. The stable and nightly installs' are `plxstate.stable` and
+        // `plxstate.night`, which PlxNative (`com.beb.plxnative`) and its nightly also use, so the
+        // object found there is copied or purged only when its kind is this install's own.
+        let legacy = match identity.get("legacy_object_id") {
+            None => None,
+            Some(id) => {
+                let id = id.as_str().expect("legacy DB8 object id");
+                assert!((1..=15).contains(&id.len()), "invalid legacy DB8 object_id {id:?} for flavor {name}");
+                legacy_ids.push(id.to_owned());
+                Some(id.to_owned())
+            }
+        };
+        legacies.push_str(&format!("Self::{variant} => {legacy:?},\n"));
         variants.push_str(&format!("{variant},\n"));
         apps.push_str(&format!("{app:?} => Some(Self::{variant}),\n"));
         objects.push_str(&format!("Self::{variant} => {object:?},\n"));
+    }
+    for legacy in &legacy_ids {
+        assert!(!object_ids.contains(legacy), "legacy DB8 object_id {legacy:?} is a current one");
     }
     let generated = format!(
         "#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -49,6 +69,7 @@ pub fn emit(path: &Path) {
                  match id {{ {apps} _ => None }}
              }}
              pub fn object_id(self) -> &'static str {{ match self {{ {objects} }} }}
+             pub fn legacy_object_id(self) -> Option<&'static str> {{ match self {{ {legacies} }} }}
          }}"
     );
     std::fs::write(

@@ -677,7 +677,7 @@ class CiPathFilter(unittest.TestCase):
         ".claude/hooks/outbound-guard.py", ".claude/hooks/outbound-guard-test.py",
         ".agents/skills/wake-tv/wake-tv.sh",
         "PRIVACY.md", "LICENSE", "LICENSING.md", "TRADEMARKS.md", "THIRD-PARTY-NOTICES.md",
-        "docs/screenshots/CREDITS.md", "site/hud/schema/hud/1.0.json", "site/hud/examples/classic/hud.json",
+        "docs/screenshots/CREDITS.md", "docs/optional-reporting.md", "site/hud/schema/hud/1.0.json", "site/hud/examples/classic/hud.json",
         "docs/measurements/p1b-logs/pipe_abr_pin_320.log",
     )
     # Prose, images and repository metadata: no gate reads them (the evidence is in ci.yml).

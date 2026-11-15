@@ -366,10 +366,19 @@ pub fn runtime_dir() -> &'static Path {
             macos_app_support(),
             app_id(),
         );
-        ensure_runtime_dir(&d);
-        let _ = remove_legacy_runtime_files(&d);
+        prepare_runtime_root(&d);
         d
     })
+}
+
+/// Everything boot does to the runtime root before the first file in it is opened: create and
+/// share it ([`ensure_runtime_dir`]), and nothing else. It deletes no file: the stable install's
+/// root is `/tmp` itself, where PlxNative (`com.beb.plxnative`), the app this fork derives from,
+/// writes its own `plxnative-*` logs and recordings, and two dev-mode native apps may share a uid
+/// (`docs/two-installs.md` §6.8), so no check here could tell its files from ours. Silent, for
+/// [`runtime_dir`]'s reason.
+fn prepare_runtime_root(d: &Path) {
+    ensure_runtime_dir(d);
 }
 
 /// Create the runtime root if it is not `/tmp` itself, and make it world-writable + sticky.
@@ -558,70 +567,6 @@ pub mod runtime_file {
         GPU_TIME,
         HARDWARE_COUNTERS,
     ];
-}
-
-/// The runtime surfaces a build made before the plxnative -> multiplex rename wrote, under their
-/// old names. Nothing writes them any more, so nothing would ever truncate or erase them: they are
-/// removed at every boot ([`runtime_dir`]'s initializer) and by Delete all local data, so the logs
-/// and recordings PRIVACY.md describes cannot outlive the rename. Literals, because they name files
-/// already on televisions and Macs.
-pub mod legacy_runtime_file {
-    pub const LOGS: [&str; 9] = [
-        "plxnative-events.log",
-        "plxnative-crash.log",
-        "plxnative-stderr.log",
-        "plxnative-diag.log",
-        "plxnative-anim.log",
-        "plxnative-gst.log",
-        "plxnative-playback.log",
-        "plxnative-gputime.jsonl",
-        "plxnative-hwcnt.jsonl",
-    ];
-    /// The recorder's output directory, removed whole.
-    pub const RECORDINGS: &str = "plxnative-recordings";
-    /// The recorder's armed triggers and the crash reporter's read marker kept under the old prefix.
-    pub const OTHER: [&str; 3] = ["plxnative-rec", "plxnative-recplay", "plxnative-app-init"];
-}
-
-/// Whether a legacy runtime entry is this application's to remove. The stable flavour's runtime
-/// root is `/tmp` itself, which the upstream app this fork derives from also writes under the same
-/// `plxnative-*` names: a file another uid owns is that app's, never ours to delete or to report as
-/// a leftover of ours.
-#[cfg_attr(not(unix), allow(dead_code))]
-fn legacy_entry_is_ours(entry_owner: u32, me: u32) -> bool {
-    entry_owner == me
-}
-
-/// Remove [`legacy_runtime_file`]'s entries this process owns under `root`. Returns the names that
-/// are still there. A directory symlink is unlinked, never followed. Silent, so it can run inside
-/// [`runtime_dir`]'s initializer (see that function's doc for why nothing there may log).
-pub fn remove_legacy_runtime_files(root: &Path) -> Vec<String> {
-    #[cfg(unix)]
-    let me = unsafe { libc::geteuid() };
-    let mut leftovers = Vec::new();
-    let names = legacy_runtime_file::LOGS
-        .iter()
-        .chain(legacy_runtime_file::OTHER.iter())
-        .chain(std::iter::once(&legacy_runtime_file::RECORDINGS));
-    for name in names {
-        let path = root.join(name);
-        let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            if !legacy_entry_is_ours(meta.uid(), me) {
-                continue;
-            }
-        }
-        let removed = if meta.is_dir() { std::fs::remove_dir_all(&path) } else { std::fs::remove_file(&path) };
-        match removed {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                leftovers.push(format!("{name}: could not remove a pre-rename runtime file"))
-            }
-            _ => {}
-        }
-    }
-    leftovers
 }
 
 /// A runtime surface inside [`runtime_dir`], addressed by its bare name (`multiplex-…` included).
@@ -1049,51 +994,27 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
-    #[test]
-    fn the_legacy_runtime_names_are_the_current_ones_under_the_old_prefix() {
-        let renamed: Vec<String> = super::runtime_file::LOGS
-            .iter()
-            .map(|name| name.replacen("multiplex-", "plxnative-", 1))
-            .collect();
-        assert_eq!(renamed, super::legacy_runtime_file::LOGS);
-    }
-
-    #[test]
-    fn a_legacy_entry_another_uid_owns_is_not_ours() {
-        assert!(super::legacy_entry_is_ours(1000, 1000));
-        assert!(!super::legacy_entry_is_ours(1001, 1000));
-    }
-
+    /// **Boot never deletes a `plxnative-*` file.** PlxNative (`com.beb.plxnative`), the app this
+    /// fork derives from, writes those names in the same `/tmp` the stable install's runtime root
+    /// is, and two dev-mode native apps may run under one uid (`docs/two-installs.md` §6), so an
+    /// owner check cannot tell its files from a leftover of ours. Boot touches only its own
+    /// `multiplex-*` names.
     #[cfg(unix)]
     #[test]
-    fn pre_rename_logs_and_recordings_are_removed_and_current_files_are_kept() {
-        let root = std::env::temp_dir().join(format!(".plx-legacy-runtime-{}", std::process::id()));
+    fn preparing_the_runtime_root_leaves_plxnative_files_alone() {
+        let root = std::env::temp_dir().join(format!(".plx-coexist-runtime-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir(&root).unwrap();
-        for name in super::legacy_runtime_file::LOGS.iter().chain(super::legacy_runtime_file::OTHER.iter()) {
-            std::fs::write(root.join(name), b"old").unwrap();
+        let names = ["plxnative-events.log", "plxnative-crash.log", "plxnative-stderr.log", "plxnative-rec", "plxnative-app-init"];
+        for name in names {
+            std::fs::write(root.join(name), b"plxnative").unwrap();
         }
-        let recordings = root.join(super::legacy_runtime_file::RECORDINGS);
-        std::fs::create_dir(&recordings).unwrap();
-        std::fs::write(recordings.join("segment-0"), b"frames").unwrap();
-        // A directory symlink is unlinked, not followed: its target survives.
-        let outside = root.join("outside");
-        std::fs::create_dir(&outside).unwrap();
-        std::fs::write(outside.join("keep"), b"keep").unwrap();
-        std::fs::remove_file(root.join("plxnative-rec")).unwrap();
-        std::os::unix::fs::symlink(&outside, root.join("plxnative-rec")).unwrap();
-        let current = root.join(super::runtime_file::EVENTS);
-        std::fs::write(&current, b"new").unwrap();
-
-        assert!(super::remove_legacy_runtime_files(&root).is_empty());
-        for name in super::legacy_runtime_file::LOGS.iter().chain(super::legacy_runtime_file::OTHER.iter()) {
-            assert!(std::fs::symlink_metadata(root.join(name)).is_err(), "{name} survived");
+        std::fs::create_dir(root.join("plxnative-recordings")).unwrap();
+        super::prepare_runtime_root(&root);
+        for name in names {
+            assert_eq!(std::fs::read(root.join(name)).unwrap(), b"plxnative", "{name} was touched");
         }
-        assert!(!recordings.exists());
-        assert!(outside.join("keep").exists());
-        assert!(current.exists());
-        // Nothing left to do: a second pass is a no-op.
-        assert!(super::remove_legacy_runtime_files(&root).is_empty());
+        assert!(root.join("plxnative-recordings").is_dir());
         let _ = std::fs::remove_dir_all(&root);
     }
 

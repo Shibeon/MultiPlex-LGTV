@@ -1231,12 +1231,12 @@ mod tests {
     #[test]
     fn privacy_names_the_preview_refusal_tag_and_every_value() {
         use crate::telemetry::classes::PreviewRefusal;
-        let privacy = include_str!("../../../../PRIVACY.md");
-        assert!(privacy.contains("`preview_refusal`"), "PRIVACY.md omitted the tag");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
+        assert!(privacy.contains("`preview_refusal`"), "docs/optional-reporting.md omitted the tag");
         let codes: Vec<_> = PreviewRefusal::ALL.iter().map(|r| r.code()).collect();
         assert_eq!(codes, ["not_direct", "no_part", "adaptive"]);
         for code in codes {
-            assert!(privacy.contains(&format!("`{code}`")), "PRIVACY.md omitted {code}");
+            assert!(privacy.contains(&format!("`{code}`")), "docs/optional-reporting.md omitted {code}");
         }
     }
 
@@ -1251,14 +1251,14 @@ mod tests {
     fn consent_preview_and_privacy_name_every_refusal_domain_value() {
         use crate::telemetry::classes::{AudioCodecClass, DecisionCodeClass, VideoCodecClass};
         let legend = preview_domains();
-        let privacy = include_str!("../../../../PRIVACY.md");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
         let mut values: Vec<&str> = Vec::new();
         values.extend(DecisionCodeClass::ALL.iter().map(|c| c.code()));
         values.extend(VideoCodecClass::ALL.iter().map(|c| c.code()));
         values.extend(AudioCodecClass::ALL.iter().map(|c| c.code()));
         for value in values {
             assert!(legend.contains(value), "preview domain omitted {value}");
-            assert!(privacy.contains(value), "PRIVACY.md omitted {value}");
+            assert!(privacy.contains(value), "docs/optional-reporting.md omitted {value}");
         }
         // The whole domain, in order, once per field: the consent screen lists it as written.
         assert!(legend.contains("absent / 2000 / 2003 / 4007 / other_1xxx / other_2xxx / other_3xxx / other_4xxx / other"));
@@ -1279,13 +1279,13 @@ mod tests {
     fn delivery_reason_codes_are_closed_and_listed() {
         use crate::telemetry::classes::DeliveryReason;
         let legend = preview_domains();
-        let privacy = include_str!("../../../../PRIVACY.md");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
         assert_eq!(DeliveryReason::ALL.len(), 5);
         assert_eq!(DeliveryReason::RefusalRecovery.code(), "refusal_recovery");
         for reason in DeliveryReason::ALL {
             assert!(legend.contains(reason.code()), "the legend omitted {}", reason.code());
         }
-        assert!(privacy.contains("`refusal_recovery`"), "PRIVACY.md omitted the facet rung's reason");
+        assert!(privacy.contains("`refusal_recovery`"), "docs/optional-reporting.md omitted the facet rung's reason");
     }
 
     /// The values of the legend row headed `label`, read from the one line the legend wrote for it.
@@ -1331,7 +1331,7 @@ mod tests {
     #[test]
     fn consent_preview_and_privacy_name_the_closed_failure_domains() {
         let legend = preview_domains();
-        let privacy = include_str!("../../../../PRIVACY.md");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
         for value in [
             "playback_interrupted",
             "original_rollback",
@@ -1341,7 +1341,7 @@ mod tests {
             "refresh",
         ] {
             assert!(legend.contains(value), "preview domain omitted {value}");
-            assert!(privacy.contains(value), "PRIVACY.md omitted {value}");
+            assert!(privacy.contains(value), "docs/optional-reporting.md omitted {value}");
         }
     }
 
@@ -1516,14 +1516,14 @@ mod tests {
     #[test]
     fn consent_preview_and_privacy_name_every_transport_and_age_value() {
         let legend = preview_domains();
-        let privacy = include_str!("../../../../PRIVACY.md");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
         for value in TransportClass::ALL
             .iter()
             .map(|c| c.code())
             .chain(TransferAgeClass::ALL.iter().map(|c| c.code()))
         {
             assert!(legend.contains(value), "preview domain omitted {value}");
-            assert!(privacy.contains(value), "PRIVACY.md omitted {value}");
+            assert!(privacy.contains(value), "docs/optional-reporting.md omitted {value}");
         }
         assert!(legend.contains(
             "none / partial / recv_error / send_error / got_nothing / timeout / http2 / reopen_failed / other"
@@ -1695,7 +1695,7 @@ mod tests {
         // (including `unknown`), not only the three a refusal can name.
         let all = "unknown / original_direct / original_remux / hls / progressive_transcode";
         assert_eq!(legend.matches(all).count(), 2, "delivery and attempted delivery both list it");
-        let privacy = include_str!("../../../../PRIVACY.md");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
         for key in [
             "backend",
             "terminal_stage",
@@ -1705,13 +1705,13 @@ mod tests {
             "attempt_ordinal",
             "http_status",
         ] {
-            assert!(privacy.contains(key), "PRIVACY.md omitted {key}");
+            assert!(privacy.contains(key), "docs/optional-reporting.md omitted {key}");
         }
         for origin in AttemptOrigin::ALL {
             // Backticked, as PRIVACY.md writes every wire value: a bare word such as `preview`
             // already appears in its prose, so a bare match would pass for an omission.
             let quoted = format!("`{}`", origin.code());
-            assert!(privacy.contains(&quoted), "PRIVACY.md omitted the origin {}", origin.code());
+            assert!(privacy.contains(&quoted), "docs/optional-reporting.md omitted the origin {}", origin.code());
         }
         assert!(privacy.contains("9+") && privacy.contains("quality_pick"));
         assert!(privacy.contains("refusal_recovery"));
@@ -1765,8 +1765,8 @@ mod tests {
             legend.contains(&format!("{} to {}", i32::MIN, i32::MAX)),
             "the legend states the whole integer range: {legend}"
         );
-        let privacy = include_str!("../../../../PRIVACY.md");
-        assert!(privacy.contains("pipeline_error"), "PRIVACY.md omitted pipeline_error");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
+        assert!(privacy.contains("pipeline_error"), "docs/optional-reporting.md omitted pipeline_error");
     }
 
     #[test]
@@ -1940,7 +1940,7 @@ mod tests {
             assert!(legend.contains(code), "the legend omits {code}: {legend}");
         }
         assert!(legend.contains(&format!("{} to {}", i32::MIN, i32::MAX)), "{legend}");
-        let privacy = include_str!("../../../../PRIVACY.md");
-        assert!(privacy.contains("refusal_recovered"), "PRIVACY.md omitted refusal_recovered");
+        let privacy = include_str!("../../../../docs/optional-reporting.md");
+        assert!(privacy.contains("refusal_recovered"), "docs/optional-reporting.md omitted refusal_recovered");
     }
 }

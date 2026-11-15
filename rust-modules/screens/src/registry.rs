@@ -2387,7 +2387,8 @@ where
             // every remaining `app::input`/`app::run` call site drop its own `enter()`-equivalent
             // reset (see `input::enter_profiles_from_onboard`'s doc for the same argument made
             // about `screens::onboard` in 5b).
-            AppArg::Login => Box::new(crate::login::LoginScreen::new(entry, H::auth(cx))),
+            AppArg::Login => Box::new(crate::login::LoginScreen::new(entry, H::auth(cx))
+                .with_reporting(!H::screen_inputs(cx).telemetry_absent)),
             AppArg::Profiles => {
                 let screen = crate::profiles::ProfilesScreen::new(entry, H::auth(cx));
                 fx.push(plx_machine::machine::Fx::App(AppFx::Session(

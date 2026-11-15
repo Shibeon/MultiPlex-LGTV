@@ -2,7 +2,8 @@
   {
     "name": "stable",
     "app_id": "app.multiplex.native",
-    "object_id": "plxstate.stable"
+    "object_id": "mpxstate.stable",
+    "legacy_object_id": "plxstate.stable"
   },
   {
     "name": "debug",
@@ -12,6 +13,7 @@
   {
     "name": "nightly",
     "app_id": "app.multiplex.native.nightly",
-    "object_id": "plxstate.night"
+    "object_id": "mpxstate.night",
+    "legacy_object_id": "plxstate.night"
   }
 ]
