@@ -959,6 +959,15 @@ impl Shelf {
                 activate: Activate::Press,
             });
         }
+        // The row's band, for the Magic Remote wheel (`crate::wheel`): the posters and the caption
+        // band under them, across the screen (a row's peeking card is part of it).
+        let band = Rect::new(0.0, at.y, SCR_W, self.style.h + self.row.under_band()).intersect(at.clip);
+        f.pan_zone(p, crate::wheel::PanZone {
+            rect: super::to_local(p, band),
+            scroll: sx,
+            max: self.style.max_scroll(n),
+            pitch: self.pitch(),
+        });
     }
 
     /// The opener redraw: card `focus` drawn alone, popped and captioned exactly as in-page, over

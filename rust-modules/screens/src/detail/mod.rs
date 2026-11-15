@@ -1176,14 +1176,14 @@ impl DetailScreen {
     }
 
     /// A shelf carries its own label band, so what follows it is the SHARED shelf pitch's air —
-    /// `consts::UNDER_LABEL_AIR`, exactly what Home and the Library put between two rows — and not
+    /// `consts::SHELF_FOOT`, exactly what Home and the Library put between two rows — and not
     /// this page's `SECTION_GAP` on top of it. Stacking the two is what made every gap below the
     /// hero read as a hole: 18px of collapsed band plus 64 of region gap, 42px looser than the same
     /// two objects anywhere else in the app.
     fn section_gap(section: i32, next: Option<i32>) -> f32 {
         match section {
             1 if next == Some(2) => TAB_EP_GAP,
-            3 | 4 | 6 | 7 => plx_ui::consts::UNDER_LABEL_AIR,
+            3 | 4 | 6 | 7 => plx_ui::consts::SHELF_FOOT,
             _ => SECTION_GAP,
         }
     }
@@ -3296,6 +3296,21 @@ impl DetailScreen {
             if self.tracks_available(meta) {
                 elems.push((about::LANGUAGES_ELEM, Activate::Press));
             }
+            // The episode strip is the one row here that is not a `cards::Shelf` (those register
+            // their own): it takes the Magic Remote wheel the same way (`plx_ui::wheel`), over the
+            // band `pan_row` finds it by.
+            let (sections, n) = self.sections(Some(d));
+            if sections[..n].contains(&section::SectionId::Episode.raw()) {
+                let sec = section::SectionId::Episode.raw();
+                let top = self.section_top(sec, d, f.cx.measure) - self.scroll.pos;
+                let zone = plx_ui::wheel::PanZone {
+                    rect: Rect::new(0.0, top, plx_ui::consts::SCR_W, self.block_h(sec, d, f.cx.measure)),
+                    scroll: self.episode_scroll.pos,
+                    max: self.episode_max_scroll(d),
+                    pitch: episodes::W + episodes::GAP,
+                };
+                f.pan_zone(f.painter, zone);
+            }
         }
         for (elem, activate) in elems {
             let Some(elem) = self.engine_key(elem) else { continue };
@@ -3640,12 +3655,17 @@ impl DetailScreen {
             };
             shelf.glide(dx, len);
         } else if sec == SectionId::Episode.raw() {
-            let len = episodes::len(d, self.upcoming_of(d));
-            let viewport = plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X;
-            let max = (len as f32 * (episodes::W + episodes::GAP) - episodes::GAP - viewport).max(0.0);
+            let max = self.episode_max_scroll(d);
             self.episode_scroll.jump((self.episode_scroll.pos + dx).clamp(0.0, max));
             self.episode_free = true;
         }
+    }
+
+    /// The furthest the episode strip scrolls: its cells past the margins' viewport.
+    fn episode_max_scroll(&self, d: &Detail) -> f32 {
+        let len = episodes::len(d, self.upcoming_of(d));
+        let viewport = plx_ui::consts::SCR_W - 2.0 * plx_ui::consts::MARGIN_X;
+        (len as f32 * (episodes::W + episodes::GAP) - episodes::GAP - viewport).max(0.0)
     }
 
     /// The furthest the page scrolls: the scroll the last section's reveal takes (what a key can

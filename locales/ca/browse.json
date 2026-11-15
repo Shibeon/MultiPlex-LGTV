@@ -287,5 +287,11 @@
   "browse.detail.minutes_left": "Queden {minutes} min",
   "browse.detail.upcoming_airs": "S’emet el {date}",
   "browse.detail.upcoming_air_date_unknown": "Data d’emissió desconeguda",
-  "browse.detail.upcoming_title_tba": "Títol per anunciar"
+  "browse.detail.upcoming_title_tba": "Títol per anunciar",
+  "browse.person.acting": "Interpretació",
+  "browse.person.appearances": "Aparicions",
+  "browse.person.producing": "Producció",
+  "browse.person.directing": "Direcció",
+  "browse.person.other_credits": "Altres crèdits",
+  "browse.person.available": "Disponible a MultiPlex"
 }

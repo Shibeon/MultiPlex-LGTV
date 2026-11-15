@@ -52,6 +52,10 @@ pub(crate) struct Pointer {
     pub(crate) ok_from_click: bool,
     /// The pointer resting in the top or bottom edge band scrolls the page ([`EdgeScroll`]).
     pub(crate) edge: EdgeScroll,
+    /// A wheel notch over a horizontal row, easing the row along ([`plx_ui::wheel`]), and the
+    /// frame it last stepped on (it times its own frames, as [`EdgeScroll`] does).
+    pub(crate) wheel: plx_ui::wheel::WheelGlide,
+    pub(crate) wheel_last: u32,
 }
 /// The mounted player and its playback generation.
 pub(crate) type BackCursorTarget = (plx_machine::machine::MachineId, u32);
@@ -76,6 +80,8 @@ impl Pointer {
         last_wheel: 0,
         ok_from_click: false,
         edge: EdgeScroll::IDLE,
+        wheel: plx_ui::wheel::WheelGlide::IDLE,
+        wheel_last: 0,
     };
 
     pub(crate) fn back_cursor_active(&self) -> bool {
@@ -299,6 +305,81 @@ impl EdgeScroll {
         let share = EDGE_MIN_SHARE + (1.0 - EDGE_MIN_SHARE) * depth;
         let dx = dir as f32 * EDGE_PAN_PX_PER_S * share * ramp * dt;
         (dx != 0.0).then_some(dx)
+    }
+}
+
+impl Pointer {
+    /// **A wheel notch over the page**: the row under the pointer takes it when it scrolls
+    /// sideways and has room in the notch's direction ([`plx_ui::wheel::route`]); the move is
+    /// queued on the eased glide and `true` comes back. `false` is the page's vertical step.
+    /// `zone` is the row the last presented frame drew under the pointer; a pointer the D-pad hid
+    /// is over nothing.
+    pub(crate) fn wheel_row(&mut self, dy: i32, zone: Option<&plx_ui::wheel::PanZone>, now: u32) -> bool {
+        let Some((x, y)) = self.edge.at().filter(|_| !self.dpad_mode) else { return false };
+        let zone = zone.filter(|z| z.covers(x, y));
+        match plx_ui::wheel::route(dy, zone, self.wheel.pending(zone)) {
+            plx_ui::wheel::WheelRoute::Row(dx) => {
+                let Some(zone) = zone else { return false };
+                if self.wheel.pending(Some(zone)) == 0.0 {
+                    self.wheel_last = now;
+                }
+                self.wheel.add(dx, x, y, zone);
+                true
+            }
+            plx_ui::wheel::WheelRoute::Page => false,
+        }
+    }
+
+    /// One frame of the wheel's row glide at `now` (ms): the `InputKind::Pan` to send, if any.
+    pub(crate) fn wheel_step(&mut self, now: u32) -> Option<(f32, f32, f32)> {
+        let dt = now.wrapping_sub(self.wheel_last).min(100) as f32 / 1000.0;
+        self.wheel_last = now;
+        self.wheel.step(dt)
+    }
+}
+
+#[cfg(test)]
+mod wheel_row_tests {
+    use super::*;
+    use plx_ui::wheel::PanZone;
+
+    fn row() -> PanZone {
+        PanZone { rect: plx_ui::Rect::new(0.0, 300.0, 1920.0, 400.0), scroll: 0.0, max: 3000.0, pitch: 280.0 }
+    }
+
+    /// The application's half of the wheel rule: a notch over a row that scrolls is the row's, and
+    /// eases it RIGHT for wheel down as a run of `InputKind::Pan` frames at the pointer; at the end,
+    /// over a row that fits, off every row, or while the D-pad holds focus, it is the page's step.
+    #[test]
+    fn a_notch_over_a_row_is_the_rows_and_glides_it_over_frames() {
+        let mut p = Pointer::IDLE;
+        assert!(!p.wheel_row(-1, Some(&row()), 1000), "a hidden pointer is over nothing");
+        p.edge.moved(500.0, 400.0, false);
+        assert!(p.wheel_row(-1, Some(&row()), 1000), "wheel down over a row that scrolls is the row's");
+        let mut total = 0.0;
+        let mut frames = 0;
+        let mut now = 1000;
+        loop {
+            now += 16;
+            let Some((dx, x, y)) = p.wheel_step(now) else { break };
+            assert_eq!((x, y), (500.0, 400.0));
+            assert!(dx > 0.0, "down scrolls right");
+            total += dx;
+            frames += 1;
+            assert!(frames < 600);
+        }
+        assert!(frames > 5, "eased, not one jump");
+        assert!((total - 2.0 * 280.0).abs() < 0.05, "two cards a notch: {total}");
+
+        let end = PanZone { scroll: 3000.0, ..row() };
+        assert!(!p.wheel_row(-1, Some(&end), now), "at the right end, down is the page's");
+        let fits = PanZone { max: 0.0, ..row() };
+        assert!(!p.wheel_row(-1, Some(&fits), now), "a row that fits never takes it");
+        assert!(!p.wheel_row(-1, None, now), "off every row, the page's");
+        let below = PanZone { rect: plx_ui::Rect::new(0.0, 800.0, 1920.0, 400.0), ..row() };
+        assert!(!p.wheel_row(-1, Some(&below), now), "a zone that is not under the pointer is not its");
+        p.dpad_mode = true;
+        assert!(!p.wheel_row(-1, Some(&row()), now), "the D-pad owns focus: the page's");
     }
 }
 

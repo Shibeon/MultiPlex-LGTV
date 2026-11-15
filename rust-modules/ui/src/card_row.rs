@@ -217,7 +217,15 @@ impl RowStyle {
     /// the caption band: heading, air above the tile, the tile, air below. For [`RowStyle::HOME`]
     /// it is [`ROW_PITCH_FIXED`]; add [`under_band`] to it.
     pub const fn pitch_fixed(&self) -> f32 {
-        crate::consts::TITLE_DY + crate::consts::CARD_DY + self.h + self.under_tile + crate::consts::UNDER_LABEL_AIR
+        crate::consts::TITLE_DY + crate::consts::CARD_DY + self.h + self.under_tile + self.foot()
+    }
+    /// The air this row keeps under its band before the next section's heading: the shared
+    /// [`crate::consts::SHELF_FOOT`] (the label air and the section air). A row with a footer line
+    /// under its tiles ([`RowStyle::STILL`], the owner's CW-13 v2 board) keeps the board's own gap
+    /// instead, the label air alone: its footer and [`theme::STILL_FOOTER_AIR`] already stand in that
+    /// air, and the board pins the shelf under it (`cards::tests`, the stills row's geometry).
+    pub const fn foot(&self) -> f32 {
+        if self.under_tile > 0.0 { crate::consts::UNDER_LABEL_AIR } else { crate::consts::SHELF_FOOT }
     }
     /// Detail "Cast & Crew": circular headshots, the tight strip ring. Same motion as HOME (spring
     /// magnification + scroll), so cast animates like the poster shelves.
@@ -3374,8 +3382,9 @@ mod tests {
 
     /// The two endpoints and the rung the collapsed one is derived from. `under_band(1)` has to be
     /// `UNDER_LABEL_H` exactly or a focused shelf is not the geometry every clearance test in the
-    /// app was written against; `under_band(0)` has to leave the design system's REGION gap between
-    /// a poster's bottom edge and the next section's heading, which is the claim
+    /// app was written against; `under_band(0)` has to leave the design system's SECTION gap
+    /// (`theme::space::SECTION`: the region gap and `consts::SECTION_AIR`) between a poster's
+    /// bottom edge and the next section's heading, which is the claim
     /// [`LABEL_BAND_COLLAPSED`] makes and the only reason it is a subtraction.
     #[test]
     fn a_collapsed_shelf_still_leaves_the_region_gap_before_the_next_heading() {
@@ -3393,8 +3402,8 @@ mod tests {
         let next_heading = pitch - TITLE_DY;
         assert_eq!(
             next_heading - card_bottom,
-            crate::theme::space::LG,
-            "an unfocused shelf owes its neighbour one region gap and nothing more"
+            crate::theme::space::SECTION,
+            "an unfocused shelf owes its neighbour one section gap and nothing more"
         );
         // …and that gap is exactly what the block's own trailing air grew into
         assert_eq!(
@@ -4128,6 +4137,41 @@ mod sort_caption_review_tests {
 #[cfg(test)]
 mod rest_tests {
     use super::*;
+
+    /// **The next card peeks in at the right edge** of a poster shelf that has more to show, at
+    /// scroll 0 and at the rest a move to the right leaves (`lo`): a real slice of it is painted
+    /// (the Shelf paints against the SCREEN, [`most_painted_at_rest`]), a quarter of a card or more,
+    /// never a whole one, so the eye reads "more this way". At the end nothing peeks: the last
+    /// card stands whole inside the margin. (The Continue Watching stills row is the owner's CW-13
+    /// v2 board: four whole tiles at scroll 0, pinned by its own geometry test, so it is not here.)
+    #[test]
+    fn the_next_card_peeks_in_at_the_right_edge_until_the_end() {
+        {
+            let sty = RowStyle::HOME;
+            let pitch = sty.w + sty.gap;
+            let vw = SCR_W - 2.0 * sty.margin_x;
+            let n = 40;
+            let peek = |scroll: f32| {
+                (0..n)
+                    .map(|i| tile_rect(i, sty.margin_x, pitch, scroll, 0.0, (sty.w, sty.h)))
+                    .filter(|r| r.x < SCR_W && r.x + r.w > SCR_W)
+                    .map(|r| SCR_W - r.x)
+                    .next()
+            };
+            let focus = (SCR_W / pitch).ceil() as usize + 2;
+            let lo = scroll_into_view(0.0, focus, n, sty.w, sty.gap, vw);
+            for (at, scroll) in [("scroll 0", 0.0), ("lo", lo)] {
+                let shown = peek(scroll).unwrap_or_else(|| panic!("{}x{}: nothing peeks at {at}", sty.w, sty.h));
+                assert!(shown >= sty.w / 4.0 && shown < sty.w, "{}x{} at {at}: {shown} px of the next card", sty.w, sty.h);
+                assert!(
+                    crate::on_axis(SCR_W - shown, sty.w, SCR_W, 0.0),
+                    "and the Shelf paints it ({at})"
+                );
+            }
+            let end = sty.max_scroll(n);
+            assert_eq!(peek(end), None, "at the end nothing peeks");
+        }
+    }
 
     /// The most cards `sty` paints at ANY rest of a row of `n` cards, found the long way: focus walks the
     /// whole row right and back, then zigzags, [`scroll_into_view`] steering the scroll and [`on_axis`]

@@ -231,6 +231,12 @@ pub mod space {
     pub const MD: f32 = 24.0;
     /// Block gap — one content block to the next (synopsis → action row).
     pub const LG: f32 = 40.0;
+    /// Section gap — one titled row of cards to the next section's heading: the air between a
+    /// shelf's resting posters and the heading under them, on every page that stacks shelves
+    /// (Home, the Library's hubs, Detail's rows, Search, the person page). 56 px at 1080p
+    /// (37 px on a 720p panel), the top of the web client's 40–56 px desktop section gap, so
+    /// sections breathe; [`crate::consts::SECTION_AIR`] is what a shelf adds for it.
+    pub const SECTION: f32 = 56.0;
     /// Major gap — separates whole regions (a title band from the metadata beneath it).
     pub const XL: f32 = 64.0;
 }

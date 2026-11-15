@@ -59,6 +59,16 @@ pub const CARD_DY: f32 = 26.0;
 /// UNDER_LABEL_H` both land here once expressed against the SAME [`crate::card_row::UNDER_LABEL_H`],
 /// confirmed against sim screenshots of both grids with a two-line focused label.
 pub const UNDER_LABEL_AIR: f32 = 22.0;
+/// **The section air a shelf keeps under its band, past [`UNDER_LABEL_AIR`]**, so a resting shelf's
+/// posters stand [`crate::theme::space::SECTION`] from the next section's heading instead of the
+/// `space::LG` block gap a grid row keeps from the next row (`card_row::LABEL_BAND_COLLAPSED`).
+/// It is part of every shelf pitch ([`ROW_PITCH`], `RowStyle::pitch_fixed`) and of [`SHELF_FOOT`],
+/// and only of a SHELF's: a grid's rows are one block, not sections, and keep the block gap.
+pub const SECTION_AIR: f32 = crate::theme::space::SECTION - crate::theme::space::LG;
+/// The air a stacked page keeps under a shelf that has another shelf below it
+/// (`cards::StackPage::shelf_foot`, Detail's gap after a shelf): the label air and the section air,
+/// exactly what a shelf pitch keeps, so every page's shelves stand at Home's rhythm.
+pub const SHELF_FOOT: f32 = UNDER_LABEL_AIR + SECTION_AIR;
 /// Room for the shelf title above the row, plus the focused card's under-label block
 /// ([`crate::card_row::UNDER_LABEL_H`]) and [`UNDER_LABEL_AIR`] of air below it before the next
 /// shelf's own title. Replaces the old `CARD_H + ROW_TITLE_H + 144.0` — same 549px total
@@ -76,7 +86,7 @@ pub const UNDER_LABEL_AIR: f32 = 22.0;
 /// Under posters policy a screen hands its poster shelves (`caption_policy::band_h`; the legacy band for a shelf of
 /// landscape stills or headshots, which take none).
 pub const ROW_PITCH: f32 =
-    TITLE_DY + CARD_DY + CARD_H + crate::card_row::UNDER_LABEL_H + UNDER_LABEL_AIR;
+    TITLE_DY + CARD_DY + CARD_H + crate::card_row::UNDER_LABEL_H + UNDER_LABEL_AIR + SECTION_AIR;
 pub const CONTENT_Y: f32 = 200.0;
 /// Off-screen cull/clip-edge slack for a focused card's glow AND its risen drop-shadow — big enough
 /// to cover the worst case, a large poster's `CARD_SHADOW_BLUR + CARD_SHADOW_DY` (44+18=62) plus a

@@ -90,8 +90,9 @@ impl Harness {
     fn key(&self, elem: u32) -> FocusKey<u32> { FocusKey { entry: ENTRY, elem } }
 
     fn at(&self, elem: u32) -> Option<(usize, usize)> {
-        match self.screen.page.locate(self.store.view().current()?, elem)? {
-            Located::Shelf(kind, col) => Some((kind, col)),
+        let p = self.store.view().current()?;
+        match self.screen.page.locate(p, elem)? {
+            Located::Local(i) => local_at(p, i),
             _ => None,
         }
     }
@@ -100,8 +101,7 @@ impl Harness {
 impl CardHarness for Harness {
     fn cards(&self) -> Vec<u32> {
         let p = self.store.view().current().unwrap();
-        (0..NSHELF).flat_map(|kind| (0..p.shelf(kind).len()).map(move |col| (kind, col)))
-            .map(|(kind, col)| self.screen.page.shelf_key(p, kind, col).elem).collect()
+        (0..local_len(p)).map(|i| self.screen.page.local_key(p, i).elem).collect()
     }
     fn focused(&self) -> Option<u32> { self.focus.map(|k| k.elem) }
     fn focus(&mut self, elem: u32, by: By) {

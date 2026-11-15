@@ -213,7 +213,7 @@ maps the stored `UnderPosters` to the ui `CaptionPolicy`. **EVERY poster tile re
 `registry::captions`** (`policy()` with the one `TEST_UNDER_POSTERS` test override, `label()` the one builder of a focused
 poster's `[title, details]`, `shelf_label()` for Home's and Recommended's shelves): the Library grid, the Collections page, the Watchlist,
 Home's shelves, Recommended's poster shelves, **Search's poster rows** (Movies, Shows, Collections; a result from a server that is not the
-household's own is credited after its details line, `CaptionFacts::source`), **the person page's filmography**, **Detail's Related and
+household's own is credited after its details line, `CaptionFacts::source`), **the person page's rows** (Available on MultiPlex and the Acting, Appearances, Producing, Directing and Other credits rows), **Detail's Related and
 collection shelves** and **the Collection screen's members** (an episode member's poster already prints its "S3 · E4" mark, so its caption names the show instead: `CaptionFacts::address_on_art`). The Library's movie, TV show, season and episode grids are the exception while they show their sort value (Sort value On, sorted by something that has a value for that kind of row): it draws the one value line described below instead. A grid page otherwise hands its grid the policy through `StackPage::caption_policy`
 (Stack hands it to a `Body::Shelf` as well as a `Body::Grid`); Detail owns its shelves and sets the policy on Related and the
 collection each step. **Landscape tiles and headshots are not posters and do not read it**: the Library's Episodes listing, Search's Episode stills and Person

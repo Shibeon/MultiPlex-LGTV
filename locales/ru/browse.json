@@ -299,5 +299,11 @@
   "browse.detail.minutes_left": "Осталось {minutes} мин",
   "browse.detail.upcoming_airs": "Выходит {date}",
   "browse.detail.upcoming_air_date_unknown": "Дата выхода неизвестна",
-  "browse.detail.upcoming_title_tba": "Название будет объявлено"
+  "browse.detail.upcoming_title_tba": "Название будет объявлено",
+  "browse.person.acting": "Актёрская работа",
+  "browse.person.appearances": "Появления",
+  "browse.person.producing": "Продюсирование",
+  "browse.person.directing": "Режиссура",
+  "browse.person.other_credits": "Другие работы",
+  "browse.person.available": "Доступно в MultiPlex"
 }

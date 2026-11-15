@@ -171,20 +171,19 @@ fn a_focused_poster_tile_always_fills_the_caption_rung_it_reserves() {
         ..Default::default() }, false), "Show", "missing source data invents no fact: the line says what the tile is");
 }
 
+    /// Home's shelves are sections and keep the section air under a focused label; the Library's
+    /// grid rows are one block and keep the label air alone. The caption rule counts the label air
+    /// (`card_row::room_for`), so a label that fits the grid fits a shelf.
     #[test]
-    fn home_and_library_leave_the_same_air_under_a_focused_label() {
-        use plx_ui::consts::{CARD_DY, ROW_PITCH, TITLE_DY, UNDER_LABEL_AIR};
+    fn home_keeps_the_section_air_and_the_library_grid_the_label_air_under_a_focused_label() {
+        use plx_ui::consts::{CARD_DY, ROW_PITCH, SECTION_AIR, TITLE_DY, UNDER_LABEL_AIR};
         let home_air = ROW_PITCH - TITLE_DY - CARD_DY - CARD_H - ui_cards::UNDER_LABEL_H;
         let focused = Layout::new(false, 2).with_grid_focus(Some(0));
         // The Library names every card: its block reaches EVERY_CAPTION_REACH under the poster.
         let library_air = focused.row_y(1, 0.0) - focused.row_y(0, 0.0)
             - focused.card_h() - ui_cards::EVERY_CAPTION_REACH;
-        assert_eq!(home_air, UNDER_LABEL_AIR);
+        assert_eq!(home_air, UNDER_LABEL_AIR + SECTION_AIR);
         assert!((library_air - UNDER_LABEL_AIR).abs() < 0.01, "{library_air}");
-        assert_eq!(
-            home_air, library_air,
-            "Home and Library must agree on the air under a focused label"
-        );
     }
 
     #[test]

@@ -287,5 +287,11 @@
   "browse.detail.minutes_left": "Faltam {minutes} min",
   "browse.detail.upcoming_airs": "Estreia em {date}",
   "browse.detail.upcoming_air_date_unknown": "Data de estreia desconhecida",
-  "browse.detail.upcoming_title_tba": "Título a anunciar"
+  "browse.detail.upcoming_title_tba": "Título a anunciar",
+  "browse.person.acting": "Atuação",
+  "browse.person.appearances": "Aparições",
+  "browse.person.producing": "Produção",
+  "browse.person.directing": "Realização",
+  "browse.person.other_credits": "Outros créditos",
+  "browse.person.available": "Disponível no MultiPlex"
 }

@@ -2374,6 +2374,102 @@ pub fn filmography_total(p: &Person) -> usize {
         .sum()
 }
 
+/// **One row of credits on the person page** — the page's fixed vocabulary of rows, in page order
+/// ([`CREDIT_ROWS`]). Unlike [`filmography`]'s tabs, which fold a department by its COUNT, a row
+/// is chosen by what the department IS: the page reads the same five rows for every person (Acting,
+/// Appearances, Producing, Directing, then everything else), and a row with no credits is not shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CreditRow {
+    Acting,
+    Appearances,
+    Producing,
+    Directing,
+    Other,
+}
+
+/// The credit rows in the order the person page stacks them.
+pub const CREDIT_ROWS: [CreditRow; 5] =
+    [CreditRow::Acting, CreditRow::Appearances, CreditRow::Producing, CreditRow::Directing, CreditRow::Other];
+
+impl CreditRow {
+    /// The row a provider department (`CreditGroup::kind`, the wire's `type`: `actor`, `appeared`,
+    /// `producer`, `director`, `writer`, `other`, …) lands in. Matched on the slug, never on the
+    /// display title, which the provider localises; anything that is not acting, an appearance, a
+    /// production or a direction credit is the Other row.
+    pub fn of_kind(kind: &str) -> Self {
+        let kind = kind.trim().to_ascii_lowercase();
+        match kind.as_str() {
+            "actor" | "actress" | "acting" | "cast" => Self::Acting,
+            "appeared" | "appearance" | "appearances" | "self" => Self::Appearances,
+            k if k.starts_with("produc") || k.starts_with("executive-produc") || k.starts_with("executive_produc") => Self::Producing,
+            k if k.starts_with("direct") => Self::Directing,
+            _ => Self::Other,
+        }
+    }
+
+    /// The row's position in [`CREDIT_ROWS`].
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
+    /// The row's heading, from the catalog.
+    pub fn title(self) -> &'static str {
+        use plx_platform::i18n::msg;
+        match self {
+            Self::Acting => msg::browse_person_acting(),
+            Self::Appearances => msg::browse_person_appearances(),
+            Self::Producing => msg::browse_person_producing(),
+            Self::Directing => msg::browse_person_directing(),
+            Self::Other => msg::browse_person_other_credits(),
+        }
+    }
+}
+
+/// **The person page's credit rows** ([`CREDIT_ROWS`] order, index by [`CreditRow::index`]): every
+/// department of the credits answer gathered into its row, newest first with an undated credit
+/// last (the [`filmography`] rule), and joined against every source's library exactly as the
+/// Filmography route's rows are ([`Credit::local`]).
+///
+/// A title credited twice in one row (a writer and an "other" credit for the same film, both Other)
+/// is ONE card: the first credit keeps its place and a second job is appended to its role, so a row
+/// never holds two cards for one title and a card's identity (`row`, `catalog_id`) is unique.
+///
+/// Pure over the open person, rebuilt by the page on the frames the store's revision moves (a source
+/// landing changes the availability column under it), like [`filmography`].
+pub fn credit_rows(p: &Person) -> [Vec<Credit>; 5] {
+    let mut rows: [Vec<Credit>; 5] = Default::default();
+    for g in &p.credits {
+        let row = &mut rows[CreditRow::of_kind(&g.kind).index()];
+        for c in &g.credits {
+            let Some(it) = c.item.as_ref() else { continue };
+            if it.title.is_empty() {
+                continue;
+            }
+            if let Some(seen) = row.iter_mut().find(|r| !it.rating_key.is_empty() && r.catalog_id == it.rating_key) {
+                if !c.role.is_empty() && !seen.role.split(", ").any(|r| r == c.role) {
+                    seen.role = if seen.role.is_empty() { c.role.clone() } else { format!("{}, {}", seen.role, c.role) };
+                }
+                continue;
+            }
+            row.push(Credit {
+                catalog_id: it.rating_key.clone(),
+                title: it.title.clone(),
+                role: c.role.clone(),
+                year: it.year.clamp(0, i32::MAX as i64) as i32,
+                thumb: it.thumb.clone(),
+                local: match_local(p, &it.rating_key),
+            });
+        }
+    }
+    for row in rows.iter_mut() {
+        row.sort_by_key(|r| match r.year {
+            0 => i32::MAX,
+            y => -y,
+        });
+    }
+    rows
+}
+
 /// Which registered server holds `guid`, and under which key — the availability join, over every
 /// source's [`Src::matches`] index in registry order.
 ///
@@ -2878,6 +2974,75 @@ fn sync_roster(&mut self) -> bool {
             ["s00000003", "s00000002", "s00000001", "s00000000"]);
         assert!(rows.iter().all(|r| r.local.is_none()),
             "provider identity survives even when no PMS can supply a local ratingKey");
+        owner.reset();
+        plx_plex::plex::reset_servers_for_test();
+    }
+
+    #[test]
+    fn a_department_lands_in_its_row_by_its_slug() {
+        for (kind, row) in [
+            ("actor", CreditRow::Acting),
+            ("Actor", CreditRow::Acting),
+            ("appeared", CreditRow::Appearances),
+            ("producer", CreditRow::Producing),
+            ("executive-producer", CreditRow::Producing),
+            ("director", CreditRow::Directing),
+            ("writer", CreditRow::Other),
+            ("other", CreditRow::Other),
+            ("costume-makeup", CreditRow::Other),
+            ("", CreditRow::Other),
+        ] {
+            assert_eq!(CreditRow::of_kind(kind), row, "{kind:?}");
+        }
+        assert_eq!(CREDIT_ROWS.iter().map(|r| r.index()).collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn credit_rows_gather_every_department_into_its_row_newest_first() {
+        let mut owner = Owner::default();
+        let _g = plx_base::testlock::serial();
+        plx_plex::plex::reset_servers_for_test();
+        owner.reset();
+        owner.open(S0, "1001", "", "s00000001", "");
+        // Two thin departments that the Filmography route would fold into its count-based Other
+        // tab still get their own rows here, and the two non-acting crafts share Other.
+        owner.state.install_credits_for_test(&[("Actor", 3), ("Director", 1), ("Writer", 2), ("Other", 1)]);
+        let rows = credit_rows(owner.current().unwrap());
+        let len = |r: CreditRow| rows[r.index()].len();
+        assert_eq!(len(CreditRow::Acting), 3);
+        assert_eq!(len(CreditRow::Appearances), 0, "a row with no department is empty");
+        assert_eq!(len(CreditRow::Producing), 0);
+        assert_eq!(len(CreditRow::Directing), 1, "one credit is still a row of its own");
+        assert_eq!(len(CreditRow::Other), 3, "writer and other share the Other row");
+        assert_eq!(rows[0].iter().map(|c| c.year).collect::<Vec<_>>(), [2002, 2001, 2000], "newest first");
+        owner.reset();
+        plx_plex::plex::reset_servers_for_test();
+    }
+
+    #[test]
+    fn a_title_credited_twice_in_one_row_is_one_card_with_both_jobs() {
+        use plx_plex::plex::discover::{Credit as Wire, CreditGroup, CreditItem};
+        let mut owner = Owner::default();
+        let _g = plx_base::testlock::serial();
+        plx_plex::plex::reset_servers_for_test();
+        owner.reset();
+        owner.open(S0, "1001", "", "s00000001", "");
+        let item = |rk: &str, year: i64| Some(CreditItem { rating_key: rk.into(), kind: "movie".into(),
+            title: format!("Film {rk}"), year, ..Default::default() });
+        let group = |kind: &str, credits: Vec<Wire>| CreditGroup { kind: kind.into(), title: String::new(), size: 0, credits };
+        owner.state.current.as_mut().unwrap().credits = vec![
+            group("writer", vec![Wire { order: 0, role: "Writer".into(), item: item("aa", 2001) }]),
+            group("other", vec![
+                Wire { order: 0, role: "Story".into(), item: item("aa", 2001) },
+                Wire { order: 1, role: String::new(), item: item("bb", 0) },
+            ]),
+            group("director", vec![Wire { order: 0, role: "Director".into(), item: item("aa", 2001) }]),
+        ];
+        let rows = credit_rows(owner.current().unwrap());
+        let other = &rows[CreditRow::Other.index()];
+        assert_eq!(other.iter().map(|c| c.catalog_id.as_str()).collect::<Vec<_>>(), ["aa", "bb"], "undated last");
+        assert_eq!(other[0].role, "Writer, Story");
+        assert_eq!(rows[CreditRow::Directing.index()].len(), 1, "another row keeps its own card for the title");
         owner.reset();
         plx_plex::plex::reset_servers_for_test();
     }

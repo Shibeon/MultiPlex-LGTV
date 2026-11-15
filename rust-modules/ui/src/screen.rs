@@ -912,6 +912,8 @@ pub struct DrawFrame<'a, 'views, H: Host> {
     /// that opts into the dip ([`Screen::entry_motion`]). Set by the dispatcher's surface pass.
     pub entry_floor: f32,
     stops: Vec<Stop<H::Elem>>,
+    /// The horizontal rows this walk drew ([`Self::pan_zone`]), for the hit map's wheel answer.
+    pans: Vec<crate::wheel::PanZone>,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -966,6 +968,7 @@ impl<'a, 'views, H: Host> DrawFrame<'a, 'views, H> {
             push: None,
             entry_floor: 0.0,
             stops: Vec::new(),
+            pans: Vec::new(),
         }
     }
 
@@ -1058,6 +1061,30 @@ impl<'a, 'views, H: Host> DrawFrame<'a, 'views, H> {
 
     pub fn into_stops(self) -> Vec<Stop<H::Elem>> {
         self.stops
+    }
+
+    /// The stops and the horizontal rows this walk registered.
+    pub fn into_parts(self) -> (Vec<Stop<H::Elem>>, Vec<crate::wheel::PanZone>) {
+        (self.stops, self.pans)
+    }
+
+    /// The horizontal rows registered so far ([`Self::pan_zone`]).
+    pub fn pans(&self) -> &[crate::wheel::PanZone] {
+        &self.pans
+    }
+
+    /// **Register a row the wheel can scroll sideways** (`crate::wheel`): `zone.rect` in painter
+    /// space, carried to the screen and narrowed by the cascade's clip exactly as a [`Stop`] is.
+    /// Only the walk that feeds the hit map records it ([`Self::records_stops`]).
+    pub fn pan_zone(&mut self, p: Painter, mut zone: crate::wheel::PanZone) {
+        if (p.is_recording() && !stops_in_recording_walk()) || !self.records_stops() {
+            return;
+        }
+        let (rect, _, clip) = p.to_screen(zone.rect);
+        zone.rect = rect.intersect(clip);
+        if zone.rect.w > 0.0 && zone.rect.h > 0.0 {
+            self.pans.push(zone);
+        }
     }
 }
 

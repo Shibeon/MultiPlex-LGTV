@@ -5149,7 +5149,10 @@ fn shelf_walk(policy: Option<crate::caption_policy::CaptionPolicy>, rise: impl F
         a.run(1);
         b.run(1);
         let (y_a, lift) = (SHELF_AT.y, b.sect.heading_lift());
-        let y_b = y_a + super::ROW_PITCH_FIXED + a.sect.under_band();
+        // B stands at the room the caption rule counts (`card_row::room_for`: the grid's air, a
+        // section's [`crate::consts::SECTION_AIR`] less than a shelf's pitch keeps), the tightest
+        // place a row below can be: a caption that clears it clears every page's next shelf.
+        let y_b = y_a + super::ROW_PITCH_FIXED - crate::consts::SECTION_AIR + a.sect.under_band();
         let at_a = SectionFrame { below_rise: rise(&b.sect), ..SectionFrame::new(y_a, Rect::FULL) };
         let at_b = SectionFrame::new(y_b, Rect::FULL);
         let heading = y_b - CARD_DY - TITLE_DY - lift;
@@ -5697,8 +5700,9 @@ fn the_stills_heading_stands_a_fixed_rise_higher_over_its_cards_than_a_posters()
     );
     assert_eq!(
         RowStyle::STILL.pitch_fixed(),
-        RowStyle::EPISODE.pitch_fixed() + crate::still_footer::FOOTER_UNDER_TILE,
-        "the rise moves the heading, never the cards under it: the row's pitch is the strip's plus the footer line that stands under the tile"
+        RowStyle::EPISODE.pitch_fixed() + crate::still_footer::FOOTER_UNDER_TILE - crate::consts::SECTION_AIR,
+        "the rise moves the heading, never the cards under it: the row's pitch is the strip's plus the footer line that stands under the tile, \
+         in the board's foot rather than the section air (`RowStyle::foot`)"
     );
 }
 
@@ -5722,7 +5726,11 @@ fn the_stills_row_is_spaced_40_apart_and_its_footer_stands_below_the_art() {
     // the heading of the NEXT shelf: one pitch under this row's own, `TITLE_DY` over its tiles
     let pitch = RowStyle::STILL.pitch_fixed() + crate::card_row::LABEL_BAND_COLLAPSED;
     let next_heading_y = (PEEK_Y + pitch) - TITLE_DY;
-    assert_eq!(next_heading_y - footer_foot, crate::theme::STILL_FOOTER_AIR, "the next heading clears the footer by the shared gap");
+    assert_eq!(
+        next_heading_y - footer_foot,
+        crate::theme::STILL_FOOTER_AIR,
+        "the next heading clears the footer by the board's gap (the row keeps no extra section air: `RowStyle::foot`)"
+    );
 }
 
 /// The rise and the focus lift do not stack: a focused tile's glow spills up to `heading_lift_max`,

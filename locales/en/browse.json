@@ -2292,5 +2292,29 @@
   "browse.detail.upcoming_title_tba": {
     "value": "Title to be announced",
     "description": "Title of an upcoming episode's card when Plex has not named the episode yet (it sent nothing, or a placeholder such as TBA or Episode 7). Two lines of about 30 characters at most."
+  },
+  "browse.person.acting": {
+    "value": "Acting",
+    "description": "Heading of the person page's row of the films and shows this person acted in."
+  },
+  "browse.person.appearances": {
+    "value": "Appearances",
+    "description": "Heading of the person page's row of the titles this person appeared in as themselves (documentaries, talk shows)."
+  },
+  "browse.person.producing": {
+    "value": "Producing",
+    "description": "Heading of the person page's row of the titles this person produced."
+  },
+  "browse.person.directing": {
+    "value": "Directing",
+    "description": "Heading of the person page's row of the titles this person directed."
+  },
+  "browse.person.other_credits": {
+    "value": "Other credits",
+    "description": "Heading of the person page's row of every other credit (writing, music, crew)."
+  },
+  "browse.person.available": {
+    "value": "Available on MultiPlex",
+    "description": "Heading of the person page's first row: this person's films and shows that are on the viewer's own servers. MultiPlex is the app's name; keep it as is."
   }
 }
