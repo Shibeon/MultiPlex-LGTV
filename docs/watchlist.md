@@ -177,8 +177,9 @@ keeping the top-right:
 
 The join is the primary `plex://` guid only (`docs/pms-api.md` 2d): `imdb://`, `tmdb://` and `tvdb://`
 answer size 0 from `/library/all?guid=`, so they would only manufacture false "Not available" answers.
-A chunk whose lookup fails, or a row with no usable `ratingKey`, answers nothing for its guids, which
-stay Unknown. The lookups are the list worker's own batches (40 guids per request, per server and kind,
+A chunk whose lookup fails, or a row whose `ratingKey` is not a number, answers nothing for its guids,
+which stay Unknown (a row with an EMPTY `ratingKey` is dropped by the client, `find_by_guids`, and so
+reads as absent). The lookups are the list worker's own batches (40 guids per request, per server and kind,
 one server after another), the table is per profile and per server, and it moves on what already
 moves it: a library change the server's feed reports (`What::Delta`, that server only), a roster
 change (`What::Rematch`), a reachability flip (re-derived without a request) and a profile switch (a
