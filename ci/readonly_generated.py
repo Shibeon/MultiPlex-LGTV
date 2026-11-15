@@ -13,7 +13,7 @@ import re
 from readonly_dependencies import _local_sha, _sha, _json, _manifest_paths, _configs, _workspace_hashes, WORKSPACE_HASHING
 
 CERTIFICATE_PATH = Path(__file__).with_name('proofs') / 'platform-generated-enums.json'
-CERTIFICATE_SHA256 = 'e05154877b3252f4b59641e793eb8f48f209278ae584d2590f23413e132b2fca'
+CERTIFICATE_SHA256 = '777d988e94a0d1ea9d0bab24afbeda81f5fba7b364984212cab3965ca6163c78'
 SOURCES = ['platform/Cargo.toml', 'platform/src/lib.rs', 'platform/src/i18n/mod.rs',
            'platform/build.rs', 'platform/build_support/catalog.rs', 'build_support/install_identities.rs',
            'machine/src/lib.rs', 'machine/src/machine.rs']
@@ -25,8 +25,12 @@ MACHINE_SOURCES = ['571415d64a9885248f852b402153feedd4660acbe03606e4796c59659726
                    '03a6e18f576dcbaff66c3d7405923b155302bfb2996bb373dac115ece055a5bf']
 
 
+# The third snapshot is the MultiPlex rename: it differs from the second only in the names of the
+# three hostsim environment variables (`MULTIPLEX_FORMAT_LOCALE`, `MULTIPLEX_CLOCK`,
+# `MULTIPLEX_LOCALE`), never in the include or the enums it declares.
 I18N_SOURCES = ['40a13d07a43c772b10587e510a69502684abfa1f582ce355b22fd935a8c46f45',
-                '2c978e3aa3a9215a2e96ebaec9dd5ae3cf3ee85cf1afb43a36b5f42f17ff4d52']
+                '2c978e3aa3a9215a2e96ebaec9dd5ae3cf3ee85cf1afb43a36b5f42f17ff4d52',
+                'da6a7915d75b20ee107c26bd58bf2cb8d8272b8ea6755f5e0a13fa30aeb3f3ea']
 
 def source_hashes(root):
     sources = {p: _local_sha((root / p).read_bytes()) for p in SOURCES}
