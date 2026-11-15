@@ -1027,6 +1027,30 @@ fn the_plate_rest_and_the_remaining_ink_reach_the_draw_list() {
     assert_eq!(state.control("play").map(|c| c.rest), Some(Rest::Solid), "Play is the light primary disc");
 }
 
+/// **Only the play disc takes the primary plate.** Format 1.0's `solid` is frozen: a `toggle_play` disc
+/// resting `solid` (the reference's, hero-center's, MultiPlex's Play) draws the ivory primary plate, and
+/// any OTHER disc resting `solid` keeps the focused colours at rest, as before; an open section's own
+/// control wears `solid` whatever it is.
+#[test]
+fn only_a_play_disc_resting_solid_takes_the_primary_plate() {
+    use crate::player_hud::command::HudCommand;
+    use crate::player_hud::render::disc_rest;
+    use plx_ui::widgets::TransportRest;
+    let reference = build(REFERENCE, &FM);
+    let state = compact(&reference, Slot::Discs);
+    let play = state.control("play").expect("the play disc").clone();
+    assert_eq!((play.rest, play.act), (Rest::Solid, Some(HudCommand::TogglePlay)), "premise");
+    assert_eq!(disc_rest(&play, false), TransportRest::Primary);
+    assert_eq!(disc_rest(&play, true), TransportRest::Solid, "an open section's control is `solid` whatever it is");
+    let other_ids: Vec<_> = state.controls.iter().filter(|c| c.act != Some(HudCommand::TogglePlay)).map(|c| c.id.clone()).collect();
+    assert!(!other_ids.is_empty(), "premise: the reference row has other discs");
+    for id in other_ids {
+        let mut c = state.control(&id).unwrap().clone();
+        c.rest = Rest::Solid;
+        assert_eq!(disc_rest(&c, false), TransportRest::Solid, "{id}: a non-play `solid` disc draws as it always did");
+    }
+}
+
 /// **Play's light never reaches the skip discs.** The MultiPlex row draws Play as the player's primary
 /// plate (`TransportRest::Primary`, the ivory fill) between −N s and +N s; focused and popped to the
 /// largest scale the focus pop rests at (with a margin for the spring's overshoot), everything it paints

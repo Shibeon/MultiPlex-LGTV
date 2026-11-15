@@ -857,6 +857,22 @@ fn section_open(state: &CompiledState, c: &crate::hud_format::compile::ControlRe
     matches!(c.act, Some(HudCommand::ToggleSection(s)) if state.key.open & s.open_bit() != 0)
 }
 
+/// **The rest face a disc is drawn with.** An open section's own control wears the `solid` face,
+/// whatever it rests in. The play disc (`toggle_play`) resting `solid` is the player's primary action
+/// and takes the ivory primary plate (`TransportRest::Primary`, a halo that stays off its neighbours);
+/// every other `solid` disc keeps the format's `solid`, the focused colours at rest.
+pub(crate) fn disc_rest(c: &crate::hud_format::compile::ControlRect, open: bool) -> TransportRest {
+    match c.rest {
+        _ if open => TransportRest::Solid,
+        Rest::Solid if c.act == Some(HudCommand::TogglePlay) => TransportRest::Primary,
+        Rest::Solid => TransportRest::Solid,
+        // Format validation rejects `custom`; manually constructed ops use the film fallback.
+        Rest::Film | Rest::Custom => TransportRest::Film,
+        Rest::Bare => TransportRest::Bare,
+        Rest::Plate => TransportRest::Plate,
+    }
+}
+
 /// A labelled transport control uses the same app label the compiler measured and the shared Button face.
 #[allow(clippy::too_many_arguments)]
 fn draw_labelled(compiled: &Compiled, f: &Frame<'_>, row: &HudMotion, e: &plx_ui::Env, q: Painter,
@@ -974,17 +990,7 @@ fn draw_control(
                 .focused(focused)
                 .ground(ControlGround::Unkeyed)
                 .scale(scale)
-                .rest_face(match c.rest {
-                    // an open section's own control wears the `solid` face, whatever it rests in
-                    _ if section_open(state, c) => TransportRest::Solid,
-                    // Format validation rejects `custom`; manually constructed ops use the film fallback.
-                    Rest::Film | Rest::Custom => TransportRest::Film,
-                    Rest::Bare => TransportRest::Bare,
-                    // a disc that RESTS light is the row's primary action (Play): the ivory plate,
-                    // with a halo that stays off its neighbours (`TransportButton::halo_reach`)
-                    Rest::Solid => TransportRest::Primary,
-                    Rest::Plate => TransportRest::Plate,
-                })
+                .rest_face(disc_rest(c, section_open(state, c)))
                 .focus_face(match c.focus {
                     Focus::Accent => TransportFocus::Accent,
                     Focus::Ring => TransportFocus::Ring,

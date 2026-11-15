@@ -876,7 +876,7 @@ const F_GAP_AFTER: Field = Field::opt(
 const F_REST: Field = Field::opt(
     "rest",
     RESTS,
-    "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+    "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
 )
 .default("\"film\"");
 const F_FOCUS: Field = Field::opt(

@@ -664,7 +664,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -788,7 +788,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -887,7 +887,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -965,7 +965,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1043,7 +1043,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1140,7 +1140,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1218,7 +1218,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1305,7 +1305,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1383,7 +1383,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1481,7 +1481,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -1559,7 +1559,7 @@
             },
             "rest": {
               "default": "film",
-              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+              "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
               "enum": [
                 "film",
                 "bare",
@@ -3453,7 +3453,7 @@
         },
         "rest": {
           "default": "film",
-          "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest. `custom` is unsupported because 1.0 has no keys defining its inks.",
+          "description": "The resting face: `film` today's, `bare` the glyph only, `solid` the focused colours at rest (a `toggle_play` disc resting `solid` is the player's primary action and takes the ivory primary plate instead). `custom` is unsupported because 1.0 has no keys defining its inks.",
           "enum": [
             "film",
             "bare",
