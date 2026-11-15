@@ -153,9 +153,9 @@ jobs:
       # The released id: a candidate is the release build of the app users install.
       flavor: stable
       rc: ${{ needs.prepare.outputs.rc }}
-      # PRODUCTION, like the release: a candidate is what will ship, and its reports are filed
-      # under their own Sentry release (`multiplex@X.Y.Z-rc.N`), apart from the final's.
-      telemetry: production
+      # The same telemetry choice as the release (`none` in the MultiPlex fork, which has no
+      # destination): a candidate is the build that will ship.
+      telemetry: none
       artifact: rc-assets
       homebrew-manifest: false
       source-asset: true
