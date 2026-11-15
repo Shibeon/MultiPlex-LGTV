@@ -53,7 +53,7 @@
         { "align": "center", "valign": "center", "segment": { "id": "transport", "gap": 32, "items": [
           { "id": "skip_back", "command": "seek", "by": "setting", "dir": "back", "widget": "disc", "size": 108,
             "rest": "plate", "focus": "ring", "caption": true, "face": "builtin:skip-back" },
-          { "id": "play", "command": "toggle_play", "widget": "disc", "size": 130, "rest": "plate", "focus": "ring",
+          { "id": "play", "command": "toggle_play", "widget": "disc", "size": 130, "rest": "solid", "focus": "ring",
             "face": { "playing": "builtin:pause", "paused": "builtin:play" } },
           { "id": "skip_forward", "command": "seek", "by": "setting", "dir": "forward", "widget": "disc", "size": 108,
             "rest": "plate", "focus": "ring", "caption": true, "face": "builtin:skip-forward" }

@@ -980,7 +980,9 @@ fn draw_control(
                     // Format validation rejects `custom`; manually constructed ops use the film fallback.
                     Rest::Film | Rest::Custom => TransportRest::Film,
                     Rest::Bare => TransportRest::Bare,
-                    Rest::Solid => TransportRest::Solid,
+                    // a disc that RESTS light is the row's primary action (Play): the ivory plate,
+                    // with a halo that stays off its neighbours (`TransportButton::halo_reach`)
+                    Rest::Solid => TransportRest::Primary,
                     Rest::Plate => TransportRest::Plate,
                 })
                 .focus_face(match c.focus {

@@ -586,6 +586,22 @@ pub const CONTROL_FOCUS_RING_GAP: f32 = 3.0;
 /// literally would draw a shadow half the size the design asks for.
 pub const CONTROL_CAST_FOCUS: [(f32, f32, f32); 2] = [(5.0, 32.0, 0.34), (1.0, 6.0, 0.20)];
 
+/// **The player's PRIMARY action plate** (`widgets::TransportRest::Primary`, a HUD package's
+/// `rest: "solid"` disc: the MultiPlex HUD's Play/Pause): a warm ivory, `#F5F1EA`, softer than the
+/// cool near-white [`ACCENT`] every focused control takes, so the one light disc in the row reads as
+/// the main action without glaring over a dark picture. Its glyph is [`ACCENT_INK`].
+pub const PLAYER_PRIMARY_FILL: [f32; 4] = rgb8(0xf5, 0xf1, 0xea);
+/// The light that spills inward off the primary plate's rim, in [`CONTROL_RIM_FOCUS_UNKEYED_GLOW`]'s
+/// shape (`[top depth px, top weight, bottom depth px, bottom weight]`): half its depth and about a
+/// third of its weight, because on an always-light plate the full étliv read as a bloom.
+pub const PLAYER_PRIMARY_GLOW: [f32; 4] = [2.5, 0.35, 1.25, 0.2];
+/// The primary plate's focus lift, `(dy, blur, alpha)` like [`CONTROL_CAST_FOCUS`] but tight and
+/// faint: its whole reach ([`PLAYER_PRIMARY_REACH`]) stays inside half the transport row's gap, so
+/// nothing the Play disc draws ever lands on the skip discs beside it.
+pub const PLAYER_PRIMARY_CAST: [(f32, f32, f32); 1] = [(2.0, 8.0, 0.18)];
+/// How far the primary plate's cast reaches past the disc's frame, at most: blur plus offset.
+pub const PLAYER_PRIMARY_REACH: f32 = PLAYER_PRIMARY_CAST[0].1 + PLAYER_PRIMARY_CAST[0].0;
+
 // ── Surfaces / backgrounds ───────────────────────────────────────────────────
 /// Flat shelf/app base (both gradient stops) — Apple TV's shelf gray **#2C2C2E (44,44,46)**. A
 /// MEDIUM gray, deliberately not near-black: the focused-card drop-shadow only reads against a base

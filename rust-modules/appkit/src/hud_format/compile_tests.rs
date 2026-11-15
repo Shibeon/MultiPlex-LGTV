@@ -1008,8 +1008,9 @@ fn the_focus_face_and_the_playbar_looks_reach_the_draw_list() {
 }
 
 /// Format 1.2's faces reach the draw list: MultiPlex rests its discs and its More pill on the dark `plate`
-/// and inks its remaining clock `TEXT_PRIMARY`, as the web player does; a package that names no
-/// `remaining` (classic) keeps the secondary ink (`None`).
+/// (Play excepted: the primary action rests on the light `solid` plate) and inks its remaining clock
+/// `TEXT_PRIMARY`, as the web player does; a package that names no `remaining` (classic) keeps the
+/// secondary ink (`None`).
 #[test]
 fn the_plate_rest_and_the_remaining_ink_reach_the_draw_list() {
     let remaining = |c: &Compiled| match compact(c, Slot::Discs).ops.iter().find(|o| matches!(o, DrawOp::Playbar { .. })) {
@@ -1020,9 +1021,42 @@ fn the_plate_rest_and_the_remaining_ink_reach_the_draw_list() {
     let multiplex = build(crate::hud_format::MULTIPLEX_HUD, &FM);
     assert_eq!(remaining(&multiplex), Some(plx_ui::theme::TEXT_PRIMARY));
     let state = compact(&multiplex, Slot::Discs);
-    for id in ["exit", "skip_back", "play", "skip_forward", "more"] {
+    for id in ["exit", "skip_back", "skip_forward", "more"] {
         assert_eq!(state.control(id).map(|c| c.rest), Some(Rest::Plate), "{id}");
     }
+    assert_eq!(state.control("play").map(|c| c.rest), Some(Rest::Solid), "Play is the light primary disc");
+}
+
+/// **Play's light never reaches the skip discs.** The MultiPlex row draws Play as the player's primary
+/// plate (`TransportRest::Primary`, the ivory fill) between −N s and +N s; focused and popped to the
+/// largest scale the focus pop rests at (with a margin for the spring's overshoot), everything it paints
+/// outside its circle (`TransportButton::halo_reach`: the ring, or an accent focus's cast) must end
+/// before HALF the gap to each neighbour, so the neighbour's own focus has the other half. Before the
+/// primary plate, an accent-focused light disc cast `CONTROL_CAST_FOCUS` (32 px of blur) into a 32 px gap.
+#[test]
+fn the_multiplex_play_discs_halo_stays_off_the_skip_discs() {
+    use plx_ui::widgets::{TransportButton, TransportFocus, TransportRest};
+    let multiplex = build(crate::hud_format::MULTIPLEX_HUD, &FM);
+    let state = compact(&multiplex, Slot::Discs);
+    let rect = |id: &str| state.control(id).unwrap_or_else(|| panic!("{id}")).rect;
+    let (back, play, fwd) = (rect("skip_back"), rect("play"), rect("skip_forward"));
+    let pop = plx_ui::widgets::CTRL_FOCUS_SCALE + 0.02;
+    let drawn = play.scaled(pop);
+    let gaps = [play.x - (back.x + back.w), fwd.x - (play.x + play.w)];
+    for focus in [TransportFocus::Ring, TransportFocus::Accent] {
+        let disc = TransportButton::new(0, play).focused(true).rest_face(TransportRest::Primary).focus_face(focus);
+        let reach = disc.halo_reach();
+        assert!(reach > 0.0, "{focus:?}: a focused disc says it is focused");
+        let left = (drawn.x - reach) - (back.x + back.w);
+        let right = fwd.x - (drawn.x + drawn.w + reach);
+        assert!(left >= gaps[0] * 0.5 - (play.x - drawn.x) && left > 0.0 && right > 0.0,
+            "{focus:?}: Play's halo ({reach} px past a {pop}x disc) reaches into the gaps {gaps:?}: {left} / {right} px left");
+        assert!(reach + (play.x - drawn.x) <= gaps[0].min(gaps[1]) * 0.5,
+            "{focus:?}: the halo takes more than half the gap: {reach} + pop {} vs {gaps:?}", play.x - drawn.x);
+    }
+    // the accent focus's cast the shared controls wear would not have fitted
+    let old = TransportButton::new(0, play).focused(true).rest_face(TransportRest::Solid).focus_face(TransportFocus::Accent);
+    assert!(old.halo_reach() + (play.x - drawn.x) > gaps[0].min(gaps[1]) * 0.5, "premise: the shared cast spills ({})", old.halo_reach());
 }
 
 /// **The report holds the whole row.** `HudGeometry::items` was five stops wide (classic's row) and the

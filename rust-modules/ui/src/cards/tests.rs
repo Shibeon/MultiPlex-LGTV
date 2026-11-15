@@ -5706,6 +5706,21 @@ fn the_stills_heading_stands_a_fixed_rise_higher_over_its_cards_than_a_posters()
     );
 }
 
+/// **An overflowing poster shelf says so by its next card, cut at the right edge** — the row's one
+/// "more content" cue: no scroll bar or track is drawn under a shelf, and no edge fade or chevron is
+/// added to it. At rest on Home's poster shelves the first card that does not fit whole stands well
+/// inside the frame (144 px of it on 1920), so the cue cannot be lost to a rounding of the pitch.
+#[test]
+fn an_overflowing_poster_shelf_peeks_its_next_card_at_the_right_edge() {
+    let frame = plx_base::surface::LOGICAL_W;
+    let sty = RowStyle::HOME;
+    let pitch = sty.w + sty.gap;
+    let whole = ((frame - sty.margin_x + sty.gap) / pitch).floor();
+    let next_x = sty.margin_x + whole * pitch;
+    let peek = frame - next_x;
+    assert!(peek >= 0.25 * sty.w && peek < sty.w, "the next card shows {peek} px of its {} px", sty.w);
+}
+
 /// **The Continue Watching row's geometry on the owner's CW-13 v2 board**: the tiles stand 40 px
 /// apart (a 460 px pitch for a 420 px tile) where the detail episode strip keeps its 28. The footer
 /// line stands below the art and the next heading leaves the shared footer gap.

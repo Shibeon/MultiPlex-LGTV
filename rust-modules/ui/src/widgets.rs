@@ -4878,6 +4878,11 @@ pub enum TransportRest {
     /// a dark opaque plate ([`theme::CONTROL_PLATE_FILL`]) under the white glyph, the idle film's rim
     /// round it: a control that stays legible over a bright picture without the HUD's ramp
     Plate,
+    /// the PLAYER'S PRIMARY ACTION: the ivory light plate ([`theme::PLAYER_PRIMARY_FILL`]) under the
+    /// dark glyph at rest and focused alike, with a soft inner light ([`theme::PLAYER_PRIMARY_GLOW`])
+    /// and, when an accent focus lifts it, a tight faint cast ([`theme::PLAYER_PRIMARY_CAST`]) whose
+    /// reach ([`TransportButton::halo_reach`]) stays off the discs beside it
+    Primary,
 }
 
 /// A [`TransportButton`]'s FOCUS face — what the remote's arrival changes.
@@ -4999,7 +5004,7 @@ impl<'a> TransportButton<'a> {
     fn look(&self) -> TransportLook {
         let focused = self.enabled && self.focused;
         let accent = focused && self.focus == TransportFocus::Accent;
-        let plate = if accent || (self.rest == TransportRest::Solid) {
+        let plate = if accent || matches!(self.rest, TransportRest::Solid | TransportRest::Primary) {
             Plate::Accent
         } else if self.rest == TransportRest::Bare {
             Plate::None
@@ -5011,8 +5016,26 @@ impl<'a> TransportButton<'a> {
     /// The colours of `look`'s plate and glyph: the shared control face, on the dark plate when the
     /// disc rests in [`TransportRest::Plate`] and focus has not brought the accent plate.
     fn face(&self, look: TransportLook) -> ControlFace {
+        if self.rest == TransportRest::Primary {
+            let fill = theme::PLAYER_PRIMARY_FILL;
+            return ControlFace { top: fill, body: fill, ink: theme::ACCENT_INK, spent: theme::CONTROL_SPENT_FILL };
+        }
         ControlStyle::Accent.face(look.plate == Plate::Accent, self.ground, self.palette)
             .plated(self.rest == TransportRest::Plate && look.plate == Plate::Film)
+    }
+    /// **How far past its (popped) frame this disc paints anything**, in px: the focus ring's gap
+    /// and stroke, or the focus cast's blur and offset, whichever reaches further; `0` when it
+    /// draws inside its own circle. The one answer [`View::draw`] lives by, so a layout can prove
+    /// that a disc's light never lands on its neighbour (the MultiPlex HUD's Play beside the skips).
+    pub fn halo_reach(&self) -> f32 {
+        let look = self.look();
+        let ring = if look.ring { theme::CONTROL_FOCUS_RING_GAP + theme::CONTROL_FOCUS_RING_W } else { 0.0 };
+        let cast = match (look.cast, self.rest) {
+            (false, _) => 0.0,
+            (true, TransportRest::Primary) => theme::PLAYER_PRIMARY_REACH,
+            (true, _) => theme::CONTROL_CAST_FOCUS.iter().map(|(dy, blur, _)| blur + dy.abs()).fold(0.0, f32::max),
+        };
+        ring.max(cast)
     }
 }
 impl View for TransportButton<'_> {
@@ -5039,10 +5062,17 @@ impl View for TransportButton<'_> {
         // in the picture. `ControlGround::Unkeyed` is the answer the HUD passes in, and it holds
         // because the HUD's own ramp is under the disc — the glyph's contrast comes from the ramp
         // plus the film, not from the plate alone.
-        if look.cast {
+        let primary = self.rest == TransportRest::Primary;
+        if look.cast && primary {
+            for (dy, blur, a) in theme::PLAYER_PRIMARY_CAST {
+                p.shadow_outside(r, r.w * 0.5, blur, dy, theme::with_a(theme::CARD_SHADOW, a));
+            }
+        } else if look.cast {
             control_cast(p, r, r.w * 0.5);
         }
-        if look.plate != Plate::None {
+        if primary {
+            control_rim_glow(p, r, r.w * 0.5, face.top, face.body, true, self.ground, Some(theme::PLAYER_PRIMARY_GLOW));
+        } else if look.plate != Plate::None {
             control_rim(p, r, r.w * 0.5, face.top, face.body, look.plate == Plate::Accent, self.ground);
         }
         if look.ring {
@@ -8237,11 +8267,27 @@ fn control_rim(
     focused: bool,
     ground: ControlGround,
 ) {
-    let (rim, top, w) = control_rim_spec(focused, ground);
     // the ÉTLIV — light spilling inward off that line. It belongs to the one edge that is a STATE,
     // so it arrives and leaves with it.
     let glow = (focused && ground == ControlGround::Unkeyed)
         .then_some(theme::CONTROL_RIM_FOCUS_UNKEYED_GLOW);
+    control_rim_glow(p, r, rad, top_face, body_face, focused, ground, glow);
+}
+
+/// [`control_rim`] with the inward light named by the caller: the player's primary plate
+/// ([`TransportRest::Primary`]) wears [`theme::PLAYER_PRIMARY_GLOW`], a softer étliv than focus's.
+#[allow(clippy::too_many_arguments)]
+fn control_rim_glow(
+    p: Painter,
+    r: Rect,
+    rad: f32,
+    top_face: [f32; 4],
+    body_face: [f32; 4],
+    focused: bool,
+    ground: ControlGround,
+    glow: Option<[f32; 4]>,
+) {
+    let (rim, top, w) = control_rim_spec(focused, ground);
     p.face_rimmed(
         r,
         rad,
@@ -9730,6 +9776,27 @@ fn transport_button_disabled_never_draws_a_focused_face() {
         assert_eq!(census(disabled), census(TransportButton::new(0, rect).enabled(false)),
             "a disabled disc draws its idle face whatever order the builder ran in");
     }
+}
+
+#[cfg(test)]
+#[test]
+fn the_players_primary_disc_is_ivory_with_a_tight_halo() {
+    let rect = Rect::new(0.0, 0.0, 130.0, 130.0);
+    let primary = |focus| TransportButton::new(0, rect).ground(ControlGround::Unkeyed).rest_face(TransportRest::Primary).focus_face(focus);
+    for focused in [false, true] {
+        let disc = primary(TransportFocus::Ring).focused(focused);
+        let face = disc.face(disc.look());
+        assert_eq!((face.top, face.body, face.ink), (theme::PLAYER_PRIMARY_FILL, theme::PLAYER_PRIMARY_FILL, theme::ACCENT_INK),
+            "the primary plate is ivory at rest and focused (focused: {focused})");
+    }
+    assert_eq!(theme::PLAYER_PRIMARY_FILL, plx_gfx::gfx::tokens::rgb8(0xf5, 0xf1, 0xea), "#F5F1EA");
+    assert_eq!(primary(TransportFocus::Ring).halo_reach(), 0.0, "at rest nothing is drawn outside the circle");
+    assert_eq!(primary(TransportFocus::Ring).focused(true).halo_reach(), theme::CONTROL_FOCUS_RING_GAP + theme::CONTROL_FOCUS_RING_W);
+    assert_eq!(primary(TransportFocus::Accent).focused(true).halo_reach(), theme::PLAYER_PRIMARY_REACH);
+    let shared = TransportButton::new(0, rect).focused(true).halo_reach();
+    assert!(theme::PLAYER_PRIMARY_REACH * 3.0 < shared, "the primary cast is far tighter than the shared focus cast ({shared})");
+    let (soft, full) = (theme::PLAYER_PRIMARY_GLOW, theme::CONTROL_RIM_FOCUS_UNKEYED_GLOW);
+    assert!(soft[0] <= full[0] * 0.5 && soft[1] <= full[1] * 0.4, "a softer inner light: {soft:?} vs {full:?}");
 }
 
 #[cfg(test)]
