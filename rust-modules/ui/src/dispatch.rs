@@ -1597,7 +1597,6 @@ where
         let Dispatcher { nav, input, page_snapshot, page_image, page_stops, page_debt, page_image_alpha, .. } = self;
         if !source_pass { *page_image_alpha = None; }
         let mut stops = Vec::new();
-        let mut pans = Vec::new();
         let mut set = RenderSet {
             // the shared poster/logo residency (ui/tex.rs) is the one pool rule (c) sums beside
             // the screens' own renders and the FrameCache
@@ -1706,11 +1705,9 @@ where
                         backdrop::draw_span("page", || inst.screen.draw(&mut f));
                         if capture { *page_debt = Some((e.id, super::placeholder::since(drawn_from))); }
                         report.drawn.push(inst.id);
-                        let (drawn_stops, drawn_pans) = f.into_parts();
+                        let drawn_stops = f.into_stops();
                         if capture { *page_stops = drawn_stops.clone(); }
                         stops.extend(drawn_stops);
-                        // A held image is a page nothing scrolls; only a live page's rows take the wheel.
-                        if !capture { pans.extend(drawn_pans); }
                     } else if page_image.held_entry() == Some(e.id) {
                         stops.extend(page_stops.iter().cloned());
                     }
@@ -1905,14 +1902,7 @@ where
         let hit_page = self.hit_page();
         plx_gfx::gfx::set_video_plane_frame(was_video_plane);
         if !plx_gfx::gfx::blur_source_pass() {
-            // A surface over the page owns the wheel: the page's rows take none of it. Nor does a
-            // page that does not glide: the application eases a row's notch only on a gliding page
-            // (`Screen::glides`), so a row elsewhere (the player's Chapters strip) would swallow it.
-            let page_rows = hit_page && !self.surface_up()
-                && self.owner_entry().and_then(|e| self.nav.entry(e)).and_then(|e| e.inst.as_ref())
-                    .is_some_and(|i| i.screen.glides());
             self.input.hit.fill(if hit_page { stops } else { Vec::new() });
-            self.input.hit.fill_pans(if page_rows { pans } else { Vec::new() });
             self.input.hit.swap();
         }
         if plx_gfx::gfx::blur_source_pass() { report.render_set = set; return; }

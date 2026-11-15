@@ -2909,6 +2909,34 @@ mod stack {
         assert_eq!(r.place(1000).unwrap().rect.x, grid_card.x, "the grid does not move sideways");
     }
 
+    /// **The Magic Remote wheel scrolls the page, never the row under it** (the owner's ask: a wheel
+    /// that a long shelf took for itself, `plx_ui::wheel` from d91e5e50 until it was removed, kept the
+    /// page from scrolling). A wheel with focus on a long shelf moves the page down and leaves the
+    /// shelf's cards where they stood sideways; only `InputKind::Pan` (the pointer's edge glide) and
+    /// the D-pad move a row.
+    #[test]
+    fn a_wheel_over_a_long_shelf_scrolls_the_page_and_never_the_row() {
+        let wheel = |dy: f32| ScreenEvent::Input(plx_machine::machine::InputEvent {
+            at: Default::default(),
+            source: plx_machine::machine::Source::Script,
+            kind: plx_machine::machine::InputKind::Wheel { dy },
+        });
+        let mut r = rig(24, 60);
+        r.go(100, By::Restore);
+        r.run(2);
+        let (scroll, card) = (r.stack.scroll(), r.place(101).unwrap().rect);
+        for _ in 0..20 {
+            r.feed(wheel(-0.05));
+            r.run(1);
+        }
+        r.run(120);
+        let moved = r.stack.scroll() - scroll;
+        assert!(moved > 100.0, "wheel down scrolls the page down: {scroll} -> {}", r.stack.scroll());
+        let after = r.place(101).unwrap().rect;
+        assert_eq!(after.x, card.x, "the shelf under focus did not move sideways");
+        assert!((card.y - after.y - moved).abs() < 0.5, "the row rode the page: {card:?} -> {after:?}");
+    }
+
     /// The pointer's edge glide (a fractional wheel every frame) moves a stack page itself: the
     /// page follows the wheel and stays where it put it instead of the tick pulling it back to the
     /// focused row; a hover moves focus and not the page, and a key's move brings it back.

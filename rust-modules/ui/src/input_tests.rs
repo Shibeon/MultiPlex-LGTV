@@ -1120,27 +1120,3 @@ fn a_direction_key_that_moves_focus_abandons_a_held_card_press() {
         assert_eq!(d.parts(tick(ms)).press.owner, None, "page {page}: parts() publishes no owner once the spring settled");
     }
 }
-
-/// **A page's rows take the wheel only where the app can glide them.** The application eases a
-/// row's notch as `InputKind::Pan` frames, and it steps that glide only for a page that answers
-/// `Screen::glides`; a page that does not (the player, whose Chapters strip is a `cards::Shelf` too)
-/// would have the notch taken and never delivered, so the hit map holds no wheel row for it and the
-/// notch stays the page's Up/Down.
-#[test]
-fn only_a_gliding_page_offers_its_rows_to_the_wheel() {
-    let zone = super::wheel::PanZone { row: 1, rect: Rect::new(0.0, 400.0, 1920.0, 300.0), scroll: 0.0, max: 2000.0, pitch: 280.0 };
-    let (mut d, mut rig) = boot(FixtureArg::Home);
-    let set = |d: &mut Dispatcher<FixtureHost>, glides: bool| {
-        let page = d.nav.tabs.stack.top_mut().and_then(|entry| entry.inst.as_mut()).expect("the booted page");
-        let screen = page.screen.as_any_mut().and_then(|any| any.downcast_mut::<super::fixture::FixtureScreen>())
-            .expect("fixture screen");
-        screen.pan = Some(zone);
-        screen.glides = glides;
-    };
-    set(&mut d, false);
-    d.draw(&mut rig, true);
-    assert_eq!(d.input.hit.pan_at(960.0, 500.0), None, "a page that does not glide takes no wheel on its rows");
-    set(&mut d, true);
-    d.draw(&mut rig, true);
-    assert_eq!(d.input.hit.pan_at(960.0, 500.0), Some(&zone), "a gliding page's row takes it");
-}

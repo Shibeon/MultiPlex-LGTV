@@ -181,11 +181,8 @@ the episode strip's `EPISODE` look, its caption band and `StillFooter::Shelf`.
   Down from the row reaches the grid with the stills still on top, and the grid's shelves rest as every
   shelf does (`ui_cards::grid_rest_scroll`, `consts::GRID_TOP_Y`). The pointer's edge-glide bands are
   `app::input::EDGE_BAND` (= `consts::MARGIN_Y`, 54 px), and one wheel notch is one Up/Down key
-  (`app::bridge::wheel_input`) except over a row that scrolls sideways: there the notch is the row's
-  (`plx_ui::wheel::route`, wheel down scrolls it right, two cards a notch, eased on the shared scroll
-  spring), until the row stands at the end the notch travels toward, where it is the page's step again.
-  Every `cards::Shelf` registers its band for this (`DrawFrame::pan_zone`), and so does Detail's episode
-  strip; a row that fits on screen never takes the wheel. **The billboard rotates only while focus is on the hero** (or on nothing):
+  (`app::bridge::wheel_input`), wherever the pointer rests: the wheel always scrolls the page, never a
+  row under it (a row moves with Left/Right and the pointer's edge glide). **The billboard rotates only while focus is on the hero** (or on nothing):
   the 8 s countdown (`HERO_AUTO_S`) counts while the page rests at the hero and no shelf or shelf heading
   holds focus (`HomeScreen::row_holds_focus`), and it restarts at its full length when focus returns to the
   hero. A page that rests at the hero while a Continue Watching card is focused (the row scrolls nothing)

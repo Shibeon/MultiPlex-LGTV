@@ -1803,16 +1803,6 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
                 // `wheel:0` token — not a step in either direction
                 return;
             }
-            // Over a row that scrolls sideways the notch is the ROW's (`plx_ui::wheel`): wheel
-            // down shows more on the right, until the row's end, where it is the page's again. The
-            // hit map holds the rows only while no surface is up and the page takes the pointer
-            // and glides (`Screen::glides`); a held button pauses the glide, so it takes none either.
-            let owned = !app.ptr.button_down
-                && (super::bridge::search_owns_input(&app.pages) || super::bridge::owns_input(&app.pages));
-            let zone = app.ptr.edge.at().and_then(|(x, y)| app.pages.input.hit.pan_at(x, y).copied());
-            if owned && app.ptr.wheel_row(dy, zone.as_ref(), app.last_input) {
-                return;
-            }
             if super::bridge::search_owns_input(&app.pages) {
                 app.inputs.push(plx_machine::machine::InputEvent {
                     at: plx_machine::machine::Tick { ms: app.last_input, dt_us: 0 },
@@ -2422,19 +2412,8 @@ pub(crate) unsafe fn playback_tick(app: &mut App, fr: &mut Frame) {
                     kind: plx_machine::machine::InputKind::Pan { dx, x, y },
                 });
             }
-            // and a wheel notch over a row eases it along, on the same glide
-            if app.ptr.edge.at().is_none() {
-                app.ptr.wheel.stop();
-            } else if let Some((dx, x, y)) = app.ptr.wheel_step(fr.now) {
-                app.inputs.push(plx_machine::machine::InputEvent {
-                    at: plx_machine::machine::Tick { ms: fr.now, dt_us: 0 },
-                    source: plx_machine::machine::Source::Sdl,
-                    kind: plx_machine::machine::InputKind::Pan { dx, x, y },
-                });
-            }
         } else {
             app.ptr.edge.stop();
-            app.ptr.wheel.stop();
         }
         // hide the idle pointer during playback
         if matches!(app.route(), AppArg::Player)
