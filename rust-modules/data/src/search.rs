@@ -252,6 +252,9 @@ pub struct TagHit {
     /// The person page opens such a person by `tag_key` on that server (a `tagKey` is also a
     /// `personId` there, `plx_plex::plex::Tag::tag_key`) and resolves every other server by name.
     pub catalog: bool,
+    /// The fold's bookkeeping ([`fold_tag`]): `count` per library section a sighting came from,
+    /// `(server, section, departments, count)`. Empty until a second sighting is folded in.
+    pub sections: Vec<(ServerId, i64, u8, i64)>,
 }
 
 /// A collection result as the server sends it when asked with `includeCollections=1`
@@ -654,6 +657,20 @@ impl SearchReq {
     /// people search, which is made as an account and asks no server.
     pub fn server(&self) -> Option<(ServerId, ClientKey)> {
         (!matches!(self.work, SearchWork::People(_))).then_some((self.sid, self.key))
+    }
+}
+
+/// Requests built outside a step, for a runner test that pins what the runner makes of them
+/// (`app/adapters/stores.rs`): plex.tv's people search, and a server's first answer.
+#[cfg(any(test, feature = "test-support"))]
+impl SearchReq {
+    pub fn people_for_test(q: &str) -> SearchReq {
+        SearchReq { sid: ServerId::from_raw(0), key: ClientKey { instance: 0, token: 0, grant: 0 }, q: q.into(),
+            favs: Vec::new(), work: SearchWork::People(Account { client_id: "synthetic-client".into(),
+                token: "synthetic-token".into() }) }
+    }
+    pub fn first_for_test(sid: ServerId, key: ClientKey, q: &str) -> SearchReq {
+        SearchReq { sid, key, q: q.into(), favs: Vec::new(), work: SearchWork::First }
     }
 }
 
@@ -1338,8 +1355,10 @@ fn ask_catalog(state: &mut SearchState, adapter: &Arc<SearchAdapter>,
 }
 
 /// The people half of a [`rebuild`]: rank the Person shelf's people with plex.tv's ([`people::rank`])
-/// and lay them out — the person the query names comes out of the row as the featured card, and
-/// the row keeps the others in rank order (people the query does not name stay, after them).
+/// and lay them out — the person the query names comes out of the row as the featured card; the
+/// row keeps the servers' people in the merge's order within a strength (people the query does not
+/// name after them) and puts plex.tv's own last ([`people::Ranked::row`]), so plex.tv's answer
+/// landing later moves no card already drawn.
 /// plex.tv's people join only the row's first page, and only while the row has no further page,
 /// since a page read later would land in front of them. The row of a window paged past its first
 /// page keeps the server's order and `prev`, less `prev` itself: a person is drawn once.
@@ -1356,10 +1375,9 @@ fn arrange_people(query: &str, shelves: &mut Vec<Shelf>, catalog: &[people::Cata
     let paged = shelf.is_some_and(|s| s.window.after);
     let library: Vec<TagHit> = shelf.into_iter().flat_map(|s| &s.items)
         .filter_map(|it| match it { Item::Tag(t) => Some(t.clone()), _ => None }).collect();
-    let ranked = people::rank(query, &library, if paged { &[] } else { catalog }, art);
-    let featured = ranked.featured.map(|p| Arc::new(people::Featured::of(p)));
-    let items: Vec<Item> = ranked.people.into_iter().map(|p| p.hit).chain(ranked.unmatched)
-        .map(Item::Tag).collect();
+    let mut ranked = people::rank(query, &library, if paged { &[] } else { catalog }, art);
+    let featured = ranked.featured.take().map(|p| Arc::new(people::Featured::of(p)));
+    let items: Vec<Item> = ranked.row().cloned().map(Item::Tag).collect();
     match at {
         Some(i) if items.is_empty() => { shelves.remove(i); }
         Some(i) => shelves[i].items = items,
@@ -1693,6 +1711,9 @@ fn rebuild(state: &mut SearchState) {
 /// no explanation on screen — so the whole granted roster is still here and only the order moves.
 /// The pass is STABLE, so each server's own ranking survives inside it: the only ranking any server
 /// hands over is the order of its own list, and re-sorting within a pass would throw that away.
+/// The Cast & Crew shelf is then laid out once more by [`arrange_people`] (the featured person out,
+/// plex.tv's people appended), whose sort is stable too and moves people only between strengths
+/// of how well the query names them, so this order survives among the people it names equally.
 ///
 /// **The fold runs over the whole window before anything is drawn, and that ordering is
 /// load-bearing.** This used to `break` out of the fill the moment the shelf was full, which meant
@@ -2236,13 +2257,25 @@ fn project(
 /// Fold a second sighting `t` of the tag `into` already holds ([`same_tag`]): another library
 /// section's, another server's, another department's. The ONE fold `project`, the cross-server
 /// merge and a lane read share:
-/// - the counts SUM (each row carries its own section's);
+/// - the counts of different sections (and servers) SUM, each row carrying its own section's; but
+///   two departments of ONE section list the same titles (a writer-director of five films is five
+///   films in both hubs), so there the larger count stands ([`TagHit::sections`]);
 /// - [`TagHit::fav`] and [`TagHit::jobs`] are OR'd, never overwritten, so a person in one favourite
 ///   section and one non-favourite is favourite-ranked, and an actor who also directs is both;
 /// - whichever row carried artwork wins: a section that has none must not blank a face the other
 ///   supplied.
 fn fold_tag(into: &mut TagHit, t: &TagHit) {
-    into.count += t.count;
+    let own = |h: &TagHit| if h.sections.is_empty() { vec![(h.sid, h.sec, h.jobs, h.count)] } else { h.sections.clone() };
+    let mut sections = own(into);
+    for (sid, sec, jobs, count) in own(t) {
+        // another department of a section already seen: the same titles, so the larger count
+        match sections.iter_mut().find(|s| s.0 == sid && s.1 == sec && s.2 != 0 && jobs != 0 && s.2 & jobs == 0) {
+            Some(s) => { s.3 = s.3.max(count); s.2 |= jobs; }
+            None => sections.push((sid, sec, jobs, count)),
+        }
+    }
+    into.count = sections.iter().map(|s| s.3).sum();
+    into.sections = sections;
     into.fav |= t.fav;
     into.jobs |= t.jobs;
     if into.thumb.is_empty() {

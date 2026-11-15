@@ -120,7 +120,7 @@ fn the_whole_name_is_featured_ahead_of_the_films() {
     assert!(featured.hit.catalog && featured.hit.sid == ART && featured.hit.id.is_empty(),
         "a plex.tv-only person opens by its key, its headshot drawn through `art`");
     // "Christian Slater" is not named; "Bale Christianson" only by word starts
-    assert_eq!(names(&r.people), ["Bale Christianson"]);
+    assert_eq!(names(&r.catalog), ["Bale Christianson"]);
 }
 
 #[test]
@@ -129,14 +129,14 @@ fn a_first_name_alone_features_nobody_and_the_people_stay_in_their_row() {
         catalog("Christian Bale", "k0000000000000001", 0.9, 80), catalog("Bale Christianson", "k0000000000000003", 0.1, 1)], ART);
     assert!(r.featured.is_none());
     // whole words first, then plex.tv's score; "Christianson" (a word start) after
-    assert_eq!(names(&r.people), ["Christian Slater", "Christian Bale", "Bale Christianson"]);
+    assert_eq!(names(&r.catalog), ["Christian Slater", "Christian Bale", "Bale Christianson"]);
 }
 
 #[test]
 fn people_the_query_does_not_name_are_left_out_unless_a_server_sent_them() {
     let r = rank("dune", &[library("Dee Wallace", "k00000000000000d1", 3)],
         &[catalog("Christian Bale", "k0000000000000001", 0.9, 80)], ART);
-    assert!(r.featured.is_none() && r.people.is_empty());
+    assert!(r.featured.is_none() && r.people.is_empty() && r.catalog.is_empty());
     assert_eq!(r.unmatched.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Dee Wallace"],
         "a server's answer is never dropped, only ranked last");
 }
@@ -155,7 +155,7 @@ fn both_sources_merge_on_the_key_and_the_library_wins_a_tie() {
     assert_eq!(featured.hit.thumb, local.thumb, "the library keeps its own face");
     assert_eq!((featured.hit.count, featured.credits), (3, 80), "its titles here, its career on plex.tv");
     assert_eq!(featured.hit.jobs, job_bit("actor") | job_bit("director"));
-    assert_eq!(r.people.iter().map(|p| p.hit.tag_key.as_str()).collect::<Vec<_>>(), ["k0000000000000009"]);
+    assert_eq!(r.catalog.iter().map(|p| p.hit.tag_key.as_str()).collect::<Vec<_>>(), ["k0000000000000009"]);
 }
 
 #[test]
@@ -163,5 +163,31 @@ fn equal_people_rank_by_score_then_titles() {
     let r = rank("morel", &[], &[catalog("Ines Morel", "k0000000000000001", 0.5, 2),
         catalog("Paul Morel", "k0000000000000002", 0.5, 40), catalog("Anne Morel", "k0000000000000003", 0.7, 1)], ART);
     assert!(r.featured.is_none());
-    assert_eq!(names(&r.people), ["Anne Morel", "Paul Morel", "Ines Morel"]);
+    assert_eq!(names(&r.catalog), ["Anne Morel", "Paul Morel", "Ines Morel"]);
+}
+
+/// The row as the screen draws it after the featured card: the servers' people the query names,
+/// then the ones it does not, then plex.tv's own.
+fn row(r: &Ranked) -> Vec<&str> {
+    r.row().map(|t| t.name.as_str()).collect()
+}
+
+#[test]
+fn the_servers_order_decides_between_their_equally_named_people() {
+    // the merge put the favourite library's person first; their title count must not undo it
+    let r = rank("morel", &[library("Ines Morel", "k00000000000000a1", 1), library("Paul Morel", "k00000000000000a2", 9)],
+        &[], ART);
+    assert_eq!(row(&r), ["Ines Morel", "Paul Morel"]);
+}
+
+#[test]
+fn plex_tv_landing_late_moves_none_of_the_servers_people() {
+    let library = [library("Ines Morel", "k00000000000000a1", 1), library("Dee Wallace", "k00000000000000d1", 3),
+        library("Paul Morel", "k00000000000000a2", 9)];
+    let before = rank("morel", &library, &[], ART);
+    assert_eq!(row(&before), ["Ines Morel", "Paul Morel", "Dee Wallace"]);
+    let after = rank("morel", &library, &[catalog("Anne Morel", "k0000000000000003", 1.0, 50),
+        catalog("Paul Morel", "k00000000000000a2", 0.99, 40)], ART);
+    assert_eq!(row(&after), ["Ines Morel", "Paul Morel", "Dee Wallace", "Anne Morel"],
+        "plex.tv's people follow the servers'; its scores place only them");
 }

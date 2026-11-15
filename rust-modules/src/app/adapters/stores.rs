@@ -1511,6 +1511,17 @@ mod tests {
     use crate::app::bridge::test_support::Pms;
     use crate::app::bridge::Bridge;
 
+    /// plex.tv's people search is launched with no server's client: the runner neither resolves
+    /// nor waits on one, so a query on a house whose servers are all gone still asks plex.tv. A
+    /// server's own request whose client the registry no longer holds is dropped as before.
+    #[test]
+    fn a_people_search_runs_through_no_servers_client() {
+        assert!(matches!(search_client(&SearchReq::people_for_test("morel")), Ok(None)));
+        let nobody = plx_plex::plex::ClientKey { instance: u32::MAX, token: u32::MAX, grant: u32::MAX };
+        let gone = SearchReq::first_for_test(ServerId::from_raw(4093), nobody, "morel");
+        assert!(matches!(search_client(&gone), Err(Gone)));
+    }
+
     /// Puts the tape back to its inactive state when a test ends, however it ends.
     struct TapeReset;
     impl Drop for TapeReset {

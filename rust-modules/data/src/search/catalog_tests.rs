@@ -1,7 +1,8 @@
 //! plex.tv's people search as a job of the Search store ([`ask_catalog`], [`take_catalog`],
 //! [`finish_people`]): asked once per settled query as the account the step captured, answered
 //! into its own mailbox, merged into the Person shelf by the rebuild, and featured when the query
-//! names the person. The runner side is pinned in `app/adapters/stores.rs`.
+//! names the person. The runner side (a people job runs through no server's client) is pinned by
+//! `a_people_search_runs_through_no_servers_client` in `app/adapters/stores.rs`.
 
 use super::test_support::*;
 use super::*;
@@ -191,4 +192,52 @@ fn every_people_hub_feeds_one_shelf_and_a_person_keeps_all_their_departments() {
     assert_eq!(people[0].jobs, people::job_bit("actor") | people::job_bit("director"));
     assert_eq!(people[1].jobs, people::job_bit("writer") | people::job_bit("producer"));
     assert_eq!((people[1].tag_key.as_str(), people[1].id.as_str()), ("5d776825880197001ec90b6b", "8"));
+}
+
+/// The same person listed by two departments of one library section is credited once per title:
+/// the departments' rows take the larger count, and only another section (or server) adds to it.
+#[test]
+fn a_person_in_two_departments_of_one_section_is_not_counted_twice() {
+    use plx_plex::plex::{MediaContainer, Tag};
+    let tag = |sec: i64, count: i64| Tag { tag: "Nick Park".into(), tag_key: "5d776825880197001ec90b6a".into(),
+        id: 7, library_section_id: sec, count, ..Default::default() };
+    let mut actor = hub("actor", "actor");
+    actor.directory = vec![tag(1, 5), tag(2, 3)];
+    let mut director = hub("director", "director");
+    director.directory = vec![tag(1, 5)];
+    let mut writer = hub("writer", "writer");
+    writer.directory = vec![tag(2, 2)];
+    let mc = MediaContainer { hub: vec![actor, director, writer], ..Default::default() };
+    let p = project(&mc, ServerId::from_raw(0), NO_FAVS);
+    let Some(Item::Tag(t)) = p[3].first() else { panic!("a person") };
+    assert_eq!(t.count, 8, "5 in section 1 (acting and directing the same titles) and 3 in section 2");
+}
+
+/// The rebuild keeps the merged Cast & Crew order (favourite libraries first, then the servers'
+/// ranking), and plex.tv's answer landing later moves none of the people already drawn.
+#[test]
+fn the_rebuild_keeps_the_servers_order_and_a_late_plex_tv_answer_moves_nobody() {
+    let (_fresh, mut owner) = settled("morel");
+    let account = account();
+    pump_as(&mut owner, 0.3, Some(&account));
+    let (job, port) = people_jobs(&mut owner).pop().expect("asked");
+    let person = |name: &str, key: &str, count: i64| Item::Tag(TagHit { sid: ServerId::from_raw(fixture_slots()[0] as u16),
+        name: name.into(), tag_key: key.into(), id: count.to_string(), count, jobs: people::job_bit("actor"),
+        fav: true, ..Default::default() });
+    let mut answer: Projection = Default::default();
+    answer[3] = vec![person("Ines Morel", "5d7768d2ebdf2200209c9001", 1), person("Paul Morel", "5d7768d2ebdf2200209c9002", 9)];
+    record_for_test(&mut owner.state, fixture_slots()[0], Some(answer));
+    // the people lane's end read: the row has no further page, so plex.tv's people may join it
+    owner.state.src[fixture_slots()[0]].tails[3].end = Some(2);
+    rebuild_for_test(&mut owner.state);
+    let names = |owner: &Owner| owner.state.snapshot().view().shelves().iter().find(|s| s.kind == Kind::Person)
+        .map(|s| titles(s).into_iter().map(str::to_owned).collect::<Vec<_>>()).unwrap_or_default();
+    assert_eq!(names(&owner), ["Ines Morel", "Paul Morel"], "the merged order, not the title counts'");
+
+    finish_people(&port, job.addr, &job.req.q, || Some(json!({ "SearchResults": [{ "SearchResult": [
+        { "score": 1.0, "Directory": { "type": "person", "title": "Anne Morel", "metadataId": "5d7768d2ebdf2200209c9003" } },
+        { "score": 0.99, "Directory": { "type": "person", "title": "Paul Morel", "metadataId": "5d7768d2ebdf2200209c9002",
+            "CreditType": [{ "type": "actor", "count": 40 }] } }] }] })));
+    pump_as(&mut owner, 0.016, Some(&account));
+    assert_eq!(names(&owner), ["Ines Morel", "Paul Morel", "Anne Morel"]);
 }

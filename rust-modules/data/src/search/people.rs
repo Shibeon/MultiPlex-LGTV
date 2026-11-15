@@ -12,14 +12,18 @@
 //!   answer, and never an error that could hide the servers' results.
 //!
 //! [`rank`] merges the two on the person's key (the `tagKey` a server sends is the id plex.tv
-//! answers to, `plex/discover.rs`), keeps the people whose NAME the query names, and orders them:
-//! [`match_strength`], then in the user's libraries, then plex.tv's score, then the title count. The
-//! first is FEATURED (a card at the top of the results) only when the query really names them
-//! (strength [`FEATURE_STRENGTH`] or more: the whole name, or two whole words of it); a first name
-//! alone never puts a stranger ahead of the films.
+//! answers to, `plex/discover.rs`), keeps the people whose NAME the query names, and picks the
+//! FEATURED one (a card at the top of the results) the web client's way (`packages/core/src/
+//! people.ts`): [`match_strength`], then in the user's libraries, then plex.tv's score, then the
+//! title count — and only when the query really names them (strength [`FEATURE_STRENGTH`] or more:
+//! the whole name, or two whole words of it); a first name alone never puts a stranger ahead of the
+//! films.
 //!
-//! The ranking is the web client's (`packages/core/src/people.ts`), ported so both clients agree on
-//! who a query names. Pure: no IO, no clock, no registry.
+//! The ROW is ordered differently from the web's, because on a television it is focused while it
+//! fills: the servers' people keep the order the merge gave them (favourite libraries first, each
+//! server's own ranking) within a strength, and plex.tv's own people (those no server sent) follow
+//! all of them, ordered by strength, score and titles. So plex.tv answering late adds cards at the
+//! end of the row and moves none of the cards already drawn. Pure: no IO, no clock, no registry.
 use super::TagHit;
 use plx_plex::plex::ServerId;
 
@@ -212,11 +216,21 @@ impl Person {
 pub struct Ranked {
     /// The person the query names, for the card at the top.
     pub featured: Option<Person>,
-    /// Everyone else the query names, best first: the People row.
+    /// The servers' other people the query names: strongest first, in the servers' (merged) order
+    /// within a strength.
     pub people: Vec<Person>,
     /// The servers' people whose name the query does not name (a spelling correction, a match on
     /// another field). A server's answer is never dropped: they follow, in the servers' order.
     pub unmatched: Vec<TagHit>,
+    /// The people only plex.tv knows that the query names, best first: after every server's.
+    pub catalog: Vec<Person>,
+}
+
+impl Ranked {
+    /// The Cast & Crew row after the featured card, in the order it is drawn.
+    pub fn row(&self) -> impl Iterator<Item = &TagHit> {
+        self.people.iter().map(|p| &p.hit).chain(&self.unmatched).chain(self.catalog.iter().map(|p| &p.hit))
+    }
 }
 
 /// Merge the servers' people (`library`, the Person shelf's hits) with plex.tv's (`catalog`) on the
@@ -246,26 +260,41 @@ pub fn rank(query: &str, library: &[TagHit], catalog: &[CatalogPerson], art: Ser
         }
     }
     let mut out = Ranked::default();
-    let mut named = Vec::new();
     for mut p in merged {
         p.strength = match_strength(query, &p.hit.name);
-        if p.strength >= 0 {
-            named.push(p);
-        } else if p.in_library() {
-            out.unmatched.push(p.hit);
+        match (p.strength >= 0, p.in_library()) {
+            (true, true) => out.people.push(p),
+            (true, false) => out.catalog.push(p),
+            (false, true) => out.unmatched.push(p.hit),
+            (false, false) => {}
         }
     }
-    // stable: equal people keep the servers' order, then plex.tv's
-    named.sort_by(|a, b| b.strength.cmp(&a.strength)
-        .then(b.in_library().cmp(&a.in_library()))
+    // Both sorts are stable: the servers' people keep the merge's order within a strength, and only
+    // plex.tv's own are placed by its score and the titles.
+    out.people.sort_by(|a, b| b.strength.cmp(&a.strength));
+    out.catalog.sort_by(|a, b| b.strength.cmp(&a.strength)
         .then(b.score.unwrap_or(0.0).total_cmp(&a.score.unwrap_or(0.0)))
         .then(b.titles().cmp(&a.titles())));
-    let mut named = named.into_iter();
-    out.featured = named.next();
-    if out.featured.as_ref().is_some_and(|p| p.strength < FEATURE_STRENGTH) {
-        out.people.extend(out.featured.take());
+    // The featured person: the first in the web's order over both lists (strength, then in a
+    // library, then score, then titles; the row's order on a full tie).
+    let best = |list: &[Person]| -> Option<usize> {
+        let top = list.first()?.strength;
+        let mut at = 0;
+        for (i, p) in list.iter().enumerate().take_while(|(_, p)| p.strength == top).skip(1) {
+            let cur = &list[at];
+            let ahead = p.score.unwrap_or(0.0).total_cmp(&cur.score.unwrap_or(0.0))
+                .then(p.titles().cmp(&cur.titles()));
+            if ahead == std::cmp::Ordering::Greater { at = i; }
+        }
+        Some(at)
+    };
+    let strength = |list: &[Person], at: Option<usize>| at.map_or(-1, |i| list[i].strength);
+    let (lib, cat) = (best(&out.people), best(&out.catalog));
+    let (from, at) = if strength(&out.people, lib) >= strength(&out.catalog, cat) { (&mut out.people, lib) }
+        else { (&mut out.catalog, cat) };
+    if let Some(i) = at.filter(|&i| from[i].strength >= FEATURE_STRENGTH) {
+        out.featured = Some(from.remove(i));
     }
-    out.people.extend(named);
     out
 }
 

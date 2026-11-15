@@ -50,6 +50,10 @@ mod browse_roster_bridge_tests;
 #[path = "notify_bridge_tests.rs"]
 mod notify_bridge_tests;
 
+#[cfg(test)]
+#[path = "search_people_bridge_tests.rs"]
+mod search_people_bridge_tests;
+
 use plx_screens::family::SettingsPage;
 use plx_screens::player::HudPolicy;
 use plx_screens::registry::{AppArg, AppFx, AppMounter, AppMsg, ConsentCmd, ContentArg, ContentReq, HomeCmd, HomeLike, HomeReq, HomeTab, ItemMenuKind, LibraryReq, LoopReq, PageMemory};
@@ -569,8 +573,10 @@ impl StoreSessionCapture {
             profile_generation: self.profile_generation, session_generation: self.visible_generation, tenure: self.tenure,
             profile_key: &self.profile_key },
             // plex.tv's people search is asked as the SETTLED account, never under a controlled
-            // run (its replay supplies no plex.tv answer) and never where it would be refused
-            catalog: self.session.as_deref().filter(|_| !self.controlled && !self.people_refused) }
+            // run or a tape replay (neither supplies a plex.tv answer) and never where it would be
+            // refused (`search_people_bridge_tests.rs`)
+            catalog: self.session.as_deref()
+                .filter(|_| !self.controlled && !self.tape_active && !self.people_refused) }
     }
 }
 
