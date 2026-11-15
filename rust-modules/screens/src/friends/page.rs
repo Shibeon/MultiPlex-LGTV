@@ -38,7 +38,7 @@ use plx_ui::cards::{CardEvent, RowStyle, CardSource, Kind, SectionSpec, Stack, S
 use plx_ui::consts::*;
 use plx_ui::page_regions::{Arrival, BackStep, PageRegions};
 use plx_ui::screen::{
-    AxisMask, DrawFrame, EdgeRule, ElemKind, FocusSource, Focusable, GroupKind, GroupSpec, HitSource, Link,
+    AxisMask, Dir, DrawFrame, EdgeRule, ElemKind, FocusSource, Focusable, GroupKind, GroupSpec, HitSource, Link, Placed,
     RenderStrategy, Screen, ScreenEvent, Seat,
 };
 use plx_ui::theme;
@@ -277,6 +277,11 @@ impl Page {
             ShareState::Known(true) => ShareFace::On,
             ShareState::Known(false) => ShareFace::Off,
         }
+    }
+
+    /// How many plates the filter row has: "All" and the friends it offers.
+    fn chips(&self) -> usize {
+        self.friends.len() + 1
     }
 
     fn selected_chip(&self) -> usize {
@@ -537,6 +542,44 @@ impl<H: ContentLike> StackPage<H> for Page {
             Sec::Status => (self.view.feed == FeedState::Failed).then_some(RETRY_ELEM),
             Sec::Live | Sec::Day(_) => None,
         }
+    }
+
+    /// The head is ONE row of stops, the filter's plates then the toggle (the shared
+    /// [`HeaderFocus`](plx_ui::page_header::HeaderFocus): Left and Right walk it with no wrap).
+    fn plain_len(&self, k: Sec) -> usize {
+        match k {
+            Sec::Head => self.chips() + 1,
+            _ => StackPage::<H>::elem_of(self, k).is_some() as usize,
+        }
+    }
+
+    fn plain_elem(&self, k: Sec, n: usize) -> Option<u32> {
+        match k {
+            Sec::Head if n < self.chips() => Some(CHIP_BASE + n as u32),
+            Sec::Head => (n == self.chips()).then_some(SHARE_ELEM),
+            _ => if n == 0 { StackPage::<H>::elem_of(self, k) } else { None },
+        }
+    }
+
+    fn plain_step(&self, k: Sec, at: usize, dir: Dir) -> Option<usize> {
+        match (k, dir) {
+            (Sec::Head, Dir::Left) => at.checked_sub(1),
+            (Sec::Head, Dir::Right) => (at + 1 < StackPage::<H>::plain_len(self, k)).then_some(at + 1),
+            _ => None,
+        }
+    }
+
+    fn element_rect(&self, cx: &Cx<'_, H>, k: Sec, n: usize, section: Rect) -> Rect {
+        match (k, StackPage::<H>::plain_elem(self, k, n)) {
+            (Sec::Head, Some(elem)) => self.header_row(cx.measure).plate(elem)
+                .map_or(section, |p| Rect::new(p.x, p.y + section.y, p.w, p.h)),
+            _ => StackPage::<H>::focus_rect(self, cx, k, section),
+        }
+    }
+
+    /// Coming into the row from below seats it on the selected plate (the shared header rule).
+    fn seat_override(&self, cx: &Cx<'_, H>, k: Sec, from: Placed) -> Option<u32> {
+        (k == Sec::Head).then(|| self.header_row(cx.measure).focus(self.entry, HEADER_GROUP).seat(from).elem)
     }
 
     fn card_has_menu(&self, _cx: &Cx<'_, H>, _k: Sec, _elem: &u32) -> bool {

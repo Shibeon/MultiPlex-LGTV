@@ -112,17 +112,21 @@ impl H {
         h
     }
 
-    fn step(&mut self, ev: ScreenEvent<WatchHost>) -> Vec<Stamped<WatchHost>> {
-        let mut present = plx_machine::present::Present::new();
-        let mut out = Vec::new();
-        let cx = Cx {
+    fn cx(&self) -> Cx<'static, WatchHost> {
+        Cx {
             views: (),
             tick: Tick { ms: self.ms, dt_us: 16_667 },
             measure: &FixtureMeasure,
             press: PressRead { scale: 1.0, owner: self.focus, ..Default::default() },
             focus: FocusRead { current: self.focus, ..Default::default() },
             owner: InputOwner::Entry(ENTRY),
-        };
+        }
+    }
+
+    fn step(&mut self, ev: ScreenEvent<WatchHost>) -> Vec<Stamped<WatchHost>> {
+        let mut present = plx_machine::present::Present::new();
+        let mut out = Vec::new();
+        let cx = self.cx();
         let mut fx = Effects::new(&mut out, plx_machine::machine::MachineId::Instance(plx_machine::machine::InstanceId(9)), &mut present);
         Machine::<WatchHost>::step(&mut self.screen, &ev, &cx, &mut fx);
         out
@@ -269,4 +273,36 @@ fn the_readouts_replace_the_shelves() {
     }
     let mut h = H::new(FriendsView { feed: FeedState::Failed, ..Default::default() });
     assert_eq!(requests(h.press(super::page::RETRY_ELEM)), vec![Asked::Retry]);
+}
+
+/// **The filter row is walked by the remote**: Left from the toggle reaches the last friend's
+/// plate and on to "All", Right walks back to the toggle and stops there, and Up from the first
+/// shelf lands on the row's selected plate ("All"). The row is one focus group whose stops are
+/// every chip and the toggle (`HeaderFocus`), not the toggle alone.
+#[test]
+fn the_remote_walks_the_filter_row_and_the_toggle() {
+    use plx_ui::screen::{Dir, Focusable, Step};
+    let h = H::new(view(ShareState::Known(true)));
+    let cx = h.cx();
+    let key = |elem| FocusKey { entry: ENTRY, elem };
+    let walk = |from: u32, dir| match Focusable::<WatchHost>::neighbour(&h.screen, key(from), dir, &cx) {
+        Step::Move(k) => Some(k.elem),
+        Step::Edge => None,
+    };
+    // Camille, Léo, Inès: three friends after "All".
+    let chips: Vec<u32> = (0..4).map(FriendsScreen::chip_elem).collect();
+    assert_eq!(walk(SHARE_ELEM, Dir::Left), Some(chips[3]), "Left from the toggle reaches the last friend");
+    let mut at = chips[3];
+    for want in [chips[2], chips[1], chips[0]] {
+        at = walk(at, Dir::Left).expect("a plate on the left");
+        assert_eq!(at, want);
+    }
+    assert_eq!(walk(chips[0], Dir::Left), None, "no wrap past All");
+    assert_eq!(walk(chips[3], Dir::Right), Some(SHARE_ELEM));
+    assert_eq!(walk(SHARE_ELEM, Dir::Right), None, "no wrap past the toggle");
+    // Up from the live shelf's first card seats the row on its selected plate.
+    let live = h.screen.probe_day_card(0, 0).expect("a card under the row");
+    let from = Focusable::<WatchHost>::place(&h.screen, &live, &cx, plx_ui::screen::At::SpringTarget).unwrap();
+    let group = Focusable::<WatchHost>::group_of(&h.screen, &SHARE_ELEM, &cx).unwrap();
+    assert_eq!(Focusable::<WatchHost>::seat(&h.screen, group, from, &cx).elem, chips[0], "Up lands on All");
 }
