@@ -75,6 +75,25 @@ impl crate::registry::CollectionLike for TestHost {
     }
 }
 
+thread_local! {
+    // TEST ONLY: the screen inputs this thread's `TestHost` publishes (the empty fixture unless a
+    // test says the watching profile is managed, `managed_inputs`).
+    static TEST_INPUTS: std::cell::Cell<Option<&'static crate::registry::ScreenInputs>> = const { std::cell::Cell::new(None) };
+}
+
+/// Publish screen inputs whose profile is (`true`) or is not managed, until the next call.
+pub(super) fn managed_inputs(managed: bool) {
+    let inputs: &'static crate::registry::ScreenInputs =
+        Box::leak(Box::new(crate::registry::ScreenInputs { managed, ..Default::default() }));
+    TEST_INPUTS.with(|cell| cell.set(managed.then_some(inputs)));
+}
+
+impl crate::registry::ScreenInputsLike for TestHost {
+    fn screen_inputs<'a>(_cx: &Cx<'a, Self>) -> &'a crate::registry::ScreenInputs {
+        TEST_INPUTS.with(|cell| cell.get()).unwrap_or_else(crate::registry::empty_fixture)
+    }
+}
+
 impl crate::registry::MetadataLike for TestHost {
     fn metadata<'a>(_cx: &Cx<'a, Self>) -> plx_data::metadata::MetadataView<'a> {
         test_store().view()
@@ -162,7 +181,7 @@ pub(super) fn bare_held(sid: ServerId, rk: &str) -> DetailScreen {
         tabs: TabStrip::new(),
         season_pop: CtlPop::new(),
         ctl_pop: CtlPop::new(),
-        watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None,
+        watchlist: plx_data::catalog::Membership::Unknown, watchlist_hex: None, no_watchlist: false,
         season_metrics: season::Metrics::new(),
         about_rows: about::Rows::new(),
         ground: AmbientWash::flat(theme::SURFACE_APP),
@@ -5600,3 +5619,35 @@ mod hero_shade;
 
 #[path = "upcoming_tests.rs"]
 mod upcoming;
+
+/// **A managed profile's More menu has no Watchlist row** (the owner's decision, the web app's
+/// too), and the page hands the application's feed no title, so no membership is read for it.
+/// The owner's menu keeps the row.
+#[test]
+fn a_managed_profile_has_no_watchlist_row_in_the_more_menu() {
+    let sid = ServerId::from_raw(1);
+    let mut item = detail(sid, "m");
+    item.is_show = false;
+    item.kind = "movie".into();
+    item.seasons.clear();
+    item.episodes = Vec::new().into();
+    item.guid = "plex://movie/5d776b1d96b655001f2a9c3e".into();
+    let guard = install(item);
+    let mut screen = bare(&guard, sid, "m");
+    let tick = ScreenEvent::Tick(plx_machine::machine::Tick { ms: 16, dt_us: 16_667 });
+    let has_row = |screen: &DetailScreen| screen.hero_menu(test_store().view()).iter()
+        .any(|row| row.elem == hero::ELEM_WATCHLIST);
+    step(&mut screen, &tick, None);
+    assert!(has_row(&screen), "premise: the owner's menu offers the Watchlist");
+    assert!(screen.watchlist_hex().is_some());
+    managed_inputs(true);
+    step(&mut screen, &tick, None);
+    let (managed_row, managed_hex) = (has_row(&screen), screen.watchlist_hex());
+    managed_inputs(false);
+    step(&mut screen, &tick, None);
+    let owner_again = has_row(&screen);
+    clear();
+    assert!(!managed_row, "no Watchlist row for a managed profile");
+    assert_eq!(managed_hex, None, "and no title for the feed");
+    assert!(owner_again, "the row comes back with the owner");
+}

@@ -1914,11 +1914,14 @@ impl HomeScreen {
         // page-freeze snapshot (`idle::decorative`)
         plx_machine::idle::decorative(|| self.hero_pop.step(hero_focus, dt));
         // The bookmark disc: the title it is for (read by the application's feed) and its flip.
+        // A managed Plex Home profile is offered no Watchlist (`ScreenInputs::managed`): no disc,
+        // so no title for the feed either. Focus a disc leaves is reconciled by the engine.
+        self.disc.hidden = H::screen_inputs(cx).managed;
         self.disc.shown = status_read(view)
             .is_none()
             .then(|| self.selected_hero(view))
             .flatten()
-            .and_then(|h| disc_hex(h.item));
+            .and_then(|h| disc_hex(h.item, self.disc.hidden));
         self.disc.step(dt);
         let visible_cx: Cx<'_, H> = Cx {
             views: cx.views,
@@ -2382,7 +2385,7 @@ impl HomeScreen {
             return None;
         }
         let (label, progress) = hero_action(hero);
-        let info = hero_rects(measure, hero, &label, progress.is_some()).info;
+        let info = hero_rects(measure, hero, &label, progress.is_some(), self.disc.hidden).info;
         let dots = PageDots::new(view.hero_count()).active(index);
         let pager = hero_pager(info.x + info.w, dots.width());
         Some((dots, pager))
@@ -2401,7 +2404,7 @@ impl HomeScreen {
         press_scale: f32,
     ) {
         let (label, progress) = hero_action(hero);
-        let HeroRects { play: pill, disc, info } = hero_rects(measure, hero, &label, progress.is_some());
+        let HeroRects { play: pill, disc, info } = hero_rects(measure, hero, &label, progress.is_some(), self.disc.hidden);
         if !on_axis(MARGIN_X + dx, info.x + info.w - MARGIN_X, SCR_W, 0.0) { return; }
         let row = Rect::new(pill.x + dx, pill.y, info.x + info.w - pill.x, pill.h);
         let reading = plx_gfx::gfx::sample_control_ground(
@@ -2425,7 +2428,7 @@ impl HomeScreen {
             button = button.inline_progress(progress);
         }
         button.draw(env, p);
-        if let Some((rect, hex)) = disc.zip(disc_hex(hero)) {
+        if let Some((rect, hex)) = disc.zip(disc_hex(hero, self.disc.hidden)) {
             // At either rest the plain face; only a flip in flight layers the fill.
             let (icon, mid) = plx_appkit::watchlist_disc::paint(self.disc.progress(hex));
             let mut button = CircleButton::new(c"".as_ptr())
@@ -3175,7 +3178,7 @@ impl HomeScreen {
     fn hero_slots(&self, view: HubsView<'_>) -> ([usize; HERO_NBTN], usize) {
         match status_read(view) {
             Some((_, _, action)) => ([0, 0, 0], usize::from(action.is_some())),
-            None => self.selected_hero(view).map_or(([0, 1, 0], 2), |h| item_slots(h.item)),
+            None => self.selected_hero(view).map_or(([0, 1, 0], 2), |h| item_slots(h.item, self.disc.hidden)),
         }
     }
 
@@ -3220,7 +3223,7 @@ impl HomeScreen {
         }
         let hero = self.selected_hero(view)?.item;
         let (label, progress) = hero_action(hero);
-        let rects = hero_rects(measure, hero, &label, progress.is_some());
+        let rects = hero_rects(measure, hero, &label, progress.is_some(), self.disc.hidden);
         match index {
             0 => Some(rects.play),
             1 => Some(rects.info),
@@ -3723,15 +3726,17 @@ fn hero_elem(slot: usize) -> u32 {
 
 /// The hero controls an item draws, in ROW order, as slots: Play, the bookmark disc when the item
 /// stands for a Watchlist title, then Info. The disc is second, as on Detail.
-fn item_slots(item: &PmsMovie) -> ([usize; HERO_NBTN], usize) {
-    if disc_hex(item).is_some() { ([0, 2, 1], 3) } else { ([0, 1, 0], 2) }
+fn item_slots(item: &PmsMovie, hidden: bool) -> ([usize; HERO_NBTN], usize) {
+    if disc_hex(item, hidden).is_some() { ([0, 2, 1], 3) } else { ([0, 1, 0], 2) }
 }
 
 /// The catalog id the hero's bookmark disc acts on: the item's own, or its show's for a season or
 /// an episode. `None` (no `plex://movie|show` guid, or a collection) means no disc at all, which is
 /// what Detail does too; Home does not resolve a missing id through the server record as the item
 /// menu does, because the disc's presence moves the focus row and must not appear a beat late.
-fn disc_hex(item: &PmsMovie) -> Option<[u8; 12]> {
+/// `hidden` (a managed Plex Home profile, [`HeroDisc::hidden`]) means no disc for any item.
+fn disc_hex(item: &PmsMovie, hidden: bool) -> Option<[u8; 12]> {
+    if hidden { return None; }
     item.watchlist_subject().and_then(|(_, hex, _)| hex)
 }
 
@@ -3749,12 +3754,16 @@ struct HeroDisc {
     prev: Option<([u8; 12], bool)>,
     /// The title the hero shows now, cached each tick for the application's feed.
     shown: Option<[u8; 12]>,
+    /// The watching profile is a managed Plex Home member (`ScreenInputs::managed`, read each
+    /// tick): no disc on any hero, the row is Play and Info.
+    hidden: bool,
 }
 
 impl HeroDisc {
     /// What a press on the disc of `item` asks for, `None` when it names no title.
     fn press(&mut self, item: &PmsMovie) -> Option<crate::registry::ItemMenuAction> {
         use crate::registry::ItemMenuAction as Action;
+        if self.hidden { return None; }
         let (kind, hex, _) = item.watchlist_subject()?;
         let hex = hex?;
         let on = self.of == Some(hex) && self.flip.membership() == plx_data::catalog::Membership::On;
@@ -3836,11 +3845,11 @@ fn hero_pager(info_right: f32, dots_w: f32) -> PagerRects {
     }
 }
 
-fn hero_rects(measure: &dyn Measure, item: &PmsMovie, label: &std::ffi::CStr, inline_progress: bool) -> HeroRects {
+fn hero_rects(measure: &dyn Measure, item: &PmsMovie, label: &std::ffi::CStr, inline_progress: bool, no_disc: bool) -> HeroRects {
     // One row: Play, the watchlist disc when the title has one (absent: no room, no gap), Info —
     // each exactly one gap after the one before it, measured between the visible marks
     // ([`plx_appkit::hero_layout::flat_row`]).
-    let has_disc = disc_hex(item).is_some();
+    let has_disc = disc_hex(item, no_disc).is_some();
     let items = [
         Item::new(if inline_progress {
             Button::progress_pill_width(measure, label, theme::size::BODY).max(theme::hero::PLAY_MIN_W)

@@ -19,19 +19,27 @@ pub(crate) enum Pill {
 /// pill, the Watchlist ("My list"), then a divider, Settings and the profile chip at the right end.
 /// The one place that order is written; `refresh` publishes it and the pill maps below read it, so
 /// no map assumes which index anything holds.
-fn strip_keys(directory: DirectoryView<'_>) -> Vec<u32> {
+///
+/// `managed` is the watching profile's [`Session::profile_is_managed`]: a managed Plex Home
+/// profile has no My list pill (the owner's decision, shared with the web app), so the bar goes
+/// from the last type pill straight to the divider. Focus travel needs nothing of its own for it:
+/// the strip's members are these keys, so the `FocusEngine` simply has one stop fewer.
+///
+/// [`Session::profile_is_managed`]: plx_plex::plex::session::Session::profile_is_managed
+fn strip_keys(directory: DirectoryView<'_>, managed: bool) -> Vec<u32> {
     let mut keys = vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME];
     keys.extend((0..directory.tab_count()).filter_map(|i| directory.tab_kind(i)).map(|kind| match kind {
         SecKind::Movie => widgets::TAB_KEY_MOVIES,
         SecKind::Show => widgets::TAB_KEY_SHOWS,
     }));
-    keys.extend([widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS,
-        widgets::TAB_KEY_CHIP]);
+    if !managed { keys.push(widgets::TAB_KEY_WATCHLIST); }
+    keys.extend([widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
     keys
 }
 
-pub(crate) fn pill_at(directory: DirectoryView<'_>, i: usize) -> Pill {
-    pill_in(i, &strip_keys(directory))
+/// The destination at strip index `i` of the bar `managed` names ([`strip_keys`]).
+pub(crate) fn pill_at(directory: DirectoryView<'_>, managed: bool, i: usize) -> Pill {
+    pill_in(i, &strip_keys(directory, managed))
 }
 
 /// The destination a strip index names, by the KEY published at that index.
@@ -45,8 +53,10 @@ fn pill_in(i: usize, keys: &[u32]) -> Pill {
     }
 }
 
-pub(crate) fn pill_of(directory: DirectoryView<'_>, pill: Pill) -> Option<usize> {
-    pill_index(pill, &strip_keys(directory))
+/// Where `pill` stands on the bar `managed` names; `None` when that bar has no such pill (a type
+/// with no library, or My list for a managed profile).
+pub(crate) fn pill_of(directory: DirectoryView<'_>, managed: bool, pill: Pill) -> Option<usize> {
+    pill_index(pill, &strip_keys(directory, managed))
 }
 
 fn pill_index(pill: Pill, keys: &[u32]) -> Option<usize> {
@@ -64,6 +74,8 @@ fn pill_index(pill: Pill, keys: &[u32]) -> Option<usize> {
 pub(crate) struct ChromeSnapshot {
     tabs_generation: Option<u32>,
     profile_generation: Option<u32>,
+    /// The captured profile is a managed Plex Home member ([`strip_keys`]'s `managed`).
+    managed: bool,
     session_watch: plx_plex::plex::session::VisibleSessionWatch,
     faces: Vec<TabFace>,
     pub(crate) keys: Vec<u32>,
@@ -101,12 +113,40 @@ impl ChromeSnapshot {
         self.refresh_with_profile(measure, directory, None);
     }
 
+    /// Is the profile this snapshot last captured a managed Plex Home member? The bar then has no
+    /// My list pill, and the application sends a press or a boot target for it Home instead
+    /// (`bridge::nav_tab`). `false` until a profile has been captured, and whenever the roster
+    /// cannot prove it ([`Session::profile_is_managed`]).
+    ///
+    /// [`Session::profile_is_managed`]: plx_plex::plex::session::Session::profile_is_managed
+    pub(crate) fn managed(&self) -> bool {
+        self.managed
+    }
+
     pub(crate) fn refresh_with_profile(&mut self, measure: &dyn Measure, directory: DirectoryView<'_>,
         captured: Option<(&plx_plex::plex::session::CurrentProfile, &plx_plex::plex::session::Session)>) {
+        // The profile first: whether it is managed decides the strip's keys below.
+        let generation = captured.map_or_else(plx_plex::plex::session::current_gen, |(profile, _)| profile.generation);
+        let session_changed = captured.is_none() && self.session_watch.changed();
+        let managed_before = self.managed;
+        if self.profile_generation != Some(generation) || session_changed {
+            let current = captured.map_or_else(plx_plex::plex::session::current, |(profile, _)| profile.user.clone());
+            let peeked;
+            let saved = match captured {
+                Some((_, saved)) => saved,
+                None => { peeked = plx_plex::plex::session::peek(); &*peeked }
+            };
+            let account = saved.account(current.as_ref());
+            self.managed = saved.profile_is_managed(current.as_ref());
+            self.thumb = current.map(|user| user.thumb).unwrap_or_default();
+            let initial = account.name.as_deref().map(plx_ui::widgets::initial_of).unwrap_or_default();
+            self.initial = std::ffi::CString::new(initial).unwrap_or_default();
+            self.profile_generation = Some(generation);
+        }
         let generation = directory.tabs_gen();
-        let strip_changed = self.tabs_generation != Some(generation);
+        let strip_changed = self.tabs_generation != Some(generation) || self.managed != managed_before;
         if strip_changed {
-            self.keys = strip_keys(directory);
+            self.keys = strip_keys(directory, self.managed);
             self.faces = self.keys.iter().map(|&key| match key {
                 widgets::TAB_KEY_HOME => TabFace::IconLabel(Icon::Home, plx_platform::i18n::msg::browse_chrome_home().into()),
                 widgets::TAB_KEY_MOVIES => TabFace::IconLabel(Icon::Movie, plx_platform::i18n::msg::browse_kind_movies().into()),
@@ -119,17 +159,6 @@ impl ChromeSnapshot {
             }).collect();
             self.widths = widgets::tab_widths(&self.faces, measure);
             self.tabs_generation = Some(generation);
-        }
-        let generation = captured.map_or_else(plx_plex::plex::session::current_gen, |(profile, _)| profile.generation);
-        let session_changed = captured.is_none() && self.session_watch.changed();
-        if self.profile_generation != Some(generation) || session_changed {
-            let current = captured.map_or_else(plx_plex::plex::session::current, |(profile, _)| profile.user.clone());
-            let account = if let Some((_, saved)) = captured { saved.account(current.as_ref()) }
-                else { plx_plex::plex::session::peek().account(current.as_ref()) };
-            self.thumb = current.map(|user| user.thumb).unwrap_or_default();
-            let initial = account.name.as_deref().map(plx_ui::widgets::initial_of).unwrap_or_default();
-            self.initial = std::ffi::CString::new(initial).unwrap_or_default();
-            self.profile_generation = Some(generation);
         }
     }
 
@@ -300,13 +329,65 @@ mod tests {
     fn pill_maps_follow_the_published_strip_keys() {
         let directory = directory(&[SecKind::Movie, SecKind::Show]);
         let view = directory.view();
-        assert_eq!(strip_keys(view), vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME,
+        assert_eq!(strip_keys(view, false), vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME,
             widgets::TAB_KEY_MOVIES, widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_WATCHLIST, widgets::TAB_KEY_DIVIDER,
             widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
-        assert_eq!(pill_of(view, Pill::Search), Some(0));
-        assert_eq!(pill_of(view, Pill::Watchlist), Some(4));
-        assert_eq!(pill_at(view, 0), Pill::Search);
-        assert_eq!(pill_at(view, 4), Pill::Watchlist);
+        assert_eq!(pill_of(view, false, Pill::Search), Some(0));
+        assert_eq!(pill_of(view, false, Pill::Watchlist), Some(4));
+        assert_eq!(pill_at(view, false, 0), Pill::Search);
+        assert_eq!(pill_at(view, false, 4), Pill::Watchlist);
+    }
+
+    /// A household with the owner, a managed member and a full member, the published profile
+    /// `watching`: the captured pair `refresh_with_profile` takes from the application.
+    fn household(watching: &str, generation: u32) -> (plx_plex::plex::session::CurrentProfile, plx_plex::plex::session::Session) {
+        use plx_plex::plex::session::{CurrentProfile, HomeUserRef, Session, UserRef};
+        let user = UserRef { uuid: watching.into(), ..Default::default() };
+        let tile = |uuid: &str, title: &str, admin: bool, restricted: bool| HomeUserRef {
+            uuid: uuid.into(), title: title.into(), admin, restricted, ..Default::default()
+        };
+        (CurrentProfile { user: Some(user.clone()), generation, stamp: String::new() },
+            Session { user, home_users: vec![tile("u-owner", "Owner", true, false), tile("u-kid", "Kid", false, true),
+                tile("u-adult", "Adult", false, false)], ..Default::default() })
+    }
+
+    /// **A managed Plex Home profile's bar has no My list** (the owner's decision, the web app's
+    /// too): the last type pill is followed by the divider, Settings and the chip. The bar of the
+    /// owner and of a full member keeps it, and a switch between them rebuilds the strip although
+    /// no library changed.
+    #[test]
+    fn a_managed_profile_bar_has_no_my_list() {
+        let directory = directory(&[SecKind::Movie, SecKind::Show]);
+        let mut snapshot = ChromeSnapshot::default();
+        let (profile, saved) = household("u-kid", 1);
+        snapshot.refresh_with_profile(&plx_ui::fixture::FixtureMeasure, directory.view(), Some((&profile, &saved)));
+        assert!(snapshot.managed(), "the restricted tile is a managed profile");
+        assert_eq!(snapshot.keys, vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES,
+            widgets::TAB_KEY_SHOWS, widgets::TAB_KEY_DIVIDER, widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP]);
+        assert!(!snapshot.faces.iter().any(|face| matches!(face, TabFace::IconLabel(Icon::Bookmark, _))),
+            "no My list face either");
+        let mut members = Vec::new();
+        snapshot.members(0, None, 0.0, &mut members);
+        assert_eq!(members.iter().map(|member| member.elem).collect::<Vec<_>>(),
+            vec![widgets::TAB_KEY_SEARCH, widgets::TAB_KEY_HOME, widgets::TAB_KEY_MOVIES, widgets::TAB_KEY_SHOWS,
+                widgets::TAB_KEY_SETTINGS, widgets::TAB_KEY_CHIP], "Shows' neighbour is Settings");
+        assert_eq!(pill_of(directory.view(), true, Pill::Watchlist), None, "no index to select or travel to");
+        assert_eq!(pill_of(directory.view(), true, Pill::Search), Some(0));
+        snapshot.pulse(widgets::TAB_KEY_WATCHLIST);
+        assert_eq!(snapshot.take_pulse(), None, "a pulse for a pill the bar lacks plays nowhere");
+
+        for (watching, generation) in [("u-owner", 2), ("u-adult", 3)] {
+            let (profile, saved) = household(watching, generation);
+            snapshot.refresh_with_profile(&plx_ui::fixture::FixtureMeasure, directory.view(), Some((&profile, &saved)));
+            assert!(!snapshot.managed(), "{watching} is not managed");
+            assert_eq!(snapshot.keys, strip_keys(directory.view(), false), "{watching}'s bar has My list");
+            assert_eq!(snapshot.faces.len(), snapshot.keys.len());
+            assert_eq!(pill_of(directory.view(), false, Pill::Watchlist), Some(4));
+        }
+        let (profile, saved) = household("u-kid", 4);
+        snapshot.refresh_with_profile(&plx_ui::fixture::FixtureMeasure, directory.view(), Some((&profile, &saved)));
+        assert!(!snapshot.keys.contains(&widgets::TAB_KEY_WATCHLIST), "switching back to the managed profile drops it again");
+        assert_eq!(snapshot.faces.len(), snapshot.keys.len());
     }
 
     #[test]

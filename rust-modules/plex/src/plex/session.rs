@@ -2887,6 +2887,21 @@ impl Session {
             .unwrap_or(false)
     }
 
+    /// **Is the watching profile a managed Plex Home member?** plex.tv's `restricted` flag on the
+    /// profile's own roster tile ([`HomeUserRef::restricted`], what the picker captions "Managed
+    /// profile"). The profile is `active` (the published one, [`current`]) when there is one, else
+    /// the persisted [`Session::user`], the same order [`Session::account`] names it in.
+    ///
+    /// **`false` whenever it cannot be proven**, unlike [`Session::active_profile_is_admin`]: what
+    /// rides on it is what a managed profile is NOT shown (the top bar's My list), so an owner
+    /// with no Plex Home (empty uuid), a full member (neither `admin` nor `restricted`), a roster
+    /// that never landed and a uuid the roster does not hold all keep everything. Nothing here
+    /// asks plex.tv: the roster is the one the last sign-in or profile switch persisted.
+    pub fn profile_is_managed(&self, active: Option<&UserRef>) -> bool {
+        let uuid = active.map_or(self.user.uuid.as_str(), |user| user.uuid.as_str());
+        !uuid.is_empty() && self.home_users.iter().any(|u| u.uuid == uuid && u.restricted)
+    }
+
     /// **Everyone in this house, as plex.tv account ids** — the input to
     /// [`super::servers::is_household`] and so to the one "Shared by …" rule: a server whose
     /// `ownerId` is in here belongs to the household and credits nobody.
