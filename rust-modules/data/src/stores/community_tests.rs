@@ -8,7 +8,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// A scripted seam: answers what the test set, and counts every write it was asked for.
 struct Script {
     feed: Mutex<Result<Vec<FriendActivity>, WatchlistError>>,
-    shares: Result<bool, WatchlistError>,
+    shares: Mutex<Result<bool, WatchlistError>>,
+    privacy_reads: AtomicUsize,
     write: Result<(), WatchlistError>,
     live: Mutex<Result<Vec<LiveRow>, LiveError>>,
     answers: Vec<Answer>,
@@ -20,7 +21,8 @@ impl Default for Script {
     fn default() -> Self {
         Self {
             feed: Mutex::new(Ok(vec![activity("a", "5d776b59ad5437001f79c6f8", ActivityKind::Movie)])),
-            shares: Ok(true),
+            shares: Mutex::new(Ok(true)),
+            privacy_reads: AtomicUsize::new(0),
             write: Ok(()),
             live: Mutex::new(Ok(Vec::new())),
             answers: Vec::new(),
@@ -35,7 +37,8 @@ impl CommunityIo for Script {
         self.feed.lock().unwrap().clone()
     }
     fn shares(&self, _: &WatchlistAuth) -> Result<bool, WatchlistError> {
-        self.shares.clone()
+        self.privacy_reads.fetch_add(1, Ordering::SeqCst);
+        self.shares.lock().unwrap().clone()
     }
     fn set_shares(&self, _: &WatchlistAuth, _: bool) -> Result<(), WatchlistError> {
         self.writes.fetch_add(1, Ordering::SeqCst);
@@ -191,7 +194,7 @@ fn reads_start_when_the_page_shows() {
 /// setting the page shows.
 #[test]
 fn the_privacy_write_is_emitted_only_by_the_explicit_command() {
-    let io = Script { shares: Err(WatchlistError::Transport), ..Script::default() };
+    let io = Script { shares: Mutex::new(Err(WatchlistError::Transport)), ..Script::default() };
     let mut rig = Rig::new();
     for i in 0..2_000 {
         rig.visible = i % 300 < 200;
@@ -272,7 +275,95 @@ fn the_live_section_hides_on_forbidden_or_empty_and_polls_while_shown() {
     for _ in 0..60 {
         rig.pump(1.0, &io);
     }
-    assert_eq!(io.lives.load(Ordering::SeqCst), after, "and never asked again for this identity");
+    assert_eq!(io.lives.load(Ordering::SeqCst), after, "not asked again while the servers stay the same");
+}
+
+/// **A refusal is not sticky past a change of servers**: an owner who opened the page while only
+/// a friend's shared server was up (403) sees "Watching now" once their own server comes up, which
+/// moves the captured roster or its facts.
+#[test]
+fn a_forbidden_live_read_is_asked_again_when_the_servers_change() {
+    let io = Script { live: Mutex::new(Err(LiveError::Forbidden)), ..Script::default() };
+    let mut rig = Rig::new();
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    let after = io.lives.load(Ordering::SeqCst);
+    for _ in 0..30 {
+        rig.pump(1.0, &io);
+    }
+    assert_eq!(io.lives.load(Ordering::SeqCst), after);
+    *io.live.lock().unwrap() = Ok(vec![(ServerId::from_raw(1), session("Camille"))]);
+    rig.keys.refill_roster(ServerId::UNSET, 7, 0, [], |_| None, |_| None, |_| None);
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(io.lives.load(Ordering::SeqCst), after + 1, "a new roster asks again");
+    assert_eq!(rig.store.live().len(), 1);
+
+    *io.live.lock().unwrap() = Err(LiveError::Forbidden);
+    for _ in 0..11 {
+        rig.pump(1.0, &io);
+    }
+    let forbidden = io.lives.load(Ordering::SeqCst);
+    rig.keys.refill_roster(ServerId::UNSET, 7, 3, [], |_| None, |_| None, |_| None);
+    rig.pump(0.0, &io);
+    assert_eq!(io.lives.load(Ordering::SeqCst), forbidden + 1, "new facts (a server described as owned) ask again");
+}
+
+/// **A failed read of the sharing setting recovers**: one transient failure (a 5xx, a timeout) is
+/// asked again after [`RETRY_MS`], and the toggle reads the account's setting again.
+#[test]
+fn a_failed_privacy_read_is_asked_again_after_the_wait() {
+    let io = Script { shares: Mutex::new(Err(WatchlistError::Transport)), ..Script::default() };
+    let mut rig = Rig::new();
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(rig.store.shares(), ShareState::Failed);
+    assert_eq!(io.privacy_reads.load(Ordering::SeqCst), 1);
+    *io.shares.lock().unwrap() = Ok(false);
+    rig.pump(RETRY_MS as f32 / 1000.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(io.privacy_reads.load(Ordering::SeqCst), 2);
+    assert_eq!(rig.store.shares(), ShareState::Known(false));
+    assert_eq!(rig.writes(), 0, "a read never writes");
+}
+
+/// A setting that keeps failing is not hammered: after the one automatic retry it waits for the
+/// user (Retry, which the toggle's press sends while the setting is unreadable) or the page's next
+/// showing.
+#[test]
+fn a_failing_privacy_read_waits_for_retry_or_the_next_show() {
+    let io = Script { shares: Mutex::new(Err(WatchlistError::Transport)), ..Script::default() };
+    let reads = |io: &Script| io.privacy_reads.load(Ordering::SeqCst);
+    let mut rig = Rig::new();
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    rig.pump(RETRY_MS as f32 / 1000.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(reads(&io), 2);
+    for _ in 0..60 {
+        rig.pump(1.0, &io);
+    }
+    assert_eq!(reads(&io), 2, "not hammered");
+    assert_eq!(rig.store.shares(), ShareState::Failed);
+
+    rig.store.retry();
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(reads(&io), 3, "Retry asks again");
+
+    rig.visible = false;
+    rig.pump(1.0, &io);
+    rig.visible = true;
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(reads(&io), 4, "the next show asks again");
+
+    *io.shares.lock().unwrap() = Ok(true);
+    rig.store.retry();
+    rig.pump(0.0, &io);
+    rig.pump(0.0, &io);
+    assert_eq!(rig.store.shares(), ShareState::Known(true));
+    assert_eq!(rig.writes(), 0);
 }
 
 /// A transient failure keeps what was shown and asks again at the cadence.
@@ -290,21 +381,62 @@ fn a_failed_live_read_keeps_the_section() {
     assert_eq!(rig.store.live().len(), 1);
 }
 
-/// The owned-server rule: forbidden only when every owned server refused; no server to ask yet is
-/// an empty answer (polled again), and one that answers makes the answer.
+/// The owned-server rule: only a reachable server the account's facts say it OWNS is asked (the
+/// browsed one may be a friend's share); forbidden only when every owned server refused; no server
+/// to ask yet is an empty answer (polled again), and one that answers makes the answer.
 #[test]
 fn live_on_owned_reads_only_owned_reachable_servers() {
-    let (a, b, shared) = (ServerId::from_raw(1), ServerId::from_raw(2), ServerId::from_raw(3));
-    let input = Snapshot::from(SnapshotData { reach: vec![(a, true, 0), (b, true, 1), (shared, true, 2)], ..SnapshotData::default() });
-    let mut asked = Vec::new();
-    let got = live_on_owned(&input, |sid| {
-        asked.push(sid);
-        if sid == a { Err(LiveError::Forbidden) } else { Ok(vec![session("Inès")]) }
+    let (current, own, other_own, shared) = (ServerId::from_raw(1), ServerId::from_raw(2), ServerId::from_raw(4), ServerId::from_raw(3));
+    let input = Snapshot::from(SnapshotData {
+        reach: vec![(current, true, 0), (own, true, 1), (other_own, true, 1), (shared, true, 2)],
+        ..SnapshotData::default()
     });
-    assert_eq!(asked, [a, b], "a shared server is not asked");
-    assert_eq!(got.unwrap().iter().map(|(s, _)| *s).collect::<Vec<_>>(), [b]);
-    assert_eq!(live_on_owned(&input, |_| Err(LiveError::Forbidden)), Err(LiveError::Forbidden));
-    assert_eq!(live_on_owned(&Snapshot::default(), |_| panic!("no server to ask")), Ok(Vec::new()));
+    let owned = |s: ServerId| s == own || s == other_own;
+    let mut asked = Vec::new();
+    let got = live_on_owned(&input, owned, |sid| {
+        asked.push(sid);
+        if sid == other_own { Err(LiveError::Forbidden) } else { Ok(vec![session("Inès")]) }
+    });
+    assert_eq!(asked, [own, other_own], "neither the browsed share nor another share is asked");
+    assert_eq!(got.unwrap().iter().map(|(s, _)| *s).collect::<Vec<_>>(), [own]);
+    assert_eq!(live_on_owned(&input, owned, |_| Err(LiveError::Forbidden)), Err(LiveError::Forbidden));
+    assert_eq!(live_on_owned(&input, |_| false, |_| panic!("no owned server")), Ok(Vec::new()));
+    assert_eq!(live_on_owned(&Snapshot::default(), |_| true, |_| panic!("no server to ask")), Ok(Vec::new()));
+}
+
+fn described(owned: bool) -> &'static plx_plex::plex::ServerFacts {
+    Box::leak(Box::new(plx_plex::plex::ServerFacts {
+        name: "srv".into(), handle: if owned { String::new() } else { "friend".into() }, owned, home: false, owner_id: 0,
+    }))
+}
+
+/// [`owns`] reads the server's description, never its rank: the browsed server is not the
+/// account's because it is browsed.
+#[test]
+fn owns_reads_the_described_facts() {
+    let (mine, theirs, unknown) = (ServerId::from_raw(61), ServerId::from_raw(62), ServerId::from_raw(63));
+    let mut keys = ClientKeys::default();
+    keys.refill_roster(theirs, 1, 1, [mine, theirs, unknown], |_| None,
+        |s| (s != unknown).then(|| described(s == mine)), |_| None);
+    assert!(owns(&keys, mine));
+    assert!(!owns(&keys, theirs), "the browsed share is not owned");
+    assert!(!owns(&keys, unknown), "undescribed is not owned");
+}
+
+/// **The privacy rule for friends' avatars and the feed's plex.tv posters**: they are fetched
+/// through a server the account owns, never through the browsed server when it is a friend's
+/// share. No owned server reachable: nothing (the page draws the initials).
+#[test]
+fn the_art_server_is_an_owned_reachable_server() {
+    let (current, own, down, shared) = (ServerId::from_raw(1), ServerId::from_raw(2), ServerId::from_raw(3), ServerId::from_raw(4));
+    let input = Snapshot::from(SnapshotData {
+        reach: vec![(current, true, 0), (shared, true, 2), (down, false, 1), (own, true, 1)],
+        ..SnapshotData::default()
+    });
+    assert_eq!(art_server_of(&input, |s| s == own || s == down), Some(own));
+    assert_eq!(art_server_of(&input, |s| s == current || s == own), Some(current), "the browsed server when it is owned");
+    assert_eq!(art_server_of(&input, |s| s == down), None, "an owned server that is down is not one");
+    assert_eq!(art_server_of(&input, |_| false), None, "a shared browsed server never carries it");
 }
 
 /// The feed's titles are matched against the servers once per landing; the best ranked copy wins.

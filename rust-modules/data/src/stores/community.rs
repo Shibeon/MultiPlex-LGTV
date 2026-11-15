@@ -15,9 +15,11 @@
 //!   emits nothing.
 //! - **Nothing is read while the page is not on screen.** The feed and the privacy setting are read
 //!   when the page shows, and the feed again when it shows after [`FEED_STALE_MS`]. The live
-//!   sessions are read when the page shows and every [`LIVE_EVERY_MS`] while it stays up; a
-//!   server that answers 401/403 (the account does not own it) ends the polling for the identity,
-//!   and the section is hidden whenever nothing plays.
+//!   sessions are read when the page shows and every [`LIVE_EVERY_MS`] while it stays up, of the
+//!   servers the account owns ([`owns`]); when every one answers 401/403 the polling stops until
+//!   the captured servers or their facts change, and the section is hidden whenever nothing plays.
+//!   A failed read of the sharing setting is asked again once after [`RETRY_MS`], then on Retry or
+//!   the page's next showing.
 //! - **The privacy write is a command, never a step's decision**: [`CommunityStore::set_share`] is
 //!   called by the Bridge only for the page's explicit press of the toggle. No pump emits it.
 //!
@@ -100,7 +102,7 @@ impl CommunityIo for LiveCommunityIo {
     }
     fn live(&self, input: &Snapshot) -> Result<Vec<LiveRow>, LiveError> {
         let clients = KeyedClients::new(&input.keys, self.lookup);
-        live_on_owned(input, |sid| clients.client(sid).ok_or(LiveError::Failed)?.live_sessions())
+        live_on_owned(input, |sid| owns(&input.keys, sid), |sid| clients.client(sid).ok_or(LiveError::Failed)?.live_sessions())
     }
     fn matches(&self, input: &Snapshot, rows: &[(String, Kind)]) -> Vec<Answer> {
         let io = super::watchlist_job::ports::LiveWatchlistIo { input: input.clone(), lookup: self.lookup, lease: self.lease };
@@ -114,7 +116,7 @@ pub enum CommunityCmd {
     /// **The toggle's explicit press**: share (`true`) or stop sharing what the account watches.
     /// The ONLY command that leads to the privacy write ([`CommunityStore::set_share`]).
     SetShare(bool),
-    /// Try again on the unreachable read-out ([`CommunityStore::retry`]).
+    /// Try again what failed to read: the feed, the sharing setting ([`CommunityStore::retry`]).
     Retry,
 }
 
@@ -125,7 +127,7 @@ pub enum CommunityReq {
     Privacy { auth: AuthValue },
     /// **The write**: emitted only by [`CommunityStore::set_share`].
     SetPrivacy { auth: AuthValue, share: bool },
-    /// What plays on the captured servers this account owns (copy rank 0 or 1, reachable).
+    /// What plays on the captured servers this account owns ([`owns`], reachable).
     Live { input: Snapshot },
     /// Which captured servers hold the feed's titles.
     Match { input: Snapshot, rows: Vec<(String, Kind)> },
@@ -201,12 +203,12 @@ fn community_addr(req: u32) -> Addr {
 }
 
 /// **What plays on the servers the account owns**: `read` asked of every captured server that is
-/// reachable and the account's own (copy rank 0, the browsed one, or 1, another it owns; a shared
-/// one would answer 403). Any server that answers makes the answer (the others add nothing);
+/// reachable and `owned` (production: [`owns`], the server's description; the browsed server is
+/// NOT the account's because it is browsed, and a shared one would answer 403). Any server that answers makes the answer (the others add nothing);
 /// `Forbidden` only when there was a server to ask and every one refused; no server to ask yet is
 /// an empty answer, so the section is polled again once one is captured.
-pub fn live_on_owned(input: &Snapshot, mut read: impl FnMut(ServerId) -> Result<Vec<LiveSession>, LiveError>) -> Result<Vec<LiveRow>, LiveError> {
-    let servers: Vec<ServerId> = input.roster().into_iter().filter(|s| input.reachable(*s) && input.copy_rank(*s) <= 1).collect();
+pub fn live_on_owned(input: &Snapshot, owned: impl Fn(ServerId) -> bool, mut read: impl FnMut(ServerId) -> Result<Vec<LiveSession>, LiveError>) -> Result<Vec<LiveRow>, LiveError> {
+    let servers: Vec<ServerId> = input.roster().into_iter().filter(|s| input.reachable(*s) && owned(*s)).collect();
     let (mut sessions, mut answered, mut forbidden) = (Vec::new(), servers.is_empty(), 0usize);
     for sid in &servers {
         match read(*sid) {
@@ -269,12 +271,24 @@ pub enum ShareState {
 /// One live session and the server it plays on.
 pub type LiveRow = (ServerId, LiveSession);
 
-/// The reachable server whose photo proxy draws the feed's absolute plex.tv posters and avatars:
-/// the best ranked one (the current server, then an owned one), My list's rule. `None` while none
-/// is reachable. A pure read of the captured keys.
+/// **The server whose photo proxy draws the friends' plex.tv avatars and the feed's plex.tv
+/// posters**: a reachable server the account OWNS ([`owns`]), the browsed one first. Never a
+/// friend's share, the browsed one included: a friend's avatar URL (and what friends watched) is
+/// not sent to a server the account does not own. `None` while no owned server is reachable, and
+/// the page then draws the initials. A pure read of the captured keys.
 pub fn art_server(keys: &ClientKeys) -> Option<ServerId> {
-    let snapshot = Snapshot::new(keys, None);
-    snapshot.roster().into_iter().filter(|s| snapshot.reachable(*s)).min_by_key(|s| snapshot.copy_rank(*s))
+    art_server_of(&Snapshot::new(keys, None), |s| owns(keys, s))
+}
+
+/// [`art_server`] over a captured snapshot and an ownership predicate.
+pub fn art_server_of(snapshot: &Snapshot, owned: impl Fn(ServerId) -> bool) -> Option<ServerId> {
+    snapshot.roster().into_iter().filter(|s| snapshot.reachable(*s) && owned(*s)).min_by_key(|s| snapshot.copy_rank(*s))
+}
+
+/// Does the account own `sid`? Its plex.tv description says so (`owned`); an undescribed server
+/// is not taken for one.
+pub fn owns(keys: &ClientKeys, sid: ServerId) -> bool {
+    keys.facts(sid).and_then(|f| f.described).is_some_and(|f| f.owned)
 }
 
 /// A slot's request in flight, or a wait before asking again.
@@ -300,10 +314,11 @@ impl Ask {
 enum LivePoll {
     /// Read once the clock reaches this deadline (ms); `None`: on the next visible pump.
     Every(Option<u32>),
-    /// A request is out.
-    Out(u32),
-    /// The account owns no server it may read the sessions of: never asked again for this identity.
-    Forbidden,
+    /// A request is out, asked with these captured roster and facts generations.
+    Out(u32, (u32, u32)),
+    /// Every owned server refused (401/403) as of these roster and facts generations: asked again
+    /// only once they move (a server comes up or is described), never at the cadence.
+    Forbidden((u32, u32)),
 }
 
 /// The identity the store holds, compared each pump.
@@ -317,7 +332,6 @@ pub struct CommunityStore {
     identity: Option<Identity>,
     feed: FeedState,
     feed_ask: Ask,
-    /// Seconds since the feed last landed.
     /// The clock when the feed last landed.
     feed_landed: Option<u32>,
     /// The clock of the last pump: a landing's next deadline counts from it.
@@ -330,6 +344,10 @@ pub struct CommunityStore {
     write_failed: bool,
     live: Arc<[LiveRow]>,
     live_poll: LivePoll,
+    /// Consecutive failed reads of the sharing setting (the automatic retry is spent after one).
+    share_fails: u8,
+    /// The sharing setting is owed a read again: the one automatic retry, a Retry, the next show.
+    share_due: bool,
     /// Guid to the best held copy (lowest copy rank) the last match found.
     held: HashMap<String, (u8, ServerMatch)>,
     match_ask: Ask,
@@ -358,6 +376,8 @@ impl Default for CommunityStore {
             write_failed: false,
             live: Arc::from(Vec::new()),
             live_poll: LivePoll::Every(None),
+            share_fails: 0,
+            share_due: false,
             held: HashMap::new(),
             match_ask: Ask::Idle,
             feed_rev: 0,
@@ -466,13 +486,34 @@ impl CommunityStore {
         true
     }
 
-    /// Try the feed again after it failed (the page's Try again).
+    /// Try again what failed to read: the feed (the page's Try again) and the sharing setting (the
+    /// toggle's press while it is unreadable).
     pub fn retry(&mut self) {
         if self.feed == FeedState::Failed {
             self.feed = FeedState::Loading;
             self.feed_ask = Ask::Idle;
             self.touch();
         }
+        self.retry_shares();
+    }
+
+    /// Owe the sharing setting a read again when its last read failed.
+    fn retry_shares(&mut self) {
+        if self.shares == ShareState::Failed && self.share_ask.out().is_none() {
+            self.share_ask = Ask::Idle;
+            self.share_due = true;
+        }
+    }
+
+    /// A read of the sharing setting failed: the first of a run is asked again after
+    /// [`RETRY_MS`] (a transient 5xx or timeout recovers on its own); after that it waits for a
+    /// Retry or the page's next showing.
+    fn fail_shares(&mut self) {
+        self.shares = ShareState::Failed;
+        self.share_fails = self.share_fails.saturating_add(1);
+        self.share_due = self.share_fails == 1;
+        self.share_ask = if self.share_due { Ask::Owed(self.now.wrapping_add(RETRY_MS)) } else { Ask::Idle };
+        self.touch();
     }
 
     /// Take the identity `input` names: another profile or credential forgets everything held.
@@ -509,6 +550,9 @@ impl CommunityStore {
         self.land();
         let shown = input.visible && !self.was_visible;
         self.was_visible = input.visible;
+        if shown {
+            self.retry_shares();
+        }
         if input.visible {
             self.ask_owed(input, shown);
         }
@@ -530,14 +574,19 @@ impl CommunityStore {
             if self.feed_ask == Ask::Idle && (self.feed == FeedState::Loading || stale) {
                 self.feed_ask = Ask::Out(self.emit(CommunityReq::Feed { auth: auth.clone() }));
             }
-            if self.share_ask == Ask::Idle && self.shares == ShareState::Unknown {
+            if self.share_ask == Ask::Idle && (self.shares == ShareState::Unknown || self.share_due) {
+                self.share_due = false;
                 self.share_ask = Ask::Out(self.emit(CommunityReq::Privacy { auth }));
             }
         }
-        if let LivePoll::Every(due) = self.live_poll {
-            if shown || due.is_none_or(|due| reached(now, due)) {
-                self.live_poll = LivePoll::Out(self.emit(CommunityReq::Live { input: Snapshot::new(input.keys, None) }));
-            }
+        let servers = (input.keys.roster_gen(), input.keys.facts_gen());
+        let due = match self.live_poll {
+            LivePoll::Every(due) => shown || due.is_none_or(|due| reached(now, due)),
+            LivePoll::Forbidden(at) => at != servers,
+            LivePoll::Out(..) => false,
+        };
+        if due {
+            self.live_poll = LivePoll::Out(self.emit(CommunityReq::Live { input: Snapshot::new(input.keys, None) }), servers);
         }
         if let FeedState::Ready(feed) = &self.feed {
             let wanted = (self.feed_rev, input.keys.roster_gen());
@@ -563,7 +612,7 @@ impl CommunityStore {
             let feed = self.feed_ask.out() == Some(req);
             let share = self.share_ask.out() == Some(req);
             let matched = self.match_ask.out() == Some(req);
-            let live = self.live_poll == LivePoll::Out(req);
+            let live = matches!(self.live_poll, LivePoll::Out(r, _) if r == req);
             let write = self.writing.is_some_and(|(r, _)| r == req);
             match outcome {
                 Outcome::NotStarted => {
@@ -576,7 +625,7 @@ impl CommunityStore {
                 }
                 Outcome::Panicked => {
                     if feed { self.feed_ask = Ask::Idle; self.fail_feed() }
-                    if share { self.share_ask = Ask::Idle; self.shares = ShareState::Failed; self.touch() }
+                    if share { self.fail_shares() }
                     if matched { self.match_ask = Ask::Idle }
                     if live { self.live_poll = LivePoll::Every(Some(self.now.wrapping_add(LIVE_EVERY_MS))) }
                     if write { self.writing = None; self.write_failed = true; self.touch() }
@@ -597,19 +646,31 @@ impl CommunityStore {
                     self.share_ask = Ask::Idle;
                     // A write that landed first is the newer answer.
                     if self.writing.is_none() {
-                        self.shares = result.map_or(ShareState::Failed, ShareState::Known);
+                        match result {
+                            Ok(on) => {
+                                self.shares = ShareState::Known(on);
+                                self.share_fails = 0;
+                                self.share_due = false;
+                            }
+                            Err(_) => self.fail_shares(),
+                        }
                     }
                     self.touch();
                 }
                 Outcome::SetPrivacy(share, result) if write => {
                     self.writing = None;
                     match result {
-                        Ok(()) => self.shares = ShareState::Known(share),
+                        Ok(()) => {
+                            self.shares = ShareState::Known(share);
+                            self.share_fails = 0;
+                            self.share_due = false;
+                        }
                         Err(_) => self.write_failed = true,
                     }
                     self.touch();
                 }
                 Outcome::Live(result) if live => {
+                    let LivePoll::Out(_, asked) = self.live_poll else { unreachable!("matched as out") };
                     let next = match result {
                         Ok(rows) => {
                             self.live = rows.into();
@@ -617,7 +678,7 @@ impl CommunityStore {
                         }
                         Err(LiveError::Forbidden) => {
                             self.live = Arc::from(Vec::new());
-                            LivePoll::Forbidden
+                            LivePoll::Forbidden(asked)
                         }
                         // A failed read keeps what was shown and tries again at the cadence.
                         Err(LiveError::Failed) => LivePoll::Every(Some(self.now.wrapping_add(LIVE_EVERY_MS))),
