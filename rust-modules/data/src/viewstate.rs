@@ -176,8 +176,12 @@ impl Scope {
     }
 }
 
-/// What a finished playback tells the view state: the position its `stopped` timeline POST
-/// carried, and whether the item was already watched when the play began. Filled by the media layer
+/// What a finished playback tells the view state: the resume point this stop leaves on the server
+/// as far as the app knows (the position its `stopped` timeline POST carried, or 0 when the stop
+/// worker followed a restart's under-the-floor stop with `/:/unscrobble`, see
+/// [`restart_owes_resume_reset`], because PMS drops that stop), and whether the item was already
+/// watched when the play began. Read `pos_ms` as the tile's new resume point, not as how far the
+/// viewer actually played. Filled by the media layer
 /// when that POST is attempted or abandoned (`route::take_landed_stops`), consumed by
 /// [`crate::stores::Stores::stops_landed`].
 #[derive(Clone, Debug, PartialEq, Eq)]

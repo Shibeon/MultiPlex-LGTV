@@ -1479,8 +1479,9 @@ Client behavior expected by PMS (matches official clients):
     `viewOffset` is `/:/unscrobble` (below; it clears `viewCount` too). So the stop worker
     (`route::ScrobbleWork`, rule `plx_data::viewstate::restart_owes_resume_reset`) follows such a
     `stopped` with an unscrobble when the play-queue row said, at play start, that the server held
-    a resume point at or past 120 s, the stop is under 120 s and below it, and the title was NOT
-    watched. A watched title being rewatched is left alone (the unscrobble would discard its watched
+    a resume point at or past 120 s, the stop is under 120 s and below it, the title was NOT
+    watched, and the playback showed a frame without ending failed (Back during a still-buffering
+    Play from Start, or a failed start, watched nothing and leaves the point alone). A watched title being rewatched is left alone (the unscrobble would discard its watched
     state), so its old resume point still stands after such a restart.
 - simpler alternative (also unverified live): `GET /:/progress?key={ratingKey}&identifier=com.plexapp.plugins.library&time={ms}&state=stopped` — sets progress only; note plexapi warns `time=0` is ignored ("Use markPlayed or markUnplayed to achieve that goal"), and the harness found the same live: a `time=0` or `time=1` progress PUT answers 200 and the old offset survives, `/:/unscrobble` is the only reset (`tests/run.py`, `pms_unscrobble`)
 - mark watched/unwatched without a time: `GET /:/scrobble?key={ratingKey}&identifier=com.plexapp.plugins.library` / `/:/unscrobble?...`

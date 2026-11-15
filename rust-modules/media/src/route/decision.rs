@@ -195,6 +195,10 @@ pub struct PlaybackSession {
     /// explicitly, since long credits start before that; a stop past it is the server's to count,
     /// and a scrobble on top would be a second view. Read and cleared by [`scrobble_stop`].
     pub finished: bool,
+    /// This landing has shown the viewer a decoded frame ([`on_decoded_frame`]). Cleared by every
+    /// request and every landing. A stop that never presented one (Back while a Play from Start
+    /// buffered) watched nothing, so it owes the server no resume reset ([`scrobble_stop`]).
+    presented: bool,
     /// Read-only publication of Player.repair for the HUD. Never authorizes a resource effect.
     pub repair_status: plx_platform::tv::sandbox::State,
     /// The request which produced this attempt, retained for terminal Retry / Choose quality.
@@ -1690,6 +1694,7 @@ impl PlaybackSession {
         native_start_refused: None,
         engine_failure: None,
         finished: false,
+        presented: false,
         repair_status: plx_platform::tv::sandbox::State::Idle,
         request: None,
         requested_resume_ns: 0,
@@ -1798,6 +1803,7 @@ impl PlaybackSession {
             native_start_refused,
             engine_failure,
             finished,
+            presented,
             repair_status,
             request,
             requested_resume_ns,
@@ -1888,6 +1894,7 @@ impl PlaybackSession {
             native_start_refused: *native_start_refused,
             engine_failure: *engine_failure,
             finished: *finished,
+            presented: *presented,
             repair_status: *repair_status,
             request: request.clone(),
             requested_resume_ns: *requested_resume_ns,
@@ -8601,7 +8608,12 @@ pub fn scrobble_stop(
             .map(|i| &ps.queue[i]);
         // Started over and stopped under the server's floor: the `stopped` below would be dropped
         // and the old resume point would stand (the owner's "Resume at 45 minutes" after a restart).
+        // Only a playback that showed the viewer a frame and did not end failed: Back during a
+        // still-buffering Play from Start, or a start that failed (its report names 0,
+        // `route_start::final_position_ns`), watched nothing from the beginning.
         reset_resume = !mark_watched
+            && ps.presented
+            && engine_failure(ps).is_none()
             && row.is_some_and(|r| plx_data::viewstate::restart_owes_resume_reset(*pos_ms, r.resume_ms, r.watched));
         PendingStop::new(plx_data::viewstate::StopRecord {
             sid,
@@ -10800,6 +10812,7 @@ fn request_play_with_queue(
     viewer_reconfigure: Option<(ViewerReconfigure, bool)>,
 ) -> bool {
     ps.finished = false; // a flag the previous stop never took must not mark THIS item
+    ps.presented = false;
     let sid = request.sid;
     let rk = &request.rk;
     let part = &request.part;
@@ -11684,6 +11697,7 @@ fn apply_plan(ps: &mut PlaybackSession, meta: &mut plx_data::stores::metadata::M
             native_start_refused: None,
             engine_failure: None,
             finished: false,
+            presented: false,
             repair_status: plx_platform::tv::sandbox::State::Idle,
             request,
             requested_resume_ns,
