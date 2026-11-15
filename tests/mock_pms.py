@@ -3211,6 +3211,28 @@ TIMELINE_STATES = {"created": 5, "deleted": 9}  # `TimelineEntry.state`: process
 TIMELINE_TYPES = {"movie": 1, "show": 2}
 
 
+# What PMS does with a reported position, as docs/pms-api.md section 7 records it ("Measured live
+# 2026-10-10", PMS 1.43.4): past ~90 % the item is watched and its resume point cleared; a STOPPED
+# position under the server's floor is silently NOT stored (60 s was dropped, 120 s kept), so the
+# resume point the item already held stands; anything else is stored, even a lower one. The floor
+# was measured on `stopped` only, so `playing`/`paused` reports keep storing their time.
+TIMELINE_WATCHED_PERCENT = 90
+TIMELINE_DROPPED_UNDER_MS = 60_001
+
+
+def timeline_resume(it, t, duration, state):
+    """Apply one `/:/timeline` position (`state` playing|paused|stopped|buffering) to catalog row
+    `it` the way PMS does."""
+    if duration > 0 and t * 100 >= duration * TIMELINE_WATCHED_PERCENT:
+        if it.get("viewOffset"):
+            it["viewCount"] = it.get("viewCount", 0) + 1
+        it.pop("viewOffset", None)
+        it["lastViewedAt"] = int(time.time())
+    elif state != "stopped" or t >= TIMELINE_DROPPED_UNDER_MS:
+        it["viewOffset"] = t
+        it["lastViewedAt"] = int(time.time())
+
+
 def timeline_frame(entries):
     """The SSE `timeline` frames a library change sends, in the shape the owner's own server was
     captured sending (docs/pms-api.md section 9): one `event: timeline` frame per entry, its data a
@@ -4025,8 +4047,9 @@ class MockPms:
                 with self.lock:
                     it = lib.items.get(int(rk)) if rk.isdigit() else None
                     if it and t and t.isdigit():
-                        it["viewOffset"] = int(t)
-                        it["lastViewedAt"] = int(time.time())
+                        timeline_resume(it, int(t), int(q.get("duration") or it.get("duration") or 0),
+                                        q.get("state", ""))
+                        lib._roll_up()
             return j(self.container())
         if p == "/playQueues":
             uri = q.get("uri", "")
@@ -4742,6 +4765,24 @@ def selftest():
     assert jget(f"/library/metadata/{rk}")["Metadata"][0]["viewCount"] == 1
     jget(f"/:/unscrobble?key={rk}&identifier=com.plexapp.plugins.library")
     assert "viewCount" not in jget(f"/library/metadata/{rk}")["Metadata"][0]
+    # the timeline's resume point, as PMS keeps it: a stop under the floor leaves the old point
+    # standing (the restart bug), an unscrobble clears it
+    def timeline(t, state="stopped"):
+        jget(f"/:/timeline?ratingKey={rk}&key=%2Flibrary%2Fmetadata%2F{rk}"
+             f"&identifier=com.plexapp.plugins.library&state={state}&time={t}&duration=6000000")
+    def offset():
+        return jget(f"/library/metadata/{rk}")["Metadata"][0].get("viewOffset", 0)
+    timeline(2_700_000)
+    assert offset() == 2_700_000
+    timeline(5_000)
+    assert offset() == 2_700_000, "a stop under the floor is dropped"
+    timeline(5_000, "playing")
+    assert offset() == 5_000, "the floor is a stopped rule: a playing report is stored"
+    timeline(2_700_000)
+    timeline(300_000)
+    assert offset() == 300_000, "a lower stop above the floor is stored"
+    jget(f"/:/unscrobble?key={rk}&identifier=com.plexapp.plugins.library")
+    assert offset() == 0
     # subtitle search & download: 3-letter -> 500, unknown language -> empty, a PUT installs a
     # NEW selected external stream whose sidecar is fetchable, and a candidate key is single-use
     def send(path, method="GET"):
