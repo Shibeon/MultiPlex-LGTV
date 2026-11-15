@@ -1,6 +1,6 @@
 {
  "flaky": [],
- "generated": "2026-11-15T14:10:18Z",
+ "generated": "2026-11-15T14:13:53Z",
  "metrics": [
   {
    "change30_pct": null,
@@ -12,9 +12,9 @@
    "id": "push_wait",
    "kind": "wait",
    "label": "Wait after merge",
-   "n_now": 7,
+   "n_now": 6,
    "n_prev": 0,
-   "now": 366,
+   "now": 430.0,
    "prev7": null,
    "shown": true,
    "state": "new",
