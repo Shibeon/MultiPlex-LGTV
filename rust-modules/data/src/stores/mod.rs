@@ -61,6 +61,7 @@ pub(crate) fn push_held(keys: &mut HeldKeys, sid: plx_plex::plex::ServerId, rk: 
 
 pub mod browse;
 pub mod catalog;
+pub mod community;
 pub mod fanout;
 mod content_arg;
 pub use content_arg::ContentArg;
@@ -107,6 +108,9 @@ pub struct Stores {
     pub catalog: catalog::CatalogStore,
     /// The Detail page's upcoming episodes (`crate::upcoming`). Appended last, like its `StoreId`.
     pub upcoming: upcoming::UpcomingStore,
+    /// The Friends page's feed, privacy setting and live sessions (`crate::community`). Appended
+    /// last, like its `StoreId`.
+    pub community: community::CommunityStore,
     /// The PMS notification feed's owner. Ships on for owned servers (`notify::NOTIFY_ENABLED`); no `StoreId`, no
     /// `StoreCmd`: the application pumps it and tells it the lifecycle (`Bridge::notify_*`).
     pub notify: notify::NotifyStore,
@@ -140,6 +144,7 @@ impl Default for Stores {
             watchlist: watchlist::WatchlistStore::default(),
             catalog: catalog::CatalogStore::default(),
             upcoming: upcoming::UpcomingStore::default(),
+            community: community::CommunityStore::default(),
             notify: notify::NotifyStore::default(),
             notify_map: Default::default(),
             view_ledger: Default::default(),
@@ -303,6 +308,7 @@ pub fn person_pump(&mut self, input: &crate::person::PersonInput<'_>) -> bool {
             StoreId::Person => self.person.take_jobs(),
             StoreId::Catalog => self.catalog.take_jobs(),
             StoreId::Upcoming => self.upcoming.take_jobs(),
+            StoreId::Community => self.community.take_jobs(),
             StoreId::SubtitleSearch => self.subtitle_search.take_jobs(),
             StoreId::ViewReconcile => self.reconcile.take_jobs(),
             StoreId::Hubs => self.hubs.take_jobs(),
@@ -329,6 +335,7 @@ pub fn person_pump(&mut self, input: &crate::person::PersonInput<'_>) -> bool {
             StoreId::Person => self.person.has_jobs(),
             StoreId::Catalog => self.catalog.has_jobs(),
             StoreId::Upcoming => self.upcoming.has_jobs(),
+            StoreId::Community => self.community.has_jobs(),
             StoreId::SubtitleSearch => self.subtitle_search.has_jobs(),
             StoreId::ViewReconcile => self.reconcile.has_jobs(),
             StoreId::Hubs => self.hubs.has_jobs(),
@@ -692,6 +699,7 @@ pub fn person_pump(&mut self, input: &crate::person::PersonInput<'_>) -> bool {
             StoreId::Watchlist => self.watchlist.gen(),
             StoreId::Catalog => self.catalog.gen(),
             StoreId::Upcoming => self.upcoming.gen(),
+            StoreId::Community => self.community.gen(),
             // A landing gate slot only: the stop mailbox is not a store and has no generation.
             StoreId::ViewStop | StoreId::Notify => 0,
         }
@@ -764,6 +772,8 @@ pub enum StoreId {
     /// Appended for the same reason: the Detail page's upcoming episodes (`crate::upcoming`).
     /// Never recorded.
     Upcoming,
+    /// Appended for the same reason: the Friends page (`crate::community`). Never recorded.
+    Community,
 }
 
 /// Route-scoped background work, distinct from a user command. Polling an idle store must not
@@ -822,6 +832,10 @@ pub enum StoreJob {
     /// upcoming store's `want` (and its pump's retry) and addressed by the request id. It names no
     /// server and no client: a plex.tv read as the captured identity. Not on the tape.
     Upcoming(plx_machine::job::Job<upcoming::UpcomingReq>, upcoming::UpcomingPort),
+    /// One Friends-page job (the feed, the privacy read or its WRITE, the live sessions, the guid
+    /// match), emitted by the community store's pump or, for the write alone, its `set_share`
+    /// command, and addressed by the request id. Not on the tape.
+    Community(plx_machine::job::Job<community::CommunityReq>, community::CommunityPort),
     /// One subtitle search, download or install poll, emitted by the subtitle-search pump and
     /// addressed by the search generation. One is out at a time. Not on the tape.
     SubtitleSearch(plx_machine::job::Job<crate::subsearch::SubSearchReq>, crate::subsearch::SubSearchPort),
@@ -932,6 +946,7 @@ impl StoreJob {
             | Self::WatchlistResolve(..) | Self::WatchlistWrite(..) | Self::NotifyStream(..)
             | Self::Catalog(..)
             | Self::Upcoming(..)
+            | Self::Community(..)
             | Self::SubtitleSearch(..)
             | Self::ViewReconcile(..)
             | Self::Search(..)
@@ -958,6 +973,7 @@ impl StoreJob {
             | Self::WatchlistResolve(..) | Self::WatchlistWrite(..) => StoreId::Watchlist,
             Self::Catalog(..) => StoreId::Catalog,
             Self::Upcoming(..) => StoreId::Upcoming,
+            Self::Community(..) => StoreId::Community,
             Self::SubtitleSearch(..) => StoreId::SubtitleSearch,
             Self::ViewReconcile(..) => StoreId::ViewReconcile,
             Self::Hubs(..) => StoreId::Hubs,
@@ -969,7 +985,7 @@ impl StoreJob {
 }
 
 impl StoreId {
-    pub const ALL: [StoreId; 14] = [
+    pub const ALL: [StoreId; 15] = [
         StoreId::Browse,
         StoreId::Hubs,
         StoreId::Metadata,
@@ -984,6 +1000,7 @@ impl StoreId {
         StoreId::Catalog,
         StoreId::Notify,
         StoreId::Upcoming,
+        StoreId::Community,
     ];
 
     /// The library's ordinal for this store (spec §5.1: the library never names `StoreId`).
@@ -1011,6 +1028,7 @@ impl StoreId {
             StoreId::Catalog => "catalog",
             StoreId::Notify => "notify",
             StoreId::Upcoming => "upcoming",
+            StoreId::Community => "community",
         }
     }
 }
@@ -1506,7 +1524,9 @@ mod tests {
         assert_eq!(StoreId::Notify.name(), "notify");
         assert_eq!(StoreId::Upcoming.ord(), StoreOrd(13));
         assert_eq!(StoreId::Upcoming.name(), "upcoming");
-        assert_eq!(StoreId::from_ord(StoreOrd(14)), None);
+        assert_eq!(StoreId::Community.ord(), StoreOrd(14));
+        assert_eq!(StoreId::Community.name(), "community");
+        assert_eq!(StoreId::from_ord(StoreOrd(15)), None);
         let original = ["browse", "hubs", "metadata", "search", "person", "viewstate",
             "collection", "subsearch", "viewreconcile", "viewstop", "watchlist", "catalog"];
         for (ord, name) in original.into_iter().enumerate() {
