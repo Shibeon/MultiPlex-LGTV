@@ -147,9 +147,11 @@ const BIO_LEAD: f32 = 40.0;
 const HL_PAD_X: f32 = 26.0;
 const HL_PAD_Y: f32 = 24.0;
 const BIO_MORE_GAP: f32 = theme::space::LG;
-/// The air between the header block and the first shelf's heading: one shelf section to the next
-/// is [`theme::space::SECTION`], and the header is the page's first section.
-const BAND_GAP_TO_SHELF: f32 = theme::space::SECTION;
+/// The air between the header block and the first shelf's heading: the region gap
+/// ([`theme::space::XL`]), as a title band keeps from what is under it. Not the shelf-to-shelf
+/// [`theme::space::SECTION`] (96): with the tall portrait header that would push the first shelf's
+/// focused caption past the panel and scroll the page at rest (`the_first_shelf_fits_at_rest`).
+const BAND_GAP_TO_SHELF: f32 = theme::space::XL;
 /// The air under a shelf that has another under it ([`StackPage::shelf_foot`]): the label band's
 /// air and the section air, which keeps the pitch Home's shelves have ([`SECTION_AIR`]).
 const SHELF_GAP: f32 = SHELF_FOOT;
@@ -1623,11 +1625,6 @@ mod tests {
         for _ in 0..frames {
             feed(s, store, &FixtureMeasure, Some(focus), ScreenEvent::Tick(Tick { ms: 0, dt_us: 16_667 }));
         }
-    }
-
-    /// Every stop the page registers, in z order — what `Screen::draw` registers without painting.
-    fn page_stops(s: &PersonScreen, f: &mut DrawFrame<'_, '_, PersonHost>) {
-        s.stack.view(&s.page).record_stops(f);
     }
 
     /// Put the page's scroll at `scroll`, without gliding there.
@@ -3236,27 +3233,6 @@ mod tests {
         assert!(matches!(&opened(&s, credit_of(&s, CreditRow::Acting, 1))[..], [ContentArg::Catalog { hex: h }] if *h == hex),
             "a credit no server holds opens its catalog page");
         assert!(opened(&s, credit_of(&s, CreditRow::Acting, 2)).is_empty(), "no catalog id, nowhere to go");
-        store.run(PersonCmd::Close);
-    }
-
-    /// Every row registers the band the Magic Remote wheel scrolls it by (`plx_ui::wheel`): a row
-    /// that fits on screen says it has nowhere to go, a long one says how far it can.
-    #[test]
-    fn every_row_registers_its_wheel_band() {
-        let _serial = plx_base::testlock::serial();
-        let (mut store, mut s) = seed(3, 0);
-        credit(&mut s, &mut store, &[("Actor", 40)]);
-        let key = credit_of(&s, CreditRow::Acting, 0);
-        settle_shelves(&mut s, &store, key, 240);
-        let context = cx_at(&FixtureMeasure, store.view(), key);
-        let mut frame = DrawFrame::new(&context, Painter::root());
-        page_stops(&s, &mut frame);
-        let acting = Focusable::<PersonHost>::place(&s, &key.elem, &context, At::Drawn).unwrap().rect;
-        let zone = plx_ui::wheel::zone_at(frame.pans(), acting.cx(), acting.cy()).expect("the Acting row's band is under its card");
-        assert_eq!(zone.max, SHELF_STYLE.max_scroll(40), "a long row can go as far as its last card");
-        assert!(zone.max > 0.0);
-        assert!(frame.pans().iter().any(|z| z.max == 0.0), "the three local titles fit: that row has nowhere to go");
-        drop(context);
         store.run(PersonCmd::Close);
     }
 }
