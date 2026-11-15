@@ -1342,14 +1342,17 @@ fn ask_catalog(state: &mut SearchState, adapter: &Arc<SearchAdapter>,
 /// the row keeps the others in rank order (people the query does not name stay, after them).
 /// plex.tv's people join only the row's first page, and only while the row has no further page,
 /// since a page read later would land in front of them. The row of a window paged past its first
-/// page is left as the server sent it and keeps `prev`.
+/// page keeps the server's order and `prev`, less `prev` itself: a person is drawn once.
 fn arrange_people(query: &str, shelves: &mut Vec<Shelf>, catalog: &[people::CatalogPerson], art: ServerId,
     prev: Option<Arc<people::Featured>>) -> Option<Arc<people::Featured>> {
     let at = shelves.iter().position(|s| s.kind == Kind::Person);
-    let shelf = at.map(|i| &shelves[i]);
-    if shelf.is_some_and(|s| s.window.start > 0) {
+    if let Some(i) = at.filter(|&i| shelves[i].window.start > 0) {
+        if let Some(shown) = prev.as_ref().and_then(|f| f.hit()) {
+            shelves[i].items.retain(|it| !matches!(it, Item::Tag(t) if same_tag(t, shown)));
+        }
         return prev;
     }
+    let shelf = at.map(|i| &shelves[i]);
     let paged = shelf.is_some_and(|s| s.window.after);
     let library: Vec<TagHit> = shelf.into_iter().flat_map(|s| &s.items)
         .filter_map(|it| match it { Item::Tag(t) => Some(t.clone()), _ => None }).collect();
