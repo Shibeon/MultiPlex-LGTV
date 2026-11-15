@@ -74,7 +74,8 @@
 //! `Session::account_token` empty. That is the same wall `/tmp/multiplex-personbio` exists for, one
 //! step further along — the biography degrades to a blank line, the filmography degrades to
 //! nothing at all — and it is why `/tmp/multiplex-personcredits` had to be written.
-use super::account::{discover, discover_read_allowed, AccountClient};
+use super::account::{discover, discover_read_allowed, metadata_provider, AccountClient};
+use super::client::QueryBuilder;
 use super::models::de_i64;
 use serde::Deserialize;
 
@@ -87,6 +88,30 @@ fn person_profile_url(guid: &str) -> String {
 /// `{discover()}/library/people/{guid}/credits` — the one place the filmography URL is spelled.
 fn person_credits_url(guid: &str) -> String {
     format!("{}/library/people/{guid}/credits", discover())
+}
+
+/// `{metadata_provider()}/library/search?query=…&searchTypes=people` — plex.tv's PEOPLE search, the
+/// one place its URL is spelled. The Search screen asks it beside every server's `/hubs/search`, so a
+/// person the user's libraries do not hold (or hold past the hub's limit) can still be found by name.
+///
+/// The parameters are the ones python-plexapi's published example sends (issue #1158, the only
+/// sample of this endpoint there is): `includeMetadata=1` puts the person record in each result and
+/// `filterPeople=1` keeps the list to people. `limit` bounds the answer.
+fn people_search_url(query: &str, limit: i64) -> String {
+    QueryBuilder::new(format!("{}/library/search", metadata_provider()))
+        .str("query", query)
+        .int("limit", limit)
+        .str("searchTypes", "people")
+        .int("includeMetadata", 1)
+        .int("filterPeople", 1)
+        .build()
+}
+
+/// Would [`AccountClient::search_people`] refuse the read before building a request? The Discover
+/// read rule ([`discover_read_allowed`]): fixed for the life of the process, so the worker that would
+/// make the read answers "nobody" instead of failing, and the search settles rather than retrying.
+pub fn people_search_refused() -> bool {
+    !discover_read_allowed(&people_search_url("", 1))
 }
 
 /// Would [`AccountClient::person_profile`] refuse the read for `guid` before building a request?
@@ -176,6 +201,25 @@ impl AccountClient {
             groups.iter().map(|g| g.credits.len()).sum::<usize>()
         ));
         Some(groups)
+    }
+}
+
+impl AccountClient {
+    /// GET {metadata_provider()}/library/search?searchTypes=people — plex.tv's people matching
+    /// `query`, as the raw `MediaContainer` (`None` = the request FAILED or was REFUSED; a caller
+    /// that must not retry a refusal asks [`people_search_refused`] first).
+    ///
+    /// Returned UNPARSED on purpose: there is one published sample of this answer, so the shape is
+    /// read tolerantly by `plx_data::search::people::parse_catalog`, where anything unexpected
+    /// costs that person and never the request (a typed DTO here would turn one drifted field into
+    /// a body that does not decode, which this caller cannot tell from a network error).
+    pub fn search_people(&self, query: &str, limit: i64) -> Option<serde_json::Value> {
+        let url = people_search_url(query, limit);
+        if !discover_read_allowed(&url) {
+            return None;
+        }
+        let body: serde_json::Value = self.get(&url)?;
+        Some(body.get("MediaContainer").cloned().unwrap_or(serde_json::Value::Null))
     }
 }
 
@@ -435,6 +479,31 @@ mod tests {
         let real = REAL_DISCOVER;
         assert_eq!(read(&[]), [format!("{real}/library/people/abc"), format!("{real}/library/people/abc/credits")],
             "nothing armed: the real provider, and only then");
+    }
+
+    /// plex.tv's people search: built on the metadata provider (which follows the Discover stand-in),
+    /// with the query encoded and the parameters python-plexapi's sample sends; the read hands the
+    /// transport exactly that URL and nothing when the dev-token gate refuses it.
+    #[test]
+    fn the_people_search_is_built_on_the_metadata_provider_and_gated_like_discover() {
+        with_triggers(&[], || {
+            assert_eq!(people_search_url("Inès Morel", 10),
+                "https://metadata.provider.plex.tv/library/search?query=In%C3%A8s%20Morel&limit=10\
+                 &searchTypes=people&includeMetadata=1&filterPeople=1");
+        });
+        if !plx_base::devtrig::ENABLED {
+            return;
+        }
+        let client = AccountClient::new("synthetic-client", None);
+        let ask = |armed: &[(&str, &str)]| with_triggers(armed, || {
+            let refused = people_search_refused();
+            let (_, urls) = probe_gets(|| client.search_people("wal", 10));
+            (refused, urls)
+        });
+        assert_eq!(ask(&[("token", "t")]), (true, vec![]), "dev-token boot, no stand-in: refused, nothing sent");
+        assert_eq!(ask(&[("token", "t"), ("discover", "http://127.0.0.1:41999")]),
+            (false, vec!["http://127.0.0.1:41999/library/search?query=wal&limit=10&searchTypes=people\
+                &includeMetadata=1&filterPeople=1".to_string()]));
     }
 
     /// The refusal as the person store meets it: asked BEFORE a worker exists, through the same gate

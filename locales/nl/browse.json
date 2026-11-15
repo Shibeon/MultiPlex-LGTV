@@ -142,6 +142,14 @@
     "one": "{count} persoon",
     "other": "{count} personen"
   },
+  "browse.search.person_titles": {
+    "one": "{count} titel op MultiPlex",
+    "other": "{count} titels op MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} vermelding",
+    "other": "{count} vermeldingen"
+  },
   "browse.search.count": {
     "one": "{count} resultaat",
     "other": "{count} resultaten"
@@ -184,6 +192,8 @@
   "browse.crew.director": "Regie",
   "browse.crew.writer": "Scenario",
   "browse.crew.director_writer": "Regie, scenario",
+  "browse.crew.actor": "Acteur",
+  "browse.crew.producer": "Productie",
   "browse.library.type": "Type",
   "browse.library.filter_by": "Filteren op",
   "browse.kind.seasons": "Seizoenen",

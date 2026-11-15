@@ -154,6 +154,18 @@
     "many": "{count} osób",
     "other": "{count} osoby"
   },
+  "browse.search.person_titles": {
+    "one": "{count} tytuł w MultiPlex",
+    "few": "{count} tytuły w MultiPlex",
+    "many": "{count} tytułów w MultiPlex",
+    "other": "{count} tytułu w MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} tytuł",
+    "few": "{count} tytuły",
+    "many": "{count} tytułów",
+    "other": "{count} tytułu"
+  },
   "browse.search.count": {
     "one": "{count} wynik",
     "few": "{count} wyniki",
@@ -204,6 +216,8 @@
   "browse.crew.director": "Reżyseria",
   "browse.crew.writer": "Scenariusz",
   "browse.crew.director_writer": "Reżyseria, scenariusz",
+  "browse.crew.actor": "Aktorstwo",
+  "browse.crew.producer": "Produkcja",
   "browse.library.type": "Typ",
   "browse.library.filter_by": "Filtruj według",
   "browse.kind.seasons": "Sezony",

@@ -58,7 +58,7 @@ fn a_settled_query_emits_one_request_per_slot_naming_the_client_it_decided_on() 
     assert_eq!(jobs.len(), 2, "one request per live slot");
     for ((job, port), i) in jobs.iter().zip(fixture_slots()) {
         let sid = ServerId::from_raw(i as u16);
-        assert_eq!(job.req.server(), (sid, keys.key(sid).expect("registered")));
+        assert_eq!(job.req.server(), Some((sid, keys.key(sid).expect("registered"))));
         assert_eq!(job.addr, search_addr(owner.state.gen), "addressed by the query's generation");
         assert_eq!(*port, SearchPort::to(&owner.adapter, i), "answering into its own slot");
         assert!(matches!(job.req.work, SearchWork::First), "the first answer is the whole preview");

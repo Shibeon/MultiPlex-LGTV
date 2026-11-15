@@ -148,6 +148,16 @@
     "many": "{count} personnes",
     "other": "{count} personnes"
   },
+  "browse.search.person_titles": {
+    "one": "{count} titre sur MultiPlex",
+    "many": "{count} titres sur MultiPlex",
+    "other": "{count} titres sur MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} crédit",
+    "many": "{count} crédits",
+    "other": "{count} crédits"
+  },
   "browse.search.count": {
     "one": "{count} résultat",
     "many": "{count} résultats",
@@ -194,6 +204,8 @@
   "browse.crew.director": "Réalisateur",
   "browse.crew.writer": "Scénariste",
   "browse.crew.director_writer": "Réalisateur, scénariste",
+  "browse.crew.actor": "Acteur",
+  "browse.crew.producer": "Producteur",
   "browse.library.type": "Type",
   "browse.library.filter_by": "Filtrer par",
   "browse.kind.seasons": "Saisons",

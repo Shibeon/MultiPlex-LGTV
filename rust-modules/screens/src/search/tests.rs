@@ -1673,3 +1673,88 @@ fn the_edge_glide_moves_the_results_by_poster_rows_and_a_wheel_notch_by_a_table_
     assert!((screen.stack.target() - glided - plx_ui::table::ROW_H).abs() < 0.01,
         "a wheel notch moves one table row: {} -> {}", glided, screen.stack.target());
 }
+
+// ---- the featured person: one focus stop between the field and the rows ----------------------
+
+/// A person only plex.tv knows, featured over a Movies row (what `plx_data::search::people::rank`
+/// publishes when the query names someone).
+fn featured_person(fixture: &mut Fixture, rows: bool) -> plx_data::search::TagHit {
+    let sid = plx_plex::plex::ServerId::from_raw(0);
+    let tag = plx_data::search::TagHit { sid, name: "Inès Morel".into(), tag_key: "5d7768d2ebdf2200209c916d".into(),
+        thumb: "https://img.example/ines.jpg".into(), catalog: true,
+        jobs: plx_data::search::people::job_bit("actor"), ..Default::default() };
+    fixture.query("ines morel");
+    fixture.shelves(if rows { vec![shelf(Kind::Movie, "featured", 3)] } else { Vec::new() });
+    fixture.store.publish_featured_for_test(Some(plx_data::search::people::Featured::new(tag.clone(), 12)));
+    fixture.capture();
+    tag
+}
+
+#[test]
+fn down_from_the_field_reaches_the_featured_person_and_then_the_rows() {
+    let _serial = plx_base::testlock::serial();
+    let session = plx_plex::plex::session::TempSession::new("owned-search-featured");
+    watching(&session, "owned-search-featured", &[]);
+    let mut fixture = Fixture::new();
+    featured_person(&mut fixture, true);
+    let mut screen = fixture.screen();
+    let featured = screen.featured.expect("the featured person is a focus stop");
+    let mut engine = seated(&screen, &fixture);
+
+    let at = step_dir(&mut screen, &fixture, &mut engine, Dir::Down).unwrap();
+    assert_eq!(at.elem, featured, "▼ from the field lands on the person the query names");
+    assert_eq!(screen.probe(Some(at)).0, "Featured");
+    assert!(matches!(screen.selected_item(Some(at), &fixture.cx(Some(at))),
+        Some(Item::Tag(tag)) if tag.name == "Inès Morel"), "the app's open path reads it as a person card");
+
+    let tile = step_dir(&mut screen, &fixture, &mut engine, Dir::Down).unwrap();
+    assert!(screen.rows[0].elems.contains(&tile.elem),
+        "▼ again reaches the first row, seated under the card as any vertical step is");
+    assert_eq!(step_dir(&mut screen, &fixture, &mut engine, Dir::Up).map(|k| k.elem), Some(featured));
+    assert_eq!(step_dir(&mut screen, &fixture, &mut engine, Dir::Up), Some(screen.key(FIELD)));
+    drop(session);
+}
+
+#[test]
+fn ok_on_the_featured_person_opens_their_page_and_a_hold_does_not() {
+    let _serial = plx_base::testlock::serial();
+    let session = plx_plex::plex::session::TempSession::new("owned-search-featured-ok");
+    watching(&session, "owned-search-featured-ok", &[]);
+    let mut fixture = Fixture::new();
+    let tag = featured_person(&mut fixture, false);
+    let mut screen = fixture.screen();
+    let featured = screen.featured.expect("featured");
+    assert_eq!(screen.probe_below(), "Results", "a person alone is a result, not the empty statement");
+    let mut engine = seated(&screen, &fixture);
+    assert_eq!(step_dir(&mut screen, &fixture, &mut engine, Dir::Down).map(|k| k.elem), Some(featured),
+        "with no row under it the person is still reachable");
+
+    let key = Some(screen.key(featured));
+    let (handled, out, _) = deliver(&mut screen, &fixture, key, ScreenEvent::Activate(featured));
+    assert_eq!(handled, Handled::Yes);
+    assert!(out.iter().any(|effect| matches!(&effect.fx, Fx::App(AppFx::Search(SearchReq::Person {
+        sid, key, guid, name, thumb })) if *sid == tag.sid && *key == tag.tag_key && *guid == tag.tag_key
+            && *name == tag.name && *thumb == tag.thumb)),
+        "a person only plex.tv knows opens by its key on the server drawing its photo");
+
+    let (_, out, _) = deliver(&mut screen, &fixture, key, ScreenEvent::PressHold(plx_machine::machine::PressId(9)));
+    assert!(out.iter().all(|effect| !matches!(&effect.fx, Fx::App(AppFx::Search(SearchReq::Person { .. })))),
+        "a hold has no menu to open on a person");
+}
+
+#[test]
+fn a_new_query_takes_the_featured_person_away_with_the_rows() {
+    let _serial = plx_base::testlock::serial();
+    let session = plx_plex::plex::session::TempSession::new("owned-search-featured-wipe");
+    watching(&session, "owned-search-featured-wipe", &[]);
+    let mut fixture = Fixture::new();
+    featured_person(&mut fixture, true);
+    let mut screen = fixture.screen();
+    assert!(screen.featured.is_some());
+    fixture.query("dune");
+    let field = Some(screen.key(FIELD));
+    deliver(&mut screen, &fixture, field, ScreenEvent::StoreChanged(StoreId::Search.ord(), 0));
+    assert!(screen.featured.is_none(), "the old query's person is not offered for the new one");
+    assert!(links(&screen).iter().all(|link| link.to != FEATURE_GROUP && link.from != FEATURE_GROUP));
+    drop(session);
+}

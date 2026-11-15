@@ -246,11 +246,25 @@ rather than taken from the spec, and each one decides something:
 |---|---|
 | A one-character query returns every hub empty | `search::MIN_QUERY` is 2 — the first keystroke of every search costs no round trip |
 | Hub ORDER moves per query (`sta` ranks people first, `star` ranks films first) | the shelf order here is FIXED (`search::KINDS`) and ranking is honoured only *inside* a shelf; reordering rows per keystroke would move the row under a typing user's focus |
-| Items arrive in **two** containers — `Metadata[]` for `movie`/`show`/`episode`, `Directory[]` for `actor`/`director`/`collection` | `search::Item` is an enum (`Media`/`Tag`/`Collection`) instead of one struct. The request sends `includeCollections=1`, which turns the `collection` hub into full `Metadata[]` rows (`Item::Collection`: ratingKey, thumb, childCount; OK opens the collection page); a server that ignores it still sends tag rows (`Item::Tag`, opened by section + tag id). `plex-openapi.json`'s own worked example disagrees with the server, which is why this was probed live; see the table in `Hub::directory`'s doc in `plex/models.rs` |
+| Items arrive in **two** containers — `Metadata[]` for `movie`/`show`/`episode`, `Directory[]` for `actor`/`director`/`writer`/`producer`/`collection` (a person hub may also answer in `Metadata[]` rows, read as tags by their `plex://person/<id>` guid) | `search::Item` is an enum (`Media`/`Tag`/`Collection`) instead of one struct. The request sends `includeCollections=1`, which turns the `collection` hub into full `Metadata[]` rows (`Item::Collection`: ratingKey, thumb, childCount; OK opens the collection page); a server that ignores it still sends tag rows (`Item::Tag`, opened by section + tag id). `plex-openapi.json`'s own worked example disagrees with the server, which is why this was probed live; see the table in `Hub::directory`'s doc in `plex/models.rs` |
 | A search response carries **every** hub type the server knows, most with `size: 0` | `Hub::size` is the field that says which shelves are worth drawing |
 
-The `actor` and `director` hubs are merged into one **Cast & Crew** shelf. Merging in the data layer
+The `actor`, `director`, `writer` and `producer` hubs are merged into one **Cast & Crew** shelf, each
+person carrying the departments they were listed under (`TagHit::jobs`). Merging in the data layer
 rather than in the UI keeps "what is a shelf" a data question.
+
+**The featured person** (`search::people`, a port of the web client's `people.ts`). Once the query
+settles, the store also asks plex.tv's people search (`discover.rs::search_people`, metadata provider
+`/library/search?searchTypes=people&filterPeople=1`) once, as the settled account, through the same
+job lane as the servers (`SearchWork::People`; it asks no server, answers no people on any failure,
+and is never asked by a controlled replay or a dev-token boot with no Discover stand-in). Its people
+are merged with the Cast & Crew shelf's on the person's key, the server's copy winning ties, and
+ranked by how well the query names them: the whole name (3), several whole words (2), one whole word
+(1), word prefixes (0); then in a library first, plex.tv's score, titles. A person named by strength 2
+or more is drawn as a card above the rows (`plx_ui::person_feature`, one focus stop between the field
+and the first row; OK opens their page); the others stay in the shelf in rank order. A person only
+plex.tv knows (`TagHit::catalog`) has no local id: their headshot is drawn through the first live
+server's photo transcoder and their page opens on that server by `tagKey`.
 
 `State` distinguishes `Ready`-with-nothing from `Failed`, a lesson `browse.rs` learned the hard way:
 an empty result set is an ANSWER and reads as "No results"; a fault is a fault and reads as one. An
@@ -448,7 +462,8 @@ refuses outright to grade a log carrying the simulator's `sim=1` tag against dev
 ## 6. Out of scope: Discover results and the catalog (the Watchlist is not a search scope)
 
 The official client's search returns Plex's own catalog and Discover results alongside server ones.
-**Ours does not, by decision.** Those live on `discover.provider.plex.tv` /
+**Ours does not, by decision**, with one exception: the people plex.tv knows join the Cast & Crew
+shelf and can be the featured person (§ above, "The featured person"); no catalog *title* does. Those live on `discover.provider.plex.tv` /
 `metadata.provider.plex.tv`, which need DNS and TLS and therefore `net.rs` (libcurl) rather than
 `stream.rs`; they are an *adjacent catalog*, not the user's library, and `docs/parity-gaps.md` has
 tracked them as their own gap from the start. Adding a catalog row to this screen is a separate
@@ -458,7 +473,7 @@ feature with its own client, its own store and its own failure modes — not a w
 The Watchlist did ship, but as a destination of its own: the bookmark tab before the Search pill,
 backed by `plex::watchlist`, `WatchlistStore` and the Watchlist page, with the Discover-only
 `CatalogScreen` for titles no server holds (`docs/watchlist.md`). It reads the account's list, not a
-search; typing a query still searches servers only, and a catalog title never appears among the
+search; typing a query still searches servers for titles (plex.tv only for people), and a catalog title never appears among the
 results.
 
 What this screen closes, and what it does not, is written up in `docs/parity-gaps.md` under the

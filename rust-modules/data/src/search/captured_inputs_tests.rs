@@ -3,7 +3,7 @@ use crate::captured_store_fixture::{key, roster};
 use crate::stores::search::SearchCmd;
 fn input<'a>(keys: &'a ClientKeys, session: &'a plx_plex::plex::session::Session, profile: &'a str) -> SearchInput<'a> {
     SearchInput { keys, recents: recents::Input { session, settled: true, profile_generation: 7,
-        session_generation: 11, tenure: 99, profile_key: profile } }
+        session_generation: 11, tenure: 99, profile_key: profile }, catalog: None }
 }
 #[test]
 fn captured_roster_includes_unkeyed_slots_and_ignores_conflicting_ambient() {

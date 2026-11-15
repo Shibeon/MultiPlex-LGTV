@@ -25,7 +25,10 @@ pub struct RowCards<'a> {
 
 impl RowCards<'_> {
     /// The server handle credited under a card of a source that is not the household's own.
+    /// A person only plex.tv knows came from no server (its `sid` only draws its headshot), so it
+    /// is credited to none.
     fn handle(&self, item: &Item) -> &str {
+        if matches!(item, Item::Tag(tag) if tag.catalog) { return ""; }
         self.sources.iter().find(|source| source.sid == item.sid() && !source.household)
             .map_or("", |source| source.handle.as_str())
     }

@@ -154,6 +154,18 @@
     "many": "{count} асоб",
     "other": "{count} асобы"
   },
+  "browse.search.person_titles": {
+    "one": "{count} назва ў MultiPlex",
+    "few": "{count} назвы ў MultiPlex",
+    "many": "{count} назваў у MultiPlex",
+    "other": "{count} назвы ў MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} праца",
+    "few": "{count} працы",
+    "many": "{count} прац",
+    "other": "{count} працы"
+  },
   "browse.search.count": {
     "one": "{count} вынік",
     "few": "{count} вынікі",
@@ -204,6 +216,8 @@
   "browse.crew.director": "Рэжысёр",
   "browse.crew.writer": "Сцэнарыст",
   "browse.crew.director_writer": "Рэжысёр, сцэнарыст",
+  "browse.crew.actor": "Акцёр",
+  "browse.crew.producer": "Прадзюсар",
   "browse.library.type": "Тып",
   "browse.library.filter_by": "Фільтраваць паводле",
   "browse.kind.seasons": "Сезоны",

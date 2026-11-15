@@ -83,6 +83,7 @@ pub mod wheel; // the Magic Remote wheel over a horizontal row: the zones rows r
 pub mod page_header; // the page header row: one layout, paint, focus group and motion for the Library, Collections, Recommended and Watchlist pages
 pub mod page_regions; // the column NAV/HEADER/CONTENT/RAIL: one table for the pages' links, BACK and first seat
 pub mod caption_policy; // "Under posters": what a focused poster's caption band shows and how tall it is (CONTRACT FREEZE: P3 fills)
+pub mod person_feature; // the featured person: a round headshot, the name, the departments and a note, as one focus stop (Search)
 pub mod pill; // THE CAPSULE OUTLINE — three blended arcs per corner, solved; not a stadium
 pub(crate) mod poster_grid; // uniform six-column portrait geometry for collection-like pages
 pub mod scroll_chrome; // the chrome/capsule handoff state a page owns, plus the capsule text and predicate, owned by the Library (and its Collections page) and the Watchlist; Home shares only its spatial clearance rule

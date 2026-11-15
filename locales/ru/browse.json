@@ -154,6 +154,18 @@
     "many": "{count} человек",
     "other": "{count} человека"
   },
+  "browse.search.person_titles": {
+    "one": "{count} название в MultiPlex",
+    "few": "{count} названия в MultiPlex",
+    "many": "{count} названий в MultiPlex",
+    "other": "{count} названия в MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} работа",
+    "few": "{count} работы",
+    "many": "{count} работ",
+    "other": "{count} работы"
+  },
   "browse.search.count": {
     "one": "{count} результат",
     "few": "{count} результата",
@@ -204,6 +216,8 @@
   "browse.crew.director": "Режиссёр",
   "browse.crew.writer": "Сценарист",
   "browse.crew.director_writer": "Режиссёр, сценарист",
+  "browse.crew.actor": "Актёр",
+  "browse.crew.producer": "Продюсер",
   "browse.library.type": "Тип",
   "browse.library.filter_by": "Фильтровать по",
   "browse.kind.seasons": "Сезоны",

@@ -312,6 +312,49 @@ class DiscoverMock(unittest.TestCase):
         self.assertEqual(len(DiscoverFixture.TITLES), 16)
 
 
+class PeopleSearch(unittest.TestCase):
+    """The metadata provider's people search (`discover.rs::search_people`, the Search screen's
+    featured person): the library's people under their `tagKey`, plus one person only it knows."""
+
+    @staticmethod
+    def search(pms, query, extra="&searchTypes=people&includeMetadata=1&filterPeople=1"):
+        return jcall(pms, "GET", "/library/search?" + urllib.parse.urlencode({"query": query, "limit": 10}) + extra)
+
+    @staticmethod
+    def people(mc):
+        return [r["Directory"] for g in mc["SearchResults"] for r in g["SearchResult"]]
+
+    def test_a_library_person_is_found_by_both_searches_under_one_key(self):
+        pms = make()
+        who = next(t for t in sorted(pms.lib.people.values(), key=lambda t: t["id"])
+                   if any(t["id"] == r["id"] for it in pms.lib.items.values() for r in it.get("Role", [])))
+        found = self.people(self.search(pms, who["tag"]))
+        self.assertEqual([p["metadataId"] for p in found], [who["tagKey"]])
+        self.assertEqual(found[0]["type"], "person")
+        self.assertEqual(found[0]["key"], f"/library/people/{who['tagKey']}")
+        self.assertIn("actor", [c["type"] for c in found[0]["CreditType"]])
+        self.assertTrue(all(c["count"] > 0 for c in found[0]["CreditType"]))
+        hubs = jcall(pms, "GET", "/hubs/search?" + urllib.parse.urlencode({"query": who["tag"], "limit": 10}))["Hub"]
+        actors = next(h for h in hubs if h["type"] == "actor")["Directory"]
+        self.assertEqual([a["tagKey"] for a in actors], [who["tagKey"]], "the server's search finds the same key")
+
+    def test_a_person_only_the_provider_knows_has_a_headshot_and_a_profile(self):
+        pms = make()
+        found = self.people(self.search(pms, DiscoverFixture.CATALOG_PERSON["tag"]))
+        self.assertEqual([p["metadataId"] for p in found], ["sfeedc0de"])
+        self.assertTrue(found[0]["thumb"].startswith("https://"))
+        self.assertEqual(found[0]["CreditType"], [])
+        profile = jcall(pms, "GET", "/library/people/sfeedc0de")
+        self.assertEqual(profile["Metadata"][0]["title"], "sfeedc0de")
+
+    def test_nothing_matches_nothing_and_the_pms_search_is_untouched(self):
+        pms = make()
+        self.assertEqual(self.people(self.search(pms, "zzzz")), [])
+        mc = jcall(pms, "GET", "/library/search?query=sfeedc0de&searchTypes=movies")
+        self.assertNotIn("SearchResults", mc, "without filterPeople the PMS's own typed search answers")
+        self.assertEqual(mc["SearchResult"], [])
+
+
 class CwArtDiscover(unittest.TestCase):
     """`--cw-art-fixture`'s half of the stand-in: Continue Watching titles it knows by catalog id, off the
     list, with a `coverArt` where the fixture says so. Without the flag nothing is added."""

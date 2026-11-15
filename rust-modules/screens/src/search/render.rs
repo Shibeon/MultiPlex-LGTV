@@ -29,6 +29,47 @@ pub(super) struct Resources {
     count_keys: [Option<(Kind, usize)>; 5],
     counts: [CString; 5],
     owner: CString,
+    feature: Option<Feature>,
+}
+
+/// The featured person's words, built when the person changes ([`plx_data::search::view::SearchView::featured`]).
+struct Feature {
+    /// Whose words these are: the person's key and the counts the note was built from.
+    of: (String, i64, i64, u8),
+    name: CString,
+    jobs: Vec<&'static str>,
+    note: CString,
+}
+
+impl Feature {
+    fn of(featured: &plx_data::search::people::Featured) -> Option<Self> {
+        let tag = featured.hit()?;
+        Some(Self {
+            of: (tag.tag_key.clone(), tag.count, featured.credits, tag.jobs),
+            name: cstring(&tag.name),
+            jobs: job_labels(tag.jobs),
+            note: cstring(&person_note(tag.count, featured.credits)),
+        })
+    }
+}
+
+/// The departments of a [`plx_data::search::people::JOBS`] mask, worded, in that order.
+pub(super) fn job_labels(jobs: u8) -> Vec<&'static str> {
+    use plx_platform::i18n::msg;
+    let words: [fn() -> &'static str; 4] =
+        [msg::browse_crew_actor, msg::browse_crew_director, msg::browse_crew_writer, msg::browse_crew_producer];
+    plx_data::search::people::JOBS.iter().zip(words)
+        .filter(|(job, _)| jobs & plx_data::search::people::job_bit(job) != 0)
+        .map(|(_, word)| word()).collect()
+}
+
+/// The featured person's note: how many of the user's titles they are in, else how many credits
+/// plex.tv knows for them, else nothing.
+pub(super) fn person_note(titles: i64, credits: i64) -> String {
+    use plx_platform::i18n::msg;
+    if titles > 0 { msg::browse_search_person_titles(titles) }
+    else if credits > 0 { msg::browse_search_person_credits(credits) }
+    else { String::new() }
 }
 
 impl Resources {
@@ -116,6 +157,11 @@ impl Resources {
         if self.owner.to_bytes() != owner.as_bytes() {
             self.owner = cstring(owner);
         }
+        let featured = H::search(cx).featured();
+        let of = featured.and_then(|f| f.hit().map(|t| (t.tag_key.as_str(), t.count, f.credits, t.jobs)));
+        if self.feature.as_ref().map(|f| (f.of.0.as_str(), f.of.1, f.of.2, f.of.3)) != of {
+            self.feature = featured.and_then(Feature::of);
+        }
     }
 }
 
@@ -140,9 +186,10 @@ pub(super) fn draw<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '
     let p = p.alpha(screen.fade.alpha());
     if !screen.recents.is_empty() {
         recents(screen, f, p);
-    } else if screen.rows.is_empty() {
+    } else if screen.rows.is_empty() && screen.featured.is_none() {
         empty(screen, f, p);
     }
+    featured(screen, f, p);
     for (i, row) in screen.rows.iter().enumerate() {
         let Some((frame, shelf)) = screen.row_frame(f.cx, i) else { continue };
         let top = frame.y - layout::HEAD_TO_ROW;
@@ -323,6 +370,18 @@ fn recents<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '_, H>, p
         .focused(f.cx.focus.current == Some(screen.key(CLEAR)))
         .draw(&env, p);
     stop(screen, CLEAR, ElemKind::Control, f, p);
+}
+
+/// The person the query names, above the rows ([`plx_ui::person_feature`]).
+fn featured<H: SearchLike>(screen: &SearchScreen, f: &mut DrawFrame<'_, '_, H>, p: Painter) {
+    let Some(elem) = screen.featured else { return };
+    let (Some(words), Some(tag)) = (&screen.render.feature, H::search(f.cx).featured().and_then(|x| x.hit())) else { return };
+    let top = layout::CONTENT_TOP - screen.stack.scroll();
+    if !plx_ui::on_axis(top, layout::FEATURE_BLOCK_H, SCR_H, 0.0) { return; }
+    plx_ui::person_feature::PersonFeature {
+        sid: tag.sid.raw(), thumb: &tag.thumb, name: &words.name, jobs: &words.jobs, note: &words.note,
+    }.draw(p, layout::FEATURE_X, top, f.cx.focus.current == Some(screen.key(elem)));
+    stop(screen, elem, ElemKind::Bare, f, p);
 }
 
 fn empty<H: SearchLike>(screen: &SearchScreen, f: &DrawFrame<'_, '_, H>, p: Painter) {

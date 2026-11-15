@@ -148,6 +148,16 @@
     "many": "{count} persones",
     "other": "{count} persones"
   },
+  "browse.search.person_titles": {
+    "one": "{count} títol a MultiPlex",
+    "many": "{count} títols a MultiPlex",
+    "other": "{count} títols a MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} crèdit",
+    "many": "{count} crèdits",
+    "other": "{count} crèdits"
+  },
   "browse.search.count": {
     "one": "{count} resultat",
     "many": "{count} resultats",
@@ -194,6 +204,8 @@
   "browse.crew.director": "Director",
   "browse.crew.writer": "Guionista",
   "browse.crew.director_writer": "Director i guionista",
+  "browse.crew.actor": "Actor",
+  "browse.crew.producer": "Productor",
   "browse.library.type": "Tipus",
   "browse.library.filter_by": "Filtra per",
   "browse.kind.seasons": "Temporades",

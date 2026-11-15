@@ -1,10 +1,11 @@
 //! Retained Search publication. Capturing a frame clones handles, not queries or result items.
-use super::{Arc, Shelf, State};
+use super::{people::Featured, Arc, Shelf, State};
 
 #[derive(Clone)]
 pub struct SearchSnapshot {
     query: Option<Arc<str>>,
     shelves: Option<Arc<Vec<Shelf>>>,
+    featured: Option<Arc<Featured>>,
     state: State,
     query_gen: u32,
     recents: super::recents::RecentsSnapshot,
@@ -16,6 +17,7 @@ impl Default for SearchSnapshot {
         Self {
             query: None,
             shelves: None,
+            featured: None,
             state: State::Idle,
             query_gen: 0,
             recents: Default::default(),
@@ -30,12 +32,13 @@ impl SearchSnapshot {
     pub fn from_parts(
         query: Option<Arc<str>>,
         shelves: Option<Arc<Vec<Shelf>>>,
+        featured: Option<Arc<Featured>>,
         state: State,
         query_gen: u32,
         recents: super::recents::RecentsSnapshot,
         scope: super::scope::SourceScopeSnapshot,
     ) -> Self {
-        Self { query, shelves, state, query_gen, recents, scope }
+        Self { query, shelves, featured, state, query_gen, recents, scope }
     }
 
     pub fn view(&self) -> SearchView<'_> { SearchView(self) }
@@ -53,6 +56,7 @@ impl SearchSnapshot {
         }
         self.state == other.state && self.query_gen == other.query_gen
             && same(&self.query, &other.query) && same(&self.shelves, &other.shelves)
+            && same(&self.featured, &other.featured)
             && self.recents.same_publication(&other.recents)
             && self.scope.same_publication(&other.scope)
     }
@@ -68,6 +72,8 @@ impl<'a> SearchView<'a> {
     pub fn shelves(self) -> &'a [Shelf] {
         self.0.shelves.as_deref().map(Vec::as_slice).unwrap_or(&[])
     }
+    /// The person the query names ([`super::people::rank`]): the card above the shelves.
+    pub fn featured(self) -> Option<&'a Featured> { self.0.featured.as_deref() }
     pub fn state(self) -> State { self.0.state }
     pub fn query_gen(self) -> u32 { self.0.query_gen }
     pub fn recents(self) -> &'a super::recents::RecentsSnapshot { &self.0.recents }

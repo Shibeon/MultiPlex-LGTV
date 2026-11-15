@@ -877,7 +877,8 @@ fn sources(origin: ServerId, key: &str, name: &str, keys: &ClientKeys) -> Vec<Sr
 ///
 /// Hubs are matched on either `hubIdentifier` or `type` because `/hubs/search` sends the same token
 /// in both (`docs/plex-openapi.json`'s own example), and `Hub::directory` is keyed by that word.
-/// The person hubs of a `/hubs/search` answer (`actor`, `director`), in the order they are named.
+/// The person hubs of a `/hubs/search` answer (`actor`, `director`, `writer`, `producer`), in the
+/// order they are named.
 fn person_hubs(mc: &plx_plex::plex::MediaContainer) -> impl Iterator<Item = &Hub> {
     crate::search::Kind::Person.hubs().iter().flat_map(move |h| {
         mc.hub

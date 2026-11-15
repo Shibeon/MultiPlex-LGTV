@@ -117,6 +117,7 @@ use std::sync::{Arc, Mutex};
 pub mod view;
 pub mod recents;
 pub mod scope;
+pub mod people;
 mod tail;
 
 /// Below this many characters the server answers with nothing, so asking is pure latency.
@@ -141,8 +142,8 @@ pub enum Kind {
     Movie,
     Show,
     Episode,
-    /// Cast **and** crew: the server splits these into an `actor` hub and a `director` hub, and
-    /// the design draws one shelf. Merging them here rather than in the UI keeps "what is a
+    /// Cast **and** crew: the server splits these into `actor`, `director`, `writer` and `producer`
+    /// hubs, and the design draws one shelf. Merging them here rather than in the UI keeps "what is a
     /// shelf" a data question.
     Person,
     Collection,
@@ -177,7 +178,7 @@ impl Kind {
             Kind::Movie => &["movie"],
             Kind::Show => &["show"],
             Kind::Episode => &["episode"],
-            Kind::Person => &["actor", "director"],
+            Kind::Person => &["actor", "director", "writer", "producer"],
             Kind::Collection => &["collection"],
         }
     }
@@ -242,6 +243,15 @@ pub struct TagHit {
     /// about. So the bit is attached before the first fold and **OR'd** at both: a person in one
     /// favourite library and one non-favourite is favourite-ranked, which is the honest answer.
     pub fav: bool,
+    /// The departments the person is listed under ([`people::JOBS`] mask): the hubs a server
+    /// listed them in, OR'd at every fold like [`TagHit::fav`], plus plex.tv's when it knows them.
+    /// 0 on a collection.
+    pub jobs: u8,
+    /// **Known only to plex.tv** ([`people::rank`]): no server sent this person, so `id` is empty,
+    /// `count` is 0 and `sid` is only the server whose photo transcoder draws the `https` headshot.
+    /// The person page opens such a person by `tag_key` on that server (a `tagKey` is also a
+    /// `personId` there, `plx_plex::plex::Tag::tag_key`) and resolves every other server by name.
+    pub catalog: bool,
 }
 
 /// A collection result as the server sends it when asked with `includeCollections=1`
@@ -556,6 +566,14 @@ pub struct SearchAdapter {
     fetch: Mutex<Vec<Arc<Fetch>>>,
     /// A recents write the runner refused ([`recents::SaveRecentsPort`]), not yet seen by an edit.
     recents_refused: AtomicBool,
+    /// plex.tv's people search: its claim and its one mailbox, beside the servers' ([`ask_catalog`]).
+    catalog: crate::stores::Fetch<CatalogMail>,
+}
+
+/// plex.tv's people for the query of generation `gen` (none when the read failed or was refused).
+struct CatalogMail {
+    gen: u32,
+    people: Vec<people::CatalogPerson>,
 }
 
 impl SearchAdapter {
@@ -588,6 +606,7 @@ impl SearchAdapter {
         for mailbox in self.fetch.lock().unwrap_or_else(|e| e.into_inner()).iter() {
             mailbox.clear();
         }
+        self.catalog.clear();
     }
 }
 
@@ -609,6 +628,14 @@ pub struct SearchReq {
     work: SearchWork,
 }
 
+/// The account plex.tv's people search speaks for, captured by the step from its input
+/// ([`SearchInput::catalog`]): a sign-in that lands while the request is out cannot redirect it.
+#[derive(Clone, PartialEq)]
+struct Account {
+    client_id: String,
+    token: String,
+}
+
 /// What a search request reads.
 #[derive(Clone)]
 enum SearchWork {
@@ -617,12 +644,16 @@ enum SearchWork {
     /// A read of depths `range` of the lane of kind `k`, on a COPY of the source's lane and `tv`
     /// map: a failed or superseded read leaves the lane as it was.
     Tail { k: usize, range: std::ops::Range<usize>, lane: tail::Lane, tv: tail::TvMap },
+    /// plex.tv's people search ([`people`]), asked once per settled query as the account the step
+    /// captured. It asks no server: `sid` and `key` name nothing ([`SearchReq::server`] is `None`).
+    People(Account),
 }
 
 impl SearchReq {
-    /// The server to ask and the client the step decided to ask it through.
-    pub fn server(&self) -> (ServerId, ClientKey) {
-        (self.sid, self.key)
+    /// The server to ask and the client the step decided to ask it through; `None` for plex.tv's
+    /// people search, which is made as an account and asks no server.
+    pub fn server(&self) -> Option<(ServerId, ClientKey)> {
+        (!matches!(self.work, SearchWork::People(_))).then_some((self.sid, self.key))
     }
 }
 
@@ -635,6 +666,7 @@ impl PartialEq for SearchReq {
             && match (&self.work, &other.work) {
                 (SearchWork::First, SearchWork::First) => true,
                 (SearchWork::Tail { k, range, .. }, SearchWork::Tail { k: k2, range: r2, .. }) => k == k2 && range == r2,
+                (SearchWork::People(a), SearchWork::People(b)) => a == b,
                 _ => false,
             }
     }
@@ -646,6 +678,7 @@ impl std::fmt::Debug for SearchReq {
         match &self.work {
             SearchWork::First => write!(f, "first)"),
             SearchWork::Tail { k, range, .. } => write!(f, "lane {k} depths {}..{})", range.start, range.end),
+            SearchWork::People(_) => write!(f, "plex.tv people)"),
         }
     }
 }
@@ -657,6 +690,8 @@ pub struct SearchAnswer(Answer);
 enum Answer {
     First(Option<Projection>),
     Tail { kind: usize, read: Option<(tail::Lane, tail::TvMap)> },
+    /// plex.tv's people; a failed or refused read is no people (it never fails the search).
+    People(Vec<people::CatalogPerson>),
 }
 
 /// Where a search request's ONE answer goes: slot `slot`'s mailbox in the adapter the request was
@@ -668,22 +703,31 @@ enum Answer {
 pub struct SearchPort {
     adapter: Arc<SearchAdapter>,
     slot: usize,
+    /// The port of plex.tv's people search: its answer lands in [`SearchAdapter::catalog`], not
+    /// in a slot's mailbox (`slot` is then unused).
+    catalog: bool,
 }
 
 impl SearchPort {
     fn to(adapter: &Arc<SearchAdapter>, slot: usize) -> Self {
-        Self { adapter: Arc::clone(adapter), slot }
+        Self { adapter: Arc::clone(adapter), slot, catalog: false }
+    }
+    fn catalog(adapter: &Arc<SearchAdapter>) -> Self {
+        Self { adapter: Arc::clone(adapter), slot: 0, catalog: true }
     }
 }
 
 impl PartialEq for SearchPort {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.adapter, &other.adapter) && self.slot == other.slot
+        Arc::ptr_eq(&self.adapter, &other.adapter) && self.slot == other.slot && self.catalog == other.catalog
     }
 }
 
 impl std::fmt::Debug for SearchPort {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.catalog {
+            return write!(f, "SearchPort({:p}, plex.tv people)", Arc::as_ptr(&self.adapter));
+        }
         write!(f, "SearchPort({:p}, slot {})", Arc::as_ptr(&self.adapter), self.slot)
     }
 }
@@ -695,6 +739,7 @@ impl Port<SearchAnswer> for SearchPort {
         match out.0 {
             Answer::First(what) => land(&self.adapter, self.slot, addr.req.0, what),
             Answer::Tail { kind, read } => land_tail(&self.adapter, self.slot, addr.req.0, kind, read),
+            Answer::People(people) => land_catalog(&self.adapter, addr.req.0, people),
         }
     }
 
@@ -703,7 +748,11 @@ impl Port<SearchAnswer> for SearchPort {
     /// which backs the source off before it asks again. A refusal that comes after a newer request
     /// has claimed the slot leaves that claim alone.
     fn refused(&self, addr: Addr) {
-        self.adapter.mailbox(self.slot).refuse_for(addr.req.0);
+        if self.catalog {
+            self.adapter.catalog.refuse_for(addr.req.0);
+        } else {
+            self.adapter.mailbox(self.slot).refuse_for(addr.req.0);
+        }
     }
 }
 
@@ -799,6 +848,9 @@ fn nsrc(state: &SearchState) -> usize {
 pub struct SearchInput<'a> {
     pub keys: &'a ClientKeys,
     pub recents: recents::Input<'a>,
+    /// The settled account plex.tv's people search is asked as ([`people`]); `None` asks plex.tv
+    /// nothing (no account yet, a controlled run, a fixture that is not about it).
+    pub catalog: Option<&'a plx_plex::plex::session::Session>,
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -816,7 +868,8 @@ impl FixtureInput {
     pub fn input(&self) -> SearchInput<'_> {
         SearchInput { keys: &self.keys, recents: recents::Input {
             session: &self.session, settled: self.settled, profile_generation: self.profile_generation,
-            session_generation: self.session_generation, tenure: self.tenure, profile_key: &self.profile_key } }
+            session_generation: self.session_generation, tenure: self.tenure, profile_key: &self.profile_key },
+            catalog: None }
     }
 }
 #[cfg(any(test, feature = "test-support"))]
@@ -837,6 +890,14 @@ pub struct SearchState {
     // them; replacing a query or landing cannot invalidate a frame that still owns the old Arc.
     query: Option<Arc<str>>,
     shelves: Option<Arc<Vec<Shelf>>>,
+    /// The person the query names, drawn as a card above the shelves ([`people::rank`]); rebuilt
+    /// with them.
+    featured: Option<Arc<people::Featured>>,
+    /// plex.tv's people for the current generation: `None` until its answer (or its failure, which
+    /// is no people) is in. Merged into the Person shelf by [`rebuild`].
+    catalog: Option<Vec<people::CatalogPerson>>,
+    /// Whether plex.tv's people search has been asked for the current generation: once per query.
+    catalog_asked: bool,
     state: State,
 
     /// The CONTENT epoch — bumped by every query change and every reset. Read by the screen to
@@ -910,6 +971,9 @@ impl Default for SearchState {
             ledger: Default::default(),
             query: None,
             shelves: None,
+            featured: None,
+            catalog: None,
+            catalog_asked: false,
             state: State::Idle,
             gen: 0,
             visible: 0,
@@ -958,6 +1022,11 @@ impl SearchState {
         self.shelves.as_deref().map(Vec::as_slice).unwrap_or(&[])
     }
 
+    /// The person the query names ([`people::rank`]), for the card above the shelves.
+    pub fn featured(&self) -> Option<&people::Featured> {
+        self.featured.as_deref()
+    }
+
     pub fn query_gen(&self) -> u32 {
         self.gen
     }
@@ -988,6 +1057,7 @@ impl SearchState {
         view::SearchSnapshot::from_parts(
             self.query.clone(),
             self.shelves.clone(),
+            self.featured.clone(),
             self.state,
             self.gen,
             recents::snapshot_with_input(&input.recents),
@@ -1047,6 +1117,14 @@ impl SearchState {
     #[cfg(any(test, feature = "test-support"))]
     pub fn publish_shelves_for_test(&mut self, shelves: Vec<Shelf>) {
         self.publish_shelves(shelves, snapshot_favs);
+    }
+
+    /// Publish `featured` as the person the published catalog names (what [`rebuild`] would put
+    /// there from plex.tv's answer), for a screen test that needs the card.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn publish_featured_for_test(&mut self, featured: Option<people::Featured>) {
+        plx_base::testlock::assert_held("the search store (publish_featured_for_test)");
+        self.featured = featured.map(Arc::new);
     }
 
     /// [`Self::publish_shelves_for_test`] for a fixture whose pump runs over a retained directory:
@@ -1210,6 +1288,88 @@ fn land(adapter: &SearchAdapter, i: usize, gen: u32, what: Option<Projection>) {
     });
 }
 
+/// Post plex.tv's people for generation `gen`; a newer generation replaces an older one, as in
+/// [`land`].
+fn land_catalog(adapter: &SearchAdapter, gen: u32, people: Vec<people::CatalogPerson>) {
+    adapter.catalog.post(CatalogMail { gen, people }, |old| old.gen <= gen);
+}
+
+/// Take plex.tv's answer for the current query, if it is in: its people join the Person shelf at
+/// the next [`rebuild`] (the `true`). A refused launch settles as no people, so the query is not
+/// asked again ([`ask_catalog`] asks once per generation).
+fn take_catalog(state: &mut SearchState, adapter: &SearchAdapter, gate: &plx_machine::landgate::Gate) -> bool {
+    let catalog = &adapter.catalog;
+    let taken = crate::stores::take_landing_owed(gate, crate::stores::StoreId::Search,
+        || catalog.busy(), || catalog.take_current(|m| m.gen));
+    let mut landed = false;
+    if let Some(m) = taken {
+        if m.gen == state.gen {
+            landed = !m.people.is_empty();
+            state.catalog = Some(m.people);
+        }
+    }
+    if catalog.take_refused(state.gen) {
+        state.catalog = Some(Vec::new());
+    }
+    landed
+}
+
+/// Ask plex.tv for the people the settled query names, once per generation, as `account` (the
+/// Bridge's settled session; `None` asks nothing). The servers' fan-out does not wait for it, and
+/// it does not wait for them: its answer is merged in whenever it lands ([`rebuild`]).
+fn ask_catalog(state: &mut SearchState, adapter: &Arc<SearchAdapter>,
+    account: Option<&plx_plex::plex::session::Session>) {
+    if state.armed || state.catalog_asked || adapter.catalog.busy() {
+        return;
+    }
+    let Some(account) = account.filter(|s| !s.client_id.is_empty()) else { return };
+    let Some(q) = terms(state.query()) else { return };
+    let q = q.to_string();
+    state.catalog_asked = true;
+    adapter.catalog.claim(state.gen);
+    plx_base::eventlog::log(&format!("search: q[{}ch] asking plex.tv people", q.chars().count()));
+    let work = SearchWork::People(Account { client_id: account.client_id.clone(),
+        token: account.account_token.clone() });
+    state.jobs.push(crate::stores::StoreJob::Search(
+        Job { addr: search_addr(state.gen), req: SearchReq { sid: ServerId::UNSET, key: ClientKey { instance: 0, token: 0, grant: 0 },
+            q, favs: Vec::new(), work } },
+        SearchPort::catalog(adapter),
+    ));
+}
+
+/// The people half of a [`rebuild`]: rank the Person shelf's people with plex.tv's ([`people::rank`])
+/// and lay them out — the person the query names comes out of the row as the featured card, and
+/// the row keeps the others in rank order (people the query does not name stay, after them).
+/// plex.tv's people join only the row's first page, and only while the row has no further page,
+/// since a page read later would land in front of them. The row of a window paged past its first
+/// page is left as the server sent it and keeps `prev`.
+fn arrange_people(query: &str, shelves: &mut Vec<Shelf>, catalog: &[people::CatalogPerson], art: ServerId,
+    prev: Option<Arc<people::Featured>>) -> Option<Arc<people::Featured>> {
+    let at = shelves.iter().position(|s| s.kind == Kind::Person);
+    let shelf = at.map(|i| &shelves[i]);
+    if shelf.is_some_and(|s| s.window.start > 0) {
+        return prev;
+    }
+    let paged = shelf.is_some_and(|s| s.window.after);
+    let library: Vec<TagHit> = shelf.into_iter().flat_map(|s| &s.items)
+        .filter_map(|it| match it { Item::Tag(t) => Some(t.clone()), _ => None }).collect();
+    let ranked = people::rank(query, &library, if paged { &[] } else { catalog }, art);
+    let featured = ranked.featured.map(|p| Arc::new(people::Featured::of(p)));
+    let items: Vec<Item> = ranked.people.into_iter().map(|p| p.hit).chain(ranked.unmatched)
+        .map(Item::Tag).collect();
+    match at {
+        Some(i) if items.is_empty() => { shelves.remove(i); }
+        Some(i) => shelves[i].items = items,
+        None if items.is_empty() => {}
+        None => {
+            let rank_of = |k: Kind| KINDS.iter().position(|&x| x == k).unwrap_or(NKIND);
+            let i = shelves.iter().position(|s| rank_of(s.kind) > rank_of(Kind::Person)).unwrap_or(shelves.len());
+            shelves.insert(i, Shelf { kind: Kind::Person, items, window: Window::default(), epoch: 0 });
+        }
+    }
+    featured
+}
+
 /// Post a finished lane read. A source has one request out at a time, so this never meets another
 /// mail of its own generation; a newer generation replaces an older one, as in [`land`].
 fn land_tail(adapter: &SearchAdapter, i: usize, gen: u32, kind: usize, read: Option<(tail::Lane, tail::TvMap)>) {
@@ -1252,6 +1412,9 @@ fn supersede_with_directory(
         *s = Source::EMPTY;
     }
     state.wins = Default::default();
+    state.featured = None;
+    state.catalog = None;
+    state.catalog_asked = false;
 }
 
 /// Standalone fixture scope. Production always supplies the owning Bridge's retained directory;
@@ -1392,6 +1555,8 @@ fn pump_with_optional_directory(
         }
         maybe_spawn(state, adapter, i, &mut turn, keys);
     }
+    landed |= take_catalog(state, adapter, gate);
+    ask_catalog(state, adapter, input.catalog);
     // The SHELVES are rebuilt only when something landed, but the STATE is recomputed every frame:
     // it is a scan of one status per live slot, and making it conditional on a landing left the one
     // case that can never produce one — an EMPTY roster — parked on `Searching` forever, which is
@@ -1501,7 +1666,10 @@ fn rebuild(state: &mut SearchState) {
     let sources = live_sources(state, &live);
     let los: [usize; NKIND] = std::array::from_fn(|k| state.wins[k].lo);
     let epochs: [u32; NKIND] = std::array::from_fn(|k| state.wins[k].committed);
-    let shelves = merge_refs(&sources, &favs(state), &los, &epochs);
+    let mut shelves = merge_refs(&sources, &favs(state), &los, &epochs);
+    let art = live.first().map_or(ServerId::UNSET, |&i| ServerId::from_raw(i as u16));
+    let prev = state.featured.take();
+    state.featured = arrange_people(state.query(), &mut shelves, state.catalog.as_deref().unwrap_or(&[]), art, prev);
     let items: usize = shelves.iter().map(|s| s.items.len()).sum();
     plx_base::eventlog::log(&format!(
         "search: q[{}ch] shelves={} items={}",
@@ -1581,12 +1749,8 @@ fn merge_refs(sources: &[&Source], favs: &[(ServerId, i64, bool)], los: &[usize;
                         Item::Tag(p) if same_tag(p, t) => Some(p),
                         _ => None,
                     }) {
-                        prev.count += t.count;
-                        // the SECOND fold, and the bit is OR'd here exactly as in `project`
-                        prev.fav |= t.fav;
-                        if prev.thumb.is_empty() {
-                            prev.thumb = t.thumb.clone();
-                        }
+                        // the SECOND fold, the same as `project`'s
+                        fold_tag(prev, t);
                         continue;
                     }
                 }
@@ -1743,6 +1907,7 @@ fn maybe_spawn(state: &mut SearchState, adapter: &Arc<SearchAdapter>, i: usize,
         match work {
             SearchWork::First => land(adapter, i, gen, None),
             SearchWork::Tail { k, .. } => land_tail(adapter, i, gen, k, None),
+            SearchWork::People(_) => adapter.mailbox(i).release(),
         }
         return;
     };
@@ -1757,9 +1922,34 @@ fn maybe_spawn(state: &mut SearchState, adapter: &Arc<SearchAdapter>, i: usize,
 /// (`None`), not as an answer of "this server has nothing", and the take of it releases the claim.
 ///
 /// WORKER THREAD.
-pub fn finish_search_job(port: &SearchPort, addr: Addr, client: &'static Client, req: SearchReq) {
+pub fn finish_search_job(port: &SearchPort, addr: Addr, client: Option<&'static Client>, req: SearchReq) {
     let SearchReq { sid, q, favs, work, .. } = req;
+    if let SearchWork::People(account) = work {
+        return finish_people(port, addr, &q, || {
+            if plx_plex::plex::discover::people_search_refused() {
+                return None;
+            }
+            let token = (!account.token.is_empty()).then_some(account.token.as_str());
+            plx_plex::plex::account::AccountClient::new(&account.client_id, token).search_people(&q, CATALOG_LIMIT)
+        });
+    }
+    // A server read runs through a client; one handed none was never startable.
+    let Some(client) = client else { return port.refused(addr) };
     finish_work(port, addr, &mut LiveIo { client, sid, q, favs }, sid, work);
+}
+
+/// People asked of plex.tv per query: a row's worth, and enough for the namesakes a full name has.
+const CATALOG_LIMIT: i64 = 10;
+
+/// WORKER THREAD: plex.tv's people search body over `read`, the one call that reaches plex.tv (the
+/// seam a test replaces). Its one answer is the people it could read: a failure, a refusal or a
+/// panic answers NO people rather than an error, because plex.tv's opinion must never hold the
+/// servers' results back or put a fault on screen.
+fn finish_people(port: &SearchPort, addr: Addr, q: &str, read: impl FnOnce() -> Option<serde_json::Value>) {
+    let found = catch_unwind(AssertUnwindSafe(|| read().map(|mc| people::parse_catalog(&mc)))).unwrap_or(None);
+    plx_base::eventlog::log(&format!("search: q[{}ch] plex.tv people={}", q.chars().count(),
+        found.as_ref().map_or_else(|| "failed".to_string(), |p| p.len().to_string())));
+    port.done(addr, SearchAnswer(Answer::People(found.unwrap_or_default())));
 }
 
 /// [`finish_search_job`] over any [`tail::Io`]: what a data test with a fake server runs a job
@@ -1787,6 +1977,8 @@ fn finish_work(port: &SearchPort, addr: Addr, io: &mut dyn tail::Io, sid: Server
             .unwrap_or(None);
             Answer::Tail { kind: k, read }
         }
+        // `finish_search_job` answers plex.tv's people before a server is involved
+        SearchWork::People(_) => Answer::People(Vec::new()),
     };
     port.done(addr, SearchAnswer(out));
 }
@@ -1984,10 +2176,19 @@ fn project(
     let mut out: Projection = Default::default();
     for hub in &mc.hub {
         let Some(k) = kind_index(hub) else { continue };
+        // a people hub is a department: the job its people are listed under here
+        let job = people::job_bit(&hub.kind) | people::job_bit(&hub.hub_identifier);
         // Both containers, because a hub answers in one or the other and which one is per hub TYPE,
         // not per response (`Hub::directory`). Walking both is how this stops being a thing to
         // remember.
+        let mut rows: Vec<TagHit> = Vec::new();
         for m in &hub.metadata {
+            // A people hub can answer in `Metadata` rows too: a person there is a tag like any
+            // other, and one with no usable plex.tv id is one the person page could not open.
+            if KINDS[k] == Kind::Person {
+                rows.extend(person_row(m, sid, favs));
+                continue;
+            }
             // `includeCollections=1` puts the collection hub's rows HERE, as full rows
             // ([`CollectionHit`]); every other type is the ordinary card.
             out[k].push(if m.kind == "collection" {
@@ -1996,8 +2197,11 @@ fn project(
                 Item::Media(parse_item(m, sid))
             });
         }
-        for t in &hub.directory {
-            let hit = tag_hit(t, sid, favs);
+        rows.extend(hub.directory.iter().map(|t| tag_hit(t, sid, favs)));
+        for mut hit in rows {
+            if KINDS[k] == Kind::Person {
+                hit.jobs = job;
+            }
             // **A tag arrives once per LIBRARY SECTION**, measured: a person in both the Movies and
             // the TV Shows library comes back as two rows with the same `id` and `tagKey`, each
             // carrying that section's own `count`. Drawn raw that is the same face twice; keeping
@@ -2011,17 +2215,7 @@ fn project(
                 Item::Tag(e) if same_tag(e, &hit) => Some(e),
                 _ => None,
             }) {
-                Some(e) => {
-                    e.count += hit.count;
-                    // the FIRST of the two folds this bit has to survive — OR, never overwrite, so
-                    // a person in one favourite section and one non-favourite is favourite-ranked
-                    e.fav |= hit.fav;
-                    // whichever row happened to carry artwork wins; a section that has none
-                    // must not blank a face the other section supplied
-                    if e.thumb.is_empty() {
-                        e.thumb = hit.thumb;
-                    }
-                }
+                Some(e) => fold_tag(e, &hit),
                 None => out[k].push(Item::Tag(hit)),
             }
         }
@@ -2034,6 +2228,45 @@ fn project(
         }
     }
     out
+}
+
+/// Fold a second sighting `t` of the tag `into` already holds ([`same_tag`]): another library
+/// section's, another server's, another department's. The ONE fold `project`, the cross-server
+/// merge and a lane read share:
+/// - the counts SUM (each row carries its own section's);
+/// - [`TagHit::fav`] and [`TagHit::jobs`] are OR'd, never overwritten, so a person in one favourite
+///   section and one non-favourite is favourite-ranked, and an actor who also directs is both;
+/// - whichever row carried artwork wins: a section that has none must not blank a face the other
+///   supplied.
+fn fold_tag(into: &mut TagHit, t: &TagHit) {
+    into.count += t.count;
+    into.fav |= t.fav;
+    into.jobs |= t.jobs;
+    if into.thumb.is_empty() {
+        into.thumb = t.thumb.clone();
+    }
+}
+
+/// WORKER THREAD: a person a people hub sent as a `Metadata` row, as the tag the Person shelf
+/// holds: its `tagKey` is the id of its `plex://person/<id>` guid, and one without a valid one is
+/// dropped ([`people::valid_key`]) since nothing could open it.
+fn person_row(m: &plx_plex::plex::Metadata, sid: ServerId, favs: &[(ServerId, i64, bool)]) -> Option<TagHit> {
+    let tag_key = m.guid.strip_prefix("plex://person/").filter(|k| people::valid_key(k))?;
+    let name = m.title.trim();
+    if name.is_empty() {
+        return None;
+    }
+    Some(TagHit {
+        sid,
+        fav: section_is_fav(favs, sid, m.library_section_id),
+        name: name.to_string(),
+        tag_key: tag_key.to_string(),
+        id: m.rating_key.chars().all(|c| c.is_ascii_digit()).then(|| m.rating_key.clone()).unwrap_or_default(),
+        thumb: m.thumb.clone(),
+        key: m.key.clone(),
+        sec: m.library_section_id,
+        ..Default::default()
+    })
 }
 
 /// Are these two rows the same tag? `tagKey` is plex.tv's and global; `id` is server-local and
@@ -2085,6 +2318,7 @@ fn tag_hit(t: &plx_plex::plex::Tag, sid: ServerId, favs: &[(ServerId, i64, bool)
         key: t.key.clone(),
         sec: t.library_section_id,
         count: t.count,
+        ..Default::default()
     }
 }
 
@@ -2264,3 +2498,7 @@ mod job_tests;
 #[cfg(test)]
 #[path = "search/captured_inputs_tests.rs"]
 mod captured_inputs_tests;
+
+#[cfg(test)]
+#[path = "search/catalog_tests.rs"]
+mod catalog_tests;

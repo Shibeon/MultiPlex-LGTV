@@ -531,6 +531,9 @@ struct StoreSessionCapture {
     household: Vec<i64>,
     controlled: bool,
     tape_active: bool,
+    /// plex.tv's people search would be refused (`discover::people_search_refused`: a dev-token
+    /// boot with no Discover stand-in), read with the session it would be asked as.
+    people_refused: bool,
 }
 
 impl StoreSessionCapture {
@@ -551,6 +554,7 @@ impl StoreSessionCapture {
         }
         let key = profile.user.as_ref().map_or("", |user| user.uuid.as_str());
         if self.profile_key != key { self.profile_key.clear(); self.profile_key.push_str(key); }
+        self.people_refused = plx_plex::plex::discover::people_search_refused();
         self.session = settled;
         self.observed = observed;
         self.visible_generation = visible_generation;
@@ -563,7 +567,10 @@ impl StoreSessionCapture {
         plx_data::search::SearchInput { keys, recents: plx_data::search::recents::Input {
             session: &self.observed, settled: self.session.is_some(),
             profile_generation: self.profile_generation, session_generation: self.visible_generation, tenure: self.tenure,
-            profile_key: &self.profile_key } }
+            profile_key: &self.profile_key },
+            // plex.tv's people search is asked as the SETTLED account, never under a controlled
+            // run (its replay supplies no plex.tv answer) and never where it would be refused
+            catalog: self.session.as_deref().filter(|_| !self.controlled && !self.people_refused) }
     }
 }
 

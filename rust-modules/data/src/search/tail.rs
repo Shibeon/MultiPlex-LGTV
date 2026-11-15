@@ -289,9 +289,7 @@ impl Lane {
                 });
                 if let Some((at, o)) = held {
                     if at != depth {
-                        o.count += t.count;
-                        o.fav |= t.fav;
-                        if o.thumb.is_empty() { o.thumb = t.thumb.clone(); }
+                        super::fold_tag(o, t);
                     }
                     continue;
                 }
