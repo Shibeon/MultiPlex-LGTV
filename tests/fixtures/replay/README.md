@@ -683,3 +683,21 @@ with a measurement table miss. The anchors were re-recorded with
 `tests/focusfp.sh --rec --only 1,6,12`, keeping the same inputs and manifests. The closed alphabet
 adds the three exact strings from the seed-1 mock. Targets and Resolve both match all frames at
 960x540.
+
+The MultiPlex rename (0f7446f2) renamed the recorded developer triggers (`plxnative-app-init`,
+`plxnative-rec`, `plxnative-focus`, `plxnative-noidle` became `multiplex-*`) by editing the three
+manifests and their initial-input `hash`, without recording afresh. The manifests were right (a
+new recording's header equals them field for field), but every frame's `st` folds that initial
+digest (`AppFrameV4{…initial}`), so all three anchors diverged on every frame, from f=0, with every
+named difference counter at zero (`1-boot-home-chip-grid` expected `0xb5cacbf9cf698826`, got
+`0xfd8f278177c98c0a`), and the old manifests are refused by the current build (`replay: REFUSED —
+unsupported initial developer input`). `6-settings-family` was in addition refused with
+`replay: REFUSED — replay measurement table miss` since 7c26c6e9, which renamed the Legal page's
+"Privacy & security contact" row "Security contact" when the support address went away (a
+controlled boot captures no build fact, so Privacy & data still shows its two switches and flow 6's
+keys are unchanged). The anchors were recorded afresh on the unchanged shape
+(`tests/focusfp.sh --rec --only 1,6,12` on the Linux simulator under Xvfb, 350 ms keys, 1 s boot
+settle, 1.5 s final settle); the new frame-0 and frame-1 hashes are exactly the ones the macOS CI
+replay reported as `got`. `multiplex-rec check` accepted all three; only each `rec-0000.jsonl` was
+replaced (manifests unchanged, `anchor: true` kept); Targets and Resolve are SAME with every
+difference counter at zero on three consecutive runs, one of them at the CI window (960x540).
