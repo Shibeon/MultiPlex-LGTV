@@ -2746,11 +2746,47 @@ class DiscoverFixture:
                                     librarySectionID="watchlist", librarySectionTitle="Watchlist",
                                     Metadata=page)
 
+    # A person only the plex.tv stand-in knows (no library credits them): the Search screen's
+    # featured card for a person no server sent. Synthetic: the closed `s` + 8 hex alphabet, and a
+    # headshot URL the mock's own photo transcoder answers with a flat colour, never fetched.
+    CATALOG_PERSON = {"id": None, "tag": "sfeedc0de", "tagKey": "sfeedc0de",
+                      "thumb": "https://metadata-static.example/people/sfeedc0de.jpg"}
+
+    def people_search(self, q, lib):
+        """`GET /library/search?searchTypes=people&filterPeople=1` on the metadata provider (the
+        app's `discover.rs::search_people`): the people whose name the query matches (the PMS's own
+        word-prefix rule, `search_matcher`), the library's first (their `tagKey` as `metadataId`, the
+        departments the library credits them in) and then `CATALOG_PERSON`, each a
+        `SearchResult{score, Directory}` in the one published sample's shape. Pure function of the
+        query and the library."""
+        hits = search_matcher(q.get("query", ""))
+        limit = int(q["limit"]) if q.get("limit", "").isdigit() else 10
+        people = [t for t in sorted(lib.people.values(), key=lambda t: t["id"]) if hits(t["tag"])]
+        people += [self.CATALOG_PERSON] if hits(self.CATALOG_PERSON["tag"]) else []
+        results = []
+        for n, who in enumerate(people[:limit]):
+            entry = {"type": "person", "title": who["tag"], "metadataId": who["tagKey"],
+                     "key": f"/library/people/{who['tagKey']}", "slug": who["tagKey"],
+                     "source": "provider://tv.plex.provider.metadata",
+                     "CreditType": [{"type": kind, "title": title, "count": len(rows)}
+                                    for kind, title, rows in self._departments(who, lib)]}
+            if who.get("thumb", "").startswith("https://"):
+                entry["thumb"] = who["thumb"]
+            results.append({"score": round(1.0 - n * 0.05, 2), "Directory": entry})
+        return self._container(size=1, SearchResults=[
+            {"id": "people", "title": "People", "size": len(results), "SearchResult": results}])
+
     def handle(self, method, p, q, headers, lib):
         """`(status, content_type, bytes)` for a Discover path, or None when `p` is not one."""
         segs = [s for s in p.split("/") if s]
         j = lambda obj, status=200: (status, "application/json", json.dumps(obj).encode())
         hexid = lambda s: len(s) == 24 and all(ch in "0123456789abcdef" for ch in s.lower())
+        if p == "/library/search" and q.get("filterPeople") == "1" and q.get("searchTypes") == "people":
+            # The metadata provider's people search; the PMS's own `/library/search` (typed, no
+            # `filterPeople`) falls through to it.
+            if method != "GET":
+                return j({"error": "method not allowed"}, 405)
+            return j(self.people_search(q, lib))
         if (len(segs) == 4 and segs[:3] == ["library", "sections", "watchlist"]
                 and segs[3] in ("all", "released")):
             if method != "GET":
@@ -2817,7 +2853,9 @@ class DiscoverFixture:
         if (segs[:2] == ["library", "people"] and (len(segs) == 3 or (len(segs) == 4 and segs[3] == "credits"))):
             if method != "GET":
                 return j({"error": "method not allowed"}, 405)
-            who = next((t for t in lib.people.values() if t.get("tagKey") == urllib.parse.unquote(segs[2])), None)
+            key = urllib.parse.unquote(segs[2])
+            who = next((t for t in lib.people.values() if t.get("tagKey") == key),
+                       self.CATALOG_PERSON if key == self.CATALOG_PERSON["tagKey"] else None)
             if len(segs) == 3:
                 return j(self._person_profile(who, lib))
             if not (headers.get("X-Plex-Token") or q.get("X-Plex-Token")):

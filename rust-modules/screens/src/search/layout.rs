@@ -38,6 +38,16 @@ pub(super) const SCOPE_H: f32 = plx_ui::theme::size::CAPTION as f32 * 1.35;
 pub(super) const CLEAR_H: f32 = 60.0;
 pub(super) const RECENT_CAP: usize = plx_data::search::recents::CAP;
 
+/// The featured person's section ([`super::Sec::Featured`]): its card and a step of air before
+/// the first row's heading.
+pub(super) const FEATURE_BLOCK_H: f32 = plx_ui::person_feature::H + plx_ui::theme::space::SM;
+/// Where the featured card's plate stands: its headshot on the rows' left margin.
+pub(super) const FEATURE_X: f32 = MARGIN_X - plx_ui::person_feature::PAD;
+/// The featured card's focus stop in a section whose top is `top`.
+pub(super) fn feature(top: f32) -> Rect {
+    plx_ui::person_feature::PersonFeature::focus_rect(FEATURE_X, top)
+}
+
 pub(super) fn ordinal(kind: Kind) -> u32 {
     match kind {
         Kind::Movie => 0,

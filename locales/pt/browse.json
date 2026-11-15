@@ -148,6 +148,16 @@
     "many": "{count} de pessoas",
     "other": "{count} pessoas"
   },
+  "browse.search.person_titles": {
+    "one": "{count} título no MultiPlex",
+    "many": "{count} de títulos no MultiPlex",
+    "other": "{count} títulos no MultiPlex"
+  },
+  "browse.search.person_credits": {
+    "one": "{count} crédito",
+    "many": "{count} de créditos",
+    "other": "{count} créditos"
+  },
   "browse.search.count": {
     "one": "{count} resultado",
     "many": "{count} de resultados",
@@ -194,6 +204,8 @@
   "browse.crew.director": "Realizador",
   "browse.crew.writer": "Argumentista",
   "browse.crew.director_writer": "Realizador e argumentista",
+  "browse.crew.actor": "Ator",
+  "browse.crew.producer": "Produtor",
   "browse.library.type": "Tipo",
   "browse.library.filter_by": "Filtrar por",
   "browse.kind.seasons": "Temporadas",

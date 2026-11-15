@@ -577,6 +577,26 @@
     },
     "description": "browse search people"
   },
+  "browse.search.person_titles": {
+    "value": {
+      "one": "{count} title on MultiPlex",
+      "other": "{count} titles on MultiPlex"
+    },
+    "args": {
+      "count": "i64"
+    },
+    "description": "The featured person card in search: how many titles of the user's libraries they are in."
+  },
+  "browse.search.person_credits": {
+    "value": {
+      "one": "{count} credit",
+      "other": "{count} credits"
+    },
+    "args": {
+      "count": "i64"
+    },
+    "description": "The featured person card in search: how many credits plex.tv knows for them."
+  },
   "browse.search.count": {
     "value": {
       "one": "{count} result",
@@ -1610,6 +1630,14 @@
   },
   "browse.crew.director_writer": {
     "value": "Director, Writer",
+    "description": "App-owned crew job caption; preserve stable metadata role keys."
+  },
+  "browse.crew.actor": {
+    "value": "Actor",
+    "description": "App-owned crew job caption; preserve stable metadata role keys."
+  },
+  "browse.crew.producer": {
+    "value": "Producer",
     "description": "App-owned crew job caption; preserve stable metadata role keys."
   },
   "browse.library.type": {

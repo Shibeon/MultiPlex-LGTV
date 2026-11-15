@@ -201,6 +201,15 @@ fn person_client(req: &PersonReq) -> Result<Option<&'static Client>, Gone> {
     }
 }
 
+/// The client a search job runs through: none for plex.tv's people search, which asks no server;
+/// otherwise as for [`person_client`].
+fn search_client(req: &SearchReq) -> Result<Option<&'static Client>, Gone> {
+    match req.server() {
+        None => Ok(None),
+        Some((sid, key)) => resolve(sid, key).map(Some).ok_or(Gone),
+    }
+}
+
 /// TEST ONLY: what [`StoreRunner::launch_hubs`] does on this test thread in place of starting the
 /// worker. The seams stand where the production boundary is: the OS refusing a thread (below the
 /// claim `owed` reads, which the refusal gives back) and a worker whose answer comes late.
@@ -812,8 +821,7 @@ fn start_watchlist_stream(&mut self, job: StoreJob) {
     /// out. The answer of a fetch the roster has since moved on from is caught by the roster-
     /// generation supersede, which drops it at the next pump.
     fn launch_search(&mut self, job: Job<SearchReq>, port: SearchPort) -> bool {
-        let (sid, key) = job.req.server();
-        let Some(client) = resolve(sid, key) else { return false };
+        let Ok(client) = search_client(&job.req) else { return false };
         match self {
             Self::Live => {
                 let Job { addr, req } = job;
@@ -1439,10 +1447,9 @@ fn start_watchlist_stream(&mut self, job: StoreJob) {
                 StoreJob::Search(job, port) => {
                     // The registry may have moved on since the job was parked: a fetch whose client
                     // is gone is refused, as the launch would have refused it.
-                    let (sid, key) = job.req.server();
-                    match resolve(sid, key) {
-                        Some(client) => finish_search_job(&port, job.addr, client, job.req),
-                        None => port.refused(job.addr),
+                    match search_client(&job.req) {
+                        Ok(client) => finish_search_job(&port, job.addr, client, job.req),
+                        Err(Gone) => port.refused(job.addr),
                     }
                 }
                 StoreJob::BrowsePreferences(job, port) => finish_browse_preferences_job(&port, job.addr, job.req),
@@ -1503,6 +1510,17 @@ mod tests {
 
     use crate::app::bridge::test_support::Pms;
     use crate::app::bridge::Bridge;
+
+    /// plex.tv's people search is launched with no server's client: the runner neither resolves
+    /// nor waits on one, so a query on a house whose servers are all gone still asks plex.tv. A
+    /// server's own request whose client the registry no longer holds is dropped as before.
+    #[test]
+    fn a_people_search_runs_through_no_servers_client() {
+        assert!(matches!(search_client(&SearchReq::people_for_test("morel")), Ok(None)));
+        let nobody = plx_plex::plex::ClientKey { instance: u32::MAX, token: u32::MAX, grant: u32::MAX };
+        let gone = SearchReq::first_for_test(ServerId::from_raw(4093), nobody, "morel");
+        assert!(matches!(search_client(&gone), Err(Gone)));
+    }
 
     /// Puts the tape back to its inactive state when a test ends, however it ends.
     struct TapeReset;

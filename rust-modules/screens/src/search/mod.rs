@@ -37,6 +37,8 @@ const CLEAR: u32 = 2;
 const FIELD_GROUP: GroupId = GroupId(0x5345_4100);
 const RECENTS_GROUP: GroupId = GroupId(0x5345_4101);
 const CLEAR_GROUP: GroupId = GroupId(0x5345_4102);
+/// The featured person's card ([`Sec::Featured`]): one focus stop between the field and the rows.
+const FEATURE_GROUP: GroupId = GroupId(0x5345_4103);
 const STRIP: GroupId = plx_ui::containers::tabs::STRIP;
 /// The alpha at or under which the owner annotation is invisible: the renderer draws no run
 /// below it, and the instance swaps the word it holds only there — so a handle never changes
@@ -67,8 +69,9 @@ struct Row { kind: Kind, group: GroupId, elems: Vec<u32> }
 
 /// The sections of the page, top to bottom. A result row's key carries the page's `rows_gen`: a
 /// row the page wiped and rebuilt is a new section with a new shelf, as a wiped row always was.
+/// `Featured` is the person the query names (`plx_data::search::people`), drawn above the rows.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Sec { Head, Recents, Clear, Row(Kind, u32) }
+pub enum Sec { Head, Recents, Clear, Featured, Row(Kind, u32) }
 
 pub struct SearchScreen {
     entry: EntryId,
@@ -85,6 +88,9 @@ pub struct SearchScreen {
     rows_gen: u32,
     keys: Vec<KeyEntry>,
     next_elem: u32,
+    /// The featured person's element ([`Sec::Featured`]), interned like a Person row card (its key
+    /// is in `keys`, under [`FEATURE_GROUP`]); wiped with the rows.
+    featured: Option<u32>,
     rows: Vec<Row>,
     recents: Vec<u32>,
     query_gen: u32,
@@ -115,7 +121,7 @@ impl SearchScreen {
     pub fn new(entry: EntryId, instance: InstanceId) -> Self {
         Self { entry, instance, draft: Draft::new(0, ""), mounted: false, editing: false,
             blink_us: 0, hot: Spring::at(1.0), stack: new_stack(entry), rows_gen: 0,
-            keys: Vec::new(), next_elem: 10, rows: Vec::new(), recents: Vec::new(), query_gen: 0,
+            keys: Vec::new(), next_elem: 10, featured: None, rows: Vec::new(), recents: Vec::new(), query_gen: 0,
             recent_clear_pending: false, publication: None, content_dirty: true,
             fade: plx_ui::xfade::Xfade::new(), ground: plx_ui::widgets::PageGround::new(),
             owner_row: None, owner: String::new(), owner_alpha: Spring::at(0.0), restored: None, render: Default::default(),
@@ -172,6 +178,7 @@ impl SearchScreen {
 
     /// Drop the result rows, and with them their shelves.
     fn wipe_rows(&mut self) {
+        self.featured = None;
         if !self.rows.is_empty() {
             self.rows.clear();
             self.rows_gen = self.rows_gen.wrapping_add(1);
@@ -236,6 +243,10 @@ impl SearchScreen {
             self.fade.reload();
         }
         self.rows.clear();
+        self.featured = view.featured().and_then(|featured| featured.hit()).map(|tag| {
+            let id = if tag.tag_key.is_empty() { tag.id.clone() } else { tag.tag_key.clone() };
+            self.intern(Identity::Tag(Kind::Person, tag.sid, id), FEATURE_GROUP, 0)
+        });
         for shelf in view.shelves() {
             let group = layout::group(shelf.kind);
             let mut elems = Vec::with_capacity(shelf.items.len());
@@ -309,6 +320,12 @@ impl SearchScreen {
             }
             return Handled::Yes;
         }
+        if self.featured == Some(elem) {
+            if let Some(tag) = H::search(cx).featured().and_then(|featured| featured.hit()) {
+                if !held { self.open_person(tag, fx); }
+            }
+            return Handled::Yes;
+        }
         for (row_index, row) in self.rows.iter().enumerate() {
             let Some(col) = row.elems.iter().position(|key| *key == elem) else { continue };
             let view = H::search(cx);
@@ -327,19 +344,22 @@ impl SearchScreen {
                     fx.push(Fx::App(AppFx::Search(SearchReq::Collection {
                         sid: hit.item.sid, rk: hit.item.rk.clone(), tag: hit.tag })));
                 }
-                Item::Tag(tag) if row.kind == Kind::Person && !held => {
-                    let key = if tag.id.is_empty() || tag.id == "0" { &tag.tag_key } else { &tag.id };
-                    if !key.is_empty() {
-                        self.remember(fx);
-                        fx.push(Fx::App(AppFx::Search(SearchReq::Person { sid: tag.sid, key: key.clone(),
-                            guid: tag.tag_key.clone(), name: tag.name.clone(), thumb: tag.thumb.clone() })));
-                    }
-                }
+                Item::Tag(tag) if row.kind == Kind::Person && !held => self.open_person(tag, fx),
                 _ => {}
             }
             return Handled::Yes;
         }
         Handled::No
+    }
+
+    /// Open a person's page: on the server that sent them, by their id there (a `tagKey` is also a
+    /// `personId`, which is how a person only plex.tv knows opens on the server drawing its photo).
+    fn open_person<H: SearchLike>(&self, tag: &plx_data::search::TagHit, fx: &mut Effects<'_, H>) {
+        let key = if tag.id.is_empty() || tag.id == "0" { &tag.tag_key } else { &tag.id };
+        if key.is_empty() { return; }
+        self.remember(fx);
+        fx.push(Fx::App(AppFx::Search(SearchReq::Person { sid: tag.sid, key: key.clone(),
+            guid: tag.tag_key.clone(), name: tag.name.clone(), thumb: tag.thumb.clone() })));
     }
 }
 
@@ -494,6 +514,7 @@ impl SearchScreen {
         let key = focus.filter(|key| key.entry == self.entry)?;
         let view = H::search(cx);
         if self.draft.pending() || self.query_gen != view.query_gen() || self.draft.profile() != view.recents().generation() { return None; }
+        if self.featured == Some(key.elem) { return view.featured().map(|featured| featured.item()); }
         let (row, col) = self.rows.iter().enumerate().find_map(|(row, model)|
             model.elems.iter().position(|elem| *elem == key.elem).map(|col| (row, col)))?;
         view.shelves().get(row)?.items.get(col)
@@ -537,6 +558,7 @@ impl SearchScreen {
         match elem {
             Some(FIELD) => ("Field", -1, -1, -1, false),
             Some(CLEAR) => ("Clear", -1, -1, -1, false),
+            Some(elem) if self.featured == Some(elem) => ("Featured", -1, -1, -1, false),
             Some(elem) if self.recents.contains(&elem) => {
                 let index = self.recents.iter().position(|e| *e == elem).unwrap_or(0);
                 ("Recents", -1, -1, index as i64, false)
@@ -558,7 +580,7 @@ impl SearchScreen {
     pub fn probe_below(&self) -> &'static str {
         if !self.real_query() {
             if self.recents.is_empty() { "Nothing" } else { "Recents" }
-        } else if self.rows.is_empty() { "Nothing" } else { "Results" }
+        } else if self.rows.is_empty() && self.featured.is_none() { "Nothing" } else { "Results" }
     }
 
     pub fn is_editing(&self) -> bool { self.editing }
@@ -570,7 +592,9 @@ impl SearchScreen {
     pub fn recents_shown(&self) -> usize { self.recents.len() }
 
     fn first_content(&self) -> Option<GroupId> {
-        if !self.recents.is_empty() { Some(RECENTS_GROUP) } else { self.rows.first().map(|row| row.group) }
+        if !self.recents.is_empty() { return Some(RECENTS_GROUP); }
+        if self.featured.is_some() { return Some(FEATURE_GROUP); }
+        self.rows.first().map(|row| row.group)
     }
     /// The stack's key of result row `row`.
     fn section(&self, row: usize) -> Sec { Sec::Row(self.rows[row].kind, self.rows_gen) }
@@ -602,6 +626,7 @@ impl SearchScreen {
             model.elems.iter().position(|elem| *elem == key.elem).map(|col| (row, col))));
         let view = H::search(cx);
         let handle = target.and_then(|(row, col)| view.shelves().get(row)?.items.get(col))
+            .filter(|item| !matches!(item, Item::Tag(tag) if tag.catalog))
             .and_then(|item| view.scope().sources().iter().find(|source| source.sid == item.sid()))
             .map_or("", |source| source.handle.as_str());
         let target_row = target.map(|(row, _)| row);
@@ -661,6 +686,8 @@ impl<H: SearchLike> StackPage<H> for SearchScreen {
             let shown = view.shelves().get(i).map_or(0, |shelf| shelf.items.len()).min(row.elems.len());
             h = mix(mix(h, layout::ordinal(row.kind) as u64), shown as u64);
         }
+        // the featured card is a section of its own; a page without one hashes as it always did
+        if self.featured.is_some() { h = mix(h, u64::from(FEATURE_GROUP.0)); }
         h
     }
     fn sections(&self, _cx: &Cx<'_, H>, out: &mut Vec<SectionSpec<Sec>>) {
@@ -670,6 +697,10 @@ impl<H: SearchLike> StackPage<H> for SearchScreen {
             out.push(SectionSpec::new(Sec::Recents, plx_ui::cards::Kind::Custom {
                 height: plx_ui::table::HDR_H + shown * plx_ui::table::ROW_H, focusable: true }, RECENTS_GROUP));
             out.push(SectionSpec::new(Sec::Clear, plx_ui::cards::Kind::Custom { height: 0.0, focusable: true }, CLEAR_GROUP));
+        }
+        if self.featured.is_some() {
+            out.push(SectionSpec::new(Sec::Featured,
+                plx_ui::cards::Kind::Custom { height: layout::FEATURE_BLOCK_H, focusable: true }, FEATURE_GROUP));
         }
         for row in &self.rows {
             let elem = if matches!(row.kind, Kind::Movie | Kind::Show | Kind::Episode) { ElemKind::Card } else { ElemKind::Bare };
@@ -699,10 +730,21 @@ impl<H: SearchLike> StackPage<H> for SearchScreen {
         matches!(self.selected_item(Some(key), cx), Some(Item::Media(media)) if crate::registry::item_has_menu(media))
     }
     fn elem_of(&self, k: Sec) -> Option<u32> {
-        match k { Sec::Head => Some(FIELD), Sec::Clear if !self.recents.is_empty() => Some(CLEAR), _ => None }
+        match k {
+            Sec::Head => Some(FIELD),
+            Sec::Clear if !self.recents.is_empty() => Some(CLEAR),
+            Sec::Featured => self.featured,
+            _ => None,
+        }
     }
     fn plain_len(&self, k: Sec) -> usize {
-        match k { Sec::Recents => self.recents.len(), Sec::Head => 1, Sec::Clear => (!self.recents.is_empty()) as usize, Sec::Row(..) => 0 }
+        match k {
+            Sec::Recents => self.recents.len(),
+            Sec::Head => 1,
+            Sec::Clear => (!self.recents.is_empty()) as usize,
+            Sec::Featured => self.featured.is_some() as usize,
+            Sec::Row(..) => 0,
+        }
     }
     fn plain_elem(&self, k: Sec, n: usize) -> Option<u32> {
         match k { Sec::Recents => self.recents.get(n).copied(), _ => if n == 0 { StackPage::<H>::elem_of(self, k) } else { None } }
@@ -718,6 +760,7 @@ impl<H: SearchLike> StackPage<H> for SearchScreen {
         match k {
             Sec::Recents => layout::recent(0, layout::CONTENT_TOP - section.y),
             Sec::Clear => layout::clear_below(section.y, cx.measure),
+            Sec::Featured => layout::feature(section.y),
             _ => Rect::new(layout::FIELD.x, layout::FIELD.y + section.y, layout::FIELD.w, layout::FIELD.h),
         }
     }
@@ -738,7 +781,13 @@ impl<H: SearchLike> StackPage<H> for SearchScreen {
     /// Entered from the field, a group takes the card focus last left on in it, else its first.
     fn seat_override(&self, cx: &Cx<'_, H>, k: Sec, _from: Placed) -> Option<u32> {
         if !cx.focus.current.is_some_and(|key| key.elem == FIELD) { return None; }
-        let group = match k { Sec::Recents => RECENTS_GROUP, Sec::Clear => CLEAR_GROUP, Sec::Head => FIELD_GROUP, Sec::Row(kind, _) => layout::group(kind) };
+        let group = match k {
+            Sec::Recents => RECENTS_GROUP,
+            Sec::Clear => CLEAR_GROUP,
+            Sec::Head => FIELD_GROUP,
+            Sec::Featured => FEATURE_GROUP,
+            Sec::Row(kind, _) => layout::group(kind),
+        };
         let valid = |elem: &u32| match k {
             Sec::Row(kind, _) => self.rows.iter().any(|row| row.kind == kind && row.elems.contains(elem)),
             _ => (0..StackPage::<H>::plain_len(self, k)).any(|n| StackPage::<H>::plain_elem(self, k, n) == Some(*elem)),
@@ -760,6 +809,7 @@ impl<H: SearchLike> StackPage<H> for SearchScreen {
         let old = self.keys.iter().find(|key| key.elem == *want);
         let elems: &[u32] = match old {
             Some(old) if old.group == RECENTS_GROUP => &self.recents,
+            Some(old) if old.group == FEATURE_GROUP => self.featured.as_slice(),
             Some(old) => self.rows.iter().find(|row| row.group == old.group).map_or(&[], |row| &row.elems),
             None => &[],
         };
@@ -806,6 +856,10 @@ impl<H: SearchLike> Screen<H> for SearchScreen {
         if !self.recents.is_empty() {
             out.push(Link { from: RECENTS_GROUP, dir: Dir::Down, to: CLEAR_GROUP });
             out.push(Link { from: CLEAR_GROUP, dir: Dir::Up, to: RECENTS_GROUP });
+        }
+        if let (Some(_), Some(row)) = (self.featured, self.rows.first()) {
+            out.push(Link { from: FEATURE_GROUP, dir: Dir::Down, to: row.group });
+            out.push(Link { from: row.group, dir: Dir::Up, to: FEATURE_GROUP });
         }
         for pair in self.rows.windows(2) {
             out.push(Link { from: pair[0].group, dir: Dir::Down, to: pair[1].group });

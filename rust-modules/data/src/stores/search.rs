@@ -231,6 +231,12 @@ impl SearchStore {
     }
 
     #[cfg(any(test, feature = "test-support"))]
+    pub fn publish_featured_for_test(&mut self, featured: Option<crate::search::people::Featured>) {
+        self.state.publish_featured_for_test(featured);
+        self.bump();
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
     pub fn publish_shelves_over_directory_for_test(&mut self, shelves: Vec<crate::search::Shelf>,
         directory: crate::stores::browse::DirectoryView<'_>) {
         self.state.publish_shelves_over_directory_for_test(shelves, directory);
