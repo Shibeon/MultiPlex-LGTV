@@ -104,6 +104,8 @@ pub(crate) struct TogetherUi {
     since_poll_ms: Option<u32>,
     /// Time the listing may be asked in for, before its first ask.
     waiting_ms: u32,
+    /// The Friends page was on top at the previous poll: its arrival asks at once.
+    on_friends_page: bool,
     /// The gate's standing last shown.
     follow: FollowState,
     /// The friends' sessions last listed, for the Friends page.
@@ -244,6 +246,8 @@ impl TogetherUi {
     /// Whether the friends' listing is due this frame (`elapsed_ms` since the previous call).
     pub(crate) fn poll_due(&mut self, elapsed_ms: u32, ctx: &UiCtx) -> bool {
         let wanted = (ctx.friend_alerts || ctx.friends_page) && !ctx.in_session;
+        let arrived = ctx.friends_page && !self.on_friends_page;
+        self.on_friends_page = ctx.friends_page;
         if !wanted {
             self.waiting_ms = 0;
             return false;
@@ -259,18 +263,13 @@ impl TogetherUi {
             }
             Some(since) => {
                 *since = since.saturating_add(elapsed_ms);
-                if *since >= POLL_MS {
+                if *since >= POLL_MS || arrived {
                     *since = 0;
                     return true;
                 }
                 false
             }
         }
-    }
-
-    /// The Friends page arrived: ask now.
-    pub(crate) fn poll_now(&mut self) {
-        self.since_poll_ms = Some(POLL_MS);
     }
 
     /// The card OK answered: what to do.
@@ -405,7 +404,8 @@ mod tests {
         assert!(!ui.poll_due(POLL_MS, &UiCtx { in_session: true, ..ctx() }), "never during a session");
         assert!(!ui.poll_due(POLL_MS, &UiCtx { friend_alerts: false, ..ctx() }), "nor with nothing to show it");
         assert!(ui.poll_due(POLL_MS, &UiCtx { friend_alerts: false, friends_page: true, ..ctx() }), "the Friends page wants it");
-        ui.poll_now();
+        assert!(!ui.poll_due(0, &ctx()), "leaving the page asks nothing");
         assert!(ui.poll_due(0, &UiCtx { friends_page: true, ..ctx() }), "an arrival asks at once");
+        assert!(!ui.poll_due(0, &UiCtx { friends_page: true, ..ctx() }), "once, not every frame on the page");
     }
 }

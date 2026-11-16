@@ -5073,6 +5073,15 @@ pub(crate) fn search_owns_input(d: &Dispatcher<AppHost>) -> bool {
             .is_some_and(|screen| screen.is::<plx_screens::search::SearchScreen>())
 }
 
+/// **Who takes typed text** (the television keyboard's commits, the `txt:` remote token, a replayed
+/// text record): owned Search, whose field takes a desktop keyboard's text with or without the
+/// panel, or any page holding the television's keyboard (`Delivery::Keyboard { up: true }`, which
+/// the dispatcher accepts only from the page that owns input): the Friends page's invitation code
+/// and the HUD settings' address read the same `InputKind::Text` Search does.
+pub(crate) fn text_owns_input(d: &Dispatcher<AppHost>) -> bool {
+    search_owns_input(d) || d.input.keyboard
+}
+
 /// **Does the page under the pointer glide at the screen's edges?** No surface is up and the top
 /// page scrolls itself by a wheel (`Screen::glides`): the pointer's edge glide is offered to it.
 pub(crate) fn page_glides(d: &Dispatcher<AppHost>) -> bool {

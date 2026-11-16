@@ -1095,3 +1095,27 @@ fn owned_search_ok_on_a_collection_requests_its_collection_page() {
     assert!(matches!(selected, plx_data::search::Item::Collection(c) if c.item.rk == "50007"));
     plx_plex::plex::reset_servers_for_test();
 }
+
+/// Typed text reaches whichever page holds the television's keyboard, not only Search: the Friends
+/// page's invitation code and the HUD settings' address raise the same keyboard and read the same
+/// `InputKind::Text`, and before this gate named them their typing queued in `textinput` unread.
+#[test]
+fn a_page_holding_the_system_keyboard_owns_typed_text() {
+    let _serial = plx_base::testlock::serial();
+    let session = plx_plex::plex::session::TempSession::new("keyboard-text-owner");
+    session.watching("synthetic-keyboard-text-owner");
+    plx_plex::plex::reset_servers_for_test();
+    let mut d = Dispatcher::<AppHost>::new();
+    let mut rig = Bridge::for_test(|| 0);
+    frame(&mut d, &mut rig, AppArg::Friends, tick(0), vec![]);
+    let page = d.nav.top_page().unwrap().inst.as_ref().unwrap().id;
+    assert!(!search_owns_input(&d) && !text_owns_input(&d), "no keyboard, no text owner");
+    d.emit(MachineId::Instance(page), Fx::Deliver(MachineId::Instance(page), Delivery::Keyboard { up: true }));
+    frame(&mut d, &mut rig, AppArg::Friends, tick(1), vec![]);
+    assert!(d.input.keyboard);
+    assert!(!search_owns_input(&d), "the Friends page is not Search");
+    assert!(text_owns_input(&d), "the page that raised the keyboard takes what is typed on it");
+    d.emit(MachineId::Instance(page), Fx::Deliver(MachineId::Instance(page), Delivery::Keyboard { up: false }));
+    frame(&mut d, &mut rig, AppArg::Friends, tick(2), vec![]);
+    assert!(!text_owns_input(&d), "the keyboard down, nothing owns text again");
+}
