@@ -13,7 +13,7 @@ import re
 from readonly_dependencies import _local_sha, _sha, _json, _manifest_paths, _configs, _workspace_hashes, WORKSPACE_HASHING
 
 CERTIFICATE_PATH = Path(__file__).with_name('proofs') / 'platform-generated-enums.json'
-CERTIFICATE_SHA256 = '7e2866b4a6d78df7f7d718c2b77d69604b750a97c4657990b4250f5971a026d7'
+CERTIFICATE_SHA256 = 'c4187fc626fd46f064c611a3a9551d869671709321de215e33f6c4c216a1ee7f'
 SOURCES = ['platform/Cargo.toml', 'platform/src/lib.rs', 'platform/src/i18n/mod.rs',
            'platform/build.rs', 'platform/build_support/catalog.rs', 'build_support/install_identities.rs',
            'machine/src/lib.rs', 'machine/src/machine.rs']
@@ -21,8 +21,11 @@ GRAMMAR = {'Preference': {'prefix': ['System'], 'catalogue_unit_variants': True}
            'Language': {'catalogue_unit_variants': True, 'suffix': ['Pseudo']}}
 
 
+# The third snapshot adds the unit variant `MachineId::Together` (and its canon arm): the ID newtype
+# macro and every other enum are unchanged.
 MACHINE_SOURCES = ['571415d64a9885248f852b402153feedd4660acbe03606e4796c59659726049f',
-                   '03a6e18f576dcbaff66c3d7405923b155302bfb2996bb373dac115ece055a5bf']
+                   '03a6e18f576dcbaff66c3d7405923b155302bfb2996bb373dac115ece055a5bf',
+                   'f0b1f58d46c74ddbb4466bc01c52cac244ed4c02ddeea9ea037405a5d16b58d4']
 
 
 # The third snapshot is the MultiPlex rename: it differs from the second only in the names of the

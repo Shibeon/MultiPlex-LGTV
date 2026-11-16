@@ -79,6 +79,7 @@ pub mod paging;
 pub mod search;
 pub mod subsearch;
 pub mod tape;
+pub mod together;
 pub mod upcoming;
 pub mod viewreconcile;
 pub mod viewstate;

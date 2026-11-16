@@ -1,7 +1,9 @@
 //! SHA-256, HMAC-SHA-256 and PBKDF2-HMAC-SHA-256, written out here because the crate has no
-//! hashing dependency and the one consumer needs a **password verifier, not a hash**.
+//! hashing dependency and the first consumer needs a **password verifier, not a hash**. The second
+//! is Watch Together (`plx_data::together`): its session keys are PBKDF2 then HKDF (`crate::hkdf`,
+//! keyed through [`HmacKey`]), the same derivation the web client runs in WebCrypto.
 //!
-//! The consumer is `plex::session::PinVerifier`: the four-digit Plex Home PIN a
+//! The first consumer is `plex::session::PinVerifier`: the four-digit Plex Home PIN a
 //! protected profile is behind has to be checked with plex.tv unreachable, and plex.tv is the only
 //! party that knows the PIN. What this stores instead is PBKDF2 of the PIN under a random salt,
 //! so the file holds something a PIN can be checked AGAINST and never the PIN itself — a household
@@ -149,13 +151,13 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 /// HMAC-SHA-256 (RFC 2104) with the inner and outer keyed states returned, because PBKDF2 keys
 /// the same password thousands of times and the two key pads are the part worth computing once.
 #[derive(Clone)]
-struct HmacKey {
+pub struct HmacKey {
     inner: Sha256,
     outer: Sha256,
 }
 
 impl HmacKey {
-    fn new(key: &[u8]) -> Self {
+    pub fn new(key: &[u8]) -> Self {
         let mut k = [0u8; 64];
         if key.len() > 64 {
             k[..32].copy_from_slice(&sha256(key));
@@ -175,9 +177,17 @@ impl HmacKey {
         HmacKey { inner, outer }
     }
 
-    fn mac(&self, msg: &[u8]) -> [u8; 32] {
+    pub fn mac(&self, msg: &[u8]) -> [u8; 32] {
+        self.mac_parts(&[msg])
+    }
+
+    /// The MAC of the concatenation of `parts`, without building it (HKDF-Expand's
+    /// `T(i-1) | info | i`).
+    pub fn mac_parts(&self, parts: &[&[u8]]) -> [u8; 32] {
         let mut i = self.inner.clone();
-        i.update(msg);
+        for part in parts {
+            i.update(part);
+        }
         let ih = i.finish();
         let mut o = self.outer.clone();
         o.update(&ih);
@@ -185,8 +195,7 @@ impl HmacKey {
     }
 }
 
-/// Graded by the RFC 4231 vectors; the shipping consumer only ever keys through PBKDF2.
-#[cfg(any(test, feature = "test-support"))]
+/// One-shot HMAC-SHA-256, graded by the RFC 4231 vectors.
 pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> [u8; 32] {
     HmacKey::new(key).mac(msg)
 }

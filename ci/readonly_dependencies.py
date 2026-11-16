@@ -17,7 +17,7 @@ import re
 import tarfile
 
 CERTIFICATE_PATH = Path(__file__).with_name('proofs') / 'serde-json-immutable.json'
-CERTIFICATE_SHA256 = 'f9c9d30faa7d2726c50db4d2c4c6214116fd5bf9c4d365141ab4e0d626d34c10'
+CERTIFICATE_SHA256 = 'eb77a90af646890b0928f22a4242e2c8cb2b1e5a8beff9797a26276d4e7b5389'
 SCHEMA = 'plx.readonly.locked-json.v1'
 REGISTRY = 'registry+https://github.com/rust-lang/crates.io-index'
 SUPPORTED = ['alloc', 'arbitrary_precision', 'default', 'float_roundtrip', 'raw_value', 'std', 'unbounded_depth']

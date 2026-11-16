@@ -61,8 +61,9 @@ pub const MAX_HEAD_ITEMS: usize = 8;
 pub const MAX_ROW_ITEMS: usize = crate::hud_format::schema::MAX_SEGMENT_ITEMS;
 
 /// How many tabs the bottom row can hold: Info, then Chapters, then More (format 1.2: an `open_more` pill
-/// outside the row, the MultiPlex HUD's "+ More").
-pub(crate) const HUD_TABS: usize = 3;
+/// outside the row, the MultiPlex HUD's "+ More"), then Watch Together (format 1.3: an `open_more` on the
+/// `together` page outside the row, pill or disc).
+pub(crate) const HUD_TABS: usize = 4;
 
 /// Where the control row hangs: its right edge, its top and its height. The stand-ins that take
 /// the row's place (Skip, Up Next) land on exactly these or the transport visibly jumps when a

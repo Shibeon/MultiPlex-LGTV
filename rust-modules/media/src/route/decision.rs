@@ -199,6 +199,18 @@ pub struct PlaybackSession {
     /// request and every landing. A stop that never presented one (Back while a Play from Start
     /// buffered) watched nothing, so it owes the server no resume reset ([`scrobble_stop`]).
     presented: bool,
+    /// This playback was opened by a Watch Together session's Follow ([`waive_resume_reset`]),
+    /// not by the viewer's own Play from Start: its stop owes the server no resume reset
+    /// ([`plx_data::viewstate::restart_owes_resume_reset`]). Joining a session that is near the
+    /// beginning is not the viewer throwing away the point they had; the ordinary `stopped` report
+    /// still goes out, exactly as a normal play's. Carried across the plan's landing and a retry of
+    /// the same playback, cleared by every new request.
+    resume_reset_waived: bool,
+    /// The viewer's own play, pause and seek requests on the player so far ([`note_gesture`]):
+    /// a count only ever moves forward, carried across a plan's landing and every new request, so a
+    /// Watch Together session tells the person's gesture from a change it asked for itself (which
+    /// never counts) by its moving. Wraps.
+    transport_gestures: u32,
     /// Read-only publication of Player.repair for the HUD. Never authorizes a resource effect.
     pub repair_status: plx_platform::tv::sandbox::State,
     /// The request which produced this attempt, retained for terminal Retry / Choose quality.
@@ -1695,6 +1707,8 @@ impl PlaybackSession {
         engine_failure: None,
         finished: false,
         presented: false,
+        resume_reset_waived: false,
+        transport_gestures: 0,
         repair_status: plx_platform::tv::sandbox::State::Idle,
         request: None,
         requested_resume_ns: 0,
@@ -1804,6 +1818,8 @@ impl PlaybackSession {
             engine_failure,
             finished,
             presented,
+            resume_reset_waived,
+            transport_gestures,
             repair_status,
             request,
             requested_resume_ns,
@@ -1895,6 +1911,8 @@ impl PlaybackSession {
             engine_failure: *engine_failure,
             finished: *finished,
             presented: *presented,
+            resume_reset_waived: *resume_reset_waived,
+            transport_gestures: *transport_gestures,
             repair_status: *repair_status,
             request: request.clone(),
             requested_resume_ns: *requested_resume_ns,
@@ -7061,6 +7079,32 @@ pub fn cur_memory_note(ps: &PlaybackSession) -> bool {
 pub fn cur_rk(ps: &PlaybackSession) -> String {
     ps.cur_rk.clone()
 }
+/// A Watch Together session opened this playback (a Follow): its stop owes no resume reset
+/// ([`PlaybackSession::resume_reset_waived`]). Call it after the request that opened the playback,
+/// which clears it. A seek the session asks for on a playback it did not open waives nothing: the
+/// host's own Play from Start still owes its reset.
+pub fn waive_resume_reset(ps: &mut PlaybackSession) {
+    ps.resume_reset_waived = true;
+}
+/// See [`waive_resume_reset`].
+pub fn resume_reset_waived(ps: &PlaybackSession) -> bool {
+    ps.resume_reset_waived
+}
+/// The viewer asked the player to play, pause or seek ([`PlaybackSession::transport_gestures`]).
+/// Called by the application's own transport doors, never by a change a session asked for.
+pub fn note_gesture(ps: &mut PlaybackSession) {
+    ps.transport_gestures = ps.transport_gestures.wrapping_add(1);
+}
+/// See [`note_gesture`].
+pub fn transport_gestures(ps: &PlaybackSession) -> u32 {
+    ps.transport_gestures
+}
+/// The item this playback was asked for ([`request_play`]), `(server, ratingKey)`: known from the
+/// request on, before the plan lands and names it [`cur_rk`]. `None` with no request, or for a
+/// hero preview's.
+pub fn requested_item(ps: &PlaybackSession) -> Option<(ServerId, &str)> {
+    ps.request.as_ref().filter(|r| !r.preview).map(|r| (r.sid, r.rk.as_str()))
+}
 /// The playing version's `mediaIndex` — see [`PlaybackSession::cur_media_index`].
 fn cur_media_index(ps: &PlaybackSession) -> usize {
     ps.cur_media_index
@@ -8612,6 +8656,7 @@ pub fn scrobble_stop(
         // still-buffering Play from Start, or a start that failed (its report names 0,
         // `route_start::final_position_ns`), watched nothing from the beginning.
         reset_resume = !mark_watched
+            && !ps.resume_reset_waived
             && ps.presented
             && engine_failure(ps).is_none()
             && row.is_some_and(|r| plx_data::viewstate::restart_owes_resume_reset(*pos_ms, r.resume_ms, r.watched));
@@ -10813,6 +10858,10 @@ fn request_play_with_queue(
 ) -> bool {
     ps.finished = false; // a flag the previous stop never took must not mark THIS item
     ps.presented = false;
+    if retry.is_none() {
+        // A new playback is the viewer's own until a session says otherwise; a retry is the same one.
+        ps.resume_reset_waived = false;
+    }
     let sid = request.sid;
     let rk = &request.rk;
     let part = &request.part;
@@ -11698,6 +11747,8 @@ fn apply_plan(ps: &mut PlaybackSession, meta: &mut plx_data::stores::metadata::M
             engine_failure: None,
             finished: false,
             presented: false,
+            resume_reset_waived: s.resume_reset_waived,
+            transport_gestures: s.transport_gestures,
             repair_status: plx_platform::tv::sandbox::State::Idle,
             request,
             requested_resume_ns,

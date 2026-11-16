@@ -75,6 +75,7 @@ pub(crate) mod subtitle_cue; // embedded/side-reader cue bridge; caption stores 
 pub mod text_ass; // text subtitles to ASS: dialect converter, synthesized header, sidecar scripts (pure)
 pub mod text_style; // the viewer's size/position picks as the numbers that converter and the screen's lift use (pure)
 mod timeline;
+pub mod together; // Watch Together's door into the player: the facts a session observes and the requests it performs, for either backend
 pub mod transport;
 pub mod video_geometry;
 

@@ -946,6 +946,17 @@ pub fn write_sources(w: &mut Canon, sources: &[plx_plex::plex::session::SourceRe
             .bool(s.home).u64(s.owner_id as u64)
             .str(&s.address).u64(s.port as u64).str(&s.token).str(&s.origin_url);
         write_tier(w, s.tier);
+        // plex.tv's published connections are part of the state: a roster whose only change is a
+        // new public name is a change (it moves where a Watch Together relay is found). Written
+        // only when there are some, so every digest of a record without them (all the recorded
+        // ones, the legacy V5 goldens) stays what it was; the `seq` tag cannot be read as the next
+        // source's leading `str`, nor its `str, bool, bool` entries as what follows the roster.
+        if !s.published.is_empty() {
+            w.seq(s.published.len());
+            for c in &s.published {
+                w.str(&c.uri).bool(c.local).bool(c.relay);
+            }
+        }
     }
 }
 
@@ -4338,6 +4349,8 @@ let (req,): (u32,) = (req,);
                                 home: candidate.home, owner_id: candidate.owner_id,
                                 origin_url: candidate.origin.base(), address: candidate.address.clone(),
                                 port: i64::from(candidate.origin.port()), tier: Some(candidate.location),
+                                // The registry's activation: the persisted roster (`Install`) carries them.
+                                published: Vec::new(),
                                 extensions: Default::default(),
                             }, ipv6: candidate.ipv6,
                             // A roster refresh lists `/resources` with the ACCOUNT token; the seated
@@ -5051,6 +5064,22 @@ mod tests {
         let mut b = a.clone();
         b.persisted.language = plx_platform::i18n::Preference::Be;
         assert_ne!(a.hash(), b.hash());
+    }
+
+    /// A server's published connections are part of the recorded state; written only when there
+    /// are some, so the pinned legacy digests of rosters without them do not move.
+    #[test]
+    fn published_connections_change_the_recorded_session_hash() {
+        use plx_machine::machine::LogicalState;
+        let mut a = SessionInit::captured(PersistedSession::default());
+        a.persisted.sources = vec![plx_plex::plex::session::SourceRef { machine_id: "m".into(), ..Default::default() }];
+        let mut b = a.clone();
+        b.persisted.sources[0].published =
+            vec![plx_plex::plex::session::PublishedConnection { uri: "https://plex.exemple.fr".into(), local: false, relay: false }];
+        assert_ne!(a.hash(), b.hash());
+        let mut c = b.clone();
+        c.persisted.sources[0].published[0].local = true;
+        assert_ne!(b.hash(), c.hash());
     }
 
     /// A managed member's `restricted` flag is part of the recorded state, in the persisted roster

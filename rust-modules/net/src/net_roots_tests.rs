@@ -100,6 +100,58 @@ fn a_plex_direct_host_whose_issuer_the_device_lacks_is_verified_through_the_bund
     assert!(out.latched, "a success through the bundle latches the host");
 }
 
+/// A Watch Together relay is offered the bundle once the together runner admitted its exact host,
+/// and only then; a neighbouring name is not (`keypin::admit_relay_host`). One test, because the
+/// admitted list is the process's: the bound (least recently admitted host out) is reached last.
+#[test]
+fn an_admitted_relay_host_is_verified_through_the_bundle_and_no_other_name_is() {
+    let _serial = plx_base::testlock::serial();
+    if curl_ready() {
+        admitted_relay_requests();
+    }
+    relay_admission_bounds();
+}
+
+fn admitted_relay_requests() {
+    let relay = "relais-admis.roots-test.invalid";
+    let cert = leaf(&[relay]);
+    refused_with(&request_to(relay, Arc::clone(&cert), &unrelated_store(), Some(&cert.pem), "relay-before"), &[60]);
+    keypin::admit_relay_host("Relais-Admis.Roots-Test.Invalid.");
+    let out = request_to(relay, Arc::clone(&cert), &unrelated_store(), Some(&cert.pem), "relay-ok");
+    assert_eq!(out.result.expect("an admitted relay verifies through the bundle").status, 200);
+    let other = "autre.roots-test.invalid";
+    let cert = leaf(&[other]);
+    refused_with(&request_to(other, Arc::clone(&cert), &unrelated_store(), Some(&cert.pem), "relay-other"), &[60]);
+}
+
+fn relay_admission_bounds() {
+    let _bundle = keypin::test_roots::Guard::install(&mint_cert(&["relay-bound.invalid"]).pem, "relay-bound");
+    for bad in ["", "localhost", "a.b@evil.example", "x.example/path", ".lead.example", "sp ace.example"] {
+        keypin::admit_relay_host(bad);
+        assert_eq!(keypin::relay_roots_bundle(bad), None, "{bad:?}");
+    }
+    keypin::admit_relay_host("bound-0.relay.invalid");
+    assert!(keypin::relay_roots_bundle("BOUND-0.relay.invalid").is_some());
+    assert_eq!(keypin::relay_roots_bundle("bound-0.relay.invalid.evil.example"), None);
+    // The bound evicts the least recently admitted host, never the newest: a 17th relay (the one
+    // about to be dialled) is admitted, and the oldest leaves.
+    for i in 1..=keypin::MAX_RELAY_HOSTS {
+        keypin::admit_relay_host(&format!("bound-{i}.relay.invalid"));
+    }
+    let newest = format!("bound-{}.relay.invalid", keypin::MAX_RELAY_HOSTS);
+    assert!(keypin::relay_roots_bundle(&newest).is_some(), "the newest host past the bound is admitted");
+    assert_eq!(keypin::relay_roots_bundle("bound-0.relay.invalid"), None, "the oldest host is evicted");
+    // Admitting a host again makes it the newest: it outlives the next eviction, its neighbour does not.
+    keypin::admit_relay_host("bound-1.relay.invalid");
+    keypin::admit_relay_host("bound-extra.relay.invalid");
+    assert!(keypin::relay_roots_bundle("bound-1.relay.invalid").is_some(), "a re-admitted host is refreshed");
+    assert_eq!(keypin::relay_roots_bundle("bound-2.relay.invalid"), None, "the oldest is evicted next");
+    assert!(keypin::relay_roots_bundle("bound-extra.relay.invalid").is_some());
+    let key = keypin::key_of(&newest, 443);
+    assert!(matches!(after_strict_failure(&key, 60, Some(20)), Some(keypin::Mode::Roots { .. })));
+    assert_eq!(after_strict_failure(&key, 60, Some(51)), None, "a name failure is not the bundle's");
+}
+
 #[test]
 fn without_the_issuing_root_in_the_bundle_the_request_fails_as_before() {
     let _serial = plx_base::testlock::serial();

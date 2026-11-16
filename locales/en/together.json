@@ -1,0 +1,235 @@
+{
+  "together.title": {
+    "value": "Watch together",
+    "description": "Title of the Watch Together panel (opened from the player's More menu) and of its row there. Watch Together keeps several people's players at the same place, each with their own Plex access."
+  },
+  "together.status.connecting": {
+    "value": "Connecting…",
+    "description": "Watch Together panel: the session's state while its encrypted relay connection is being opened."
+  },
+  "together.status.connected": {
+    "value": "Connected",
+    "description": "Watch Together panel: the session's state once the relay connection is open."
+  },
+  "together.create": {
+    "value": "Start a session",
+    "description": "Watch Together panel: button that starts a new session (this TV becomes the host) on the title playing."
+  },
+  "together.code": {
+    "value": "Invitation",
+    "description": "Watch Together panel: label of the row that shows the session's invitation code (for example MPX-K7Q2-9XFD), which friends type to join."
+  },
+  "together.visible": {
+    "value": "Visible to my Plex friends",
+    "description": "Watch Together panel, host only: switch that lists the session to the host's Plex friends (who then see it and join without a code). Followed by On/Off."
+  },
+  "together.listed.pending": {
+    "value": "Telling your friends…",
+    "description": "Watch Together panel, host of a visible session: the relay is being asked to list it to the host's Plex friends."
+  },
+  "together.listed.yes": {
+    "value": "Your Plex friends can see it",
+    "description": "Watch Together panel, host of a visible session: the relay lists it to the host's Plex friends."
+  },
+  "together.listed.no": {
+    "value": "Not listed: invitation only",
+    "description": "Watch Together panel, host of a visible session: the relay could not list it (friends must use the invitation code)."
+  },
+  "together.participants": {
+    "value": "Participants",
+    "description": "Watch Together panel: heading of the list of the people in the session."
+  },
+  "together.me": {
+    "value": "Me",
+    "description": "Watch Together panel: the user's own row in the participants list, when their Plex name is unknown."
+  },
+  "together.host": {
+    "value": "Host",
+    "description": "Watch Together panel: read-out beside the participant who hosts the session."
+  },
+  "together.state.playing": {
+    "value": "Playing",
+    "description": "Watch Together panel: a participant's player is playing."
+  },
+  "together.state.paused": {
+    "value": "Paused",
+    "description": "Watch Together panel: a participant's player is paused."
+  },
+  "together.state.away": {
+    "value": "Not in the player",
+    "description": "Watch Together panel: a participant is in the session but not in the player (on a page of the app)."
+  },
+  "together.alone": {
+    "value": "Waiting for guests…",
+    "description": "Watch Together panel: the participants list while nobody else has joined yet."
+  },
+  "together.leave": {
+    "value": "Leave session",
+    "description": "Watch Together panel: button that leaves the session (playback goes on, no longer shared)."
+  },
+  "together.action.paused": {
+    "value": "{name} paused",
+    "description": "Short notice over the picture: another participant (a Plex user's name) paused playback for everyone.",
+    "args": {
+      "name": "str"
+    }
+  },
+  "together.action.played": {
+    "value": "{name} resumed",
+    "description": "Short notice over the picture: another participant (a Plex user's name) resumed playback for everyone.",
+    "args": {
+      "name": "str"
+    }
+  },
+  "together.action.seeked": {
+    "value": "{name} moved playback",
+    "description": "Short notice over the picture: another participant (a Plex user's name) jumped to another moment for everyone.",
+    "args": {
+      "name": "str"
+    }
+  },
+  "together.missing": {
+    "value": "“{title}” isn’t on your servers",
+    "description": "Notice: the session moved to a title (a media title from a server) that none of the user's Plex servers has, so it was not opened.",
+    "args": {
+      "title": "str"
+    }
+  },
+  "together.opening": {
+    "value": "Joining “{title}”…",
+    "description": "Notice while the session's title (a media title from a server) is being opened to join the others.",
+    "args": {
+      "title": "str"
+    }
+  },
+  "together.friend_started": {
+    "value": "{name} is watching “{title}” together",
+    "description": "Notification: a Plex friend ({name}) started a Watch Together session on a title ({title}) the user can join.",
+    "args": {
+      "name": "str",
+      "title": "str"
+    }
+  },
+  "together.join": {
+    "value": "Join",
+    "description": "Action of the friend's-session notification and of a friend's session card: join that session."
+  },
+  "together.ask.title": {
+    "value": "Leave this playback to join?",
+    "description": "Question asked when a Watch Together session moves to another title while the user watches something of their own: only one playback at a time."
+  },
+  "together.ask.body": {
+    "value": "The session is playing “{title}”. Stay keeps your playback and leaves the session.",
+    "description": "Body of the question above: {title} is the session's title (a media title from a server).",
+    "args": {
+      "title": "str"
+    }
+  },
+  "together.ask.stay": {
+    "value": "Stay",
+    "description": "Answer to the question above: keep watching the current title and leave the Watch Together session."
+  },
+  "together.friends.heading": {
+    "value": "Your friends’ sessions",
+    "description": "Friends page: heading of the row of Watch Together sessions the user's Plex friends made visible to them."
+  },
+  "together.friends.watching": {
+    "value": "{name} is watching together",
+    "description": "Friends page: caption of a friend's session card ({name} is the friend's Plex name).",
+    "args": {
+      "name": "str"
+    }
+  },
+  "together.friends.count": {
+    "value": {
+      "one": "{count} in the session",
+      "other": "{count} in the session"
+    },
+    "description": "Friends page: how many people are in a friend's session.",
+    "args": {
+      "count": "i64"
+    }
+  },
+  "together.join_code": {
+    "value": "Join with a code",
+    "description": "Friends page: button that opens the field where the user types an invitation code (MPX-…) to join a session."
+  },
+  "together.code.prompt": {
+    "value": "Invitation code",
+    "description": "Friends page: placeholder of the field where an invitation code (MPX-…) is typed."
+  },
+  "together.error.code": {
+    "value": "That invitation isn’t valid",
+    "description": "Notice: the typed text is not a Watch Together invitation code."
+  },
+  "together.error.relay": {
+    "value": "No relay found for this session",
+    "description": "Notice: joining failed because no Watch Together relay could be found for the session."
+  },
+  "together.error.not_found": {
+    "value": "Session not found",
+    "description": "Notice: no relay knows the session (wrong code, or the host left)."
+  },
+  "together.error.no_host": {
+    "value": "The host didn’t answer. Try again in a moment",
+    "description": "Notice: joining a friend's session failed because its host did not hand over the key in time."
+  },
+  "together.error.failed": {
+    "value": "Couldn’t open the session",
+    "description": "Notice: joining a session failed for another reason."
+  },
+  "together.error.host": {
+    "value": "Couldn’t start the session",
+    "description": "Notice: starting a session failed for another reason than a missing relay."
+  },
+  "together.error.no_relay": {
+    "value": "No “Watch Together” relay found on this server",
+    "description": "Notice: starting a session failed because no Watch Together relay answers on the public addresses of the Plex server the session belongs to (nothing is typed: the relay is found on the server)."
+  },
+  "together.left": {
+    "value": "You left the session",
+    "description": "Notice: the user is no longer in the Watch Together session."
+  },
+  "together.host_now": {
+    "value": "You’re now the host",
+    "description": "Notice: the previous host left and this TV now leads the session."
+  },
+  "together.count": {
+    "value": {
+      "one": "{count} watching",
+      "other": "{count} watching"
+    },
+    "description": "Read-out of the Watch Together row and of the participants indicator: how many people are in the session, the user included.",
+    "args": {
+      "count": "i64"
+    }
+  },
+  "settings.together.section": {
+    "value": "Watch together",
+    "description": "Settings: section of the Watch Together switches."
+  },
+  "settings.together.visible": {
+    "value": "Visible to my Plex friends",
+    "description": "Settings switch: new Watch Together sessions are listed to the user's Plex friends (they can still change it in each session). Followed by On/Off."
+  },
+  "settings.together.visible_detail": {
+    "value": "Sessions you start are listed to your Plex friends who have access to the server. You can change it in each session.",
+    "description": "Settings: the sentence explaining the switch above."
+  },
+  "settings.together.notify": {
+    "value": "Friends’ session alerts",
+    "description": "Settings switch: show a notification when one of the user's Plex friends starts a Watch Together session. Followed by On/Off. Keep it short."
+  },
+  "settings.together.notify_detail": {
+    "value": "A notice offers to join when one of your Plex friends starts a session you can see.",
+    "description": "Settings: the sentence explaining the switch above."
+  },
+  "settings.together.on": {
+    "value": "On",
+    "description": "Settings: the read-out of a Watch Together switch that is on."
+  },
+  "settings.together.off": {
+    "value": "Off",
+    "description": "Settings: the read-out of a Watch Together switch that is off."
+  }
+}

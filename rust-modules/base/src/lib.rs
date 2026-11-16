@@ -20,8 +20,10 @@ pub mod civil; // `days_from_civil`/`civil_from_days`: the one proleptic Gregori
 pub mod task; // the one spawn: a refused thread is a return value, not a panic that kills the app
 pub mod cbuf; // fixed NUL-terminated C-string buffer read/write
 pub mod sha256; // SHA-256 / HMAC / PBKDF2, hand-written: the offline PIN verifier's hash
+pub mod hkdf; // HKDF-SHA-256 over `sha256`: Watch Together's session and grant keys
+pub mod crypto; // AES-256-GCM and P-256 ECDH (RustCrypto), randomness handed in: Watch Together's end-to-end encryption
 pub mod sha1;
-pub mod b64; // standard base64 encode/decode
+pub mod b64; // standard base64 encode/decode, and the URL-safe unpadded alphabet
 pub mod spki; // a PEM certificate -> its CURLOPT_PINNEDPUBLICKEY string
 pub mod dynlib; // dlopen-by-SONAME-candidate: the libraries whose major moves between webOS releases
 pub mod checkpoint; // the transport-neutral "may I keep waiting?" seam every blocking media wait consults

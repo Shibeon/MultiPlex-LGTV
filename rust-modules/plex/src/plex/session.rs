@@ -58,7 +58,7 @@ pub use playback_options::{MarkerSkipMode, DolbyVisionMode, InstantDpadSeeking, 
 pub use prefs::{IntroSkipPref, CreditsSkipPref, DolbyVisionModePref, InstantDpadSeekingPref, UriEnginePref, AudioModePref, AudioModeDecodePref, HoldHintTaughtPref, effective, effective_hud, own_prefs, persist_profile_hud, persist_profile_pref, put_own, stored_effective, stored_effective_hud, tenure, HudSelectionPref, AudioEnhancementsPref,
     DeckPressPref, DirectPlayModePref, HdrOverlayBrightnessPref, NextEpisodeModePref, Preferences, ProfilePrefs, ProfilePrefsPref,
     ProfilePrefsRecord, ProfileSetting, ProfileWrite, QualityPref, Row, Setting, SkipIntervalPref,
-    SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, UiResolutionPref, UnderPostersPref};
+    SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, TogetherNotifyPref, TogetherVisiblePref, UiResolutionPref, UnderPostersPref};
 use prefs::ProfileMemory;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -1945,9 +1945,37 @@ pub struct SourceRef {
     /// for why that fallback exists at all, and [`ServerRef::origin_url`] for the `_url` suffix.
     #[serde(default, rename = "origin")]
     pub origin_url: String,
+    /// **Every connection plex.tv publishes for this server** (`resources`' `connections`), as
+    /// published, not only the one that answered: a server reached on its LAN or a `plex.direct`
+    /// name usually ALSO publishes a public name (a custom access URL), and that is where Watch
+    /// Together finds the server's relay, as the web client reads the same list. Written by every
+    /// discovery ingest from the wire row; empty in a file written before the field existed, and
+    /// for a server no plex.tv row described (a dev boot), until the next `/resources` read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub published: Vec<PublishedConnection>,
     #[serde(flatten, default, skip_serializing_if = "OpaqueExtensions::is_empty")]
     pub extensions: OpaqueExtensions,
 
+}
+
+/// One connection plex.tv publishes for a server ([`super::account::Connection`], reduced to what
+/// relay discovery reads): its URL as published, whether plex.tv calls it local (an RFC1918
+/// address), and whether it is a Plex relay.
+#[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[serde(default)]
+pub struct PublishedConnection {
+    pub uri: String,
+    pub local: bool,
+    pub relay: bool,
+}
+
+/// The connections `res` publishes, in plex.tv's order (one without a URL says nothing to read).
+pub fn published_connections(res: &super::account::Resource) -> Vec<PublishedConnection> {
+    res.connections
+        .iter()
+        .filter(|c| !c.uri.is_empty())
+        .map(|c| PublishedConnection { uri: c.uri.clone(), local: c.local, relay: c.relay })
+        .collect()
 }
 
 impl SourceRef {

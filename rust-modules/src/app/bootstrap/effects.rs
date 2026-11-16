@@ -186,6 +186,8 @@ fn content_request(request: &plx_screens::registry::ContentReq) -> Result<Value,
         ContentReq::Tab(tab) => json!({"tab":tab_word(*tab)}),
         ContentReq::Account => json!("account"),
         ContentReq::LeaveToHome => json!("leave_to_home"),
+        // a Watch Together command can carry an invitation code: not a controlled-replay domain
+        ContentReq::Together(_) => return Err("unsupported Watch Together request"),
         ContentReq::PreviewStart { sid, rk, part, vcodec, acodec, title } =>
             json!({"preview_start":{"sid":sid.raw(),"rk":rk,"part":part,
                 "vcodec":vcodec,"acodec":acodec,"title":title}}),

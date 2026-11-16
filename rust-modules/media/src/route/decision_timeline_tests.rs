@@ -838,6 +838,59 @@ fn a_restart_from_the_beginning_quit_seconds_in_clears_the_servers_old_resume_po
     reset_player_control_for_test(&ps);
 }
 
+/// Joining a Watch Together session near the beginning of a title the viewer had left at 45:00 is
+/// not a Play from Start: the session opened this playback, so its stop seconds in
+/// reports `stopped` exactly as any play does and clears nothing (`waive_resume_reset`). The waiver
+/// survives the plan's landing and belongs to that playback only: the next request is the
+/// viewer's own again.
+#[test]
+fn a_together_join_quit_seconds_in_keeps_the_servers_old_resume_point() {
+    let mut ps = crate::route::PlaybackSession::IDLE;
+    let _g = fresh_registry(&mut ps);
+    drain_scrobble();
+    reset_session(&mut ps);
+    reset_player_control_for_test(&ps);
+    let _ = take_landed_stops();
+
+    let server = RecordingServer::start();
+    let sid = plx_plex::plex::register_for_test("together-stop", "127.0.0.1", server.port, "tok", "together-client");
+    const DUR: i64 = 6_000_000;
+    const AT_45: i64 = 2_700_000;
+
+    // The session's Follow opened the film at 0:03 (the waiver comes with the request), then the
+    // plan landed and the first picture showed.
+    waive_resume_reset(&mut ps);
+    apply_plan(&mut ps, Plan { sid, sess: "logical-together".into(), ..Default::default() }, "7");
+    assert!(resume_reset_waived(&ps), "the plan's landing carries the waiver");
+    on_decoded_frame(&mut ps);
+    ps.queue = vec![plx_plex::plex::QueueRow {
+        item_id: 21, sid, rk: "7".into(), watched: false, resume_ms: AT_45, dur_ms: DUR, ..Default::default()
+    }];
+    ps.pq_item_id = "21".into();
+    let before = server.lines().len();
+    scrobble_stop(&mut ps, Some(("7".into(), 5_000, DUR)), None);
+    drain_scrobble();
+    let joined = server.lines()[before..].to_vec();
+    assert_eq!(joined.len(), 1, "`stopped` alone, no unscrobble: {joined:?}");
+    assert!(joined[0].contains("state=stopped"), "{joined:?}");
+    let _ = take_landed_stops();
+    server.stop();
+    plx_plex::plex::reset_servers_for_test();
+
+    // The next request is the viewer's own: its waiver is gone. (No server answers it: the resolve
+    // it starts is withdrawn and joined before the next test registers one.)
+    let mut meta = plx_data::stores::metadata::MetadataStore::default();
+    assert!(request_play(
+        &mut ps, &mut meta, plx_platform::devcaps::caps(), ServerId::from_raw(0), "7", "/library/parts/2/file.mkv", "h264", "aac", "Film", "", None, "",
+    ));
+    assert!(!resume_reset_waived(&ps), "a new request clears the waiver");
+
+    cancel_play(&mut ps);
+    let _ = wait_resolve_workers_for_test(std::time::Duration::from_secs(10));
+    reset_player_control_for_test(&ps);
+    reset_session(&mut ps);
+}
+
 /// A `finished` flag no stop took (Up Next with nothing playing to stop) must not mark the item
 /// the next request starts: every playback request clears it.
 #[test]

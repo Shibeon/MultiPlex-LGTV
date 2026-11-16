@@ -2498,7 +2498,7 @@ mod tests {
         let missing = edit(MINIMAL, &[(r#""format": "1.0","#, ""), other_mistake]);
         refuses(&missing, &codes::E0401, "/hud/format");
 
-        for newer_minor in ["1.3", "1.7", "1.255", "1.99999999999999999999999"] {
+        for newer_minor in ["1.4", "1.7", "1.255", "1.99999999999999999999999"] {
             let text = with_format(&format!(r#""format": "{newer_minor}""#));
             let finding = refuses(&text, &codes::E0402, "/hud/format");
             assert_eq!(finding.message, REASON_NEWER, "{newer_minor}");
@@ -2807,6 +2807,9 @@ mod tests {
             assert_eq!(schema::builtin_icon_since(icon), Some(schema::V1_2), "{icon}");
             refuses(&face(icon), &codes::E0107, &format!("{ITEM_AT}/face"));
         }
+        // Watch Together's glyph arrived in 1.3
+        assert_eq!(schema::builtin_icon_since("crowd"), Some(schema::V1_3));
+        refuses(&face("crowd"), &codes::E0107, &format!("{ITEM_AT}/face"));
     }
 
     /// An enum VALUE newer than its key (`rest: "plate"`, 1.2) is `E0107` in an older package.

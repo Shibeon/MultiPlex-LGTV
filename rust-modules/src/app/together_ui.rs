@@ -1,0 +1,478 @@
+//! **Watch Together's notices** (`plx_ui::action_notice`): what the session tells the viewer,
+//! decided here from values and posted on the application's one transient notice.
+//!
+//! - **A participant's gesture** (`Notice::Action`): "Camille paused", one passive card that a
+//!   following gesture updates in place.
+//! - **A friend's new session** (`Notice::FriendSessions`): an actionable card, "Camille is watching
+//!   “Dune” together · [▲] Join", only for a room not announced before, only while the viewer's
+//!   "Friends' session alerts" setting is on and they are in no session of their own. It is shown
+//!   in the player too, because it takes no focus (`action_notice`'s module doc); a room the relay
+//!   stops listing withdraws its card. Join enters the session (`TogetherCmd::JoinFriend`), whose
+//!   title then opens through the player side's one gate.
+//! - **The gate's standing** (`FollowState`): Opening is a sticky progress line until it resolves,
+//!   Missing a plain message. Asking is the player page's decision card when a player page is up;
+//!   with none (the viewer's own play still waiting on its page) it is an actionable card whose
+//!   Join answers the gate; leaving it unanswered leaves the question held, as the gate holds it.
+//! - **Failures and changes of hand** (`JoinFailed`, `HostFailed`, `HostChanged`, `Left`): passive.
+//! - **The friends' listing is polled** (`TogetherCmd::RefreshFriends`) every [`POLL_MS`] while the
+//!   alerts are on or the Friends page is up, never during a session (the web's cadence:
+//!   first after [`FIRST_POLL_MS`]); the Friends page's arrival asks at once.
+//!
+//! Nothing here performs IO: the caller hands the notices, the state and the elapsed time, and
+//! carries out what [`TogetherUi::activate`] returns.
+use std::collections::BTreeSet;
+
+use plx_data::together::player::{FollowAnswer, FollowState};
+use plx_data::together::session::{FriendSession, HostError, JoinError, Notice};
+use plx_data::together::wire::SyncAction;
+use plx_platform::i18n::msg;
+use plx_ui::action_notice::{ActionNotice, Notice as Card};
+use plx_ui::icons::Icon;
+
+/// The friends' listing is asked again this often.
+pub(crate) const POLL_MS: u32 = 45_000;
+/// …and first this long after it may be.
+pub(crate) const FIRST_POLL_MS: u32 = 4_000;
+
+const ID_ACTION: u64 = 1;
+const ID_HAND: u64 = 2;
+const ID_ERROR: u64 = 3;
+const ID_LEFT: u64 = 4;
+const ID_FOLLOW: u64 = 5;
+const ID_ASK: u64 = 6;
+/// A friend's room's card id: this base plus the room's hash.
+const ID_FRIEND: u64 = 1 << 32;
+
+/// A friend's live session as the notices and the Friends page show it (no ticket: that stays in the store).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct FriendRoom {
+    pub(crate) relay: String,
+    /// The relay's Plex server (`machineIdentifier`), where `key` is the title's rating key.
+    pub(crate) server: String,
+    pub(crate) key: Option<String>,
+    pub(crate) room: String,
+    pub(crate) name: String,
+    pub(crate) title: String,
+    pub(crate) sub: Option<String>,
+    pub(crate) count: u32,
+    pub(crate) playing: bool,
+}
+
+impl FriendRoom {
+    pub(crate) fn of(f: &FriendSession) -> FriendRoom {
+        FriendRoom {
+            relay: f.relay.clone(),
+            server: f.server.clone(),
+            key: f.card.key.clone(),
+            room: f.room.clone(),
+            name: f.card.name.clone(),
+            title: f.card.title.clone(),
+            sub: f.card.sub.clone(),
+            count: f.count,
+            playing: f.card.playing,
+        }
+    }
+}
+
+/// What an answered card asks the application to do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum NoticeAction {
+    JoinFriend { relay: String, room: String },
+    Follow(FollowAnswer),
+}
+
+/// What the caller knows this frame.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct UiCtx {
+    /// A session is live (hosted or joined).
+    pub(crate) in_session: bool,
+    /// The viewer's "Friends' session alerts" setting.
+    pub(crate) friend_alerts: bool,
+    /// The Friends page is on screen.
+    pub(crate) friends_page: bool,
+    /// A player page is mounted (it asks the gate's question itself).
+    pub(crate) player_page: bool,
+}
+
+/// The notice, the friend rooms already announced, the actions of the cards standing, the poll clock.
+#[derive(Default)]
+pub(crate) struct TogetherUi {
+    pub(crate) notice: ActionNotice,
+    announced: BTreeSet<String>,
+    actions: Vec<(u64, NoticeAction)>,
+    /// Time since the last listing was asked (`None`: never yet).
+    since_poll_ms: Option<u32>,
+    /// Time the listing may be asked in for, before its first ask.
+    waiting_ms: u32,
+    /// The Friends page was on top at the previous poll: its arrival asks at once.
+    on_friends_page: bool,
+    /// The gate's standing last shown.
+    follow: FollowState,
+    /// …and whether a player page was up when it was (it asks the question itself).
+    follow_on_player: bool,
+    /// The friends' sessions last listed, for the Friends page.
+    pub(crate) sessions: Vec<FriendRoom>,
+}
+
+fn friend_id(room: &str) -> u64 {
+    // FNV-1a: a stable id per room for the card's in-place update and withdrawal.
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in room.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    ID_FRIEND | (h & 0xffff_ffff)
+}
+
+/// The words of a join failure.
+pub(crate) fn join_error_text(e: JoinError) -> &'static str {
+    match e {
+        JoinError::Code => msg::together_error_code(),
+        JoinError::Relay => msg::together_error_relay(),
+        JoinError::NotFound => msg::together_error_not_found(),
+        JoinError::NoHost => msg::together_error_no_host(),
+        JoinError::Failed => msg::together_error_failed(),
+    }
+}
+
+/// The words of a host failure: no relay on the session's server is named as such.
+pub(crate) fn host_error_text(e: HostError) -> &'static str {
+    match e {
+        HostError::NoRelay => msg::together_error_no_relay(),
+        HostError::Failed => msg::together_error_host(),
+    }
+}
+
+/// A title as the notices name it.
+pub(crate) fn title_of(item: &plx_data::together::wire::SharedItem) -> &str {
+    if item.title.is_empty() {
+        item.sub.as_deref().unwrap_or("")
+    } else {
+        &item.title
+    }
+}
+
+impl TogetherUi {
+    fn post(&mut self, card: Card, action: Option<NoticeAction>) {
+        self.actions.retain(|(id, _)| *id != card.id);
+        if let Some(a) = action {
+            self.actions.push((card.id, a));
+        }
+        self.notice.post(card);
+    }
+
+    fn withdraw(&mut self, id: u64) {
+        self.actions.retain(|(i, _)| *i != id);
+        self.notice.withdraw(id);
+    }
+
+    /// One notice of the session.
+    pub(crate) fn on_notice(&mut self, n: &Notice, ctx: &UiCtx) {
+        match n {
+            Notice::Action { name, action: Some(a) } => {
+                let text = match a {
+                    SyncAction::Pause => msg::together_action_paused(name),
+                    SyncAction::Play => msg::together_action_played(name),
+                    SyncAction::Seek => msg::together_action_seeked(name),
+                };
+                self.post(Card::passive(ID_ACTION, text).mark(Icon::Crowd), None);
+            }
+            Notice::Action { action: None, .. } => {}
+            Notice::HostChanged { host: true } => self.post(Card::passive(ID_HAND, msg::together_host_now()).mark(Icon::Crowd), None),
+            Notice::HostChanged { host: false } => {}
+            Notice::HostFailed(e) => self.post(Card::passive(ID_ERROR, host_error_text(*e)), None),
+            Notice::JoinFailed(e) => self.post(Card::passive(ID_ERROR, join_error_text(*e)), None),
+            Notice::Left => {
+                self.withdraw(ID_FOLLOW);
+                self.withdraw(ID_ASK);
+                self.post(Card::passive(ID_LEFT, msg::together_left()), None);
+            }
+            Notice::FriendSessions(list) => {
+                let rooms: Vec<FriendRoom> = list.iter().map(FriendRoom::of).collect();
+                self.on_friend_sessions(&rooms, ctx);
+            }
+            Notice::Opened { .. } | Notice::Status(_) | Notice::Item(_) | Notice::Visible(_) | Notice::Listed(_) => {}
+        }
+    }
+
+    pub(crate) fn on_friend_sessions(&mut self, list: &[FriendRoom], ctx: &UiCtx) {
+        // A room no longer listed takes its card with it.
+        let listed: BTreeSet<&str> = list.iter().map(|f| f.room.as_str()).collect();
+        let gone: Vec<String> = self.announced.iter().filter(|r| !listed.contains(r.as_str())).cloned().collect();
+        for room in gone {
+            self.withdraw(friend_id(&room));
+            self.announced.remove(&room);
+        }
+        let mut fresh = list.iter().filter(|f| !self.announced.contains(&f.room)).cloned().collect::<Vec<_>>();
+        for f in &fresh {
+            self.announced.insert(f.room.clone());
+        }
+        self.sessions = list.to_vec();
+        // Discreet: one card at a time, none during a session, none with the alerts off.
+        if !ctx.friend_alerts || ctx.in_session || fresh.is_empty() {
+            return;
+        }
+        let first = fresh.remove(0);
+        let text = msg::together_friend_started(&first.name, &first.title);
+        let id = friend_id(&first.room);
+        self.post(
+            Card::actionable(id, text, msg::together_join()).mark(Icon::Crowd),
+            Some(NoticeAction::JoinFriend { relay: first.relay.clone(), room: first.room.clone() }),
+        );
+    }
+
+    /// The gate's standing, each frame; only a change posts.
+    ///
+    /// The question has ONE place, re-decided whenever the gate's standing OR the player page's
+    /// presence changes: the player page's decision card while a page is up (`player_ask`), this
+    /// card otherwise. So a page that mounts over a standing card takes the question from it, and
+    /// a page that leaves with the question unanswered hands it back.
+    pub(crate) fn on_follow(&mut self, f: &FollowState, ctx: &UiCtx) {
+        if *f == self.follow && ctx.player_page == self.follow_on_player {
+            return;
+        }
+        let moved_only = *f == self.follow;
+        self.follow = f.clone();
+        self.follow_on_player = ctx.player_page;
+        if moved_only && !matches!(f, FollowState::Asking(_)) {
+            return;
+        }
+        match f {
+            FollowState::Idle => {
+                self.withdraw(ID_FOLLOW);
+                self.withdraw(ID_ASK);
+            }
+            FollowState::Opening { item } => {
+                self.withdraw(ID_ASK);
+                self.post(Card::passive(ID_FOLLOW, msg::together_opening(title_of(item))).mark(Icon::Crowd).sticky(), None);
+            }
+            FollowState::Missing { item } => {
+                self.withdraw(ID_ASK);
+                self.withdraw(ID_FOLLOW);
+                self.post(Card::passive(ID_ERROR, msg::together_missing(title_of(item))), None);
+            }
+            FollowState::Asking(ask) => {
+                self.withdraw(ID_FOLLOW);
+                if ctx.player_page {
+                    self.withdraw(ID_ASK);
+                } else {
+                    let text = format!("{} {}", msg::together_ask_title(), msg::together_ask_body(title_of(&ask.item)));
+                    self.post(Card::actionable(ID_ASK, text, msg::together_join()).mark(Icon::Crowd).sticky(), Some(NoticeAction::Follow(FollowAnswer::Join)));
+                }
+            }
+        }
+    }
+
+    /// Whether the friends' listing is due this frame (`elapsed_ms` since the previous call).
+    pub(crate) fn poll_due(&mut self, elapsed_ms: u32, ctx: &UiCtx) -> bool {
+        let wanted = (ctx.friend_alerts || ctx.friends_page) && !ctx.in_session;
+        let arrived = ctx.friends_page && !self.on_friends_page;
+        self.on_friends_page = ctx.friends_page;
+        if !wanted {
+            self.waiting_ms = 0;
+            return false;
+        }
+        match self.since_poll_ms.as_mut() {
+            None => {
+                self.waiting_ms = self.waiting_ms.saturating_add(elapsed_ms);
+                if self.waiting_ms >= FIRST_POLL_MS || ctx.friends_page {
+                    self.since_poll_ms = Some(0);
+                    return true;
+                }
+                false
+            }
+            Some(since) => {
+                *since = since.saturating_add(elapsed_ms);
+                if *since >= POLL_MS || arrived {
+                    *since = 0;
+                    return true;
+                }
+                false
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn activate_peek(&self, id: u64) -> bool {
+        self.actions.iter().any(|(a, _)| *a == id)
+    }
+
+    /// The card OK answered: what to do.
+    pub(crate) fn activate(&mut self, id: u64) -> Option<NoticeAction> {
+        let i = self.actions.iter().position(|(a, _)| *a == id)?;
+        Some(self.actions.remove(i).1)
+    }
+
+    /// The dispatcher reported the card's action taken (OK on the focused card, or a click on it):
+    /// the card leaves, and this is what to do.
+    pub(crate) fn take_action(&mut self) -> Option<NoticeAction> {
+        let id = self.notice.take_action()?;
+        self.activate(id)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use plx_data::together::player::FollowAsk;
+    use plx_data::together::wire::SharedItem;
+
+    fn ctx() -> UiCtx {
+        UiCtx { in_session: false, friend_alerts: true, friends_page: false, player_page: false }
+    }
+
+    fn item(title: &str) -> SharedItem {
+        SharedItem { guid: "plex://movie/1".into(), server: Some("srv".into()), key: Some("1".into()), kind: "movie".into(), title: title.into(), sub: None }
+    }
+
+    fn session(room: &str, name: &str, title: &str) -> FriendRoom {
+        FriendRoom { relay: "wss://relais.exemple.fr".into(), server: String::new(), key: None, room: room.into(), name: name.into(), title: title.into(), sub: None, count: 2, playing: true }
+    }
+
+    #[test]
+    fn a_participants_gesture_is_one_passive_card_updated_in_place() {
+        let mut ui = TogetherUi::default();
+        ui.on_notice(&Notice::Action { name: "Camille".into(), action: Some(SyncAction::Pause) }, &ctx());
+        ui.notice.step(16);
+        ui.on_notice(&Notice::Action { name: "Camille".into(), action: Some(SyncAction::Seek) }, &ctx());
+        let cur = ui.notice.current().unwrap();
+        assert_eq!(cur.id, ID_ACTION);
+        assert_eq!(cur.text, msg::together_action_seeked("Camille"));
+        assert!(cur.action.is_none(), "passive: nothing to reach");
+    }
+
+    /// *Create a session* with no relay on the server is said, in the viewer's words, never silent.
+    #[test]
+    fn a_host_that_found_no_relay_says_so() {
+        let mut ui = TogetherUi::default();
+        ui.on_notice(&Notice::HostFailed(HostError::NoRelay), &ctx());
+        ui.notice.step(16);
+        let cur = ui.notice.current().unwrap();
+        assert_eq!((cur.id, cur.text.as_str()), (ID_ERROR, msg::together_error_no_relay()));
+        assert_ne!(msg::together_error_no_relay(), msg::together_error_host());
+        ui.on_notice(&Notice::HostFailed(HostError::Failed), &ctx());
+        ui.notice.step(16);
+        assert_eq!(ui.notice.current().unwrap().text, msg::together_error_host());
+    }
+
+    #[test]
+    fn a_friends_new_session_is_offered_once_and_join_enters_it() {
+        let mut ui = TogetherUi::default();
+        let list = vec![session("room-1", "Camille", "Dune")];
+        ui.on_friend_sessions(&list, &ctx());
+        ui.notice.step(16);
+        let cur = ui.notice.current().unwrap().clone();
+        assert_eq!(cur.text, msg::together_friend_started("Camille", "Dune"));
+        assert_eq!(cur.action.as_deref(), Some(msg::together_join()));
+        assert!(ui.notice.actionable(), "the top page's UP can reach it");
+        assert!(!ui.notice.focused(), "it took no focus on its own");
+        let action = ui.take_action();
+        assert_eq!(action, Some(NoticeAction::JoinFriend { relay: "wss://relais.exemple.fr".into(), room: "room-1".into() }));
+        assert!(!ui.notice.actionable(), "taken: the card leaves");
+        // listed again: not announced twice
+        ui.on_friend_sessions(&list, &ctx());
+        for _ in 0..200 {
+            ui.notice.step(16);
+        }
+        assert!(!ui.notice.busy(), "no second card for the same room");
+    }
+
+    #[test]
+    fn no_friend_card_with_the_alerts_off_or_during_a_session() {
+        for c in [UiCtx { friend_alerts: false, ..ctx() }, UiCtx { in_session: true, ..ctx() }] {
+            let mut ui = TogetherUi::default();
+            ui.on_friend_sessions(&[session("r", "Camille", "Dune")], &c);
+            assert!(!ui.notice.busy());
+            assert_eq!(ui.sessions.len(), 1, "the Friends page still lists it");
+        }
+    }
+
+    #[test]
+    fn a_room_no_longer_listed_withdraws_its_card() {
+        let mut ui = TogetherUi::default();
+        ui.on_friend_sessions(&[session("r", "Camille", "Dune")], &ctx());
+        ui.notice.step(16);
+        assert!(ui.notice.visible());
+        ui.on_friend_sessions(&[], &ctx());
+        for _ in 0..100 {
+            ui.notice.step(16);
+        }
+        assert!(!ui.notice.busy());
+        assert!(ui.activate(friend_id("r")).is_none(), "its action went with it");
+    }
+
+    #[test]
+    fn the_gates_standing_maps_to_progress_a_message_or_a_question() {
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&FollowState::Opening { item: item("Dune") }, &ctx());
+        ui.notice.step(16);
+        assert_eq!(ui.notice.current().unwrap().text, msg::together_opening("Dune"));
+        for _ in 0..2_000 {
+            ui.notice.step(16);
+        }
+        assert!(ui.notice.visible(), "progress stands until the gate moves on");
+        ui.on_follow(&FollowState::Missing { item: item("Dune") }, &ctx());
+        for _ in 0..60 {
+            ui.notice.step(16);
+        }
+        assert_eq!(ui.notice.current().unwrap().text, msg::together_missing("Dune"));
+        assert!(ui.notice.current().unwrap().action.is_none(), "a plain message");
+
+        // Asking with a player page up: the page asks; without one, the card does, and Join answers.
+        let ask = FollowState::Asking(FollowAsk { item: item("Dune"), position: None, playing: item("Mine") });
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&ask, &UiCtx { player_page: true, ..ctx() });
+        assert!(!ui.notice.busy());
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&ask, &ctx());
+        ui.notice.step(16);
+        assert!(ui.notice.actionable());
+        assert_eq!(ui.take_action(), Some(NoticeAction::Follow(FollowAnswer::Join)));
+        ui.on_follow(&FollowState::Idle, &ctx());
+        assert!(ui.activate(ID_ASK).is_none());
+    }
+
+    /// The question is asked in ONE place: the player page's decision card while a player page is
+    /// up, the notice card otherwise, and the place follows the player page as it comes and goes
+    /// while the gate keeps asking.
+    #[test]
+    fn the_question_moves_between_the_card_and_the_player_page_as_the_page_comes_and_goes() {
+        let ask = FollowState::Asking(FollowAsk { item: item("Dune"), position: None, playing: item("Mine") });
+        let on_card = |ui: &TogetherUi| ui.notice.current().is_some_and(|c| c.id == ID_ASK) && ui.activate_peek(ID_ASK);
+        let settle = |ui: &mut TogetherUi| for _ in 0..80 { ui.notice.step(16); };
+
+        // Asked with no player page: the card asks. A player page mounts: the page asks, the card goes.
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&ask, &ctx());
+        ui.notice.step(16);
+        assert!(on_card(&ui), "no player page: the card asks");
+        ui.on_follow(&ask, &UiCtx { player_page: true, ..ctx() });
+        settle(&mut ui);
+        assert!(!ui.notice.busy(), "the player page asks now: no second question over its card");
+        assert!(!ui.activate_peek(ID_ASK), "and the card's Join went with it");
+
+        // Asked while the player page is up: nothing on the card. The page goes, the gate still asks:
+        // the card asks.
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&ask, &UiCtx { player_page: true, ..ctx() });
+        assert!(!ui.notice.busy());
+        ui.on_follow(&ask, &ctx());
+        ui.notice.step(16);
+        assert!(on_card(&ui), "the player page left with the question unanswered: the card asks it");
+    }
+
+    #[test]
+    fn the_listing_is_polled_on_its_cadence_only_while_wanted() {
+        let mut ui = TogetherUi::default();
+        assert!(!ui.poll_due(FIRST_POLL_MS - 1, &ctx()));
+        assert!(ui.poll_due(1, &ctx()), "first after the delay");
+        assert!(!ui.poll_due(POLL_MS - 1, &ctx()));
+        assert!(ui.poll_due(1, &ctx()), "then every POLL_MS");
+        assert!(!ui.poll_due(POLL_MS, &UiCtx { in_session: true, ..ctx() }), "never during a session");
+        assert!(!ui.poll_due(POLL_MS, &UiCtx { friend_alerts: false, ..ctx() }), "nor with nothing to show it");
+        assert!(ui.poll_due(POLL_MS, &UiCtx { friend_alerts: false, friends_page: true, ..ctx() }), "the Friends page wants it");
+        assert!(!ui.poll_due(0, &ctx()), "leaving the page asks nothing");
+        assert!(ui.poll_due(0, &UiCtx { friends_page: true, ..ctx() }), "an arrival asks at once");
+        assert!(!ui.poll_due(0, &UiCtx { friends_page: true, ..ctx() }), "once, not every frame on the page");
+    }
+}

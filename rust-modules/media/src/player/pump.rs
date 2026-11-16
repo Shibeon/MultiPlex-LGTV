@@ -4993,6 +4993,10 @@ mod flight_tests {
     }
 }
 
+#[cfg(all(test, feature = "hostsim"))]
+#[path = "together_pump_tests.rs"]
+mod together_pump_tests;
+
 /// #568, at the PUMP level: a direct-play seek on a `VP_EXPORTED` (webOS 5+) session, driven by
 /// the real `pump` ticks and the real `feed_stream` against the host sink with the clock sink
 /// armed (which reports `VP_EXPORTED`). `reload_at` has no route to reload in a unit rig (an empty

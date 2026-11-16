@@ -223,6 +223,14 @@ pub struct Preferences {
     /// means this build has never supplied a fallback, so the feature defaults ON.
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_soft_opt")]
     pub hud_end_time: Option<bool>,
+    /// **A session this profile hosts starts visible to its Plex friends** (Watch Together). The
+    /// top-level value is the frozen install fallback, as [`Self::hud_end_time`]'s; `None` reads ON.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_soft_opt")]
+    pub together_visible: Option<bool>,
+    /// **Tell this profile when a Plex friend starts a Watch Together session.** As
+    /// [`Self::together_visible`]; `None` reads ON.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "de_soft_opt")]
+    pub together_notify: Option<bool>,
     /// **Retired: nothing reads or writes it any more.** It was the last hero `UltraBlurColors`
     /// envelope Home rendered, which seeded the first-run routes' frozen ground; those routes now
     /// paint the authored default ambient (`theme::ROUTE_GROUND_FALLBACK`), because a hero-keyed
@@ -609,6 +617,47 @@ impl Setting for HudEndTimePref {
     fn to_stored(v: bool) -> Option<bool> { Some(v) }
 }
 
+/// Watch Together: a hosted session starts visible to the host's Plex friends. `None` on disk means
+/// the default, ON. Per session it can still be turned off (`TogetherCmd::SetVisible`).
+pub struct TogetherVisiblePref;
+impl Row for TogetherVisiblePref {
+    const KEY: &'static str = "together_visible";
+    const SCOPE: Scope = Scope::Profile;
+    const ACCOUNT_BOUND: bool = false;
+    const LIVE: bool = true;
+    const SETTINGS: Option<SettingsWrite> = Some(SettingsWrite::Confirm);
+    const PARSE: Parse = Parse::OptionalSoft;
+    const FALLBACK: Fallback = Fallback::LegacyInstallKey;
+}
+impl Setting for TogetherVisiblePref {
+    type Stored = Option<bool>;
+    type Value = bool;
+    fn stored(p: &Preferences) -> &Option<bool> { &p.together_visible }
+    fn stored_mut(p: &mut Preferences) -> &mut Option<bool> { &mut p.together_visible }
+    fn get(p: &Preferences) -> bool { p.together_visible.unwrap_or(true) }
+    fn to_stored(v: bool) -> Option<bool> { Some(v) }
+}
+
+/// Watch Together: a notice when a Plex friend starts a session. `None` on disk means the default, ON.
+pub struct TogetherNotifyPref;
+impl Row for TogetherNotifyPref {
+    const KEY: &'static str = "together_notify";
+    const SCOPE: Scope = Scope::Profile;
+    const ACCOUNT_BOUND: bool = false;
+    const LIVE: bool = true;
+    const SETTINGS: Option<SettingsWrite> = Some(SettingsWrite::Confirm);
+    const PARSE: Parse = Parse::OptionalSoft;
+    const FALLBACK: Fallback = Fallback::LegacyInstallKey;
+}
+impl Setting for TogetherNotifyPref {
+    type Stored = Option<bool>;
+    type Value = bool;
+    fn stored(p: &Preferences) -> &Option<bool> { &p.together_notify }
+    fn stored_mut(p: &mut Preferences) -> &mut Option<bool> { &mut p.together_notify }
+    fn get(p: &Preferences) -> bool { p.together_notify.unwrap_or(true) }
+    fn to_stored(v: bool) -> Option<bool> { Some(v) }
+}
+
 // ---- A5: the remaining preference keys (a separate block, below the ten) -----------------------
 //
 // None of these has a `choose` door: the Settings screen writes `auto_sign_in` through its own
@@ -716,6 +765,8 @@ pub const DESCRIPTORS: &[Descriptor] = &[
     Descriptor::of::<AutoSignInPref>(),
     Descriptor::of::<TrailerAutoplayPref>(),
     Descriptor::of::<HudEndTimePref>(),
+    Descriptor::of::<TogetherVisiblePref>(),
+    Descriptor::of::<TogetherNotifyPref>(),
     Descriptor::of::<LastHeroBlurPref>(),
     Descriptor::of::<UiResolutionPref>(),
     Descriptor::of::<HoldHintTaughtPref>(),

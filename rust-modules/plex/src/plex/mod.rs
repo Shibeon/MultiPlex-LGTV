@@ -101,6 +101,10 @@ pub mod community;
 // whether paused, and deliberately nothing about the device, the address or the stream.
 pub mod live;
 
+// Watch Together's Plex requests: the account's plex.tv friends (the host's allow-list), the owner's
+// delegation token, and the debug-build write gate for both (`together_write_gate`).
+pub mod together;
+
 // The store keys of the two app-baked deck-card images (Plex's cover, our composite): pure
 // builders and parsers, so the screen that names a key and the worker that bakes it share one shape.
 pub mod artwork;

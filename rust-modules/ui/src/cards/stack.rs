@@ -475,6 +475,14 @@ impl<K: Copy + Eq> Stack<K> {
         Some(self.frame(p, cx, self.index(k)?))
     }
 
+    /// Section `k`'s rect on screen as it is laid out now: a block in the flow (a shelf's whole
+    /// block, heading and foot included), or an out-of-flow section's fixed rect. `None` while the
+    /// layout has no such section. What a page measures its own sections against (a read-out
+    /// that must clear the shelves standing with it).
+    pub fn section_rect<H: Host, P: StackPage<H, Key = K>>(&self, p: &P, cx: &Cx<'_, H>, k: K) -> Option<Rect> {
+        Some(self.rect(p, cx, self.index(k)?))
+    }
+
     /// The focus group the page named section `k` (`None` while the layout has no such section).
     pub fn group(&self, k: K) -> Option<GroupId> {
         self.index(k).map(|i| self.specs[i].group)

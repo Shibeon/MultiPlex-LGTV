@@ -18,7 +18,7 @@ use plx_data::stores::community::CommunityCmd;
 use plx_data::stores::{StoreCmd, StoreId};
 use plx_machine::machine::Host;
 
-use super::page::{FriendsIn, FriendsScreen, FriendsView, SHARE_ELEM};
+use super::page::{FriendsIn, FriendsScreen, FriendsView, TogetherRoom, JOIN_ELEM, SHARE_ELEM};
 use crate::registry::{AppFx, AppMsg, ContentArg, ContentReq, HomeTab, PageMemory};
 
 /// A host with no stores: the page reads everything it shows from its own inputs.
@@ -350,18 +350,99 @@ fn the_remote_walks_the_filter_row_and_the_toggle() {
     };
     // Camille, Léo, Inès: three friends after "All".
     let chips: Vec<u32> = (0..4).map(FriendsScreen::chip_elem).collect();
-    assert_eq!(walk(SHARE_ELEM, Dir::Left), Some(chips[3]), "Left from the toggle reaches the last friend");
+    assert_eq!(walk(SHARE_ELEM, Dir::Left), Some(JOIN_ELEM), "Left from the toggle reaches Join with a code");
+    assert_eq!(walk(JOIN_ELEM, Dir::Left), Some(chips[3]), "then the last friend");
     let mut at = chips[3];
     for want in [chips[2], chips[1], chips[0]] {
         at = walk(at, Dir::Left).expect("a plate on the left");
         assert_eq!(at, want);
     }
     assert_eq!(walk(chips[0], Dir::Left), None, "no wrap past All");
-    assert_eq!(walk(chips[3], Dir::Right), Some(SHARE_ELEM));
+    assert_eq!(walk(chips[3], Dir::Right), Some(JOIN_ELEM));
+    assert_eq!(walk(JOIN_ELEM, Dir::Right), Some(SHARE_ELEM));
     assert_eq!(walk(SHARE_ELEM, Dir::Right), None, "no wrap past the toggle");
     // Up from the live shelf's first card seats the row on its selected plate.
     let live = h.screen.probe_day_card(0, 0).expect("a card under the row");
     let from = Focusable::<WatchHost>::place(&h.screen, &live, &cx, plx_ui::screen::At::SpringTarget).unwrap();
     let group = Focusable::<WatchHost>::group_of(&h.screen, &SHARE_ELEM, &cx).unwrap();
     assert_eq!(Focusable::<WatchHost>::seat(&h.screen, group, from, &cx).elem, chips[0], "Up lands on All");
+}
+
+fn room(name: &str, title: &str, count: u32) -> TogetherRoom {
+    TogetherRoom {
+        relay: "wss://relais.exemple.fr".into(), room: format!("salle-{name}"), name: name.into(), title: title.into(),
+        sub: None, count, playing: true, src: 0, thumb: String::new(),
+    }
+}
+
+/// What a press asked of Watch Together.
+fn together_asked(fx: Vec<Stamped<WatchHost>>) -> Vec<plx_data::stores::together::TogetherCmd> {
+    fx.into_iter()
+        .filter_map(|e| match e.fx {
+            Fx::App(AppFx::Content(ContentReq::Together(cmd))) => Some(cmd),
+            _ => None,
+        })
+        .collect()
+}
+
+/// **Friends' Watch Together sessions are a shelf above the rest, and OK on one asks to join it.**
+/// The shelf is absent while there are none; each card names the title, who watches it together and
+/// how many are in it; OK asks the session owner to join THAT relay's room, and nothing else.
+#[test]
+fn a_friends_session_is_a_card_whose_ok_asks_to_join_it() {
+    let _fr = language_on_this_thread_for_test(Preference::Fr);
+    let mut h = H::new(view(ShareState::Known(true)));
+    assert_eq!(h.screen.probe_together(), vec![], "no session, no shelf");
+    h.screen.input(FriendsIn::Together(vec![room("Camille", "Le Film", 2)]));
+    assert_eq!(h.screen.probe_together(), vec![("Le Film".to_string(),
+        format!("{} · {}", plx_platform::i18n::msg::together_friends_watching("Camille"), plx_platform::i18n::msg::together_friends_count(2)))]);
+    let card = h.screen.probe_together_card(0).expect("the card");
+    assert_eq!(together_asked(h.press(card)), vec![plx_data::stores::together::TogetherCmd::JoinFriend {
+        relay: "wss://relais.exemple.fr".into(), room: "salle-Camille".into() }]);
+    h.screen.input(FriendsIn::Together(Vec::new()));
+    assert_eq!(h.screen.probe_together(), vec![], "the session ended: its card goes");
+}
+
+/// **Join with a code raises the keyboard, and OK on it asks to join with what was typed.** Back puts
+/// the keyboard down with the text kept; an empty code asks nothing; a typed one is trimmed, asked
+/// once, and the field empties.
+#[test]
+fn join_with_a_code_types_into_the_keyboard_and_ok_asks_to_join() {
+    use plx_machine::machine::{Delivery, Edge, InputEvent, InputKind, Key, Source, TextEdit};
+    let mut h = H::new(view(ShareState::Known(true)));
+    let raised = h.press(JOIN_ELEM);
+    assert!(raised.iter().any(|e| matches!(e.fx, Fx::Deliver(_, Delivery::Keyboard { up: true }))), "the keyboard comes up");
+    assert_eq!(h.screen.probe_code(), (true, ""));
+    let key = |h: &mut H, key: Key| h.step(ScreenEvent::Input(InputEvent { at: Tick::default(), source: Source::Script,
+        kind: InputKind::Key { key, sym: 0, wcode: 0, edge: Edge::Down, at_edge: false } }));
+    let text = |h: &mut H, t: &str| h.step(ScreenEvent::Input(InputEvent { at: Tick::default(), source: Source::Script,
+        kind: InputKind::Text(TextEdit::Commit(t.into())) }));
+    assert_eq!(together_asked(key(&mut h, Key::Ok)), vec![], "an empty code asks nothing");
+    assert_eq!(h.screen.probe_code(), (false, ""));
+    h.press(JOIN_ELEM);
+    text(&mut h, " MPX-K7Q2-9XFD ");
+    assert_eq!(h.screen.probe_code(), (true, " MPX-K7Q2-9XFD "));
+    key(&mut h, Key::Back);
+    assert_eq!(h.screen.probe_code(), (false, " MPX-K7Q2-9XFD "), "Back keeps what was typed");
+    h.press(JOIN_ELEM);
+    assert_eq!(together_asked(key(&mut h, Key::Ok)), vec![plx_data::stores::together::TogetherCmd::Join { code: "MPX-K7Q2-9XFD".into() }]);
+    assert_eq!(h.screen.probe_code(), (false, ""), "the field empties once asked");
+}
+
+/// **The read-out stands clear of the shelves that stand with it.** The friends' sessions and the
+/// live shelf do not depend on the feed, so they stand over an empty, failed or account-less feed;
+/// the read-out that says so must not be drawn across them, in any shipped language.
+#[test]
+fn the_readout_clears_the_together_and_live_shelves_in_every_language() {
+    let live: Arc<[_]> = Arc::from(vec![live_row("Camille", LiveState::Playing)]);
+    for lang in plx_platform::i18n::SHIPPED {
+        let _l = language_on_this_thread_for_test(lang);
+        for feed in [FeedState::NoAccount, FeedState::Failed, FeedState::Ready(Arc::from(Vec::new()))] {
+            let mut h = H::new(FriendsView { feed: feed.clone(), live: live.clone(), ..Default::default() });
+            h.screen.input(FriendsIn::Together(vec![room("Camille", "Le Film", 2)]));
+            h.run(4);
+            let problems = h.screen.probe_readout_overlaps(&h.cx());
+            assert!(problems.is_empty(), "{lang:?} {feed:?}: {problems:#?}");
+        }
+    }
 }

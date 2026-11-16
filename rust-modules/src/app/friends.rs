@@ -12,7 +12,7 @@
 //! command); the runner's account client then goes through the dev-build live-write gate
 //! (`plex::watchlist::account_write_gate`).
 use plx_data::stores::community::{art_server, CommunityCmd, CommunityInput};
-use plx_screens::friends::page::{FriendsIn, FriendsScreen, FriendsView};
+use plx_screens::friends::page::{FriendsIn, FriendsScreen, FriendsView, TogetherRoom};
 
 use super::*;
 
@@ -29,6 +29,35 @@ pub(crate) struct Feed {
     keys_gen: Option<(u32, u32)>,
     /// The minute (unix seconds / 60) the page's clock was last set at.
     minute: Option<Option<i64>>,
+    /// The friends' Watch Together sessions as the page was last told them.
+    together: Option<Vec<TogetherRoom>>,
+}
+
+/// **The friends' Watch Together sessions as the Friends page shows them** (none while this TV is
+/// in a session of its own): each with its poster on the relay's own Plex server when the account
+/// reaches it (found by its machine identifier among the captured keys), else none.
+fn together_rooms(rooms: &[crate::app::bridge::together::ui::FriendRoom], in_session: bool, keys: &plx_plex::plex::ClientKeys) -> Vec<TogetherRoom> {
+    if in_session {
+        return Vec::new();
+    }
+    rooms.iter().map(|r| {
+        let server = keys.slots().find(|sid| keys.facts(*sid).is_some_and(|f| !r.server.is_empty() && f.machine_id == r.server));
+        let (src, thumb) = match (server, r.key.as_deref().filter(|k| !k.is_empty() && k.bytes().all(|b| b.is_ascii_digit()))) {
+            (Some(sid), Some(key)) => (sid.raw(), format!("/library/metadata/{key}/thumb")),
+            _ => (0, String::new()),
+        };
+        TogetherRoom {
+            relay: r.relay.clone(),
+            room: r.room.clone(),
+            name: r.name.clone(),
+            title: r.title.clone(),
+            sub: r.sub.clone(),
+            count: r.count,
+            playing: r.playing,
+            src,
+            thumb,
+        }
+    }).collect()
 }
 
 impl Bridge {
@@ -88,6 +117,12 @@ impl Bridge {
             screen.input(FriendsIn::Clock { now: secs, offset });
             moved = true;
         }
+        let rooms = together_rooms(&self.together.ui.sessions, self.together.published().is_some(), &self.client_keys);
+        if feed.together.as_ref() != Some(&rooms) {
+            screen.input(FriendsIn::Together(rooms.clone()));
+            feed.together = Some(rooms);
+            moved = true;
+        }
         let store = &self.stores.community;
         if feed.generation != Some(store.gen()) {
             feed.generation = Some(store.gen());
@@ -145,5 +180,35 @@ impl Bridge {
     #[cfg(test)]
     pub(crate) fn community_for_test(&mut self) -> &mut plx_data::stores::community::CommunityStore {
         &mut self.stores.community
+    }
+}
+
+#[cfg(test)]
+mod together_rooms_tests {
+    use super::together_rooms;
+    use crate::app::bridge::together::ui::FriendRoom;
+    use plx_plex::plex::{ClientFacts, ClientKeys, ServerId};
+
+    fn room(server: &str, key: Option<&str>) -> FriendRoom {
+        FriendRoom {
+            relay: "wss://relais.exemple.fr".into(), server: server.into(), key: key.map(str::to_owned), room: "r1".into(),
+            name: "Camille".into(), title: "Le Film".into(), sub: None, count: 2, playing: true,
+        }
+    }
+
+    fn keys() -> ClientKeys {
+        let facts = |machine: &str| ClientFacts { machine_id: machine.into(), described: None, source: Some((None, None)), stream_allowed: true };
+        ClientKeys::captured(ServerId::from_raw(1), 1, 1, [(ServerId::from_raw(1), None, facts("aaa")), (ServerId::from_raw(2), None, facts("bbb"))])
+    }
+
+    /// **A friend's session's poster comes from the relay's own Plex server, found by its machine
+    /// identifier** among the servers the account reaches; a server it does not reach, or a key that
+    /// is not a rating key, draws none. While this TV is in a session of its own the page lists none.
+    #[test]
+    fn the_poster_is_the_relays_server_and_none_while_in_a_session() {
+        let rooms = [room("bbb", Some("42")), room("zzz", Some("42")), room("bbb", Some("../x")), room("bbb", None)];
+        let got: Vec<(u16, String)> = together_rooms(&rooms, false, &keys()).into_iter().map(|r| (r.src, r.thumb)).collect();
+        assert_eq!(got, vec![(2, "/library/metadata/42/thumb".to_string()), (0, String::new()), (0, String::new()), (0, String::new())]);
+        assert!(together_rooms(&rooms, true, &keys()).is_empty(), "none while in a session");
     }
 }

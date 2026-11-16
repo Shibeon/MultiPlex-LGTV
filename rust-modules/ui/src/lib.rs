@@ -49,6 +49,7 @@ pub mod fmt; // shared duration/clock display formatters
 pub mod dwell; // raw dwell accumulator; notes Motion, never a Ramp
 pub mod frame; // RESTRUCTURE spike (spec §8.1): `Budget`, admission control for prepare work
 pub mod glassload; // dev-only backdrop-glass LOAD DIAL + the blurred-route-transition prototype
+pub mod action_notice; // the shared transient notice: top-right glass card, optional action the top page's UP reaches as a focus group, timed life, bounded queue
 pub mod hold_hint; // the standing "Hold [OK] for options" capsule: dwell/life schedule, hold-progress cap, fade + rise
 pub mod hit; // RESTRUCTURE (spec §7.6): the double-buffered hit map and the pointer gates
 pub mod placeholder; // placeholder accounting: a per-frame count at every placeholder DRAW + the #FF00FE pixel sentinel (feature `placeholder-sentinel`)

@@ -75,9 +75,13 @@ pub(crate) fn frames(ps: &plx_media::route::PlaybackSession) -> Option<i32> {
 pub(crate) fn seek_pending(ps: &plx_media::route::PlaybackSession) -> Option<i64> {
     plx_media::player::seek_pending(ps)
 }
+/// The viewer's seek: every scrub commit, step, chapter, From Beginning and Skip goes through here,
+/// so it is the one place a seek is counted as the person's gesture (`route::note_gesture`, which
+/// a Watch Together session sends to the others; its own seeks go around this door).
 #[inline]
 pub(crate) fn request_seek(ps: &mut plx_media::route::PlaybackSession,
     pa: &mut plx_media::player::adapter::PlayerAdapter, x: i64) {
+    plx_media::route::note_gesture(ps);
     let _ = pa.request_seek(ps, x);
 }
 /// Commit a scrub to `target` and clear the preview. This is a bare seek: if the film is PAUSED
@@ -111,6 +115,10 @@ pub(crate) fn is_started(ps: &plx_media::route::PlaybackSession) -> Option<bool>
 pub(crate) fn apply_more_action(ps: &mut plx_media::route::PlaybackSession, pa: &mut plx_media::player::adapter::PlayerAdapter, bridge: &mut super::bridge::Bridge, a: plx_appkit::more_menu::Action) {
     match a {
         plx_appkit::more_menu::Action::ToggleStats => crate::app::diagnostics::toggle(),
+        // Watch Together's page: the session's own commands, performed by its store.
+        plx_appkit::more_menu::Action::TogetherHost => bridge.together.host_playing(),
+        plx_appkit::more_menu::Action::TogetherVisible(on) => bridge.together.command(plx_data::stores::together::TogetherCmd::SetVisible(on)),
+        plx_appkit::more_menu::Action::TogetherLeave => bridge.together.command(plx_data::stores::together::TogetherCmd::Leave),
         // A rung of the playback-quality ladder — a routing POLICY, not a number handed to a
         // running stream. Not deferred either: `route::set_quality` re-asks the routing question
         // for the playback on screen and reloads only when the answer changed.
@@ -818,6 +826,10 @@ pub(crate) fn player_requests(
             PlayerReq::PlayAutomatically => {
                 play_automatically(&mut player.session, pa, bridge.metadata_mut());
             }
+            PlayerReq::TogetherFollow { join } => {
+                let answer = if join { plx_data::together::player::FollowAnswer::Join } else { plx_data::together::player::FollowAnswer::Leave };
+                bridge.together.answer_follow(answer);
+            }
             PlayerReq::RepairSandbox => {
                 if player.session.jail_load_blocked {
                     pa.repair_sandbox(&mut player.repair, plx_platform::tv::sandbox::blocks_native_video());
@@ -1493,7 +1505,13 @@ fn apply_transport(
     now: u32,
     pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>,
 ) {
-    let target = super::lifecycle::transport_target(play, super::lifecycle::viewer_paused_for(ps, pa));
+    let paused = super::lifecycle::viewer_paused_for(ps, pa);
+    let target = super::lifecycle::transport_target(play, paused);
+    // Only a press that changes the transport is the person's gesture (`key_pause`/`key_play` ask
+    // the same): one that changes nothing would read the session's next command as theirs.
+    if target != paused {
+        plx_media::route::note_gesture(ps);
+    }
     set_transport_paused(ps, pa, target);
     if let Some(player) = super::bridge::player_mut(pages) {
         player.hud.extend(now, HUD_LINGER_MS);
@@ -1576,6 +1594,7 @@ pub(crate) fn key_pause(
     pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>,
 ) {
     if super::bridge::player(pages).is_some() && !super::lifecycle::viewer_paused_for(ps, pa) {
+        plx_media::route::note_gesture(ps);
         if set_transport_paused(ps, pa, true) {
             plx_telemetry::diag::event(plx_telemetry::diag::schema::DiagEvent::FeatureUsed {
                 feature: plx_telemetry::diag::schema::Feature::Pause,
@@ -1632,6 +1651,7 @@ pub(crate) unsafe fn key_play(
                 }
             }
         } else if super::lifecycle::viewer_paused_for(ps, pa) {
+            plx_media::route::note_gesture(ps);
             set_transport_paused(ps, pa, false);
         }
     }
@@ -1710,6 +1730,34 @@ mod paused_seek_tests {
         plx_media::player::commit_paused(&mut ps, &mut pa, was_paused);
         plx_play_feed::shared::FEED_TX.seek_to_ns.store(was_seek, Relaxed);
         plx_play_feed::shared::FEED_SHARED.seeking.store(was_seeking, Relaxed);
+    }
+}
+
+/// A press is the person's gesture (`route::note_gesture`, which a Watch Together session sends to
+/// the others) only when it changes the transport: a PLAY on a playing film or a PAUSE on a paused
+/// one changes nothing, and counting it would open a gesture window in which the session's next
+/// command landing reads as this member's own.
+#[cfg(all(test, feature = "play-feed"))]
+mod transport_gesture_tests {
+    use super::*;
+
+    #[test]
+    fn a_press_that_changes_nothing_is_no_gesture() {
+        let _g = plx_base::testlock::serial();
+        let was_paused = plx_play_feed::shared::FEED_TX.paused.load(Relaxed);
+        let mut pages = plx_ui::dispatch::Dispatcher::<super::super::bridge::AppHost>::new();
+        for paused in [false, true] {
+            let mut ps = plx_media::route::PlaybackSession::IDLE;
+            let mut pa = crate::app::adapters::backends::test_adapter();
+            plx_media::player::commit_paused(&mut ps, &mut pa, paused);
+            assert_eq!(super::super::lifecycle::viewer_paused_for(&ps, &pa), paused);
+            // `Some(true)` is the PLAY key, `Some(false)` PAUSE: the one that asks for what already is.
+            apply_transport(&mut ps, &mut pa, Some(!paused), 0, &mut pages);
+            assert_eq!(plx_media::route::transport_gestures(&ps), 0, "PLAY on playing / PAUSE on paused (paused={paused})");
+        }
+        let mut ps = plx_media::route::PlaybackSession::IDLE;
+        let mut pa = crate::app::adapters::backends::test_adapter();
+        plx_media::player::commit_paused(&mut ps, &mut pa, was_paused);
     }
 }
 

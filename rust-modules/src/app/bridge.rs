@@ -197,6 +197,8 @@ pub(crate) struct AppViews<'a> {
     pub(crate) session: &'a plx_media::route::PlaybackSession,
     /// Viewer pause intent captured with the screen's current frame, including Tick input.
     pub(crate) transport_paused: bool,
+    /// The live Watch Together session as this frame's publication (`together::TogetherFeed`).
+    pub(crate) together: Option<&'a plx_data::together::session::View>,
     /// **Today's calendar date as this frame's publication**, `[year, month, day]` in the viewer's
     /// time zone: published by the loop once per iteration ([`Bridge::publish_today`]) the way the
     /// playback session is, so a screen RECEIVES the date it words ("Today", "27 Oct") and fetches
@@ -223,7 +225,7 @@ impl Bridge {
             directory: self.directory.view(), section_hubs: self.section_hubs.view(),
             search: self.search.view(), metadata: self.stores.metadata_view(),
             person: self.stores.person_view(), collection: self.stores.collection_view(), subtitle_search: self.stores.subtitle_search_view(), session,
-            transport_paused: self.transport_paused,
+            transport_paused: self.transport_paused, together: self.together.published(),
             today: self.today, beneath: None }
     }
 }
@@ -330,6 +332,7 @@ fn execute_endpoint_outcomes_with(
 impl plx_screens::registry::PlayerLike for AppHost {
     fn session<'a>(cx: &Cx<'a, Self>) -> &'a plx_media::route::PlaybackSession { cx.views.session }
     fn transport_paused(cx: &Cx<'_, Self>) -> bool { cx.views.transport_paused }
+    fn together<'a>(cx: &Cx<'a, Self>) -> Option<&'a plx_data::together::session::View> { cx.views.together }
 }
 
 impl plx_screens::registry::SearchLike for AppHost {
@@ -701,6 +704,9 @@ pub(crate) struct Bridge {
     watchlist: watchlist::Feed,
     /// What the Friends page was last handed from the community store (`friends::Feed`).
     friends: friends::Feed,
+    /// Watch Together: the store, its runner and what the UI and the player have not taken
+    /// (`together::TogetherFeed`).
+    pub(crate) together: together::TogetherFeed,
     /// The catalog page instance the store was last opened for (`watchlist::catalog_feed`).
     catalog_seat: Option<InstanceId>,
     /// The scratch session a Watchlist rig seated for the account it scripts ([`Bridge::seat_watchlist_account_for_test`]).
@@ -722,6 +728,12 @@ impl Bridge {
     /// The measurer every screen of this bridge lays out with (a host test's has no fonts): the HUD
     /// package is compiled with it, outside the draw, so the plan's widths are the draw's.
     pub(crate) fn measure(&self) -> &dyn Measure { &self.measure }
+
+    /// Watch Together's transient notice published to the dispatcher for this frame, laid out with
+    /// the frame's own measure (`together::Together::notice_frame`).
+    pub(crate) fn together_notice_frame(&mut self, pages: &mut plx_ui::dispatch::Dispatcher<AppHost>, top: f32) {
+        self.together.notice_frame(pages, &self.measure, top);
+    }
     pub(crate) fn prepare_measurements(&mut self, replay: Option<&std::collections::HashMap<plx_ui::rec::MetricKey,u32>>) {
         self.measure.prepare(replay);
     }
@@ -967,6 +979,7 @@ impl Bridge {
             watchlist_reqs: Vec::new(),
             watchlist: watchlist::Feed::default(),
             friends: friends::Feed::default(),
+            together: together::TogetherFeed::default(),
             catalog_seat: None,
             #[cfg(test)]
             watchlist_session: None,
@@ -2879,7 +2892,7 @@ impl Bridge {
             let cx = parts.cx::<AppHost>(AppViews { inputs: &self.screen_inputs, clock: &self.clock_facts, marker_prefs: self.marker_prefs, auth: publication.read(),
                 hubs: self.hubs.view(), listing: self.listing.view(), directory: self.directory.view(),
                 section_hubs: self.section_hubs.view(), search: self.search.view(), metadata: self.stores.metadata_view(), person: self.stores.person_view(), collection: self.stores.collection_view(), subtitle_search: self.stores.subtitle_search_view(), session: &self.playback,
-                transport_paused: self.transport_paused,
+                transport_paused: self.transport_paused, together: self.together.published(),
                 today: self.today, beneath: None,
             }, &self.measure);
             let handled = self.session.step(event, &cx, fx);
@@ -3086,7 +3099,7 @@ impl Rig<AppHost> for Bridge {
                 listing: self.listing.view(),
                 directory: self.directory.view(),
                 section_hubs: self.section_hubs.view(), search: self.search.view(), metadata: self.stores.metadata_view(), person: self.stores.person_view(), collection: self.stores.collection_view(), subtitle_search: self.stores.subtitle_search_view(), session: &self.playback,
-                transport_paused: self.transport_paused,
+                transport_paused: self.transport_paused, together: self.together.published(),
                 today: self.today, beneath: None,
             },
             measure: &self.measure,
@@ -3567,6 +3580,8 @@ fn frame_ingest(
     // The Friends page's community store, for the same reason: reads only while the page is on
     // top, nothing for a managed profile, and the page handed what moved before it ticks.
     rig.friends_feed(d);
+    // Watch Together: the session's socket events and job answers land before the page ticks.
+    rig.together_feed();
     // Library used to be the only route that pumped Browse. Onboard schedules the roster-only
     // owner work from its Tick, but Tick runs after views are captured; land the roster first so
     // a discovery result and the directory publication are observed in one frame. Controlled
@@ -5064,6 +5079,15 @@ pub(crate) fn search_owns_input(d: &Dispatcher<AppHost>) -> bool {
             .is_some_and(|screen| screen.is::<plx_screens::search::SearchScreen>())
 }
 
+/// **Who takes typed text** (the television keyboard's commits, the `txt:` remote token, a replayed
+/// text record): owned Search, whose field takes a desktop keyboard's text with or without the
+/// panel, or any page holding the television's keyboard (`Delivery::Keyboard { up: true }`, which
+/// the dispatcher accepts only from the page that owns input): the Friends page's invitation code
+/// and the HUD settings' address read the same `InputKind::Text` Search does.
+pub(crate) fn text_owns_input(d: &Dispatcher<AppHost>) -> bool {
+    search_owns_input(d) || d.input.keyboard
+}
+
 /// **Does the page under the pointer glide at the screen's edges?** No surface is up and the top
 /// page scrolls itself by a wheel (`Screen::glides`): the pointer's edge glide is offered to it.
 pub(crate) fn page_glides(d: &Dispatcher<AppHost>) -> bool {
@@ -5436,6 +5460,8 @@ mod watchlist;
 
 #[path = "friends.rs"]
 mod friends;
+#[path = "together.rs"]
+pub(crate) mod together;
 
 #[cfg(test)]
 #[path = "friends_route_tests.rs"]

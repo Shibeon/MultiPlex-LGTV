@@ -514,9 +514,10 @@ fn groups_listed(inputs: &FieldListInputs<'_>) -> Vec<(String, Vec<PickerKind>)>
     out
 }
 
-/// **Video & playback is three groups**: Video (Default quality, Direct Play, Dolby Vision), Player
+/// **Video & playback is four groups**: Video (Default quality, Direct Play, Dolby Vision), Player
 /// (Skip interval, Instant D-pad seeking, HDR overlay, the marker skips when granted, and the Player HUD
-/// row after them) and Up next (Next episode, Continue Watching). Subtitle size and position are gone.
+/// row after them), Up next (Next episode, Continue Watching) and Watch Together (the profile's two
+/// switches). Subtitle size and position are gone.
 #[test]
 fn video_and_playback_lists_video_player_and_up_next() {
     use plx_platform::i18n::msg;
@@ -527,12 +528,13 @@ fn video_and_playback_lists_video_player_and_up_next() {
     assert_eq!(fields_of(&all), vec![
         PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine,
         PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode,
-        PickerKind::NextEpisode, PickerKind::DeckPress,
+        PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::TogetherVisible, PickerKind::TogetherNotify,
     ]);
     let groups = groups_listed(&all);
     assert_eq!(groups.iter().map(|(h, _)| h.as_str()).collect::<Vec<_>>(),
-        [msg::settings_playback_group_video(), msg::settings_playback_group_player(), msg::settings_playback_group_up_next()]);
+        [msg::settings_playback_group_video(), msg::settings_playback_group_player(), msg::settings_playback_group_up_next(), msg::settings_together_section()]);
     assert_eq!(groups[2].1, vec![PickerKind::NextEpisode, PickerKind::DeckPress], "Up next");
+    assert_eq!(groups[3].1, vec![PickerKind::TogetherVisible, PickerKind::TogetherNotify], "Watch Together");
     assert!(!fields_of(&all).contains(&PickerKind::SubtitleSize) && !fields_of(&all).contains(&PickerKind::SubtitlePosition) && !fields_of(&all).contains(&PickerKind::SubtitleColor),
         "subtitle size and position are on Audio & subtitles");
     assert_eq!(["Video", "Player", "Up next"], [msg::settings_playback_group_video(), msg::settings_playback_group_player(), msg::settings_playback_group_up_next()]);
@@ -546,7 +548,8 @@ fn intro_and_credits_skip_rows_follow_their_grants_in_the_player_group() {
     let none = inputs_of(Kind::Playback, None);
     assert_eq!(fields_of(&none), vec![
         PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine,
-        PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::NextEpisode, PickerKind::DeckPress]);
+        PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::NextEpisode, PickerKind::DeckPress,
+        PickerKind::TogetherVisible, PickerKind::TogetherNotify]);
     let intro = FieldListInputs { marker_prefs: MarkerPrefsView { scope: 2, intro_granted: true, ..Default::default() }, ..inputs_of(Kind::Playback, None) };
     assert_eq!(fields_of(&intro).iter().filter(|f| matches!(f, PickerKind::IntroSkip | PickerKind::CreditsSkip)).collect::<Vec<_>>(), [&PickerKind::IntroSkip]);
     let both = FieldListInputs { marker_prefs: MarkerPrefsView { scope: 2, intro_granted: true, credits_granted: true, ..Default::default() }, ..inputs_of(Kind::Playback, None) };
@@ -619,7 +622,7 @@ fn every_field_list_row_states_its_own_sentence() {
     let sentence = |kind, id: Option<&RowId>, status, force, whose: &Whose|
         row_sentence(kind, id, page, status, if force { DirectPlayMode::Forced } else { DirectPlayMode::Auto }, whose).into_owned();
     for field in [PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking,
-        PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::NextEpisode, PickerKind::DeckPress] {
+        PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::TogetherVisible, PickerKind::TogetherNotify] {
         assert_eq!(sentence(Kind::Playback, Some(&RowId::Field(field)), false, false, &seated), field.copy(), "{field:?}");
     }
     for field in [PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor] {

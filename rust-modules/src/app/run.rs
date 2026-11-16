@@ -713,6 +713,8 @@ fn hud_model(
         bitmap_by_key: plx_media::player::bitmap_by_key,
         // the wall clock is the caller's to fill (`publish_player_model`), only for a HUD that shows one
         now: None,
+        // so is the Watch Together count, from the session the bridge owns
+        together: 0,
     }
 }
 
@@ -747,6 +749,7 @@ fn publish_player_model(app: &mut App) {
     model.now = if live_clock { clock::unix_ms().and_then(|ms| clock::local_minute(ms.div_euclid(1000))) } else { None };
     model.marker_prefs = app.bridge.marker_preferences();
     model.covered = app.pages.surface_up();
+    model.together = app.bridge.together.watching();
     if let Some(screen) = super::bridge::player_mut(&mut app.pages) { screen.set_model(model); }
 }
 
@@ -982,8 +985,8 @@ unsafe fn ingress_token(app: &mut App, fr: &mut Frame, token: &str) -> bool {
     }
     // Keys and clicks use SDL's existing synthesis while coexistence lasts. Consume those
     // before a following direct text token, rather than moving all text ahead of all keys.
-    if super::bridge::search_owns_input(&app.pages) { drain_sdl(app, fr); }
-    if super::bridge::search_owns_input(&app.pages) {
+    if super::bridge::text_owns_input(&app.pages) { drain_sdl(app, fr); }
+    if super::bridge::text_owns_input(&app.pages) {
         if let Some(text) = token.strip_prefix("txt:") {
             ingest_text(app, &text.replace('+', " "), crate::textinput::available(),
                 plx_machine::machine::Source::RemoteFifo);
@@ -1821,7 +1824,7 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
         // nobody drains. Gating here would also be a second, weaker copy of a rule
         // that lives in one place — and it would flip a frame away from the field's
         // own edit state, because the route changes at the fade floor.
-        if super::bridge::search_owns_input(&app.pages) {
+        if super::bridge::text_owns_input(&app.pages) {
             let text = crate::textinput::decode(&app.ev);
             ingest_text(app, &text, crate::textinput::available(), plx_machine::machine::Source::Sdl);
         } else {
@@ -2058,6 +2061,16 @@ fn did_foreground_with_link(app: &mut App) -> ForegroundActivation {
     );
     super::deeplink::perform(out, &mut app.pages, &mut app.menu_play_await, now);
     activation
+}
+
+/// Where the transient notice's card stands on the route on top: under the page header's block on a
+/// page, under the player head's clock and title band over the player.
+fn notice_top(pages: &plx_ui::dispatch::Dispatcher<super::bridge::AppHost>) -> f32 {
+    if pages.top_arg() == Some(&AppArg::Player) {
+        plx_ui::action_notice::PLAYER_TOP
+    } else {
+        plx_ui::action_notice::PAGE_TOP
+    }
 }
 
 /// The facts of whether a playback session stands, for the launch link's step
@@ -3037,6 +3050,37 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         // from Home while a different page is up by the time the landing (or its settled
         // failure, or the ceiling) says the wait is over. A title the launch asked for
         // (`deeplink`) arms the same wait once Home is up.
+        // Watch Together's player side: the session's requests, its Follows through the one gate
+        // (a Follow arms the same wait, so it runs first and the wait ticks this frame) and the
+        // player's snapshot for the next pump (`bridge::together::player`). Held, as the launch
+        // link is, while the app is hidden or the foreground lifecycle brings the parked playback
+        // back: that playback is the lifecycle's until it has.
+        let together_held = !app.window_activity.allow_present(true) || app.player.lifecycle.awaiting_load();
+        app.bridge.together_player_frame(super::bridge::together::player::PlayerSide {
+            player: &mut app.player,
+            pa: &mut app.adapters.player,
+            pages: &mut app.pages,
+            menu_play_await: &mut app.menu_play_await,
+            now: fr.now,
+            held: together_held,
+        });
+        // …then what the session tells the viewer (`bridge::together::ui`): its notices and the
+        // gate's standing on the one transient notice, the friends' listing on its cadence, and the
+        // card published to the dispatcher, which makes an actionable one the focus group the top
+        // page's UP reaches (`action_notice`).
+        {
+            let friends_page = app.pages.top_arg() == Some(&AppArg::Friends);
+            let player_page = (app.pages.top_arg() == Some(&AppArg::Player)).then(|| app.pages.top_page()).flatten();
+            app.bridge.together.ui_frame(fr.now, friends_page, player_page.is_some());
+            let top = notice_top(&app.pages);
+            app.bridge.together_notice_frame(&mut app.pages, top);
+            // The gate's question, asked on the player page's own decision card.
+            if let Some((page, ask)) = app.bridge.together.player_ask(player_page) {
+                let page = plx_machine::machine::MachineId::Instance(page);
+                app.pages.emit(page, plx_machine::machine::Fx::Deliver(page,
+                    plx_machine::machine::Delivery::Screen(plx_ui::screen::ScreenEvent::App(plx_screens::registry::AppMsg::TogetherAsk(ask)))));
+            }
+        }
         let stands = link_session_stands(app);
         super::deeplink::frame(&mut app.pages, &mut app.deeplink, &mut app.menu_play_await,
             app.window_activity.allow_present(true), stands, fr.now);
@@ -3392,6 +3436,10 @@ pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32)
                     plx_ui::anim::draw_overlay(); // dev diagnostic overlay (all routes)
                                                      // The lab upload read-out, over everything, on every route — including the
                                                      // player, where the two branches above diverge and this one must not.
+                    // Watch Together's notice, over every route and every surface but the lab
+                    // read-out: it seats no focus of its own, so nothing under it is hidden for long.
+                    // Measured with the frame's own measure, the one its pointer stop was laid with.
+                    app.bridge.together.ui.notice.draw(plx_ui::Painter::root(), app.bridge.measure(), notice_top(&app.pages));
                     crate::lab::draw(app.diagnostics.frame_if_shown());
                     #[cfg(feature = "threadcheck")]
                     plx_ui::runtime_warning::draw(app.boot_initial.is_some());
@@ -3879,14 +3927,14 @@ unsafe fn replay_inject(app: &mut App, fr: &mut Frame, v: &serde_json::Value) {
         }
         return;
     }
-    if super::bridge::search_owns_input(&app.pages) { drain_sdl(app, fr); }
+    if super::bridge::text_owns_input(&app.pages) { drain_sdl(app, fr); }
     let kind = v["kind"].as_str().unwrap_or("");
     let i = |k: &str| v[k].as_i64().unwrap_or(0) as i32;
     let u = |k: &str| v[k].as_u64().unwrap_or(0) as u32;
     match kind {
         "text" => {
-            if !super::bridge::search_owns_input(&app.pages) {
-                log("replay: text has no owned Search recipient");
+            if !super::bridge::text_owns_input(&app.pages) {
+                log("replay: text has no recipient (no owned Search, no page holding the keyboard)");
             } else if let Some(events) = super::recorder::dec_text(v) {
                 app.inputs.extend(events);
                 plx_machine::idle::invalidate();

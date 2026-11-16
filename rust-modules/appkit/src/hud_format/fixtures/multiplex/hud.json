@@ -73,7 +73,9 @@
       ] },
       { "id": "tabs", "gap_before": { "value": "MD", "if": { "panel.info": 328, "sections": 42 } }, "cells": [
         { "align": "center", "segment": { "id": "tabs", "gap": "SM", "items": [
-          { "id": "more", "command": "open_more", "widget": "pill", "size": 72, "rest": "plate", "face": "builtin:plus" }
+          { "id": "more", "command": "open_more", "widget": "pill", "size": 72, "rest": "plate", "face": "builtin:plus" },
+          { "id": "together", "command": "open_more", "page": "together", "widget": "disc", "size": 72, "rest": "plate",
+            "focus": "ring", "caption": true, "face": "builtin:crowd" }
         ] } }
       ] }
     ],

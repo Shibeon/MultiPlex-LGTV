@@ -6,7 +6,7 @@ pub(crate) use marker_access::MarkerAccessRunner;
 use plx_media::route::{choose, Choice, How};
 use plx_plex::plex::account::{PreferenceError, PreferenceRequest};
 use plx_plex::plex::session::{IntroSkipPref, CreditsSkipPref, DolbyVisionModePref, InstantDpadSeekingPref, UriEnginePref, AudioModePref, AudioModeDecodePref, DeckPressPref, DirectPlayModePref, HdrOverlayBrightnessPref, NextEpisodeModePref, QualityPref,
-    SkipIntervalPref, SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, UnderPostersPref};
+    SkipIntervalPref, SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, TogetherNotifyPref, TogetherVisiblePref, UnderPostersPref};
 use plx_screens::registry::{AccountPreferenceReply, PreferenceCmd};
 use std::sync::mpsc::Sender;
 
@@ -29,6 +29,8 @@ fn choose_setting(choice: Choice, reply: Sender<bool>) {
         Choice::UnderPosters(v) => choose::<UnderPostersPref>(v, How::settings::<UnderPostersPref>(reply)),
         Choice::TrailerAutoplay(v) => choose::<TrailerAutoplayPref>(v, How::settings::<TrailerAutoplayPref>(reply)),
         Choice::HudEndTime(v) => choose::<HudEndTimePref>(v, How::settings::<HudEndTimePref>(reply)),
+        Choice::TogetherVisible(v) => choose::<TogetherVisiblePref>(v, How::settings::<TogetherVisiblePref>(reply)),
+        Choice::TogetherNotify(v) => choose::<TogetherNotifyPref>(v, How::settings::<TogetherNotifyPref>(reply)),
         Choice::SubtitleSize(v) => choose::<SubtitleSizePref>(v, How::settings::<SubtitleSizePref>(reply)),
         Choice::SubtitlePosition(v) => choose::<SubtitlePositionPref>(v, How::settings::<SubtitlePositionPref>(reply)),
         Choice::SubtitleTone(v) => choose::<SubtitleTonePref>(v, How::settings::<SubtitleTonePref>(reply)),

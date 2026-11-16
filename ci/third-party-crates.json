@@ -51,6 +51,7 @@
   "cc",
   "cfg_aliases",
   "core_detect",
+  "cpufeatures",
   "data-encoding",
   "der-parser",
   "deranged",
@@ -82,7 +83,6 @@
   "serde_derive",
   "shlex",
   "simdutf8",
-  "subtle",
   "syn",
   "synstructure",
   "thiserror",
@@ -113,7 +113,6 @@
   "yasna",
   "yoke-derive",
   "zerofrom-derive",
-  "zeroize",
   "zerovec-derive"
  ],
  "groups": [
@@ -137,9 +136,29 @@
      "copyright": "Jonas Schievink, oyvindln"
     },
     {
+     "name": "aead",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2019-2026 The RustCrypto Project Developers"
+    },
+    {
+     "name": "aes",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2018-2024 The RustCrypto Project Developers"
+    },
+    {
+     "name": "aes-gcm",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2019-2026 The RustCrypto Project Developers"
+    },
+    {
      "name": "anyhow",
      "licence": "MIT OR Apache-2.0",
      "copyright": "David Tolnay"
+    },
+    {
+     "name": "base16ct",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2014 Steve \"Sc00bz\" Thomas (steve at tobtu dot com)"
     },
     {
      "name": "bitflags",
@@ -150,6 +169,11 @@
      "name": "bitstream-io",
      "licence": "MIT/Apache-2.0",
      "copyright": "2017 Brian Langenberger"
+    },
+    {
+     "name": "block-buffer",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2018-2025 The RustCrypto Project Developers"
     },
     {
      "name": "bytemuck",
@@ -172,6 +196,26 @@
      "copyright": "Mozilla Foundation"
     },
     {
+     "name": "cipher",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2016-2025 RustCrypto Developers"
+    },
+    {
+     "name": "cmov",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2022-2026 The RustCrypto Project Developers"
+    },
+    {
+     "name": "const-oid",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2020-2026 The RustCrypto Project Developers"
+    },
+    {
+     "name": "cpubits",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2023-2026 The RustCrypto Project Developers"
+    },
+    {
      "name": "crc",
      "licence": "MIT OR Apache-2.0",
      "copyright": "2017 crc-rs Developers"
@@ -187,9 +231,39 @@
      "copyright": "2018 Sam Rijs, Alex Crichton and contributors"
     },
     {
+     "name": "crypto-bigint",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2021-2026 The RustCrypto Project Developers"
+    },
+    {
+     "name": "crypto-common",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2021-2026 RustCrypto Developers"
+    },
+    {
+     "name": "ctr",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2018-2022 RustCrypto Developers"
+    },
+    {
+     "name": "ctutils",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2025-2026 The RustCrypto Project Developers"
+    },
+    {
+     "name": "der",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2020-2026 The RustCrypto Project Developers"
+    },
+    {
      "name": "either",
      "licence": "MIT OR Apache-2.0",
      "copyright": "Copyright (c) 2015 (the upstream notice names no holder)"
+    },
+    {
+     "name": "elliptic-curve",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2020-2026 RustCrypto Developers"
     },
     {
      "name": "encoding_rs",
@@ -207,6 +281,11 @@
      "copyright": "The image-rs Developers"
     },
     {
+     "name": "ff",
+     "licence": "MIT/Apache-2.0",
+     "copyright": "Copyright (c) 2017 Sean Bowe"
+    },
+    {
      "name": "flate2",
      "licence": "MIT OR Apache-2.0",
      "copyright": "2014-2026 Alex Crichton"
@@ -217,14 +296,29 @@
      "copyright": "2018–2026 The rust-random Project Developers; 2014 The Rust Project Developers"
     },
     {
+     "name": "ghash",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2019-2026 The RustCrypto Project Developers"
+    },
+    {
      "name": "gimli",
      "licence": "MIT OR Apache-2.0",
      "copyright": "The `gimli` authors"
     },
     {
+     "name": "group",
+     "licence": "MIT/Apache-2.0",
+     "copyright": "Sean Bowe, Jack Grigg"
+    },
+    {
      "name": "hashbrown",
      "licence": "MIT OR Apache-2.0",
      "copyright": "Amanieu d'Antras"
+    },
+    {
+     "name": "hybrid-array",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2022-2026 The RustCrypto Project Developers"
     },
     {
      "name": "image",
@@ -235,6 +329,11 @@
      "name": "indexmap",
      "licence": "Apache-2.0 OR MIT",
      "copyright": "2016–2017 The indexmap authors"
+    },
+    {
+     "name": "inout",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2022-2025 The RustCrypto Project Developers"
     },
     {
      "name": "itoa",
@@ -272,9 +371,34 @@
      "copyright": "The `object` authors"
     },
     {
+     "name": "p256",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2020-2026 RustCrypto Developers"
+    },
+    {
      "name": "png",
      "licence": "MIT OR Apache-2.0",
      "copyright": "2015 nwin"
+    },
+    {
+     "name": "polyval",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2019-2026 The RustCrypto Project Developers"
+    },
+    {
+     "name": "primefield",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2024-2026 RustCrypto Developers"
+    },
+    {
+     "name": "primeorder",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2020-2023 RustCrypto Developers"
+    },
+    {
+     "name": "rand_core",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2018-2026 The Rand Project Developers"
     },
     {
      "name": "rustc-demangle",
@@ -285,6 +409,11 @@
      "name": "scopeguard",
      "licence": "MIT OR Apache-2.0",
      "copyright": "2016-2019 Ulrik Sverdrup \"bluss\" and scopeguard developers"
+    },
+    {
+     "name": "sec1",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2021-2026 The RustCrypto Project Developers"
     },
     {
      "name": "serde",
@@ -320,6 +449,26 @@
      "name": "typed-path",
      "licence": "MIT OR Apache-2.0",
      "copyright": "The typed-path authors"
+    },
+    {
+     "name": "typenum",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2014 Paho Lurie-Gregg"
+    },
+    {
+     "name": "universal-hash",
+     "licence": "MIT OR Apache-2.0",
+     "copyright": "Copyright (c) 2019-2025 RustCrypto Developers"
+    },
+    {
+     "name": "wnaf",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2026 RustCrypto Developers"
+    },
+    {
+     "name": "zeroize",
+     "licence": "Apache-2.0 OR MIT",
+     "copyright": "Copyright (c) 2018-2026 The RustCrypto Project Developers"
     },
     {
      "name": "zip",
@@ -446,6 +595,22 @@
      "name": "pxfm",
      "licence": "BSD-3-Clause OR Apache-2.0",
      "copyright": "(c) Radzivon Bartoshyk"
+    }
+   ]
+  },
+  {
+   "id": "bsd",
+   "columns": [
+    "Package",
+    "Version",
+    "Declared licence",
+    "Copyright"
+   ],
+   "crates": [
+    {
+     "name": "subtle",
+     "licence": "BSD-3-Clause",
+     "copyright": "Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence; (c) 2016-2024 Isis Agora Lovecruft. The complete upstream licence is preserved in `licenses/subtle-BSD-3-Clause.txt`"
     }
    ]
   },

@@ -2069,6 +2069,27 @@ mod sections {
         assert_eq!((run.group(), run.held()), (GROUP_TABS.0, Some(ELEM_TAB_BASE)));
     }
 
+    /// **An actionable card does not take the page's own Up.** With the tabs above the page, Up off the page's top
+    /// row is the page's word (it puts the page away, `answer_edge`); a card standing over the player must not turn
+    /// that press into a jump to Join. Only the transport's top group opts in to the card (`PlayerScreen::links`).
+    #[test]
+    fn rising_tabs_up_off_the_page_puts_it_away_with_an_actionable_notice_standing() {
+        use plx_ui::dispatch::NOTICE_ELEM;
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let _chapters = Chaptered::install();
+        let mut run = rising_tabs_run();
+        run.d.set_notice(Some(plx_ui::Rect::new(1200.0, plx_ui::action_notice::PLAYER_TOP, 560.0, 116.0)), true);
+        run.open_from_tab(0);
+        run.step('D');
+        run.step('U');
+        assert_eq!(run.held(), Some(ELEM_SECTION_BASE), "Up inside the page walks it");
+        run.step('U');
+        assert_ne!(run.held(), Some(NOTICE_ELEM), "the page's Up is not the card's");
+        assert_eq!(run.open_sections(), Vec::<Section>::new(), "Up off the page puts it away");
+        assert_eq!((run.group(), run.held()), (GROUP_TABS.0, Some(ELEM_TAB_BASE)));
+    }
+
     /// **Tabs above the page: Down off the page stays put.** The far edge is a wall: nothing closes, focus does not
     /// move, nothing is asked. It does not raise the linger either, and needs no more: an open page holds the
     /// transport up by itself (`HudState::visible`), and closing it extends the linger from there (`close_section`).
@@ -2412,6 +2433,41 @@ mod sections {
         let (ps, now) = (plx_media::route::idle_session_for_test(), run.now);
         let hud = &run.screen().hud;
         assert!(!hud.visible(ps, now, true), "even a paused transport is gone");
+    }
+
+    /// (Regression, pr-reviewer #3.) **Up off the topmost group reaches an actionable notice** instead of hiding the
+    /// transport: the "[▲] Join" card standing over playback is reachable from the player, where the hide used to
+    /// answer that Up first. The HUD draws no ring of its own while the card holds the focus; DOWN comes back to the
+    /// bar it left; and a transport key pressed meanwhile is still the player's, exactly as without the card.
+    #[test]
+    fn up_off_the_reference_bar_reaches_an_actionable_notice_and_down_comes_back() {
+        use plx_ui::dispatch::NOTICE_ELEM;
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let card = plx_ui::Rect::new(1200.0, plx_ui::action_notice::PLAYER_TOP, 560.0, 116.0);
+        let pause = |run: &mut Run| {
+            run.press_coded(Key::Other, plx_ui::consts::WCODE_PAUSE);
+            run.asked()
+        };
+        let mut control = reference_run();
+        control.step('U');
+        let unfocused = pause(&mut control);
+        assert!(!unfocused.is_empty(), "control: PAUSE asks the app for something");
+
+        let mut run = reference_run();
+        run.step('U');
+        assert_eq!(run.group(), GROUP_SCRUB.0);
+        run.d.set_notice(Some(card), true);
+        run.step('U');
+        assert_eq!(run.held(), Some(NOTICE_ELEM), "Up off the bar is the card");
+        assert!(!run.screen().hud.dismissed, "and it did not hide the transport");
+        assert_eq!(PlayerScreen::ring_group(run.screen().hud.nav.focus, run.held()), plx_ui::containers::tabs::NOTICE,
+            "no HUD control wears the ring while the card does");
+        assert_eq!(pause(&mut run), unfocused, "PAUSE is the player's while the card holds the focus");
+        assert_eq!(run.held(), Some(NOTICE_ELEM));
+        run.step('D');
+        assert_eq!((run.group(), run.held()), (GROUP_SCRUB.0, Some(plx_appkit::player_hud::ELEM_SCRUB)), "DOWN is the bar again");
+        assert!(!run.d.take_notice_activation(), "and nothing was taken");
     }
 
     /// **Inline sections are in the order**: with Chapters open the bar is reachable (Up, Up from the strip), where it

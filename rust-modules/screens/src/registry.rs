@@ -221,6 +221,9 @@ pub enum PlayerReq {
     CancelAutoSkip(plx_appkit::skip_policy::OfferId),
     /// Accepted only after the owned player confirmation. Never emitted by boot or Play.
     RepairSandbox,
+    /// The player page's answer to Watch Together's question (`AppMsg::TogetherAsk`): `join`
+    /// leaves this playback for the session's title, else the viewer keeps it and leaves the session.
+    TogetherFollow { join: bool },
     /// The failure read-out's *Try again*: resolve the failed item again, unchanged, at the
     /// position the viewer was at (`app::playback::retry_failed_playback`).
     RetryPlayback,
@@ -1176,6 +1179,10 @@ pub enum ContentReq {
     /// BACK on a top-bar page that is not Home: the loop returns to Home (a bar page is a root,
     /// so there is nothing under it to pop to).
     LeaveToHome,
+    /// **A Watch Together command from a page** (the Friends page's *Join* on a friend's session and
+    /// its *Join with a code*): the application's session owner (`app/together.rs`) takes it; the
+    /// page performs nothing itself.
+    Together(plx_data::stores::together::TogetherCmd),
     Play { play: PlayIntent, resume_ns: i64 },
     /// Start a hero preview. Does not push the player route.
     PreviewStart {
@@ -1393,6 +1400,13 @@ pub trait PlayerLike: AppLike<Memory = PageMemory> + Sized {
     fn session<'a>(cx: &Cx<'a, Self>) -> &'a plx_media::route::PlaybackSession;
     /// Viewer pause intent sampled by the host at this frame's Tick boundary.
     fn transport_paused(cx: &Cx<'_, Self>) -> bool;
+    /// **The live Watch Together session, as this frame's publication**: what the More menu's
+    /// Watch Together page and the HUD's participants indicator show. PROVIDED, defaulting to
+    /// `None` (no session), so a test host owes nothing; the production host publishes the store's
+    /// view.
+    fn together<'a>(_cx: &Cx<'a, Self>) -> Option<&'a plx_data::together::session::View> {
+        None
+    }
 }
 
 pub trait SearchLike: AppLike<Memory = PageMemory> + Sized {
@@ -1498,6 +1512,9 @@ pub enum AppMsg {
     Consent(ConsentCmd),
     /// A command of the player-HUD package store, delivered to [`MachineId::Huds`].
     Huds(HudCmd),
+    /// Watch Together's gate, to the player page: it holds a question about this title (`Some`),
+    /// asked on the page's decision card, or no longer does (`None`).
+    TogetherAsk(Option<String>),
     RestartReply { correlation: u32, accepted: bool },
     SelectionReply { correlation: u32, accepted: bool, flow_epoch: u64 },
     BackReply { correlation: u32, resumed: bool },
@@ -2861,7 +2878,12 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // The Friends page (the web app's *Amis*): `ARG_SHAPE` gains `Friends` (canon page tag 14, screen
 // id 31) and `FriendsScreen::SHAPE` joins the array. Previous pin: 0x1097_dde4_cf49_0664; re-record
 // the replay anchors.
-const SCREEN_SHAPES_PIN: u64 = 0xaffa_778c_f4f5_f3dc;
+// Watch Together's question on the player page: the repair alert's state gains `together` (whose
+// question it holds). Previous pin: 0xaffa_778c_f4f5_f3dc; re-record the replay anchors.
+// The Friends page's Watch Together: `FriendsScreen::SHAPE` gains the friends' sessions' cards and
+// the invitation field (`together:[u32],editing:bool,code:str`). Previous pin: 0x38b0_f603_015a_eb6e;
+// re-record the replay anchors.
+const SCREEN_SHAPES_PIN: u64 = 0x1e31_0b96_f394_5e01;
 
 #[cfg(test)]
 mod arg_tests {

@@ -28,6 +28,15 @@ test-support = []
 
 [dependencies]
 libc = "0.2"
+# Watch Together's end-to-end encryption (`crypto`): AES-256-GCM for the session's messages and the
+# grant box, P-256 ECDH for the code-less entry. Pure Rust (RustCrypto, Apache-2.0 OR MIT), no
+# `getrandom`: every random byte a key or an IV needs is drawn by a runner and handed in, so the
+# crates never read the OS themselves. HKDF and base64url are hand-written (`hkdf`, `b64`) over
+# `sha256`; ECDH is the curve arithmetic itself (`crypto::EcdhSecret::shared`), so p256's `ecdh`
+# feature, which adds an HKDF/HMAC/digest stack for a KDF nothing calls, stays off. `zeroize` (a
+# crate the curve arithmetic already depends on) wipes the AES key schedule on drop.
+aes-gcm = { version = "0.11.1", default-features = false, features = ["aes", "alloc", "zeroize"] }
+p256 = { version = "0.14.0", default-features = false, features = ["arithmetic"] }
 
 [dev-dependencies]
 rcgen = "0.14.10"

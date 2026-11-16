@@ -22,7 +22,7 @@ use plx_machine::machine::{
 use plx_machine::present::{Present, Provenance};
 use super::screen::{
     composed_draw, composed_prepare, Activate, At, AxisMask, Composed, Dir, DrawFrame, EdgeRule,
-    ElemKind, Focusable, GroupKind, GroupSpec, Hover, Mounter, Part, Placed, RenderStrategy, ReturnState,
+    ElemKind, Focusable, GroupKind, GroupSpec, Hover, Link, Mounter, Part, Placed, RenderStrategy, ReturnState,
     Screen, ScreenArg, ScreenEvent, Seat, Step, Stop,
 };
 use super::tex::{Decoded, PosterReady, Tex, TexCache, Uploader};
@@ -180,6 +180,21 @@ pub struct FixtureRow {
     /// What the row's elements are for the press: `Page(5xx)` rows are `Bare`, `Page(6xx)`
     /// rows `Control`, everything else `Card`.
     pub kind: ElemKind,
+    /// The row's Up edge: `Geometric` but on the pages that model another word for it
+    /// ([`edge_page_up`]).
+    pub up: EdgeRule,
+}
+
+/// **Pages whose row answers Up by its own rule**: `Page(820)` a `Stop`, `Page(821)` a
+/// `Nav(Back)`, `Page(822)` and `Page(823)` a `Screen` edge, `Page(823)` with a declared link from
+/// the row Up to the notice (`tabs::NOTICE`). Every other argument's row is `Geometric` all round.
+pub fn edge_page_up(arg: &FixtureArg) -> EdgeRule {
+    match arg {
+        FixtureArg::Page(820) => EdgeRule::Stop,
+        FixtureArg::Page(821) => EdgeRule::Nav(plx_machine::machine::NavOpKind::Back),
+        FixtureArg::Page(822 | 823) => EdgeRule::Screen,
+        _ => EdgeRule::Geometric,
+    }
 }
 
 impl Focusable<FixtureHost> for FixtureRow {
@@ -189,7 +204,7 @@ impl Focusable<FixtureHost> for FixtureRow {
             kind: GroupKind::Row { wrap: false },
             seat: Seat::Nearest,
             reachable: AxisMask::BOTH,
-            edge: [EdgeRule::Geometric; 4],
+            edge: [self.up, EdgeRule::Geometric, EdgeRule::Geometric, EdgeRule::Geometric],
             extent: Rect::new(0.0, 100.0, 1920.0, 200.0),
             len: self.len,
             elem: self.kind,
@@ -473,6 +488,11 @@ impl Machine<FixtureHost> for FixtureScreen {
 }
 
 impl Screen<FixtureHost> for FixtureScreen {
+    fn links(&self, out: &mut Vec<Link>) {
+        if self.arg == FixtureArg::Page(823) {
+            out.push(Link { from: self.row.group, dir: Dir::Up, to: super::containers::tabs::NOTICE });
+        }
+    }
     fn opener_departing(&self, key: FocusKey<u32>) -> bool {
         self.departing == Some(key.elem)
     }
@@ -683,6 +703,7 @@ impl FixtureModal {
                                     prepared: 0,
                                     drawn: 0,
                                     kind: ElemKind::Card,
+                                    up: EdgeRule::Geometric,
                                 },
                                 draw_at: 0,
                                 recorded_draws: 0, recorded_at: 0, speculative_draws: 0, lifted: None,
@@ -986,6 +1007,7 @@ impl Mounter<FixtureHost> for FixtureMounter {
                 prepared: 0,
                 drawn: 0,
                 kind,
+                up: edge_page_up(arg),
             },
             draw_at: 0,
             recorded_draws: 0, recorded_at: 0, speculative_draws: 0, lifted: None,

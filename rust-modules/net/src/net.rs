@@ -27,8 +27,9 @@
 //! television with no battery clock) is repeated once, recognising the server by the public key
 //! remembered for that exact host and port, with the name check still on. **Roots mode**: a
 //! missing-issuer verify result (a 2020 firmware's store lacks Let's Encrypt's 2025 roots) on a
-//! `*.plex.direct` host is repeated once against the bundled public roots (`pkg/le-roots.pem`),
-//! with chain, dates and name all still checked.
+//! `*.plex.direct` host, or on a Watch Together relay host the app admitted
+//! ([`keypin::admit_relay_host`]), is repeated once against the bundled public roots
+//! (`pkg/le-roots.pem`), with chain, dates and name all still checked.
 //! `NOSIGNAL` is set because we call from threads. Response bodies never carry into a log here.
 #![allow(non_camel_case_types)]
 use std::cell::UnsafeCell;
@@ -3247,6 +3248,58 @@ pub mod keypin {
         }
     }
 
+    /// At most this many relay hosts are admitted to the bundled roots at once ([`admit_relay_host`]:
+    /// the least recently admitted leaves first).
+    pub const MAX_RELAY_HOSTS: usize = 16;
+
+    fn relay_hosts() -> MutexGuard<'static, Vec<String>> {
+        static HOSTS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+        HOSTS.get_or_init(Mutex::default).lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The one host-name normal form both lists use: lowercase, no trailing root dot, and only
+    /// DNS-name characters with at least one dot (`None` otherwise: never admitted).
+    fn clean_host(host: &str) -> Option<String> {
+        let host = host.strip_suffix('.').unwrap_or(host);
+        let ok = host.contains('.')
+            && !host.starts_with('.')
+            && host.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.'));
+        ok.then(|| host.to_ascii_lowercase())
+    }
+
+    /// **A Watch Together relay host, admitted to roots mode.** The together runner calls this for
+    /// the exact host of each relay it is about to dial (its `/rooms`, `/friends` and socket), and
+    /// for no other: a relay is a public HTTPS service whose certificate may chain to a root a 2020
+    /// firmware lacks, the same failure `*.plex.direct` has. Admission changes nothing else: the
+    /// bundle is still offered only after a strict failure for a missing issuer, and the chain,
+    /// dates and name are all still checked. Bounded ([`MAX_RELAY_HOSTS`]) by recency: the runner
+    /// admits a host right before each dial, so admitting one makes it the newest, and past the
+    /// bound the least recently admitted host leaves. Many candidate relays probed in turn can
+    /// therefore never shut out the one being dialled now. A name that is not a clean DNS name is
+    /// not admitted.
+    pub fn admit_relay_host(host: &str) {
+        let Some(host) = clean_host(host) else { return };
+        let mut hosts = relay_hosts();
+        hosts.retain(|h| *h != host);
+        hosts.push(host);
+        if hosts.len() > MAX_RELAY_HOSTS {
+            hosts.remove(0);
+        }
+    }
+
+    /// May the bundled roots be offered to `host`: a `*.plex.direct` name or an admitted relay.
+    fn roots_host(host: &str) -> bool {
+        is_plex_direct(host) || clean_host(host).is_some_and(|h| relay_hosts().contains(&h))
+    }
+
+    /// The bundle's path for an admitted relay `host` (the together socket's retry with
+    /// `Tls::CaBundle`, which does not pass through [`after_failure`]), `None` for any other host
+    /// or when there is no usable bundle.
+    pub fn relay_roots_bundle(host: &str) -> Option<String> {
+        let admitted = clean_host(host).is_some_and(|h| relay_hosts().contains(&h));
+        if admitted { roots_bundle() } else { None }
+    }
+
     /// Is `host` a `*.plex.direct` name? A case-insensitive SUFFIX match on the host part with at
     /// least one label in front of it, and nothing in `host` that is not a DNS-name character:
     /// `plex.direct.evil.example`, `notplex.direct` and `plex.direct` itself are not, and neither
@@ -3668,10 +3721,10 @@ pub mod keypin {
             };
         }
         match ran {
-            Mode::Strict if !roots_tried && is_untrusted_issuer(rc, verify) && is_plex_direct(host_of_key(key)) => {
+            Mode::Strict if !roots_tried && is_untrusted_issuer(rc, verify) && roots_host(host_of_key(key)) => {
                 let path = roots_bundle()?;
                 plx_base::eventlog::log(&format!(
-                    "net: a plex.direct certificate failed the device trust store (X509 verify result {}) — retrying against the bundled public roots",
+                    "net: a plex.direct or relay certificate failed the device trust store (X509 verify result {}) — retrying against the bundled public roots",
                     verify.unwrap_or_default()
                 ));
                 Some(Mode::Roots { path, verify })

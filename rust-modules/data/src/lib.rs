@@ -23,6 +23,7 @@ pub mod sortfacts; // one name and one direction wording per sort fact, for the 
 pub mod community; // the Friends page: the friends' activity feed cut into posts and days, its filter row and relative times
 pub mod upcoming; // the Detail strip's upcoming episodes: announced by the metadata provider, not on the server yet
 pub mod subsearch; // the player's subtitle search & download: agent search, install, install poll
+pub mod together; // Watch Together: invitation codes, session keys, the Lamport sync rule and the session machine (pure)
 pub mod search; // Search data layer: /hubs/search fanned out across every source, merged into typed shelves
 mod instruments;
 pub mod stores; // stores as machines (restructure phase 4): one command vocabulary + one step per data store

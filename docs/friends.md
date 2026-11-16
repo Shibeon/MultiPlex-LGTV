@@ -33,10 +33,21 @@ account chip. A managed Plex Home profile has no Friends pill, no page and no re
 OK on a card opens the user's own copy when one of their servers holds the title (the Watchlist's
 guid lookup), and otherwise its catalog page.
 
+- **Watch Together** (`rust-modules/screens/src/friends/page.rs`, "Watch Together"): *Your
+  friends' sessions*, one card per session a Plex friend made visible to the viewer, and *Join
+  with a code* in the head row. These come from the together store (`plx_data::stores::together`),
+  not from community.plex.tv: its listing asks the relays found on the servers' published public
+  names (`/rooms`, then `POST /friends` with that server's own token or the owner's delegation
+  token, never the plex.tv account token) when the page arrives, and every 45 s while the page is
+  up or the viewer's *Friends' session alerts* setting is on (`app/together_ui.rs`, `POLL_MS`), so
+  unlike the community reads below it also runs while the page is not on screen. `PRIVACY.md`, "A
+  Watch Together relay", is what a user is told about it.
+
 ## Reads and the one write
 
 The store is `rust-modules/data/src/stores/community.rs` (Sans-IO: it emits jobs, the app's runner in
-`src/app/adapters/stores.rs` performs them). Nothing is read while the page is not on screen. The
+`src/app/adapters/stores.rs` performs them). Nothing is read from community.plex.tv while the page
+is not on screen. The
 feed and the privacy setting are read when the page shows, the feed again when it shows more than
 `FEED_STALE_MS` (2 min) after its last landing; the live sessions are read when the page shows and
 every `LIVE_EVERY_MS` (10 s) while it stays up. A failed read of the privacy setting is asked again

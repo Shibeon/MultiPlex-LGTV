@@ -246,6 +246,7 @@ pub(super) fn tab_labels(has_chapters: bool) -> [Option<&'static str>; HUD_TABS]
         Some(plx_platform::i18n::msg::widgets_player_info()),
         has_chapters.then(plx_platform::i18n::msg::widgets_player_chapters),
         Some(plx_platform::i18n::msg::player_hud_more()),
+        Some(plx_platform::i18n::msg::together_title()),
     ]
 }
 

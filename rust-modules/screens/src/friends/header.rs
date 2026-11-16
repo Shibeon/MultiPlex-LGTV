@@ -4,7 +4,8 @@
 //! on the left ("All" first, then the friends of the feed, the most active first; the chosen one
 //! wears the selected plate, as the Library's current library does) and, on the right, the account's
 //! "Share what I watch" toggle as a filled chip (the two-people mark while shared, the lock while
-//! private, the state as its value).
+//! private, the state as its value), with *Join with a code* (Watch Together's invitation field)
+//! before it.
 //!
 //! This file DECLARES the row; its layout, paint, motion and focus group are the ui's, the same ones
 //! the Library and My list wear.
@@ -52,7 +53,12 @@ impl Row {
     /// The row for the filter's `names` ("All" first is added here), the chosen one at `selected`
     /// (0: All), and the toggle's `share` face. Filter chip `i` is stop `chip_elem(i)`; the toggle
     /// is `share_elem`.
-    pub fn new(measure: &dyn Measure, names: &[String], selected: usize, share: ShareFace, chip_elem: impl Fn(usize) -> u32, share_elem: u32) -> Self {
+    ///
+    /// Before the toggle stands *Join with a code* (`join_elem`): `join` is what it reads after its
+    /// label while the keyboard is up for it (the code typed, else the prompt), `None` otherwise.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(measure: &dyn Measure, names: &[String], selected: usize, share: ShareFace, join: Option<&str>,
+        chip_elem: impl Fn(usize) -> u32, join_elem: u32, share_elem: u32) -> Self {
         use plx_platform::i18n::msg;
         let left: Vec<HeaderItem> = std::iter::once(msg::friends_filter_all().to_string())
             .chain(names.iter().cloned())
@@ -74,10 +80,19 @@ impl Row {
             chip: Some(Chip::Filled),
             ..Default::default()
         };
+        let code = HeaderItem {
+            label: msg::together_join_code().to_string(),
+            value: join.map(str::to_string),
+            glyph: Some(Icon::Plus),
+            focusable: true,
+            chip: Some(Chip::Filled),
+            ..Default::default()
+        };
         let chips = left.len();
-        let page = PageHeader::new(PageHeaderSpec { left, right: vec![toggle], ..Default::default() }, &[], measure);
+        let page = PageHeader::new(PageHeaderSpec { left, right: vec![code, toggle], ..Default::default() }, &[], measure);
         let layout = page.layout_at(plx_ui::consts::SCR_W, measure, ROW_Y);
         let mut stops: Vec<(u32, usize)> = (0..chips).map(|i| (chip_elem(i), i)).collect();
+        stops.push((join_elem, layout.items.len().saturating_sub(2)));
         stops.push((share_elem, layout.items.len().saturating_sub(1)));
         Self { row: HeaderRow::new(page, layout, stops), title: cstring(msg::friends_page_title()), lead: cstring(msg::friends_page_lead()) }
     }

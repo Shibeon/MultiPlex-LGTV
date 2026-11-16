@@ -19,6 +19,15 @@
 //! command to the community store on the ordered FIFO (`StoreCmd::Community`, `CommunityCmd::SetShare`),
 //! the ONLY way the privacy write is asked for, and Try again is `CommunityCmd::Retry`. The filter is
 //! the page's own: a press on a friend's plate narrows the shelves at once.
+//!
+//! **Watch Together.** Above the live shelf, *Your friends' sessions*: one card per Watch Together
+//! session a Plex friend made visible to the viewer ([`TogetherRoom`], which the app hands the page
+//! from the session it owns, `FriendsIn::Together`); OK on one asks to join it
+//! (`ContentReq::Together`, `TogetherCmd::JoinFriend`). The head row carries *Join with a code*:
+//! OK raises the television keyboard (the Search page's mechanism: a `Delivery::Keyboard`, then the
+//! OS's `InputKind::Text` edits into a [`TextBuffer`]), the chip shows what was typed, and OK on the
+//! keyboard asks `TogetherCmd::Join` with it. Whether the code is one, and every failure, is said
+//! by the session's own notices, not here.
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Arc;
@@ -28,7 +37,7 @@ use plx_data::stores::community::{FeedState, LiveRow, ShareState};
 use plx_data::watchlist::model::ServerMatch;
 use plx_machine::machine::{
     Canon, Cx, Delivery, Edge, Effects, Enter, EntryId, FocusKey, FocusTarget, Fx, GroupId, Handled, InputEvent,
-    InputKind, Key, LogicalState, Machine, Tick,
+    InputKind, InputOwner, Key, LogicalState, Machine, TextEdit, Tick,
 };
 use plx_machine::present::Provenance;
 use plx_plex::plex::community::ActivityKind;
@@ -43,12 +52,14 @@ use plx_ui::screen::{
 };
 use plx_ui::theme;
 use plx_ui::tile::{Resume, TileFacts, TileKind};
+use plx_ui::text_buffer::TextBuffer;
 use plx_ui::widgets::{Art, ProfileChipRead, StatusKind, StatusOverlay};
 use plx_ui::{Painter, Rect};
 
 use super::header::{self, ShareFace};
 use crate::registry::{AppFx, ContentArg, ContentLike, ContentReq, HomeTab};
 use plx_data::stores::community::CommunityCmd;
+use plx_data::stores::together::TogetherCmd;
 use plx_data::stores::{StoreCmd, StoreId};
 
 /// What the app hands the page: the store's state, captured when it moved.
@@ -71,6 +82,26 @@ impl Default for FriendsView {
     }
 }
 
+/// **A Watch Together session a Plex friend made visible to the viewer**, as the page shows it: the
+/// app builds it from the session's friend list and resolves the poster on a server the account
+/// reaches (the relay's own Plex server, by its machine identifier), else none.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TogetherRoom {
+    pub relay: String,
+    pub room: String,
+    /// The friend's Plex name.
+    pub name: String,
+    pub title: String,
+    /// An episode's address, when the host sent one.
+    pub sub: Option<String>,
+    /// How many are in the session.
+    pub count: u32,
+    pub playing: bool,
+    /// The poster: the server it is fetched through (0: none, the skeleton) and its path.
+    pub src: u16,
+    pub thumb: String,
+}
+
 /// What the app tells the page.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FriendsIn {
@@ -81,12 +112,16 @@ pub enum FriendsIn {
     /// The time the relative times and day headings are worded against: unix seconds (`None`: not
     /// known, under a replay) and the viewer's UTC offset in seconds. Sent at most once a minute.
     Clock { now: Option<i64>, offset: i64 },
+    /// The Watch Together sessions friends made visible, as they stand.
+    Together(Vec<TogetherRoom>),
 }
 
 /// The toggle's focus element.
 pub const SHARE_ELEM: u32 = 2;
 /// The unreachable read-out's Try again.
 pub const RETRY_ELEM: u32 = 3;
+/// The head's *Join with a code* chip.
+pub const JOIN_ELEM: u32 = 4;
 /// Filter chip `i` ("All" is 0).
 const CHIP_BASE: u32 = 0x100;
 /// The first card's element; cards count up from here and are never reused within a page.
@@ -95,8 +130,12 @@ const FIRST_CARD_ELEM: u32 = 0x1000;
 const HEADER_GROUP: GroupId = GroupId(1);
 const LIVE_GROUP: GroupId = GroupId(2);
 const STATUS_GROUP: GroupId = GroupId(3);
+const TOGETHER_GROUP: GroupId = GroupId(4);
 /// Day shelf `i`'s group (`DAY_GROUP + i`).
 const DAY_GROUP: u32 = 16;
+/// The read-out's block in the flow, under the shelves that stand with it (`Page::status_in_flow`):
+/// the verdict and a Try again pill centred in it, with the air of the shelf rhythm around them.
+const STATUS_FLOW_H: f32 = 320.0;
 
 /// The shelves' cards: Home's poster row.
 const SHELF_STYLE: RowStyle = RowStyle::HOME;
@@ -109,6 +148,7 @@ const AVATAR_INSET: f32 = 12.0;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Sec {
     Head,
+    Together,
     Live,
     Day(usize),
     Status,
@@ -119,6 +159,8 @@ enum Sec {
 enum Open {
     Detail(ServerId, String),
     Catalog([u8; 12]),
+    /// A friend's Watch Together session.
+    Join { relay: String, room: String },
     Nothing,
 }
 
@@ -253,6 +295,12 @@ struct Page {
     friends: Vec<(String, String)>,
     live: Vec<Card>,
     days: Vec<DayShelf>,
+    /// The friends' Watch Together sessions as the app last told them, and their cards.
+    rooms: Vec<TogetherRoom>,
+    together: Vec<Card>,
+    /// The invitation code being typed, and whether the keyboard is up for it.
+    code: TextBuffer,
+    editing: bool,
     keys: Keys,
     /// Element to (section, index).
     index: HashMap<u32, (Sec, usize)>,
@@ -285,6 +333,15 @@ impl Page {
         }
     }
 
+    /// What the *Join with a code* chip reads after its label: while the keyboard is up, the code typed
+    /// so far, else the field's prompt; `None` with the keyboard down.
+    fn join_face(&self) -> Option<String> {
+        self.editing.then(|| match self.code.text() {
+            "" => plx_platform::i18n::msg::together_code_prompt().to_string(),
+            text => text.to_string(),
+        })
+    }
+
     /// How many plates the filter row has: "All" and the friends it offers.
     fn chips(&self) -> usize {
         self.friends.len() + 1
@@ -301,10 +358,12 @@ impl Page {
         self.friends.hash(&mut h);
         self.selected_chip().hash(&mut h);
         self.share_face().hash(&mut h);
+        let join = self.join_face();
+        join.hash(&mut h);
         let names: Vec<String> = self.friends.iter().map(|(_, n)| n.clone()).collect();
         self.header_rows.get_replacing(
             h.finish(),
-            || header::Row::new(measure, &names, self.selected_chip(), self.share_face(), |i| CHIP_BASE + i as u32, SHARE_ELEM),
+            || header::Row::new(measure, &names, self.selected_chip(), self.share_face(), join.as_deref(), |i| CHIP_BASE + i as u32, JOIN_ELEM, SHARE_ELEM),
             |old, new| new.begin_swap(old, &mut self.header_swap.borrow_mut(), &mut self.header_capsules.borrow_mut()),
         )
     }
@@ -322,6 +381,29 @@ impl Page {
         self.friends = friends_of(feed).into_iter().take(header::FILTER_FRIENDS).map(|(f, _)| (f.id, f.name)).collect();
         if self.who.as_ref().is_some_and(|id| !self.friends.iter().any(|(f, _)| f == id)) {
             self.who = None;
+        }
+        self.together.clear();
+        for r in &self.rooms {
+            use plx_platform::i18n::msg;
+            let elem = self.keys.key(&format!("together:{}:{}", r.relay, r.room), &mut kept);
+            let mut caption = vec![msg::together_friends_watching(&r.name)];
+            caption.extend(r.sub.clone().filter(|s| !s.is_empty()));
+            caption.push(msg::together_friends_count(i64::from(r.count)));
+            self.index.insert(elem, (Sec::Together, self.together.len()));
+            self.together.push(Card {
+                elem,
+                kind: TileKind::Movie,
+                title: r.title.clone(),
+                caption: caption.join(" · "),
+                src: r.src,
+                thumb: r.thumb.clone(),
+                year: 0,
+                face: 0,
+                avatar: String::new(),
+                initial: initial(&r.name),
+                progress: None,
+                open: Open::Join { relay: r.relay.clone(), room: r.room.clone() },
+            });
         }
         self.live.clear();
         for (sid, s) in self.view.live.iter() {
@@ -408,6 +490,7 @@ impl Page {
 
     fn cards_of(&self, sec: Sec) -> Option<&[Card]> {
         match sec {
+            Sec::Together => Some(&self.together),
             Sec::Live => Some(&self.live),
             Sec::Day(d) => self.days.get(d).map(|d| d.cards.as_slice()),
             Sec::Head | Sec::Status => None,
@@ -417,6 +500,9 @@ impl Page {
     /// The shelves present, in document order.
     fn shelves(&self) -> Vec<Sec> {
         let mut out = Vec::new();
+        if !self.together.is_empty() {
+            out.push(Sec::Together);
+        }
         if !self.live.is_empty() {
             out.push(Sec::Live);
         }
@@ -427,6 +513,7 @@ impl Page {
     fn group_of(sec: Sec) -> GroupId {
         match sec {
             Sec::Head => HEADER_GROUP,
+            Sec::Together => TOGETHER_GROUP,
             Sec::Live => LIVE_GROUP,
             Sec::Day(d) => GroupId(DAY_GROUP + d as u32),
             Sec::Status => STATUS_GROUP,
@@ -442,6 +529,26 @@ impl Page {
             FeedState::Ready(feed) if feed.is_empty() => Some((msg::friends_empty_none_c(), StatusKind::Empty, false)),
             FeedState::Loading | FeedState::Ready(_) => None,
         }
+    }
+
+    /// **The read-out stands in the flow, under the shelves, when any shelf stands with it.** The
+    /// friends' sessions and the live shelf do not come from the feed, so they stand over an empty,
+    /// failed or account-less one; a page-filling read-out centred on the screen was drawn across
+    /// them. With a shelf standing it is a block of [`STATUS_FLOW_H`] after the last shelf, centred
+    /// in that block (not page-placed: the page is not the read-out's alone); with none it fills
+    /// the page as before.
+    fn status_in_flow(&self) -> bool {
+        self.readout().is_some() && !self.shelves().is_empty()
+    }
+
+    /// The read-out as drawn in its section's `frame` (in the flow), or filling the page.
+    fn overlay_at(&self, frame: Rect) -> Option<StatusOverlay<'static>> {
+        if !self.status_in_flow() {
+            return self.overlay();
+        }
+        let (caption, kind, retry) = self.readout()?;
+        let overlay = StatusOverlay::new(frame, caption, kind);
+        Some(if retry { overlay.action(plx_platform::i18n::msg::browse_action_retry_c()) } else { overlay })
     }
 
     fn overlay(&self) -> Option<StatusOverlay<'static>> {
@@ -529,6 +636,11 @@ impl<H: ContentLike> StackPage<H> for Page {
         for sec in self.shelves() {
             out.push(SectionSpec::new(sec, Kind::Shelf { style: &SHELF_STYLE, heading: SHELF_LABEL_H }, Page::group_of(sec)));
         }
+        if self.status_in_flow() {
+            let focusable = self.view.feed == FeedState::Failed;
+            out.push(SectionSpec::new(Sec::Status, Kind::Custom { height: STATUS_FLOW_H, focusable }, STATUS_GROUP).ranked(2));
+            return;
+        }
         let retry = self.overlay().filter(|_| self.view.feed == FeedState::Failed).and_then(|o| o.action_frame_measured(cx.measure));
         out.push(
             SectionSpec::new(Sec::Status, Kind::Overlay { rect: retry.unwrap_or(Rect::FULL), focusable: retry.is_some() }, STATUS_GROUP)
@@ -549,15 +661,15 @@ impl<H: ContentLike> StackPage<H> for Page {
         match k {
             Sec::Head => Some(SHARE_ELEM),
             Sec::Status => (self.view.feed == FeedState::Failed).then_some(RETRY_ELEM),
-            Sec::Live | Sec::Day(_) => None,
+            Sec::Together | Sec::Live | Sec::Day(_) => None,
         }
     }
 
-    /// The head is ONE row of stops, the filter's plates then the toggle (the shared
+    /// The head is ONE row of stops, the filter's plates, *Join with a code*, then the toggle (the shared
     /// [`HeaderFocus`](plx_ui::page_header::HeaderFocus): Left and Right walk it with no wrap).
     fn plain_len(&self, k: Sec) -> usize {
         match k {
-            Sec::Head => self.chips() + 1,
+            Sec::Head => self.chips() + 2,
             _ => StackPage::<H>::elem_of(self, k).is_some() as usize,
         }
     }
@@ -565,7 +677,8 @@ impl<H: ContentLike> StackPage<H> for Page {
     fn plain_elem(&self, k: Sec, n: usize) -> Option<u32> {
         match k {
             Sec::Head if n < self.chips() => Some(CHIP_BASE + n as u32),
-            Sec::Head => (n == self.chips()).then_some(SHARE_ELEM),
+            Sec::Head if n == self.chips() => Some(JOIN_ELEM),
+            Sec::Head => (n == self.chips() + 1).then_some(SHARE_ELEM),
             _ => if n == 0 { StackPage::<H>::elem_of(self, k) } else { None },
         }
     }
@@ -606,6 +719,10 @@ impl<H: ContentLike> StackPage<H> for Page {
     fn focus_rect(&self, cx: &Cx<'_, H>, k: Sec, section: Rect) -> Rect {
         match k {
             Sec::Head => self.header_row(cx.measure).plate(SHARE_ELEM).map_or(section, |p| Rect::new(p.x, p.y + section.y, p.w, p.h)),
+            // Try again, where the read-out in the flow draws it
+            Sec::Status if self.status_in_flow() => {
+                self.overlay_at(section).and_then(|o| o.action_frame_measured(cx.measure)).unwrap_or(section)
+            }
             _ => section,
         }
     }
@@ -634,6 +751,7 @@ impl<H: ContentLike> StackPage<H> for Page {
 
     fn draw_heading(&self, k: Sec, f: &mut DrawFrame<'_, '_, H>, r: Rect, lift: f32) {
         let heading = match k {
+            Sec::Together => plx_platform::i18n::msg::together_friends_heading_c(),
             Sec::Live => plx_platform::i18n::msg::friends_live_heading_c(),
             Sec::Day(d) => match self.days.get(d) {
                 Some(day) => day.heading.as_c_str(),
@@ -654,12 +772,12 @@ impl<H: ContentLike> StackPage<H> for Page {
                 row.draw(p, r.y, &self.header_capsules.borrow(), self.header_pop.scale_with(0, f.press.scale), &self.header_swap.borrow());
             }
             Sec::Status => {
-                if let Some(overlay) = self.overlay() {
+                if let Some(overlay) = self.overlay_at(r) {
                     let on = f.focus.current.is_some_and(|key| key.entry == self.entry && key.elem == RETRY_ELEM);
                     overlay.focused(on).draw_measured(&plx_ui::Env::inert(), p, f.measure);
                 }
             }
-            Sec::Live | Sec::Day(_) => {}
+            Sec::Together | Sec::Live | Sec::Day(_) => {}
         }
     }
 }
@@ -676,7 +794,7 @@ impl FriendsScreen {
     /// The heartbeat word, byte-identical to the route word.
     pub const WORD: &'static str = "friends";
 
-    pub const SHAPE: &'static str = "FriendsScreen{entry:u32,next_elem:u32,feed:{tag:u32,len:u64},who:str,share:u32,live:[u32],days:[[u32]],stack:Stack{scroll:{pos:f32,vel:f32},target:f32,sections:[Shelf{pop,scroll}]},header_capsules:TabStrip{sel:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32},foc:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32}},header_pop:{sp:[Spring{pos:f32,vel:f32};1],focused:Option<u32>},handoff:Handoff{tucked:bool,chrome:f32,capsule:f32}}";
+    pub const SHAPE: &'static str = "FriendsScreen{entry:u32,next_elem:u32,feed:{tag:u32,len:u64},who:str,share:u32,live:[u32],days:[[u32]],together:[u32],editing:bool,code:str,stack:Stack{scroll:{pos:f32,vel:f32},target:f32,sections:[Shelf{pop,scroll}]},header_capsules:TabStrip{sel:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32},foc:Capsule{x:Spring{pos:f32,vel:f32},w:Spring{pos:f32,vel:f32},a:Spring{pos:f32,vel:f32},at:u32}},header_pop:{sp:[Spring{pos:f32,vel:f32};1],focused:Option<u32>},handoff:Handoff{tucked:bool,chrome:f32,capsule:f32}}";
 
     /// The page as it mounts: nothing landed. The application feeds it ([`FriendsIn`]).
     pub fn loading(entry: EntryId) -> Self {
@@ -690,6 +808,10 @@ impl FriendsScreen {
             friends: Vec::new(),
             live: Vec::new(),
             days: Vec::new(),
+            rooms: Vec::new(),
+            together: Vec::new(),
+            code: TextBuffer::new(String::new(), 0),
+            editing: false,
             keys: Keys::new(),
             index: HashMap::new(),
             rev: 0,
@@ -724,8 +846,54 @@ impl FriendsScreen {
                 self.page.now = now;
                 self.page.offset = offset;
             }
+            FriendsIn::Together(rooms) => {
+                if self.page.rooms == rooms {
+                    return;
+                }
+                self.page.rooms = rooms;
+            }
         }
         self.page.rebuild();
+    }
+
+    /// **Where the read-out stands against the shelves standing with it**: one line per drawn band
+    /// of the read-out (its verdict, its Try again) that crosses a shelf's block, empty when it
+    /// clears them all (or there is no read-out).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_readout_overlaps<H: ContentLike>(&self, cx: &Cx<'_, H>) -> Vec<String> {
+        let Some(frame) = self.stack.section_rect(&self.page, cx, Sec::Status) else { return Vec::new() };
+        let Some(overlay) = self.page.overlay_at(frame) else { return Vec::new() };
+        let mut bands = vec![("verdict", overlay.verdict_band_measured(cx.measure))];
+        bands.extend(overlay.action_frame_measured(cx.measure).map(|r| ("action", r)));
+        let mut out = Vec::new();
+        for sec in self.page.shelves() {
+            let Some(block) = self.stack.section_rect(&self.page, cx, sec) else { continue };
+            for (what, band) in &bands {
+                let cut = band.intersect(block);
+                if cut.w > 0.0 && cut.h > 0.0 {
+                    out.push(format!("the read-out's {what} {band:?} crosses {sec:?} {block:?}"));
+                }
+            }
+        }
+        out
+    }
+
+    /// The friends' sessions' cards (title, caption).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_together(&self) -> Vec<(String, String)> {
+        self.page.together.iter().map(|c| (c.title.clone(), c.caption.clone())).collect()
+    }
+
+    /// The element of friends' session card `i`, if any.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_together_card(&self, i: usize) -> Option<u32> {
+        self.page.together.get(i).map(|c| c.elem)
+    }
+
+    /// Whether the keyboard is up for an invitation code, and what was typed.
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_code(&self) -> (bool, &str) {
+        (self.page.editing, self.page.code.text())
     }
 
     /// The friend the filter shows (`None`: All).
@@ -805,6 +973,8 @@ impl FriendsScreen {
             };
         }
         match elem {
+            // Join with a code: the keyboard comes up on what was typed before
+            JOIN_ELEM => self.keyboard(true, fx),
             RETRY_ELEM => self.route(AppFx::Store(StoreId::Community, StoreCmd::Community(CommunityCmd::Retry)), fx),
             SHARE_ELEM => {
                 // The explicit press: the opposite of what the account says; while the setting could
@@ -834,11 +1004,90 @@ impl FriendsScreen {
                     fx.push(Fx::App(AppFx::Content(ContentReq::Push(ContentArg::Detail { sid, rk }))));
                 }
                 Some(Open::Catalog(hex)) => self.route(AppFx::Content(ContentReq::Push(ContentArg::Catalog { hex })), fx),
+                Some(Open::Join { relay, room }) => {
+                    self.route(AppFx::Content(ContentReq::Together(TogetherCmd::JoinFriend { relay, room })), fx);
+                }
                 Some(Open::Nothing) => {}
                 None => return Handled::No,
             },
         }
         Handled::Yes
+    }
+
+    /// Raise or put down the television keyboard for the invitation code (the Search page's
+    /// mechanism). Raising it keeps what was typed, the caret at its end.
+    fn keyboard<H: ContentLike>(&mut self, up: bool, fx: &mut Effects<'_, H>) {
+        if self.page.editing == up {
+            return;
+        }
+        self.page.editing = up;
+        if up {
+            let text = self.page.code.text().to_owned();
+            let end = text.len();
+            self.page.code = TextBuffer::new(text, end);
+        }
+        fx.push(Fx::Deliver(fx.from(), Delivery::Keyboard { up }));
+        self.page.touch();
+        fx.invalidate(Provenance::Input);
+    }
+
+    /// OK on the keyboard: a typed code leaves as the session's join, and the field empties; an
+    /// empty one only puts the keyboard down.
+    fn submit<H: ContentLike>(&mut self, fx: &mut Effects<'_, H>) {
+        let code = self.page.code.text().trim().to_owned();
+        self.keyboard(false, fx);
+        if !code.is_empty() {
+            self.page.code.clear();
+            self.page.touch();
+            self.route(AppFx::Content(ContentReq::Together(TogetherCmd::Join { code })), fx);
+        }
+    }
+
+    /// Input while the code field has the keyboard (or the OS reports it): the OS's text edits, the
+    /// remote's Left/Right/Backspace, OK to submit and Back to put the keyboard down. Every other key
+    /// is the field's, not focus travel.
+    fn typing<H: ContentLike>(&mut self, kind: &InputKind<u32>, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) -> Handled {
+        match kind {
+            // The television took its keyboard down by itself: the field closes with what was typed kept.
+            InputKind::SystemKeyboard(up) => {
+                if !*up && self.page.editing {
+                    self.page.editing = false;
+                    self.page.touch();
+                    fx.invalidate(Provenance::Input);
+                }
+                Handled::Yes
+            }
+            InputKind::Text(edit) if self.page.editing || matches!(cx.owner, InputOwner::System(_)) => {
+                self.page.code.edit(edit);
+                self.page.touch();
+                fx.invalidate(Provenance::Input);
+                Handled::Yes
+            }
+            InputKind::Key { key, sym, edge, .. } if self.page.editing => {
+                if *edge == Edge::Up {
+                    return Handled::Yes;
+                }
+                let edit = match (*key, *sym) {
+                    (Key::Left, _) => Some(TextEdit::Left),
+                    (Key::Right, _) => Some(TextEdit::Right),
+                    (_, plx_ui::consts::SDLK_BACKSPACE) => Some(TextEdit::Backspace),
+                    (_, plx_ui::consts::SDLK_CLEAR) => Some(TextEdit::Clear),
+                    _ => None,
+                };
+                match (edit, *key) {
+                    (Some(edit), _) => {
+                        self.page.code.edit(&edit);
+                        self.page.touch();
+                        fx.invalidate(Provenance::Input);
+                    }
+                    (None, Key::Back) => self.keyboard(false, fx),
+                    (None, Key::Ok) => self.submit(fx),
+                    _ => {}
+                }
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
     }
 
     /// A press on the shared strip: the other pills and the chip are the shared page requests; the
@@ -943,6 +1192,11 @@ impl LogicalState for FriendsScreen {
                 c.u32(card.elem);
             }
         }
+        c.seq(page.together.len());
+        for card in &page.together {
+            c.u32(card.elem);
+        }
+        c.bool(page.editing).str(page.code.text());
         self.stack.write(c);
         page.header_capsules.borrow().write_motion(c);
         page.header_pop.write_motion(c);
@@ -957,9 +1211,10 @@ impl LogicalState for FriendsScreen {
             FeedState::Ready(feed) => format!("ready:{}", feed.len()),
         };
         out.push_str(&format!(
-            "friends feed={feed} days={} live={} who={} share={:?}",
+            "friends feed={feed} days={} live={} together={} who={} share={:?}",
             self.page.days.len(),
             self.page.live.len(),
+            self.page.together.len(),
             self.page.who.as_deref().unwrap_or("all"),
             self.page.share_face(),
         ));
@@ -970,6 +1225,17 @@ impl<H: ContentLike> Machine<H> for FriendsScreen {
     type Ev = ScreenEvent<H>;
 
     fn step(&mut self, ev: &Self::Ev, cx: &Cx<'_, H>, fx: &mut Effects<'_, H>) -> Handled {
+        // the code field has the keyboard: its keys are the field's, before the stack sees them
+        if let ScreenEvent::Input(InputEvent { kind, .. }) = ev {
+            if self.page.editing || matches!(kind, InputKind::SystemKeyboard(_) | InputKind::Text(_)) {
+                if let Handled::Yes = self.typing(kind, cx, fx) {
+                    return Handled::Yes;
+                }
+            }
+        }
+        if matches!(ev, ScreenEvent::WillLeave(_) | ScreenEvent::Unmount | ScreenEvent::Cover | ScreenEvent::Suspend) {
+            self.keyboard(false, fx);
+        }
         let card = match self.stack.on(&self.page, ev, cx, fx) {
             Some(StackEvent::Card(_, card)) => Some(card),
             _ => None,

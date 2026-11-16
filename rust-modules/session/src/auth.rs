@@ -2986,6 +2986,7 @@ fn source_from_reach(
         port: c.port,
         token: plan.token.clone(),
         tier: Some(c.location),
+        published: session::published_connections(res),
         extensions: Default::default(),
     })
 }
@@ -3293,6 +3294,8 @@ fn refreshed_sources(
         // profile switch takes, and the stored evidence belongs to whichever profile wrote it.
         cached.home = r.home;
         cached.owner_id = r.owner_id;
+        // What plex.tv publishes now, whichever address answered last time.
+        cached.published = session::published_connections(r);
         if cached.dialable() {
             out.push(cached);
         }
@@ -3335,6 +3338,7 @@ fn same_sources(a: &[SourceRef], b: &[SourceRef]) -> bool {
                 && a.token == b.token
                 && a.origin_url == b.origin_url
                 && a.tier == b.tier
+                && a.published == b.published
         })
 }
 
@@ -3426,12 +3430,16 @@ fn apply_refreshed_endpoint(
         owned: source.owned,
         home: source.home,
         owner_id: source.owner_id,
+        // Connection facts, like the address: plex.tv's list as the recovery read it (kept when
+        // the recovery carried none).
+        published: if fresh.published.is_empty() { source.published.clone() } else { fresh.published.clone() },
         extensions: source.extensions.clone(),
     };
     let changed = source.address != next.address
         || source.port != next.port
         || source.origin_url != next.origin_url
-        || source.tier != next.tier;
+        || source.tier != next.tier
+        || source.published != next.published;
     *source = next.clone();
     if session.server.machine_id == machine_id {
         reconcile_primary(&mut session.server, std::slice::from_ref(&next));

@@ -12,13 +12,15 @@
 //! spinner is the HUD's existing busy mark: [`super::state`] answers `Buffering` while a hold is
 //! live, and the transport slot already draws its `Working` glyph for that.
 //!
-//! **A viewer's transport press wins.** The viewer owns the transport; the hold is a loan. Any
-//! press that reaches `player::transport::set_transport_paused` calls [`note_user_transport`], which
-//! keeps the spinner (the claim is still flying) but forgets the restore, so a Pause the viewer
-//! pressed during the flight stays paused after the landing and a Play they pressed keeps playing.
+//! **A transport press wins.** The viewer owns the transport; the hold is a loan. Any press that
+//! reaches `player::transport::set_transport_paused` calls [`note_user_transport`], which keeps the
+//! spinner (the claim is still flying) but forgets the restore, so a Pause the viewer pressed during
+//! the flight stays paused after the landing and a Play they pressed keeps playing. A Watch Together
+//! session's Play and Pause reach the same door (`player::together::perform`) and win the same way:
+//! a remote Pause during the flight must not be undone by the landing's give-back.
 //! The hold's pause uses [`super::pause`]; its give-back uses the attempt's backend control (falling
 //! back to [`super::resume`] when there is no attempt). Neither goes through `set_transport_paused`,
-//! so neither counts as a viewer press.
+//! so neither counts as a transport press.
 
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::Mutex;
