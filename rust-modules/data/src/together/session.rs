@@ -7,10 +7,14 @@
 //! socket). Time is the `dt_us` of [`TogetherEvent::Tick`].
 //!
 //! **Scope.** Invitation-code sessions (host a new one, join by code, the older v1/v2 codes), the
-//! presence and Lamport rule of `sync`, and host take-over and step-down. A session is never
-//! announced to the relay (it is private, `vis: false` in the host's ticks): the friends listing,
-//! `announce` and the grant hand-over are being redesigned and are not wired (`friends` holds the
-//! pure pieces).
+//! presence and Lamport rule of `sync`, host take-over and step-down, and sessions visible to the
+//! host's Plex friends (the web's friends-only protocol, `friends`): the host's announce to its
+//! relay (`/rooms` checked for `friends`, `friendsOnly` and the host's server BEFORE any token
+//! leaves, then `POST /friends` with the server's own token, then the announce with the host's
+//! friend allow-list, re-read from plex.tv at most every 2 minutes and released when plex.tv does not
+//! answer), the key hand-over to a friend the relay admitted, the listing of friends' sessions
+//! (`RefreshFriends`) and entering one (`JoinFriend`). No token is held here: `AskFriends` names the
+//! relay and the server, and the runner resolves the server's credential itself.
 //!
 //! | event | in phase | effects, next phase |
 //! |---|---|---|
@@ -22,7 +26,12 @@
 //! | `Tick` | any | every 3 s a tick; peers silent for 12 s leave; the first participant takes the hand when the host is gone; reconnect timer |
 //! | `Attach`, `Player`, `Detach`, `ShareTitle` | `Live` | `sync.poll`, an `intent` for a gesture, a tick |
 //! | `Sealed` | the send that asked | `SendBinary` (and `CloseSocket` after the farewell `bye`) |
-//! | `Leave` | `Live` | `bye`, then `CloseSocket`; `Idle` |
+//! | `Leave` | `Live` | `release` (an announced host), `bye`, then `CloseSocket`; `Idle` |
+//! | `SetVisible` | `Live` | host: announce or `unlist`; a tick |
+//! | `SocketText` | `Live`, its `conn` | `announced` / an error: listed or not; `key-request`: `SealGrant` |
+//! | `FriendsAnswered`, `FriendIdsRead`, `GrantSealed` | the request that asked (by `tag`) | the announce, the listing, `SendText` |
+//! | `RefreshFriends` | any | `HttpRooms` per candidate relay of each server, `AskFriends` per relay found; `Notice::FriendSessions` |
+//! | `JoinFriend` | any (leaves the current one) | `RequestKey`, then `Derive`; `Live` when the room is the one listed |
 //!
 //! A pair not listed (a stale `tag` or `conn`, a player event outside a session) is
 //! [`Handled::No`] and changes nothing. Volume, subtitles, audio and quality have no field in any
@@ -33,10 +42,14 @@ use std::fmt;
 
 use plx_machine::machine::Handled;
 
+use super::friends::{
+    announce_text, control_text, friends_for_announce, key_grant_text, Control, FriendCard, FriendsAnswer, FriendsSent, GrantPayload, GrantState,
+    RelayBackoff, RelaySearch, FRIENDS_TTL_US, UNLISTED_ERRORS,
+};
 use super::invite::{format_invite, invite_text, parse_invite, relay_url, secret_from_bytes, Invite};
 use super::keys::{derive_legacy, SessionKeys, INVITE_ITERATIONS};
-use super::relay::{dedupe, relay_candidates, rooms_url, KnownRelays, RoomSearch, ServerInfo, MAX_ROOM_LOOKUP};
-use super::sync::{host_yields, tick_clock, PlayerCmd, PlayerObs, TogetherSync};
+use super::relay::{dedupe, relay_candidates, relay_discoverable, rooms_url, KnownRelays, RoomSearch, RoomsAnswer, ServerInfo, MAX_ROOM_LOOKUP};
+use super::sync::{host_yields, tick_clock, PlayerCmd, PlayerObs, Stamp, TogetherSync};
 use super::wire::{read_message, Bye, Incoming, Intent, Message, SharedItem, SyncAction, Tick};
 
 /// A presence every 3 s.
@@ -50,6 +63,18 @@ pub const RECONNECT_BASE_US: u64 = 1_000_000;
 pub const RECONNECT_CEILING_US: u64 = 15_000_000;
 /// The web's per-relay `/rooms` request deadline.
 pub const ROOMS_TIMEOUT_MS: u32 = 4_000;
+/// An announced card is re-sent on a change at most every 5 s, and its position every 5 presence
+/// ticks (15 s).
+pub const CARD_EVERY_US: u64 = 5_000_000;
+pub const CARD_REFRESH_TICKS: u32 = 5;
+/// A relay that does not list the session is asked again after 1 min, doubled up to 30 min.
+pub const LIST_RETRY_BASE_US: u64 = 60_000_000;
+pub const LIST_RETRY_CEILING_US: u64 = 1_800_000_000;
+/// A host hands the key to at most this many requesters per window, once each.
+pub const GRANTS_PER_WINDOW: usize = 5;
+pub const GRANT_WINDOW_US: u64 = 10_000_000;
+/// A listed session's ticket is taken for expired this long before the relay's `ttl` says.
+pub const TICKET_MARGIN_US: u64 = 15_000_000;
 
 /// Who this device is in sessions: a random id for this run (8 base64url signs in the web), and
 /// the account's display name and avatar.
@@ -73,8 +98,69 @@ pub enum JoinError {
     Code,
     /// No relay to ask: none configured, none given, none findable.
     Relay,
-    /// No relay knows the session.
+    /// No relay knows the session (or a friend's session is no longer listed).
     NotFound,
+    /// A friend's session: its host is not connected to hand the key over.
+    NoHost,
+    /// A friend's session: the key hand-over failed or did not open the listed room.
+    Failed,
+}
+
+/// Where the announce of a visible session stands (the web's `listed`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Listed {
+    Pending,
+    Yes,
+    No,
+}
+
+/// A friend's visible session, as a relay listed it (the web's `FriendSession`). `ticket` lets this
+/// account in once; it is a secret and is not printed.
+#[derive(Clone, PartialEq)]
+pub struct FriendSession {
+    pub relay: String,
+    /// The relay's Plex server (the one access was checked against).
+    pub server: String,
+    pub room: String,
+    pub card: FriendCard,
+    pub count: u32,
+    /// When the host last announced, on this machine's clock (µs).
+    pub at_us: u64,
+    ticket: String,
+    ticket_until_us: u64,
+}
+
+impl fmt::Debug for FriendSession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FriendSession")
+            .field("relay", &self.relay)
+            .field("server", &self.server)
+            .field("room", &self.room)
+            .field("card", &self.card)
+            .field("count", &self.count)
+            .field("at_us", &self.at_us)
+            .finish_non_exhaustive()
+    }
+}
+
+impl FriendSession {
+    /// The title of a friend's session, to find it at home (the web's `friendItem`).
+    pub fn item(&self) -> SharedItem {
+        SharedItem {
+            guid: self.card.guid.clone().unwrap_or_default(),
+            server: Some(self.server.clone()),
+            key: self.card.key.clone(),
+            kind: self.card.kind.clone().unwrap_or_else(|| "movie".into()),
+            title: self.card.title.clone(),
+            sub: self.card.sub.clone(),
+        }
+    }
+
+    /// Its position at `now_us` (the web's `friendTime`).
+    pub fn time_at(&self, now_us: u64) -> f64 {
+        let ran = if self.card.playing { now_us.saturating_sub(self.at_us) as f64 / 1e6 } else { 0.0 };
+        self.card.time + ran
+    }
 }
 
 /// What the UI is told.
@@ -93,6 +179,12 @@ pub enum Notice {
     HostFailed,
     JoinFailed(JoinError),
     Left,
+    /// The session is visible to the host's friends, or not (the host's choice, read from its ticks).
+    Visible(bool),
+    /// Where the announce stands (`None`: not announcing).
+    Listed(Option<Listed>),
+    /// The friends' sessions found by the last `RefreshFriends`.
+    FriendSessions(Vec<FriendSession>),
 }
 
 pub enum TogetherEvent {
@@ -100,7 +192,9 @@ pub enum TogetherEvent {
     Tick { dt_us: u64 },
     /// Open a new session as host. `relay`: the relay setting as typed; `server`: the current Plex
     /// server's identifier (salts the secret); `random`: at least 16 bytes the runner drew.
-    Host { me: Me, relay: String, server: Option<String>, item: Option<SharedItem>, random: Vec<u8> },
+    /// `visible`: listed to the host's Plex friends; `servers`: what this account sees (the host's
+    /// server's public names say whether friends find the relay).
+    Host { me: Me, relay: String, server: Option<String>, item: Option<SharedItem>, random: Vec<u8>, visible: bool, servers: Vec<ServerInfo> },
     /// Join by a pasted code. `relay`: the relay setting; `server` and `servers`: what this account
     /// sees (the secret is salted by the host's server, and the relay is found on servers' names).
     Join { me: Me, code: String, relay: String, server: Option<String>, servers: Vec<ServerInfo> },
@@ -120,6 +214,23 @@ pub enum TogetherEvent {
     /// Host: the session moves to this title.
     ShareTitle(SharedItem),
     Leave,
+    /// Host: list the session to its Plex friends, or not.
+    SetVisible(bool),
+    /// A text (control) message of the relay.
+    SocketText { conn: u32, text: String },
+    /// The relay's `/friends` answer, or `None` (no credential, a failed request, not a relay).
+    FriendsAnswered { tag: u32, answer: Option<FriendsAnswer> },
+    /// This account's friend allow-list (`friend_allow_list` of plex.tv `/api/users/`), or `None`
+    /// when plex.tv did not answer.
+    FriendIdsRead { tag: u32, ids: Option<Vec<String>> },
+    /// A grant sealed for a requester: `(host public key, box)`, or `None` (an invalid key).
+    GrantSealed { tag: u32, sealed: Option<(String, String)> },
+    /// Ask the relays of `servers` for the sessions visible to this account.
+    RefreshFriends { servers: Vec<ServerInfo> },
+    /// Enter the friend's session `room` listed by `relay`.
+    JoinFriend { me: Me, relay: String, room: String },
+    /// The host's key hand-over for a `RequestKey`.
+    FriendKey { tag: u32, answer: Result<GrantPayload, JoinError> },
 }
 
 #[derive(Clone, PartialEq)]
@@ -137,6 +248,21 @@ pub enum TogetherFx {
     Open { tag: u32, key: [u8; 32], bytes: Vec<u8> },
     Player(PlayerCmd),
     Notice(Notice),
+    /// A control message on the session's socket.
+    SendText { conn: u32, text: String },
+    /// `POST {relay}/friends` with the token proper to `server` (its own access token, or a
+    /// delegation token it hands its owner; never the plex.tv account token), answered
+    /// `FriendsAnswered`. The relay was found on that server's public names and said it is that
+    /// server's (`/rooms`), which was checked before this effect.
+    AskFriends { tag: u32, relay: String, server: String },
+    /// Read this account's Plex friends (plex.tv `/api/users/`, with its own account token, here),
+    /// answered `FriendIdsRead`.
+    ReadFriendIds { tag: u32 },
+    /// Draw an ephemeral P-256 key and an IV and `friends::seal_grant`, answered `GrantSealed`.
+    SealGrant { tag: u32, request_pub: String, payload: GrantPayload },
+    /// Enter a listed session: a socket to `{relay}/r/{room}`, `key-request` with the ticket and a
+    /// fresh public key, wait for `key-grant` (10 s) and open it; answered `FriendKey`.
+    RequestKey { tag: u32, relay: String, room: String, ticket: String },
 }
 
 /// A participant as last heard.
@@ -165,6 +291,10 @@ pub struct View {
     pub peers: Vec<Peer>,
     /// The session's position now (for starting playback at the right place when joining).
     pub position: Option<f64>,
+    /// Visible to the host's friends.
+    pub visible: bool,
+    /// Host of a visible session: where its announce stands.
+    pub listed: Option<Listed>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -187,6 +317,34 @@ struct Live {
     reconnect_in_us: Option<u64>,
     since_tick_us: u64,
     last_want_reply_us: Option<u64>,
+    /// Visible to the host's friends (the host's choice; a participant reads it from the host).
+    visible: bool,
+    /// The invitation's secret and the server that salts it: what a friend is handed.
+    grant: Option<(String, String)>,
+    /// The servers this account saw when the session opened.
+    servers: Vec<ServerInfo>,
+    announce: Announce,
+    listed: Option<Listed>,
+    /// The last card sent: its signature and when.
+    card_sent: (String, u64),
+    /// Not listed: asked again at `.0`, after a delay of `.1`.
+    list_retry: (u64, u64),
+    friends_sent: FriendsSent,
+    granted: Vec<String>,
+    grant_times: Vec<u64>,
+    presence_ticks: u32,
+}
+
+/// The announce of a visible session since the socket last opened (the web's `announcing`).
+#[derive(Clone, Debug, PartialEq)]
+enum Announce {
+    Off,
+    /// Proving access: the relay's `/rooms`, then `/friends`, then the friend list.
+    Rooms(u32),
+    Friends(u32),
+    Ids(u32, FriendsAnswer),
+    /// Announced; `Some(tag)` while a refresh waits for the friend list.
+    On(Option<u32>),
 }
 
 #[derive(Clone, PartialEq)]
@@ -196,12 +354,63 @@ struct HostPlan {
     secret: String,
     item: Option<SharedItem>,
     tag: u32,
+    server: String,
+    visible: bool,
+    servers: Vec<ServerInfo>,
+}
+
+/// Entering a friend's session.
+#[derive(Clone, Debug, PartialEq)]
+struct FriendPlan {
+    me: Me,
+    relay: String,
+    room: String,
+    stage: FriendStage,
+    /// A listing was already made again for this join (an expired ticket).
+    refreshed: bool,
+}
+
+#[derive(Clone, PartialEq)]
+enum FriendStage {
+    /// The ticket had expired: a listing is under way, and the session is looked up again after it.
+    Refresh,
+    Key { tag: u32, session: FriendSession },
+    Derive { tag: u32, session: FriendSession, payload: GrantPayload },
+}
+
+impl fmt::Debug for FriendStage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FriendStage::Refresh => f.write_str("Refresh"),
+            FriendStage::Key { tag, session } => f.debug_struct("Key").field("tag", tag).field("session", session).finish(),
+            FriendStage::Derive { tag, session, .. } => f.debug_struct("Derive").field("tag", tag).field("session", session).finish_non_exhaustive(),
+        }
+    }
+}
+
+/// One server of a friends' listing.
+#[derive(Clone, Debug, PartialEq)]
+struct ListServer {
+    id: String,
+    search: RelaySearch,
+    /// The `/rooms` request tag of each relay of `search`.
+    asked: Vec<u32>,
+    stage: ListStage,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum ListStage {
+    Search,
+    Asking(u32, String),
+    Done(Vec<FriendSession>),
 }
 
 #[derive(Clone, PartialEq)]
 struct JoinPlan {
     me: Me,
     code: String,
+    secret: String,
+    servers: Vec<ServerInfo>,
     ids: Vec<String>,
     relays: Vec<String>,
     /// `(tag, keys)` per server id, in `ids` order.
@@ -219,6 +428,7 @@ enum Phase {
     Idle,
     Deriving(HostPlan),
     Joining(JoinPlan),
+    FriendJoin(FriendPlan),
     Live(Live),
 }
 
@@ -248,6 +458,9 @@ impl fmt::Debug for Notice {
             Notice::HostFailed => f.write_str("HostFailed"),
             Notice::JoinFailed(e) => f.debug_tuple("JoinFailed").field(e).finish(),
             Notice::Left => f.write_str("Left"),
+            Notice::Visible(v) => f.debug_tuple("Visible").field(v).finish(),
+            Notice::Listed(l) => f.debug_tuple("Listed").field(l).finish(),
+            Notice::FriendSessions(list) => f.debug_tuple("FriendSessions").field(list).finish(),
         }
     }
 }
@@ -256,13 +469,15 @@ impl fmt::Debug for TogetherEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TogetherEvent::Tick { dt_us } => f.debug_struct("Tick").field("dt_us", dt_us).finish(),
-            TogetherEvent::Host { me, relay, server, item, random } => f
+            TogetherEvent::Host { me, relay, server, item, random, visible, servers } => f
                 .debug_struct("Host")
                 .field("me", me)
                 .field("relay", relay)
                 .field("server", server)
                 .field("item", item)
                 .field("random", &format_args!("<{} bytes>", random.len()))
+                .field("visible", visible)
+                .field("servers", servers)
                 .finish(),
             TogetherEvent::Join { me, relay, server, servers, .. } => {
                 f.debug_struct("Join").field("me", me).field("code", &HIDDEN).field("relay", relay).field("server", server).field("servers", servers).finish()
@@ -279,6 +494,16 @@ impl fmt::Debug for TogetherEvent {
             TogetherEvent::Detach => f.write_str("Detach"),
             TogetherEvent::ShareTitle(i) => f.debug_tuple("ShareTitle").field(i).finish(),
             TogetherEvent::Leave => f.write_str("Leave"),
+            TogetherEvent::SetVisible(v) => f.debug_tuple("SetVisible").field(v).finish(),
+            TogetherEvent::SocketText { conn, text } => f.debug_struct("SocketText").field("conn", conn).field("bytes", &text.len()).finish(),
+            TogetherEvent::FriendsAnswered { tag, answer } => f.debug_struct("FriendsAnswered").field("tag", tag).field("answer", answer).finish(),
+            TogetherEvent::FriendIdsRead { tag, ids } => f.debug_struct("FriendIdsRead").field("tag", tag).field("ids", &ids.as_ref().map(Vec::len)).finish(),
+            TogetherEvent::GrantSealed { tag, sealed } => f.debug_struct("GrantSealed").field("tag", tag).field("sealed", &sealed.is_some()).finish(),
+            TogetherEvent::RefreshFriends { servers } => f.debug_struct("RefreshFriends").field("servers", servers).finish(),
+            TogetherEvent::JoinFriend { me, relay, room } => f.debug_struct("JoinFriend").field("me", me).field("relay", relay).field("room", room).finish(),
+            TogetherEvent::FriendKey { tag, answer } => {
+                f.debug_struct("FriendKey").field("tag", tag).field("answer", &answer.as_ref().map(|_| HIDDEN)).finish()
+            }
         }
     }
 }
@@ -297,6 +522,12 @@ impl fmt::Debug for TogetherFx {
             TogetherFx::Open { tag, bytes, .. } => f.debug_struct("Open").field("tag", tag).field("key", &HIDDEN).field("bytes", &bytes.len()).finish(),
             TogetherFx::Player(c) => f.debug_tuple("Player").field(c).finish(),
             TogetherFx::Notice(n) => f.debug_tuple("Notice").field(n).finish(),
+            // A control message can carry a ticket or a grant: its length only.
+            TogetherFx::SendText { conn, text } => f.debug_struct("SendText").field("conn", conn).field("bytes", &text.len()).finish(),
+            TogetherFx::AskFriends { tag, relay, server } => f.debug_struct("AskFriends").field("tag", tag).field("relay", relay).field("server", server).finish(),
+            TogetherFx::ReadFriendIds { tag } => f.debug_struct("ReadFriendIds").field("tag", tag).finish(),
+            TogetherFx::SealGrant { tag, .. } => f.debug_struct("SealGrant").field("tag", tag).finish_non_exhaustive(),
+            TogetherFx::RequestKey { tag, relay, room, .. } => f.debug_struct("RequestKey").field("tag", tag).field("relay", relay).field("room", room).finish_non_exhaustive(),
         }
     }
 }
@@ -326,13 +557,16 @@ impl fmt::Debug for Live {
             .field("status", &self.status)
             .field("peers", &self.peers)
             .field("conn", &self.conn)
+            .field("visible", &self.visible)
+            .field("announce", &self.announce)
+            .field("listed", &self.listed)
             .finish_non_exhaustive()
     }
 }
 
 impl fmt::Debug for HostPlan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("HostPlan").field("me", &self.me).field("relay", &self.relay).field("secret", &HIDDEN).field("tag", &self.tag).finish_non_exhaustive()
+        f.debug_struct("HostPlan").field("me", &self.me).field("relay", &self.relay).field("secret", &HIDDEN).field("tag", &self.tag).field("visible", &self.visible).finish_non_exhaustive()
     }
 }
 
@@ -357,6 +591,12 @@ struct Desk {
     tags: u32,
     conns: u32,
     now_us: u64,
+    backoff: RelayBackoff,
+    friend_ids: Option<(Vec<String>, u64)>,
+    grants: BTreeMap<u32, (u32, String)>,
+    listing: Vec<ListServer>,
+    list_servers: Vec<ServerInfo>,
+    sessions: Vec<FriendSession>,
 }
 
 impl Desk {
@@ -382,6 +622,18 @@ pub struct TogetherSession {
     tags: u32,
     conns: u32,
     now_us: u64,
+    /// Relays that failed or were useless for the friends' listing (the web's `relayBackoff`).
+    backoff: RelayBackoff,
+    /// This account's friend allow-list and when it was read (cached [`FRIENDS_TTL_US`]).
+    friend_ids: Option<(Vec<String>, u64)>,
+    /// Grants being sealed: tag -> (socket, requester).
+    grants: BTreeMap<u32, (u32, String)>,
+    /// The friends' listing under way (empty when none is).
+    listing: Vec<ListServer>,
+    /// The servers the last listing asked.
+    list_servers: Vec<ServerInfo>,
+    /// The friends' sessions the last listing found.
+    sessions: Vec<FriendSession>,
 }
 
 impl Default for TogetherSession {
@@ -392,7 +644,21 @@ impl Default for TogetherSession {
 
 impl TogetherSession {
     pub fn new() -> Self {
-        TogetherSession { phase: Phase::Idle, seals: BTreeMap::new(), opens: BTreeMap::new(), known: KnownRelays::new(), tags: 0, conns: 0, now_us: 0 }
+        TogetherSession {
+            phase: Phase::Idle,
+            seals: BTreeMap::new(),
+            opens: BTreeMap::new(),
+            known: KnownRelays::new(),
+            tags: 0,
+            conns: 0,
+            now_us: 0,
+            backoff: RelayBackoff::default(),
+            friend_ids: None,
+            grants: BTreeMap::new(),
+            listing: Vec::new(),
+            list_servers: Vec::new(),
+            sessions: Vec::new(),
+        }
     }
 
     /// The one writer: every state change is made here, on values moved out of the machine and
@@ -405,6 +671,12 @@ impl TogetherSession {
             tags: self.tags,
             conns: self.conns,
             now_us: self.now_us,
+            backoff: std::mem::take(&mut self.backoff),
+            friend_ids: self.friend_ids.take(),
+            grants: std::mem::take(&mut self.grants),
+            listing: std::mem::take(&mut self.listing),
+            list_servers: std::mem::take(&mut self.list_servers),
+            sessions: std::mem::take(&mut self.sessions),
         };
         let phase = std::mem::replace(&mut self.phase, Phase::Idle);
         let (phase, handled) = reduce(phase, ev, &mut desk, fx);
@@ -415,6 +687,12 @@ impl TogetherSession {
         self.tags = desk.tags;
         self.conns = desk.conns;
         self.now_us = desk.now_us;
+        self.backoff = desk.backoff;
+        self.friend_ids = desk.friend_ids;
+        self.grants = desk.grants;
+        self.listing = desk.listing;
+        self.list_servers = desk.list_servers;
+        self.sessions = desk.sessions;
         handled
     }
 
@@ -426,16 +704,31 @@ impl TogetherSession {
     pub fn view(&self) -> Option<View> {
         match &self.phase {
             Phase::Live(live) => Some(view_of(live)),
-            Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) => None,
+            Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => None,
         }
     }
 
     /// A host start or a join is under way.
     pub fn busy(&self) -> bool {
         match &self.phase {
-            Phase::Deriving(_) | Phase::Joining(_) => true,
+            Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => true,
             Phase::Idle | Phase::Live(_) => false,
         }
+    }
+
+    /// The friends' sessions the last listing found.
+    pub fn friend_sessions(&self) -> &[FriendSession] {
+        &self.sessions
+    }
+
+    /// A friends' listing is under way.
+    pub fn listing(&self) -> bool {
+        !self.listing.is_empty()
+    }
+
+    /// The machine's clock (the sum of the ticks' `dt_us`).
+    pub fn now_us(&self) -> u64 {
+        self.now_us
     }
 }
 
@@ -448,6 +741,8 @@ fn view_of(live: &Live) -> View {
         item: live.item.clone(),
         peers: live.peers.clone(),
         position: live.sync.position().or_else(|| live.peers.iter().find(|p| p.host).map(|p| p.time)),
+        visible: live.visible,
+        listed: live.listed,
     }
 }
 
@@ -455,15 +750,16 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
     match ev {
         TogetherEvent::Tick { dt_us } => {
             desk.now_us = desk.now_us.saturating_add(dt_us);
+            desk.backoff.advance(dt_us / 1000);
             match phase {
                 Phase::Live(mut live) => {
                     on_tick(&mut live, dt_us, desk, fx);
                     (Phase::Live(live), Handled::Yes)
                 }
-                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_)) => (other, Handled::Yes),
+                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::Yes),
             }
         }
-        TogetherEvent::Host { me, relay, server, item, random } => {
+        TogetherEvent::Host { me, relay, server, item, random, visible, servers } => {
             leave(phase, desk, fx);
             let relay = relay_url(&relay);
             let secret = secret_from_bytes(&random);
@@ -472,8 +768,11 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 return (Phase::Idle, Handled::Yes);
             };
             let tag = desk.tag();
-            fx.push(TogetherFx::Derive { tag, secret: secret.clone(), server: server.unwrap_or_default(), iterations: INVITE_ITERATIONS });
-            (Phase::Deriving(HostPlan { me, relay, secret, item, tag }), Handled::Yes)
+            let server = server.unwrap_or_default();
+            fx.push(TogetherFx::Derive { tag, secret: secret.clone(), server: server.clone(), iterations: INVITE_ITERATIONS });
+            // The web: visible only with a server to salt (and so to list on).
+            let visible = visible && !server.is_empty();
+            (Phase::Deriving(HostPlan { me, relay, secret, item, tag, server, visible, servers }), Handled::Yes)
         }
         TogetherEvent::Join { me, code, relay, server, servers } => {
             leave(phase, desk, fx);
@@ -483,7 +782,43 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
             Phase::Deriving(plan) if plan.tag == tag => {
                 let code = format_invite(&plan.secret, None);
                 let full = format_invite(&plan.secret, Some(&plan.relay));
-                (open(plan.me, plan.relay, keys, code, Some(full), true, plan.item, desk, fx), Handled::Yes)
+                let grant = (!plan.server.is_empty()).then(|| (plan.secret.clone(), plan.server.clone()));
+                let opening = Opening {
+                    me: plan.me,
+                    relay: plan.relay,
+                    keys,
+                    code,
+                    full_code: Some(full),
+                    host: true,
+                    item: plan.item,
+                    grant,
+                    visible: plan.visible,
+                    servers: plan.servers,
+                };
+                (open(opening, desk, fx), Handled::Yes)
+            }
+            Phase::FriendJoin(FriendPlan { me, relay, room, stage: FriendStage::Derive { tag: t, session, payload }, .. }) if t == tag => {
+                if keys.room != room {
+                    fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::Failed)));
+                    return (Phase::Idle, Handled::Yes);
+                }
+                let opening = Opening {
+                    me,
+                    relay,
+                    keys,
+                    code: format_invite(&payload.secret, None),
+                    full_code: None,
+                    host: false,
+                    item: Some(session.item()),
+                    grant: Some((payload.secret.clone(), payload.server.clone())),
+                    visible: true,
+                    servers: desk.list_servers.clone(),
+                };
+                let mut phase = open(opening, desk, fx);
+                if let (Phase::Live(live), Some(st)) = (&mut phase, payload.state) {
+                    live.sync.adopt(st.time, st.playing, Stamp { c: st.c, by: st.by });
+                }
+                (phase, Handled::Yes)
             }
             Phase::Joining(mut plan) => {
                 let Some(slot) = plan.derived.iter_mut().find(|(t, k)| *t == tag && k.is_none()) else {
@@ -503,9 +838,17 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 plan.search = Some(search);
                 (settle_join(plan, desk, fx), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
+        TogetherEvent::RoomsAnswered { tag, body } if listing_asked(desk, tag) => {
+            list_rooms_answered(tag, body.as_deref(), desk);
+            (settle_listing(phase, desk, fx), Handled::Yes)
+        }
         TogetherEvent::RoomsAnswered { tag, body } => match phase {
+            Phase::Live(mut live) if live.announce == Announce::Rooms(tag) => {
+                on_announce_rooms(&mut live, body.as_deref(), desk, fx);
+                (Phase::Live(live), Handled::Yes)
+            }
             Phase::Joining(mut plan) => {
                 let Some(index) = plan.asked.iter().position(|t| *t == tag) else {
                     return (Phase::Joining(plan), Handled::No);
@@ -515,23 +858,28 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 }
                 (settle_join(plan, desk, fx), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::SocketOpened { conn } => match phase {
             Phase::Live(mut live) if live.conn == conn => {
                 live.retry = 0;
                 live.status = Status::Open;
+                // A new connection: nothing announced or handed over on it yet.
+                live.announce = Announce::Off;
+                live.granted.clear();
                 fx.push(TogetherFx::Notice(Notice::Status(Status::Open)));
                 // Arriving or returning: ask everyone's state now.
                 let tick = tick_of(&live, true);
                 send(&live, Message::Tick(tick), desk, fx);
+                announce(&mut live, false, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::SocketClosed { conn } => match phase {
             Phase::Live(mut live) if live.conn == conn && live.reconnect_in_us.is_none() => {
                 live.status = Status::Connecting;
+                live.announce = Announce::Off;
                 fx.push(TogetherFx::Notice(Notice::Status(Status::Connecting)));
                 // Network cut or relay restarted: reconnect, more and more patiently.
                 let delay = RECONNECT_BASE_US.saturating_mul(1u64 << live.retry.min(20)).min(RECONNECT_CEILING_US);
@@ -539,7 +887,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 live.reconnect_in_us = Some(delay);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::SocketBinary { conn, bytes } => match phase {
             Phase::Live(live) if live.conn == conn => {
@@ -548,7 +896,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 fx.push(TogetherFx::Open { tag, key: live.keys.key, bytes });
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::Opened { tag, plain } => {
             let from = desk.opens.remove(&tag);
@@ -560,7 +908,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                     }
                     (Phase::Live(live), Handled::Yes)
                 }
-                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, if from.is_some() { Handled::Yes } else { Handled::No }),
+                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, if from.is_some() { Handled::Yes } else { Handled::No }),
             }
         }
         TogetherEvent::Sealed { tag, bytes } => {
@@ -592,7 +940,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 send(&live, Message::Tick(tick), desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::No),
         },
         TogetherEvent::Player(obs) => match phase {
             Phase::Live(mut live) if live.sync.attached() => {
@@ -611,10 +959,11 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                         item: live.playing_item.clone(),
                     };
                     send(&live, Message::Intent(intent), desk, fx);
+                    announce(&mut live, false, desk, fx);
                 }
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::Detach => match phase {
             Phase::Live(mut live) if live.sync.attached() => {
@@ -624,7 +973,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 send(&live, Message::Tick(tick), desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::ShareTitle(item) => match phase {
             Phase::Live(mut live) if live.host => {
@@ -632,23 +981,468 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 fx.push(TogetherFx::Notice(Notice::Item(item)));
                 let tick = tick_of(&live, false);
                 send(&live, Message::Tick(tick), desk, fx);
+                announce(&mut live, false, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::Leave => match phase {
             Phase::Idle => (Phase::Idle, Handled::No),
-            other @ (Phase::Deriving(_) | Phase::Joining(_) | Phase::Live(_)) => {
+            other @ (Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => {
                 leave(other, desk, fx);
                 (Phase::Idle, Handled::Yes)
             }
         },
+        TogetherEvent::SetVisible(on) => match phase {
+            Phase::Live(mut live) => {
+                set_visible(&mut live, on, desk, fx);
+                (Phase::Live(live), Handled::Yes)
+            }
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::No),
+        },
+        TogetherEvent::SocketText { conn, text } => match phase {
+            Phase::Live(mut live) if live.conn == conn => {
+                if let Some(c) = Control::read(&text) {
+                    on_control(&mut live, c, desk, fx);
+                }
+                (Phase::Live(live), Handled::Yes)
+            }
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+        },
+        TogetherEvent::FriendsAnswered { tag, answer } if desk.listing.iter().any(|l| matches!(&l.stage, ListStage::Asking(t, _) if *t == tag)) => {
+            list_friends_answered(tag, answer, desk);
+            (settle_listing(phase, desk, fx), Handled::Yes)
+        }
+        TogetherEvent::FriendsAnswered { tag, answer } => match phase {
+            Phase::Live(mut live) if live.announce == Announce::Friends(tag) => {
+                on_announce_friends(&mut live, answer, desk, fx);
+                (Phase::Live(live), Handled::Yes)
+            }
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+        },
+        TogetherEvent::FriendIdsRead { tag, ids } => {
+            if let Some(ids) = &ids {
+                desk.friend_ids = Some((ids.clone(), desk.now_us));
+            }
+            match phase {
+                Phase::Live(mut live) if matches!(&live.announce, Announce::Ids(t, _) | Announce::On(Some(t)) if *t == tag) => {
+                    on_friend_ids(&mut live, ids, desk, fx);
+                    (Phase::Live(live), Handled::Yes)
+                }
+                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            }
+        }
+        TogetherEvent::GrantSealed { tag, sealed } => {
+            let Some((conn, peer)) = desk.grants.remove(&tag) else { return (phase, Handled::No) };
+            if let (Phase::Live(live), Some((public, sealed))) = (&phase, sealed) {
+                if live.conn == conn && live.status == Status::Open {
+                    fx.push(TogetherFx::SendText { conn, text: key_grant_text(&peer, &public, &sealed) });
+                }
+            }
+            (phase, Handled::Yes)
+        }
+        TogetherEvent::RefreshFriends { servers } => {
+            start_listing(servers, desk, fx);
+            (settle_listing(phase, desk, fx), Handled::Yes)
+        }
+        TogetherEvent::JoinFriend { me, relay, room } => {
+            leave(phase, desk, fx);
+            let plan = FriendPlan { me, relay, room, stage: FriendStage::Refresh, refreshed: false };
+            (enter_friend(plan, desk, fx), Handled::Yes)
+        }
+        TogetherEvent::FriendKey { tag, answer } => match phase {
+            Phase::FriendJoin(FriendPlan { me, relay, room, stage: FriendStage::Key { tag: t, session }, refreshed }) if t == tag => match answer {
+                Ok(payload) => {
+                    let tag = desk.tag();
+                    fx.push(TogetherFx::Derive { tag, secret: payload.secret.clone(), server: payload.server.clone(), iterations: INVITE_ITERATIONS });
+                    (Phase::FriendJoin(FriendPlan { me, relay, room, stage: FriendStage::Derive { tag, session, payload }, refreshed }), Handled::Yes)
+                }
+                Err(e) => {
+                    fx.push(TogetherFx::Notice(Notice::JoinFailed(e)));
+                    (Phase::Idle, Handled::Yes)
+                }
+            },
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+        },
+    }
+}
+
+/// The web's `card()`: title and position of the session (and this account's name, which the relay
+/// replaces with the one plex.tv gives it). Nothing about the device, the address or the stream.
+fn card_of(live: &Live) -> Option<FriendCard> {
+    let it = live.item.as_ref().or(live.playing_item.as_ref())?;
+    let (time, playing) = here(live);
+    Some(FriendCard {
+        name: live.me.name.clone(),
+        title: it.title.clone(),
+        sub: it.sub.clone(),
+        kind: Some(it.kind.clone()),
+        guid: Some(it.guid.clone()).filter(|g| !g.is_empty()),
+        key: it.key.clone(),
+        time,
+        playing,
+    })
+}
+
+/// Where this device is: its player's position when attached, else the session's.
+fn here(live: &Live) -> (f64, bool) {
+    match (live.sync.player_time(), live.sync.player_paused()) {
+        (Some(t), Some(paused)) => (t, !paused),
+        _ => (live.sync.position().unwrap_or(0.0), live.sync.reference().is_some_and(|r| r.playing)),
+    }
+}
+
+/// The friend allow-list, if read less than [`FRIENDS_TTL_US`] ago: `(ids, read at)`.
+fn fresh_friends(desk: &Desk) -> Option<(Vec<String>, u64)> {
+    desk.friend_ids.clone().filter(|(_, at)| desk.now_us.saturating_sub(*at) < FRIENDS_TTL_US)
+}
+
+fn set_listed(live: &mut Live, listed: Option<Listed>, fx: &mut Vec<TogetherFx>) {
+    if live.listed != listed {
+        live.listed = listed;
+        fx.push(TogetherFx::Notice(Notice::Listed(listed)));
+    }
+}
+
+/// The relay does not list the session: a stable "no", asked again later and later.
+fn not_listed(live: &mut Live, now_us: u64, fx: &mut Vec<TogetherFx>) {
+    live.announce = Announce::Off;
+    let delay = if live.list_retry.1 > 0 { live.list_retry.1.saturating_mul(2).min(LIST_RETRY_CEILING_US) } else { LIST_RETRY_BASE_US };
+    live.list_retry = (now_us.saturating_add(delay), delay);
+    set_listed(live, Some(Listed::No), fx);
+}
+
+/// The web's `announce`: host of a visible session, announce it to the relay. The first time on a
+/// connection it proves access (the relay's `/rooms` says it lists to friends only and is the
+/// host's server's, then `/friends` with the server's token gives a ticket) and sends the friend
+/// list; afterwards the card is re-sent on a change (at most every 5 s) and its position on
+/// `refresh`, with the friend list re-read (cached 2 min) and sent when it changed or was re-read.
+fn announce(live: &mut Live, refresh: bool, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    let Some((_, server)) = live.grant.clone() else { return };
+    if !live.host || !live.visible || live.keys.owner.is_none() || live.status != Status::Open {
+        return;
+    }
+    let Some(card) = card_of(live) else { return };
+    let now = desk.now_us;
+    match &live.announce {
+        Announce::Rooms(_) | Announce::Friends(_) | Announce::Ids(..) | Announce::On(Some(_)) => {}
+        Announce::On(None) => {
+            let sig = card.sig();
+            if !refresh && (sig == live.card_sent.0 || now.saturating_sub(live.card_sent.1) < CARD_EVERY_US) {
+                return;
+            }
+            live.card_sent = (sig, now);
+            match fresh_friends(desk) {
+                Some((ids, at)) => refresh_announce(live, Some(ids), at, now, fx),
+                None => {
+                    let tag = desk.tag();
+                    live.announce = Announce::On(Some(tag));
+                    fx.push(TogetherFx::ReadFriendIds { tag });
+                }
+            }
+        }
+        Announce::Off => {
+            if now < live.list_retry.0 {
+                return;
+            }
+            if live.listed.is_none() {
+                set_listed(live, Some(Listed::Pending), fx);
+            }
+            // The server's token goes only to a relay found on that server's own public names.
+            let mine: Vec<ServerInfo> = live.servers.iter().filter(|r| r.id == server).cloned().collect();
+            if mine.is_empty() || !relay_discoverable(&live.relay, &mine) {
+                return not_listed(live, now, fx);
+            }
+            let tag = desk.tag();
+            live.announce = Announce::Rooms(tag);
+            fx.push(TogetherFx::HttpRooms { tag, url: rooms_url(&live.relay, &[]), timeout_ms: ROOMS_TIMEOUT_MS });
+        }
+    }
+}
+
+/// A refresh's friend list is in (`None`: plex.tv did not answer, the announce is released: never
+/// a list that may be stale).
+fn refresh_announce(live: &mut Live, ids: Option<Vec<String>>, read_at: u64, now_us: u64, fx: &mut Vec<TogetherFx>) {
+    live.announce = Announce::On(None);
+    match friends_for_announce(ids.as_deref(), &live.friends_sent, read_at) {
+        None => {
+            fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("release") });
+            not_listed(live, now_us, fx);
+        }
+        Some((friends, sent)) => {
+            live.friends_sent = sent;
+            let proof = live.keys.owner.clone().unwrap_or_default();
+            if let Some(card) = card_of(live) {
+                fx.push(TogetherFx::SendText { conn: live.conn, text: announce_text(None, &proof, &card, friends.as_deref()) });
+            }
+        }
+    }
+}
+
+fn on_announce_rooms(live: &mut Live, body: Option<&str>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    let server = live.grant.as_ref().map(|(_, s)| s.clone()).unwrap_or_default();
+    let hit = body.and_then(RoomsAnswer::read).filter(|a| a.friends && a.server.as_deref() == Some(server.as_str()));
+    if hit.is_none() {
+        return not_listed(live, desk.now_us, fx);
+    }
+    let tag = desk.tag();
+    live.announce = Announce::Friends(tag);
+    fx.push(TogetherFx::AskFriends { tag, relay: live.relay.clone(), server });
+}
+
+fn on_announce_friends(live: &mut Live, answer: Option<FriendsAnswer>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    let server = live.grant.as_ref().map(|(_, s)| s.clone()).unwrap_or_default();
+    let Some(answer) = answer.filter(|a| a.lists_for(&server)) else { return not_listed(live, desk.now_us, fx) };
+    match fresh_friends(desk) {
+        Some((ids, at)) => first_announce(live, answer, Some(ids), at, desk.now_us, fx),
+        None => {
+            let tag = desk.tag();
+            live.announce = Announce::Ids(tag, answer);
+            fx.push(TogetherFx::ReadFriendIds { tag });
+        }
+    }
+}
+
+fn on_friend_ids(live: &mut Live, ids: Option<Vec<String>>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    let now = desk.now_us;
+    match std::mem::replace(&mut live.announce, Announce::Off) {
+        Announce::Ids(_, answer) => first_announce(live, answer, ids, now, now, fx),
+        Announce::On(Some(_)) => refresh_announce(live, ids, now, now, fx),
+        other @ (Announce::Off | Announce::Rooms(_) | Announce::Friends(_) | Announce::On(None)) => live.announce = other,
+    }
+}
+
+/// The first announce on this connection: ticket, proof, card and the friend list (without which
+/// nothing is announced: never a session visible to everyone).
+fn first_announce(live: &mut Live, answer: FriendsAnswer, ids: Option<Vec<String>>, read_at: u64, now_us: u64, fx: &mut Vec<TogetherFx>) {
+    let Some(ids) = ids else { return not_listed(live, now_us, fx) };
+    let (Some(card), true, true) = (card_of(live), live.visible, live.host) else {
+        live.announce = Announce::Off;
+        return;
+    };
+    let proof = live.keys.owner.clone().unwrap_or_default();
+    live.announce = Announce::On(None);
+    live.card_sent = (card.sig(), now_us);
+    live.friends_sent = FriendsSent { ids: ids.join(","), at: read_at };
+    fx.push(TogetherFx::SendText { conn: live.conn, text: announce_text(Some(&answer.ticket), &proof, &card, Some(&ids)) });
+}
+
+/// A host that gives the hand back releases its announce.
+fn step_down(live: &mut Live, fx: &mut Vec<TogetherFx>) {
+    if matches!(live.announce, Announce::On(_)) {
+        fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("release") });
+    }
+    live.announce = Announce::Off;
+    live.host = false;
+    set_listed(live, None, fx);
+    fx.push(TogetherFx::Notice(Notice::HostChanged { host: false }));
+}
+
+/// The web's `setVisible`.
+fn set_visible(live: &mut Live, on: bool, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    if live.visible != on {
+        live.visible = on;
+        fx.push(TogetherFx::Notice(Notice::Visible(on)));
+    }
+    if !on {
+        set_listed(live, None, fx);
+    }
+    if !live.host {
+        return;
+    }
+    if on {
+        live.list_retry.0 = 0;
+        announce(live, false, desk, fx);
+    } else {
+        if live.status == Status::Open {
+            fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("unlist") });
+        }
+        live.announce = Announce::Off;
+    }
+    let tick = tick_of(live, false);
+    send(live, Message::Tick(tick), desk, fx);
+}
+
+/// A text message of the relay on the session's socket (the web's `onControl`).
+fn on_control(live: &mut Live, c: Control, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    match c {
+        Control::Announced => {
+            live.list_retry = (0, 0);
+            set_listed(live, Some(Listed::Yes), fx);
+        }
+        Control::Error(e) => {
+            if UNLISTED_ERRORS.contains(&e.as_str()) {
+                not_listed(live, desk.now_us, fx);
+            }
+        }
+        Control::KeyRequest { peer, public } => hand_over(live, peer, public, desk, fx),
+        Control::KeyGrant { .. } => {}
+    }
+}
+
+/// A friend the relay admitted asks for the key: the invitation's secret and where the session
+/// stands, sealed for its ephemeral key alone. Once per requester, a few per 10 s.
+fn hand_over(live: &mut Live, peer: String, public: String, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    let Some((secret, server)) = live.grant.clone() else { return };
+    if !live.host || !live.visible || !matches!(live.announce, Announce::On(_)) {
+        return;
+    }
+    let now = desk.now_us;
+    live.grant_times.retain(|at| now.saturating_sub(*at) < GRANT_WINDOW_US);
+    if live.granted.contains(&peer) || live.grant_times.len() >= GRANTS_PER_WINDOW {
+        return;
+    }
+    live.granted.push(peer.clone());
+    live.grant_times.push(now);
+    let (time, playing) = here(live);
+    let stamp = live.sync.stamp();
+    let payload = GrantPayload { secret, server, state: Some(GrantState { time, playing, c: stamp.c, by: stamp.by }) };
+    let tag = desk.tag();
+    desk.grants.insert(tag, (live.conn, peer));
+    fx.push(TogetherFx::SealGrant { tag, request_pub: public, payload });
+}
+
+// ---- The friends' listing (the web's `refreshFriendSessions`) and entering one (`joinFriend`).
+
+fn listing_asked(desk: &Desk, tag: u32) -> bool {
+    desk.listing.iter().any(|l| matches!(l.stage, ListStage::Search) && l.asked.contains(&tag))
+}
+
+/// For each server this account sees (at most [`MAX_ROOM_LOOKUP`]): its relay, searched on its
+/// public names and checked to list to friends only and to be that server's, BEFORE any token
+/// leaves; then the list, asked with THAT server's token. A listing under way is replaced.
+fn start_listing(servers: Vec<ServerInfo>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    desk.listing.clear();
+    let list: Vec<ServerInfo> = servers.into_iter().take(MAX_ROOM_LOOKUP).collect();
+    for res in &list {
+        let search = RelaySearch::new(&relay_candidates(std::slice::from_ref(res)), Some(&res.id), &desk.known, &desk.backoff);
+        let mut asked = Vec::new();
+        for relay in search.relays() {
+            let tag = desk.tag();
+            asked.push(tag);
+            fx.push(TogetherFx::HttpRooms { tag, url: rooms_url(relay, &[]), timeout_ms: ROOMS_TIMEOUT_MS });
+        }
+        desk.listing.push(ListServer { id: res.id.clone(), search, asked, stage: ListStage::Search });
+    }
+    desk.list_servers = list;
+}
+
+fn list_rooms_answered(tag: u32, body: Option<&str>, desk: &mut Desk) {
+    let Desk { listing, known, backoff, .. } = desk;
+    for l in listing.iter_mut() {
+        if let Some(i) = l.asked.iter().position(|t| *t == tag) {
+            l.search.answer(i, body, known, backoff);
+        }
+    }
+}
+
+fn list_friends_answered(tag: u32, answer: Option<FriendsAnswer>, desk: &mut Desk) {
+    let now = desk.now_us;
+    for l in desk.listing.iter_mut() {
+        let ListStage::Asking(t, relay) = &l.stage else { continue };
+        if *t != tag {
+            continue;
+        }
+        let relay = relay.clone();
+        let found = answer.as_ref().filter(|a| a.lists_for(&l.id)).map(|a| {
+            let until = now.saturating_add((a.ttl_s * 1e6) as u64).saturating_sub(TICKET_MARGIN_US);
+            a.sessions
+                .iter()
+                .map(|s| FriendSession {
+                    relay: relay.clone(),
+                    server: l.id.clone(),
+                    room: s.room.clone(),
+                    card: s.card.clone(),
+                    count: s.count,
+                    at_us: now.saturating_sub(s.age_ms.saturating_mul(1000)),
+                    ticket: a.ticket.clone(),
+                    ticket_until_us: until,
+                })
+                .collect()
+        });
+        l.stage = ListStage::Done(found.unwrap_or_default());
+    }
+}
+
+/// Moves each server of the listing on; when every one is done, publishes the sessions (the one
+/// followed here left out) and resumes a friend join that waited for a fresh ticket.
+fn settle_listing(phase: Phase, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Phase {
+    if desk.listing.is_empty() {
+        return phase;
+    }
+    let mut asks = Vec::new();
+    for l in desk.listing.iter_mut() {
+        if !matches!(l.stage, ListStage::Search) {
+            continue;
+        }
+        match l.search.outcome() {
+            None => {}
+            Some(None) => l.stage = ListStage::Done(Vec::new()),
+            Some(Some(found)) => asks.push((l.id.clone(), found.relay)),
+        }
+    }
+    for (id, relay) in asks {
+        let tag = desk.tag();
+        if let Some(l) = desk.listing.iter_mut().find(|l| l.id == id && matches!(l.stage, ListStage::Search)) {
+            l.stage = ListStage::Asking(tag, relay.clone());
+            fx.push(TogetherFx::AskFriends { tag, relay, server: id });
+        }
+    }
+    if !desk.listing.iter().all(|l| matches!(l.stage, ListStage::Done(_))) {
+        return phase;
+    }
+    let current = match &phase {
+        Phase::Live(live) => Some(live.keys.room.clone()),
+        Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => None,
+    };
+    let mut found = Vec::new();
+    for l in std::mem::take(&mut desk.listing) {
+        if let ListStage::Done(list) = l.stage {
+            found.extend(list.into_iter().filter(|s| Some(&s.room) != current.as_ref()));
+        }
+    }
+    desk.sessions = found.clone();
+    fx.push(TogetherFx::Notice(Notice::FriendSessions(found)));
+    match phase {
+        Phase::FriendJoin(plan) if plan.stage == FriendStage::Refresh => enter_friend(plan, desk, fx),
+        other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => other,
+    }
+}
+
+/// Enter the listed session of `plan` with its ticket while the ticket is valid; an expired one
+/// lists again first, once (a session that the fresh listing lacks is not found).
+fn enter_friend(mut plan: FriendPlan, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Phase {
+    let listed = desk.sessions.iter().find(|s| s.room == plan.room && s.relay == plan.relay).cloned();
+    match listed {
+        Some(session) if desk.now_us <= session.ticket_until_us => {
+            let tag = desk.tag();
+            fx.push(TogetherFx::RequestKey { tag, relay: session.relay.clone(), room: session.room.clone(), ticket: session.ticket.clone() });
+            plan.stage = FriendStage::Key { tag, session };
+            Phase::FriendJoin(plan)
+        }
+        Some(_) if !plan.refreshed && !desk.list_servers.is_empty() => {
+            plan.refreshed = true;
+            plan.stage = FriendStage::Refresh;
+            let servers = desk.list_servers.clone();
+            start_listing(servers, desk, fx);
+            settle_listing(Phase::FriendJoin(plan), desk, fx)
+        }
+        Some(_) | None => {
+            fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::NotFound)));
+            Phase::Idle
+        }
     }
 }
 
 /// Leaves whatever `phase` holds: a live session says `bye` (sealed, then the socket closes).
 fn leave(phase: Phase, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
     let Phase::Live(live) = phase else { return };
+    // The host leaves: its announce is released (not made private); only its account may
+    // announce the session again.
+    if live.host && live.status == Status::Open && matches!(live.announce, Announce::On(_)) {
+        fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("release") });
+    }
+    desk.grants.retain(|_, (conn, _)| *conn != live.conn);
     if live.status == Status::Open {
         let tag = desk.tag();
         desk.seals.insert(tag, SealFor::Farewell(live.conn));
@@ -671,7 +1465,10 @@ fn join(me: Me, code: &str, relay_setting: &str, server: Option<String>, servers
         Invite::V2 { relay, .. } | Invite::V1 { relay, .. } => {
             let relay = relay.clone();
             return match derive_legacy(&invite) {
-                Some(keys) => (open(me, relay, keys, text, None, false, None, desk, fx), Handled::Yes),
+                Some(keys) => {
+                    let opening = Opening { me, relay, keys, code: text, full_code: None, host: false, item: None, grant: None, visible: false, servers: servers.to_vec() };
+                    (open(opening, desk, fx), Handled::Yes)
+                }
                 None => {
                     fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::Code)));
                     (Phase::Idle, Handled::Yes)
@@ -693,7 +1490,7 @@ fn join(me: Me, code: &str, relay_setting: &str, server: Option<String>, servers
         derived.push((tag, None));
         fx.push(TogetherFx::Derive { tag, secret: secret.clone(), server: id.clone(), iterations: INVITE_ITERATIONS });
     }
-    let plan = JoinPlan { me, code: text, ids, relays, derived, search: None, asked: Vec::new() };
+    let plan = JoinPlan { me, code: text, secret, servers: servers.to_vec(), ids, relays, derived, search: None, asked: Vec::new() };
     if plan.derived.is_empty() {
         // No server to salt with: nothing can be found.
         fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::NotFound)));
@@ -706,10 +1503,26 @@ fn join(me: Me, code: &str, relay_setting: &str, server: Option<String>, servers
 fn settle_join(plan: JoinPlan, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Phase {
     let Some(outcome) = plan.search.as_ref().and_then(RoomSearch::outcome) else { return Phase::Joining(plan) };
     let keys = outcome.and_then(|(relay, room)| {
-        plan.derived.iter().filter_map(|(_, k)| k.clone()).find(|k| k.room == room).map(|k| (relay, k))
+        plan.derived.iter().enumerate().find_map(|(i, (_, k))| k.clone().filter(|k| k.room == room).map(|k| (relay.clone(), k, plan.ids[i].clone())))
     });
     match keys {
-        Some((relay, keys)) => open(plan.me, relay, keys, plan.code, None, false, None, desk, fx),
+        Some((relay, keys, server)) => {
+            // A participant by code is handed what a friend would be (it may take the hand), and
+            // the session is private until the host says otherwise.
+            let opening = Opening {
+                me: plan.me,
+                relay,
+                keys,
+                code: plan.code,
+                full_code: None,
+                host: false,
+                item: None,
+                grant: Some((plan.secret, server)),
+                visible: false,
+                servers: plan.servers,
+            };
+            open(opening, desk, fx)
+        }
         None => {
             fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::NotFound)));
             Phase::Idle
@@ -717,8 +1530,24 @@ fn settle_join(plan: JoinPlan, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Pha
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn open(me: Me, relay: String, keys: SessionKeys, code: String, full_code: Option<String>, host: bool, item: Option<SharedItem>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Phase {
+/// What a session opens with.
+struct Opening {
+    me: Me,
+    relay: String,
+    keys: SessionKeys,
+    code: String,
+    full_code: Option<String>,
+    host: bool,
+    item: Option<SharedItem>,
+    grant: Option<(String, String)>,
+    visible: bool,
+    servers: Vec<ServerInfo>,
+}
+
+fn open(o: Opening, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Phase {
+    let Opening { me, relay, keys, code, full_code, host, item, grant, visible, servers } = o;
+    // The followed session is no friend's session to list.
+    desk.sessions.retain(|s| s.room != keys.room);
     let conn = desk.conn();
     fx.push(TogetherFx::OpenSocket { conn, url: format!("{relay}/r/{}", keys.room) });
     fx.push(TogetherFx::Notice(Notice::Opened { code: code.clone(), full_code: full_code.clone(), host }));
@@ -743,6 +1572,17 @@ fn open(me: Me, relay: String, keys: SessionKeys, code: String, full_code: Optio
         reconnect_in_us: None,
         since_tick_us: 0,
         last_want_reply_us: None,
+        visible,
+        grant,
+        servers,
+        announce: Announce::Off,
+        listed: None,
+        card_sent: (String::new(), 0),
+        list_retry: (0, 0),
+        friends_sent: FriendsSent::default(),
+        granted: Vec::new(),
+        grant_times: Vec::new(),
+        presence_ticks: 0,
     })
 }
 
@@ -758,10 +1598,7 @@ fn send(live: &Live, msg: Message, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
 
 /// This device's presence. Its position is the player's when attached, else the session's.
 fn tick_of(live: &Live, want: bool) -> Tick {
-    let (time, playing) = match (live.sync.player_time(), live.sync.player_paused()) {
-        (Some(t), Some(paused)) => (t, !paused),
-        _ => (live.sync.position().unwrap_or(0.0), live.sync.reference().is_some_and(|r| r.playing)),
-    };
+    let (time, playing) = here(live);
     let stamp = live.sync.stamp();
     Tick {
         id: live.me.id.clone(),
@@ -774,8 +1611,8 @@ fn tick_of(live: &Live, want: bool) -> Tick {
         live: live.sync.attached(),
         c: stamp.c,
         by: stamp.by,
-        // A session this client hosts is private: never visible to friends.
-        vis: live.host.then_some(false),
+        // Whether the host lists the session to its friends; who would take the hand keeps it.
+        vis: live.host.then_some(live.visible),
         hc: live.host.then_some(live.host_claim),
         want,
     }
@@ -787,6 +1624,7 @@ fn on_tick(live: &mut Live, dt_us: u64, desk: &mut Desk, fx: &mut Vec<TogetherFx
         if left <= dt_us {
             live.reconnect_in_us = None;
             live.conn = desk.conn();
+            live.announce = Announce::Off;
             desk.opens.clear();
             fx.push(TogetherFx::OpenSocket { conn: live.conn, url: format!("{}/r/{}", live.relay, live.keys.room) });
         } else {
@@ -800,6 +1638,7 @@ fn on_tick(live: &mut Live, dt_us: u64, desk: &mut Desk, fx: &mut Vec<TogetherFx
     live.since_tick_us = 0;
     let tick = tick_of(live, false);
     send(live, Message::Tick(tick), desk, fx);
+    live.presence_ticks = live.presence_ticks.wrapping_add(1);
     let now = desk.now_us;
     live.peers.retain(|p| now.saturating_sub(p.seen_us) <= PEER_TIMEOUT_US);
     // The host has gone: the first participant (by id) takes the hand.
@@ -808,6 +1647,12 @@ fn on_tick(live: &mut Live, dt_us: u64, desk: &mut Desk, fx: &mut Vec<TogetherFx
         live.host_claim = tick_clock(live.sync.clock());
         live.host = true;
         fx.push(TogetherFx::Notice(Notice::HostChanged { host: true }));
+        // It tries to announce it, but the relay lists it only for the original host's account.
+        announce(live, false, desk, fx);
+    }
+    // Host of a visible session: the announced position is refreshed every 15 s.
+    if live.host && live.presence_ticks % CARD_REFRESH_TICKS == 0 {
+        announce(live, true, desk, fx);
     }
 }
 
@@ -853,8 +1698,13 @@ fn on_message(live: &mut Live, m: Incoming, desk: &mut Desk, fx: &mut Vec<Togeth
             upsert_peer(live, News { id: &t.id, name: &t.name, presence: Some((&t.thumb, t.host, t.live)), playing: t.playing, time: t.time, item: &t.item }, now);
             // Two hosts (one came back after a cut): one stays, the other becomes a participant.
             if t.host && live.host && host_yields(live.host_claim, &live.me.id, t.hc, &t.id) {
-                live.host = false;
-                fx.push(TogetherFx::Notice(Notice::HostChanged { host: false }));
+                step_down(live, fx);
+            }
+            if t.host && !live.host {
+                if let Some(vis) = t.vis.filter(|v| *v != live.visible) {
+                    live.visible = vis;
+                    fx.push(TogetherFx::Notice(Notice::Visible(vis)));
+                }
             }
             if t.host {
                 if let Some(item) = &t.item {
@@ -880,10 +1730,15 @@ fn on_message(live: &mut Live, m: Incoming, desk: &mut Desk, fx: &mut Vec<Togeth
             }
             upsert_peer(live, News { id: &i.id, name: &i.name, presence: None, playing: i.playing, time: i.time, item: &i.item }, now);
             let mut cmds = Vec::new();
-            if live.sync.on_intent(&i, &mut cmds) {
+            let applied = live.sync.on_intent(&i, &mut cmds);
+            if applied {
                 fx.push(TogetherFx::Notice(Notice::Action { name: i.name.clone(), action: i.action }));
             }
             fx.extend(cmds.into_iter().map(TogetherFx::Player));
+            // The card changes only for play/pause (the position follows at the next refresh).
+            if applied {
+                announce(live, false, desk, fx);
+            }
         }
     }
 }
@@ -936,7 +1791,12 @@ mod tests {
                         | TogetherFx::CloseSocket { .. }
                         | TogetherFx::SendBinary { .. }
                         | TogetherFx::Player(_)
-                        | TogetherFx::Notice(_)) => self.out.push(other),
+                        | TogetherFx::Notice(_)
+                        | TogetherFx::SendText { .. }
+                        | TogetherFx::AskFriends { .. }
+                        | TogetherFx::ReadFriendIds { .. }
+                        | TogetherFx::SealGrant { .. }
+                        | TogetherFx::RequestKey { .. }) => self.out.push(other),
                     }
                 }
             }
@@ -950,14 +1810,14 @@ mod tests {
         fn key(&self) -> [u8; 32] {
             match &self.s.phase {
                 Phase::Live(l) => l.keys.key,
-                Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) => panic!("not live"),
+                Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!("not live"),
             }
         }
 
         fn conn(&self) -> u32 {
             match &self.s.phase {
                 Phase::Live(l) => l.conn,
-                Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) => panic!("not live"),
+                Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!("not live"),
             }
         }
 
@@ -994,7 +1854,7 @@ mod tests {
     /// A host on `wss://relais.exemple.fr`, its socket open. Returns the device and its code.
     fn hosting(id: &str) -> (Device, String) {
         let mut h = Device::new();
-        h.step(TogetherEvent::Host { me: me(id, "Hôte"), relay: "relais.exemple.fr".into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect() });
+        h.step(TogetherEvent::Host { me: me(id, "Hôte"), relay: "relais.exemple.fr".into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: false, servers: Vec::new() });
         let out = h.take();
         let Some(Notice::Opened { code, full_code, host: true }) = notices(&out).first().cloned() else { panic!("{out:?}") };
         assert_eq!(full_code.as_deref(), Some(format!("{code}@relais.exemple.fr").as_str()));
@@ -1054,9 +1914,9 @@ mod tests {
     #[test]
     fn a_host_needs_a_relay_and_randomness() {
         let mut d = Device::new();
-        d.step(TogetherEvent::Host { me: me("m", "H"), relay: String::new(), server: None, item: None, random: vec![1; 32] });
+        d.step(TogetherEvent::Host { me: me("m", "H"), relay: String::new(), server: None, item: None, random: vec![1; 32], visible: false, servers: Vec::new() });
         assert_eq!(notices(&d.take()), [Notice::HostFailed]);
-        d.step(TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: vec![255; 64] });
+        d.step(TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: vec![255; 64], visible: false, servers: Vec::new() });
         assert_eq!(notices(&d.take()), [Notice::HostFailed]);
         assert!(d.s.view().is_none());
     }
@@ -1277,7 +2137,7 @@ mod tests {
     #[test]
     fn debug_output_never_carries_a_secret_or_a_key() {
         let random: Vec<u8> = (0u8..32).collect();
-        let host = TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: random.clone() };
+        let host = TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: random.clone(), visible: false, servers: Vec::new() };
         let mut d = TogetherSession::new();
         let mut fx = Vec::new();
         d.step(host, &mut fx);
@@ -1285,7 +2145,7 @@ mod tests {
         let key = [0xab; 32];
         let code = format_invite(&secret, None);
         let dumps = [
-            format!("{:?}", TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random }),
+            format!("{:?}", TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random, visible: false, servers: Vec::new() }),
             format!("{:?}", TogetherEvent::Join { me: me("m", "H"), code: code.clone(), relay: String::new(), server: None, servers: Vec::new() }),
             format!("{fx:?}"),
             format!("{:?}", d.phase),
@@ -1311,5 +2171,334 @@ mod tests {
         assert_eq!(d.step(TogetherEvent::Detach), Handled::No);
         assert_eq!(d.step(TogetherEvent::Tick { dt_us: 1 }), Handled::Yes);
         assert!(d.take().is_empty());
+    }
+
+
+    // ---- Sessions visible to friends (the web's friends-only protocol).
+
+    const RELAY: &str = "wss://plex.exemple.fr:32400/multiplex-relay";
+
+    /// The host's server, published on a public name: its relay is found there.
+    fn srv1() -> ServerInfo {
+        ServerInfo { id: "srv-1".into(), connections: vec![PlexConnection { uri: "https://plex.exemple.fr:32400".into(), local: false, relay: false }] }
+    }
+
+    fn rooms_ok(server: &str) -> String {
+        format!(r#"{{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true,"server":"{server}"}}"#)
+    }
+
+    fn friends_ok(server: &str, sessions: &str) -> FriendsAnswer {
+        FriendsAnswer::read(&format!(r#"{{"multiplex":"relay","server":"{server}","friendsOnly":true,"ticket":"TICKET-1","ttl":300,"sessions":[{sessions}]}}"#)).unwrap()
+    }
+
+    fn texts(out: &[TogetherFx]) -> Vec<Value> {
+        out.iter().filter_map(|f| if let TogetherFx::SendText { text, .. } = f { Some(serde_json::from_str(text).unwrap()) } else { None }).collect()
+    }
+
+    fn find<T>(out: &[TogetherFx], pick: impl Fn(&TogetherFx) -> Option<T>) -> Vec<T> {
+        out.iter().filter_map(pick).collect()
+    }
+
+    /// A visible host whose socket just opened: returns the device and the tag of its `/rooms` ask.
+    fn visible_host() -> (Device, u32) {
+        let mut h = Device::new();
+        h.step(TogetherEvent::Host { me: me("m", "Hôte"), relay: RELAY.into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        h.take();
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketOpened { conn });
+        let out = h.take();
+        assert!(notices(&out).contains(&Notice::Listed(Some(Listed::Pending))), "{out:?}");
+        let rooms = find(&out, |f| if let TogetherFx::HttpRooms { tag, url, .. } = f { Some((*tag, url.clone())) } else { None });
+        assert_eq!(rooms.len(), 1, "{out:?}");
+        assert_eq!(rooms[0].1, "https://plex.exemple.fr:32400/multiplex-relay/rooms?ids=");
+        (h, rooms[0].0)
+    }
+
+    /// The whole announce, then the relay's `announced`.
+    fn announced() -> Device {
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let out = h.take();
+        let asks = find(&out, |f| if let TogetherFx::AskFriends { tag, relay, server } = f { Some((*tag, relay.clone(), server.clone())) } else { None });
+        assert_eq!(asks.len(), 1, "{out:?}");
+        assert_eq!((asks[0].1.as_str(), asks[0].2.as_str()), (RELAY, "srv-1"));
+        h.step(TogetherEvent::FriendsAnswered { tag: asks[0].0, answer: Some(friends_ok("srv-1", "")) });
+        let out = h.take();
+        let reads = find(&out, |f| if let TogetherFx::ReadFriendIds { tag } = f { Some(*tag) } else { None });
+        assert_eq!(reads.len(), 1, "{out:?}");
+        h.step(TogetherEvent::FriendIdsRead { tag: reads[0], ids: Some(vec!["2001".into(), "2004".into()]) });
+        let out = h.take();
+        let sent = texts(&out);
+        assert_eq!(sent.len(), 1, "{out:?}");
+        let proof = match &h.s.phase {
+            Phase::Live(l) => l.keys.owner.clone().unwrap(),
+            Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!(),
+        };
+        assert_eq!(sent[0]["t"], "announce");
+        assert_eq!(sent[0]["ticket"], "TICKET-1");
+        assert_eq!(sent[0]["proof"], proof.as_str());
+        assert_eq!(sent[0]["friends"], serde_json::json!(["2001", "2004"]));
+        assert_eq!(sent[0]["card"], serde_json::json!({"name": "Hôte", "title": "Le Film", "type": "movie", "guid": "plex://movie/1", "key": "42", "time": 0, "playing": false}));
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"announced"}"#.into() });
+        assert_eq!(notices(&h.take()), [Notice::Listed(Some(Listed::Yes))]);
+        assert_eq!(h.view().listed, Some(Listed::Yes));
+        h
+    }
+
+    #[test]
+    fn a_visible_host_proves_access_then_announces_with_its_friend_list() {
+        let mut h = announced();
+        // Its ticks say the session is visible.
+        h.tick(TICK_EVERY_US);
+        let ticks = h.sent();
+        assert_eq!(ticks[0]["vis"], true);
+    }
+
+    #[test]
+    fn no_token_leaves_for_a_relay_that_does_not_list_to_friends_only_or_is_another_servers() {
+        for body in [
+            Some(r#"{"multiplex":"relay","found":[],"friends":true,"server":"srv-1"}"#.to_string()),
+            Some(rooms_ok("autre-serveur")),
+            Some(r#"{"multiplex":"relay","found":[],"friends":false}"#.to_string()),
+            None,
+        ] {
+            let (mut h, rooms) = visible_host();
+            h.step(TogetherEvent::RoomsAnswered { tag: rooms, body });
+            let out = h.take();
+            assert!(find(&out, |f| matches!(f, TogetherFx::AskFriends { .. }).then_some(())).is_empty(), "{out:?}");
+            assert_eq!(notices(&out), [Notice::Listed(Some(Listed::No))]);
+        }
+    }
+
+    #[test]
+    fn a_relay_not_on_the_servers_public_names_gets_nothing() {
+        let mut h = Device::new();
+        h.step(TogetherEvent::Host { me: me("m", "H"), relay: "wss://ailleurs.exemple.fr".into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        h.take();
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketOpened { conn });
+        let out = h.take();
+        assert!(find(&out, |f| matches!(f, TogetherFx::HttpRooms { .. } | TogetherFx::AskFriends { .. }).then_some(())).is_empty(), "{out:?}");
+        assert!(notices(&out).contains(&Notice::Listed(Some(Listed::No))));
+    }
+
+    #[test]
+    fn without_a_friend_list_nothing_is_announced() {
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let ask = find(&h.take(), |f| if let TogetherFx::AskFriends { tag, .. } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", "")) });
+        let read = find(&h.take(), |f| if let TogetherFx::ReadFriendIds { tag } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::FriendIdsRead { tag: read, ids: None });
+        let out = h.take();
+        assert!(texts(&out).is_empty(), "{out:?}");
+        assert_eq!(notices(&out), [Notice::Listed(Some(Listed::No))]);
+        // An answer that does not say friendsOnly is not used either.
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let ask = find(&h.take(), |f| if let TogetherFx::AskFriends { tag, .. } = f { Some(*tag) } else { None })[0];
+        let old = FriendsAnswer::read(r#"{"multiplex":"relay","server":"srv-1","ticket":"T","ttl":300,"sessions":[]}"#);
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: old });
+        let out = h.take();
+        assert!(find(&out, |f| matches!(f, TogetherFx::ReadFriendIds { .. }).then_some(())).is_empty());
+        assert_eq!(notices(&out), [Notice::Listed(Some(Listed::No))]);
+    }
+
+    #[test]
+    fn refreshes_resend_the_list_only_when_re_read_and_release_when_plex_tv_is_mute() {
+        let mut h = announced();
+        // Every 5 presence ticks (15 s) the position is refreshed; the list read 15 s ago is cached
+        // and was already sent: not joined again.
+        for _ in 0..CARD_REFRESH_TICKS {
+            h.tick(TICK_EVERY_US);
+        }
+        let refresh = texts(&h.take());
+        assert_eq!(refresh.len(), 1, "{refresh:?}");
+        assert_eq!(refresh[0]["t"], "announce");
+        assert!(refresh[0].get("ticket").is_none() && refresh[0].get("friends").is_none(), "{refresh:?}");
+        // Past the 2-minute cache, plex.tv is asked again; a re-read list is sent even unchanged.
+        let mut reads = Vec::new();
+        for _ in 0..(FRIENDS_TTL_US / TICK_EVERY_US) {
+            h.tick(TICK_EVERY_US);
+            let out = h.take();
+            reads.extend(find(&out, |f| if let TogetherFx::ReadFriendIds { tag } = f { Some(*tag) } else { None }));
+            if !reads.is_empty() {
+                break;
+            }
+        }
+        assert_eq!(reads.len(), 1);
+        h.step(TogetherEvent::FriendIdsRead { tag: reads[0], ids: Some(vec!["2001".into()]) });
+        let sent = texts(&h.take());
+        assert_eq!(sent[0]["friends"], serde_json::json!(["2001"]), "a friend removed on plex.tv leaves the list");
+        // plex.tv mute at the next read: the announce is released, never kept with a stale list.
+        let mut read = None;
+        for _ in 0..(2 * FRIENDS_TTL_US / TICK_EVERY_US) {
+            h.tick(TICK_EVERY_US);
+            if let Some(t) = find(&h.take(), |f| if let TogetherFx::ReadFriendIds { tag } = f { Some(*tag) } else { None }).first() {
+                read = Some(*t);
+                break;
+            }
+        }
+        h.step(TogetherEvent::FriendIdsRead { tag: read.unwrap(), ids: None });
+        let out = h.take();
+        assert_eq!(texts(&out), [serde_json::json!({"t": "release"})]);
+        assert_eq!(notices(&out), [Notice::Listed(Some(Listed::No))]);
+    }
+
+    #[test]
+    fn an_admitted_friend_gets_the_key_once_and_a_burst_is_bounded() {
+        let mut h = announced();
+        let conn = h.conn();
+        h.tick(1_000);
+        h.take();
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"key-request","peer":"sid-1","pub":"PUB-1"}"#.into() });
+        let out = h.take();
+        let seals = find(&out, |f| if let TogetherFx::SealGrant { tag, request_pub, payload } = f { Some((*tag, request_pub.clone(), payload.clone())) } else { None });
+        assert_eq!(seals.len(), 1, "{out:?}");
+        let (tag, public, payload) = seals[0].clone();
+        assert_eq!(public, "PUB-1");
+        assert_eq!(payload.server, "srv-1");
+        assert_eq!(format_invite(&payload.secret, None), h.view().code);
+        assert!(payload.state.is_some());
+        assert!(!format!("{out:?}").contains(&payload.secret), "the secret is not printed");
+        h.step(TogetherEvent::GrantSealed { tag, sealed: Some(("HOSTPUB".into(), "BOX".into())) });
+        assert_eq!(texts(&h.take()), [serde_json::json!({"t": "key-grant", "peer": "sid-1", "pub": "HOSTPUB", "box": "BOX"})]);
+        // The same requester again: nothing. Then at most 5 per 10 s.
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"key-request","peer":"sid-1","pub":"PUB-1"}"#.into() });
+        assert!(h.take().is_empty());
+        for i in 2..10 {
+            h.step(TogetherEvent::SocketText { conn, text: format!(r#"{{"t":"key-request","peer":"sid-{i}","pub":"P"}}"#) });
+        }
+        assert_eq!(find(&h.take(), |f| matches!(f, TogetherFx::SealGrant { .. }).then_some(())).len(), GRANTS_PER_WINDOW - 1);
+    }
+
+    #[test]
+    fn a_private_session_hands_nothing_and_unlisting_says_so() {
+        let mut h = announced();
+        let conn = h.conn();
+        h.step(TogetherEvent::SetVisible(false));
+        let out = h.take();
+        assert_eq!(texts(&out), [serde_json::json!({"t": "unlist"})]);
+        assert!(notices(&out).contains(&Notice::Visible(false)));
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"key-request","peer":"sid-1","pub":"PUB-1"}"#.into() });
+        assert!(h.take().is_empty());
+    }
+
+    #[test]
+    fn an_announced_host_releases_when_it_leaves_and_a_relay_error_unlists() {
+        let mut h = announced();
+        h.step(TogetherEvent::Leave);
+        let out = h.take();
+        assert_eq!(texts(&out), [serde_json::json!({"t": "release"})]);
+        assert!(out.iter().position(|f| matches!(f, TogetherFx::SendText { .. })) < out.iter().position(|f| matches!(f, TogetherFx::SendBinary { .. })), "release, then bye");
+        let mut h = announced();
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"error","error":"owner"}"#.into() });
+        assert_eq!(notices(&h.take()), [Notice::Listed(Some(Listed::No))]);
+    }
+
+    /// A friend: lists the sessions of the servers it sees, then enters one with the ticket and the
+    /// key the host handed over.
+    #[test]
+    fn a_friend_lists_and_enters_a_visible_session() {
+        let host_keys = derive_session("K7Q29XFD", "srv-1", ROUNDS);
+        let session = format!(r#"{{"room":"{}","card":{{"name":"Dominique (dom)","title":"Le Film","type":"movie","key":"42","time":100,"playing":true}},"count":2,"age":2000}}"#, host_keys.room);
+        let mut f = Device::new();
+        f.tick(10_000_000);
+        f.step(TogetherEvent::RefreshFriends { servers: vec![srv1()] });
+        let out = f.take();
+        let rooms = find(&out, |x| if let TogetherFx::HttpRooms { tag, url, .. } = x { Some((*tag, url.clone())) } else { None });
+        assert_eq!(rooms.len(), 4, "the four candidate forms of the public name: {rooms:?}");
+        // The best-ranked form answers as srv-1's relay; the others fail.
+        f.step(TogetherEvent::RoomsAnswered { tag: rooms[0].0, body: Some(rooms_ok("srv-1")) });
+        for (tag, _) in &rooms[1..] {
+            f.step(TogetherEvent::RoomsAnswered { tag: *tag, body: None });
+        }
+        let out = f.take();
+        let asks = find(&out, |x| if let TogetherFx::AskFriends { tag, relay, server } = x { Some((*tag, relay.clone(), server.clone())) } else { None });
+        assert_eq!(asks.len(), 1, "{out:?}");
+        assert_eq!((asks[0].1.as_str(), asks[0].2.as_str()), (RELAY, "srv-1"));
+        f.step(TogetherEvent::FriendsAnswered { tag: asks[0].0, answer: Some(friends_ok("srv-1", &session)) });
+        let out = f.take();
+        let Some(Notice::FriendSessions(list)) = notices(&out).into_iter().next() else { panic!("{out:?}") };
+        assert_eq!(list.len(), 1);
+        assert_eq!((list[0].relay.as_str(), list[0].room.as_str(), list[0].server.as_str()), (RELAY, host_keys.room.as_str(), "srv-1"));
+        assert_eq!(list[0].time_at(f.s.now_us()), 102.0);
+        assert!(!format!("{list:?}").contains("TICKET-1"));
+        // Enter it.
+        f.step(TogetherEvent::JoinFriend { me: me("f", "Ami"), relay: RELAY.into(), room: host_keys.room.clone() });
+        let out = f.take();
+        let req = find(&out, |x| if let TogetherFx::RequestKey { tag, relay, room, ticket } = x { Some((*tag, relay.clone(), room.clone(), ticket.clone())) } else { None });
+        assert_eq!(req.len(), 1, "{out:?}");
+        assert_eq!(req[0].3, "TICKET-1");
+        assert!(!format!("{out:?}").contains("TICKET-1"), "the ticket is not printed");
+        let payload = GrantPayload { secret: "K7Q29XFD".into(), server: "srv-1".into(), state: Some(GrantState { time: 101.0, playing: true, c: 4, by: "h".into() }) };
+        f.step(TogetherEvent::FriendKey { tag: req[0].0, answer: Ok(payload) });
+        let out = f.take();
+        assert!(out.contains(&TogetherFx::OpenSocket { conn: f.conn(), url: format!("{RELAY}/r/{}", host_keys.room) }), "{out:?}");
+        let v = f.view();
+        assert!(!v.host && v.visible);
+        assert_eq!(v.item.as_ref().map(|i| i.title.as_str()), Some("Le Film"));
+        assert_eq!(v.position, Some(101.0));
+        assert_eq!(f.key(), host_keys.key);
+    }
+
+    #[test]
+    fn a_grant_for_another_room_or_a_refused_request_fails_the_join() {
+        let room = derive_session("K7Q29XFD", "srv-1", ROUNDS).room.clone();
+        let session = format!(r#"{{"room":"{room}","card":{{"name":"D","title":"T","time":0,"playing":false}},"count":1,"age":0}}"#);
+        let listed = |f: &mut Device| {
+            f.step(TogetherEvent::RefreshFriends { servers: vec![srv1()] });
+            let rooms = find(&f.take(), |x| if let TogetherFx::HttpRooms { tag, .. } = x { Some(*tag) } else { None });
+            f.step(TogetherEvent::RoomsAnswered { tag: rooms[0], body: Some(rooms_ok("srv-1")) });
+            for t in &rooms[1..] {
+                f.step(TogetherEvent::RoomsAnswered { tag: *t, body: None });
+            }
+            let ask = find(&f.take(), |x| if let TogetherFx::AskFriends { tag, .. } = x { Some(*tag) } else { None })[0];
+            f.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", &session)) });
+            f.take();
+            f.step(TogetherEvent::JoinFriend { me: me("f", "Ami"), relay: RELAY.into(), room: room.clone() });
+            find(&f.take(), |x| if let TogetherFx::RequestKey { tag, .. } = x { Some(*tag) } else { None })[0]
+        };
+        let mut f = Device::new();
+        let tag = listed(&mut f);
+        f.step(TogetherEvent::FriendKey { tag, answer: Ok(GrantPayload { secret: "ZZZZZZZZ".into(), server: "srv-1".into(), state: None }) });
+        assert_eq!(notices(&f.take()), [Notice::JoinFailed(JoinError::Failed)]);
+        assert!(f.s.view().is_none());
+        let mut f = Device::new();
+        let tag = listed(&mut f);
+        f.step(TogetherEvent::FriendKey { tag, answer: Err(JoinError::NoHost) });
+        assert_eq!(notices(&f.take()), [Notice::JoinFailed(JoinError::NoHost)]);
+        // A room never listed is not found.
+        let mut f = Device::new();
+        f.step(TogetherEvent::JoinFriend { me: me("f", "Ami"), relay: RELAY.into(), room: room.clone() });
+        assert_eq!(notices(&f.take()), [Notice::JoinFailed(JoinError::NotFound)]);
+    }
+
+    #[test]
+    fn an_expired_ticket_lists_again_before_entering() {
+        let room = derive_session("K7Q29XFD", "srv-1", ROUNDS).room.clone();
+        let session = format!(r#"{{"room":"{room}","card":{{"name":"D","title":"T","time":0,"playing":false}},"count":1,"age":0}}"#);
+        let mut f = Device::new();
+        let list = |f: &mut Device| {
+            let rooms = find(&f.take(), |x| if let TogetherFx::HttpRooms { tag, .. } = x { Some(*tag) } else { None });
+            f.step(TogetherEvent::RoomsAnswered { tag: rooms[0], body: Some(rooms_ok("srv-1")) });
+            for t in &rooms[1..] {
+                f.step(TogetherEvent::RoomsAnswered { tag: *t, body: None });
+            }
+            let ask = find(&f.take(), |x| if let TogetherFx::AskFriends { tag, .. } = x { Some(*tag) } else { None })[0];
+            f.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", &session)) });
+        };
+        f.step(TogetherEvent::RefreshFriends { servers: vec![srv1()] });
+        list(&mut f);
+        f.take();
+        f.tick(300_000_000);
+        f.step(TogetherEvent::JoinFriend { me: me("f", "Ami"), relay: RELAY.into(), room: room.clone() });
+        assert!(f.s.busy());
+        // Only srv-1's relay that answered is asked again (the others are set aside a while).
+        list(&mut f);
+        let out = f.take();
+        assert_eq!(find(&out, |x| matches!(x, TogetherFx::RequestKey { .. }).then_some(())).len(), 1, "{out:?}");
     }
 }
