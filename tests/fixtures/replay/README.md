@@ -760,3 +760,21 @@ pill's label (`Friends`), which every flow now measures. Each recording passed `
 and replaced its fixture through `tools/multiplex-rec rerecord` (anchor preserved). Targets and Resolve
 were SAME with every difference counter at zero at the CI window (`--window 960x540`) and at 1920x1080
 (`1-boot-home-chip-grid` 462 frames, `6-settings-family` 1059, `12-filmography-detail-return` 1052).
+
+Watch Together's interface adds the friends' live sessions, the join-by-code field and its keyboard
+to `FriendsScreen`'s canon (`together:[u32],editing:bool,code:str`), the player's More menu its
+Watch Together page and the Video & playback page its two per-profile rows, a SHAPE bump:
+`SCREEN_SHAPES_PIN` 0xaffa_778c_f4f5_f3dc → 0x1e31_0b96_f394_5e01, the recorder's frozen vectors
+re-derived, `FP_PRIOR` 7524794596150345573 → 11251609071045559382 and `FP_V6` 14417121799567616615 →
+12774535191131032000. The old anchors no longer load (`state_fp` 14417121799567616615 against the
+build's `FP_V6`: `session_app_fingerprint_probe_only` and the fixture preflight fail on them). All three
+were recorded afresh (`tests/focusfp.sh --rec --only 1,6,12` on the Linux DEBUG simulator, `hostsim`
+default features, under Xvfb with Mesa's software renderer, 350 ms keys, 1 s boot settle, 1.5 s final
+settle), each passed `multiplex-rec check` and replaced its fixture through `tools/multiplex-rec
+rerecord` (anchor preserved); the closed alphabet did not move. Targets and Resolve were SAME with every
+difference counter at zero at the CI window (`--window 960x540`) and at 1920x1080
+(`1-boot-home-chip-grid` 350 frames, `6-settings-family` 955, `12-filmography-detail-return` 920). A
+first take at the default 0.9 s step recorded twice the frames (`1-boot-home-chip-grid` 983, 1.0 MB)
+and was refused by `Recording::parse`'s decode budget (`record JSON/budget` at line 10772) before any
+replay, so recording timing on a fast unpaced host is not free. The macOS replay gate
+(`make check-replay`) was not run on these recordings.
