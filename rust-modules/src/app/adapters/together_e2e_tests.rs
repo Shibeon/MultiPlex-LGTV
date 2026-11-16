@@ -225,7 +225,7 @@ fn spin(devices: &mut [&mut Device], start: Instant, secs: u64, what: &str, done
 }
 
 fn playing(time: f64, paused: bool) -> Option<PlayerSnapshot> {
-    Some(PlayerSnapshot { item: movie(), obs: PlayerObs { time, paused, ready: true, seeking: false } })
+    Some(PlayerSnapshot { item: movie(), obs: PlayerObs { time, paused, ready: true, seeking: false, gestures: None } })
 }
 
 #[test]

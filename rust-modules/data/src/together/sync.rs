@@ -18,6 +18,16 @@
 //!   seek is commanded again, exactly [`RESEEK_LIMIT`] more times, after which the rule stops
 //!   seeking for that reference ([`TogetherSync::landing_failed`]) and keeps the last good slack,
 //!   so no input makes it seek in a loop. The next reference starts afresh.
+//!
+//! **Gestures.** The web tells the person's gesture from a correction by time alone: a change
+//! observed inside the settle window after a command is the command landing, any other change is the
+//! person. The LG player knows better and says so: [`PlayerObs::gestures`] counts the play, pause
+//! and seek requests the person made through the player's own controls. With a count, a change is
+//! sent only when a gesture preceded it ([`SETTLE_US`] to show up, kept open while a seek or a
+//! rebuffer is in flight), so a correction that lands late, a command the pipeline did not take, or
+//! the player's own recovery never echoes back as a new command, and a gesture made right after a
+//! correction is not swallowed by its settle window. A change no gesture explains brings a
+//! participant back to the session instead. Without a count (`None`) the web's rule applies.
 
 use super::wire::{IntentIn, SyncAction, TickIn};
 
@@ -76,6 +86,11 @@ pub struct PlayerObs {
     pub ready: bool,
     /// A seek is in progress: the position is not a landing yet.
     pub seeking: bool,
+    /// How many play, pause and seek gestures the person has made on this player so far (a
+    /// counter that only moves forward), or `None` when the observer cannot tell a gesture from
+    /// any other change. With a count, only a change that follows a gesture is sent as a command;
+    /// without one, a change outside the settle window is (the web's inference).
+    pub gestures: Option<u32>,
 }
 
 /// What the local player is asked to do.
@@ -136,6 +151,10 @@ pub struct TogetherSync {
     reseeks: u32,
     /// The current reference's seek kept missing: no more seeks until the next reference.
     gave_up: bool,
+    /// The last gesture count observed ([`PlayerObs::gestures`]).
+    gestures: Option<u32>,
+    /// A counted gesture waits for its change until this time.
+    gesture_until_us: Option<u64>,
 }
 
 impl TogetherSync {
@@ -153,6 +172,8 @@ impl TogetherSync {
             slack: 0.0,
             reseeks: 0,
             gave_up: false,
+            gestures: None,
+            gesture_until_us: None,
         }
     }
 
@@ -196,11 +217,14 @@ impl TogetherSync {
         self.slack = 0.0;
         self.reseeks = 0;
         self.gave_up = false;
+        self.gestures = obs.gestures;
+        self.gesture_until_us = None;
     }
 
     pub fn detach(&mut self) {
         self.seen = None;
         self.landing = false;
+        self.gesture_until_us = None;
     }
 
     /// Session left: no reference.
@@ -299,14 +323,32 @@ impl TogetherSync {
         let now = self.now_us;
         self.seen = Some(Seen { obs, at_us: now });
         let (time, paused) = (obs.time, obs.paused);
+        if let Some(count) = obs.gestures {
+            if self.gestures.is_some_and(|before| before != count) {
+                self.gesture_until_us = Some(now + SETTLE_US);
+            }
+            self.gestures = Some(count);
+        }
         if !obs.ready || obs.seeking {
             if !obs.ready {
                 self.was_ready = false;
             }
+            // A gesture's change shows once the seek (or the rebuffer) is over.
+            if self.gesture_until_us.is_some() {
+                self.gesture_until_us = Some(now + SETTLE_US);
+            }
             self.last = Last { time, paused, at_us: now };
             return None;
         }
-        if self.landing && now >= self.applying_until_us {
+        let expected = self.last.time + if self.last.paused { 0.0 } else { self.elapsed_s(self.last.at_us) };
+        let jumped = (time - expected).abs() > JUMP;
+        let changed = paused != self.last.paused || jumped;
+        let counted = obs.gestures.is_some();
+        let pending = self.gesture_until_us.is_some_and(|until| now <= until);
+        if self.gesture_until_us.is_some() && !pending {
+            self.gesture_until_us = None;
+        }
+        if self.landing && now >= self.applying_until_us && !(pending && changed) {
             // The first settled observation after a seek this rule asked for: how far off it landed.
             self.landing = false;
             self.last = Last { time, paused, at_us: now };
@@ -336,22 +378,25 @@ impl TogetherSync {
             }
             return None;
         }
-        let expected = self.last.time + if self.last.paused { 0.0 } else { self.elapsed_s(self.last.at_us) };
+        let settled = now > self.applying_until_us;
+        // With a count, only the person's gesture is a command; without one, any change once the
+        // last correction has settled.
+        let gesture = changed && if counted { pending } else { settled };
         let mut out = None;
-        if now > self.applying_until_us {
-            let jumped = (time - expected).abs() > JUMP;
-            if paused != self.last.paused || jumped {
-                if online {
-                    self.clock = tick_clock(self.clock);
-                    let c = self.clock;
-                    self.set_reference(SyncRef { time, playing: !paused, at_us: now, stamp: Stamp { c, by: self.me.clone() } });
-                    self.slack = 0.0;
-                    let action = if jumped { SyncAction::Seek } else if paused { SyncAction::Pause } else { SyncAction::Play };
-                    out = Some(IntentOut { action, time, playing: !paused, c });
-                }
-            } else if !host && online {
-                self.apply(false, cmds);
+        if gesture {
+            self.gesture_until_us = None;
+            self.landing = false;
+            if online {
+                self.clock = tick_clock(self.clock);
+                let c = self.clock;
+                self.set_reference(SyncRef { time, playing: !paused, at_us: now, stamp: Stamp { c, by: self.me.clone() } });
+                self.slack = 0.0;
+                let action = if jumped { SyncAction::Seek } else if paused { SyncAction::Pause } else { SyncAction::Play };
+                out = Some(IntentOut { action, time, playing: !paused, c });
             }
+        } else if settled && !host && online && !pending {
+            // Following the session; a change no gesture explains is brought back to it too.
+            self.apply(false, cmds);
         }
         self.last = Last { time, paused, at_us: now };
         out
@@ -424,11 +469,13 @@ mod tests {
         subtitle: &'static str,
         seeks: Vec<f64>,
         gop: f64,
+        /// Play and Pause commands are not taken (a pipeline busy or refusing).
+        deaf: bool,
     }
 
     impl FakePlayer {
         fn new() -> Self {
-            FakePlayer { pos: 0.0, paused: true, since_us: 0, volume: 0.8, subtitle: "fr", seeks: Vec::new(), gop: 0.0 }
+            FakePlayer { pos: 0.0, paused: true, since_us: 0, volume: 0.8, subtitle: "fr", seeks: Vec::new(), gop: 0.0, deaf: false }
         }
         fn time(&self, now: u64) -> f64 {
             self.pos + if self.paused { 0.0 } else { (now - self.since_us) as f64 / 1e6 }
@@ -458,18 +505,21 @@ mod tests {
         sync: TogetherSync,
         player: FakePlayer,
         now: u64,
+        /// The player's gesture count, when it keeps one.
+        gestures: Option<u32>,
     }
 
     impl Member {
         fn obs(&self) -> PlayerObs {
-            PlayerObs { time: self.player.time(self.now), paused: self.player.paused, ready: true, seeking: false }
+            PlayerObs { time: self.player.time(self.now), paused: self.player.paused, ready: true, seeking: false, gestures: self.gestures }
         }
         fn run(&mut self, cmds: Vec<PlayerCmd>) {
             for c in cmds {
                 match c {
                     PlayerCmd::Seek(t) => self.player.seek(t, self.now),
-                    PlayerCmd::Play => self.player.play(self.now),
-                    PlayerCmd::Pause => self.player.pause(self.now),
+                    PlayerCmd::Play if !self.player.deaf => self.player.play(self.now),
+                    PlayerCmd::Pause if !self.player.deaf => self.player.pause(self.now),
+                    PlayerCmd::Play | PlayerCmd::Pause => {}
                 }
             }
         }
@@ -516,8 +566,13 @@ mod tests {
             self.at(100);
             let now = self.now;
             act(&mut self.player, now);
+            self.count_gesture();
             let out = self.poll(true).expect("a gesture is a command");
             self.intent_of(out)
+        }
+        /// The person acted on the player: a counting player says so.
+        fn count_gesture(&mut self) {
+            self.gestures = self.gestures.map(|g| g.wrapping_add(1));
         }
         fn at(&mut self, ms: u64) {
             self.now += ms * 1000;
@@ -526,9 +581,14 @@ mod tests {
     }
 
     fn member(id: &'static str, host: bool, playing: bool, start_ms: u64) -> Member {
+        member_counting(id, host, playing, start_ms, None)
+    }
+
+    /// A member whose player counts the person's gestures (`Some`), or cannot tell (`None`).
+    fn member_counting(id: &'static str, host: bool, playing: bool, start_ms: u64, gestures: Option<u32>) -> Member {
         let mut sync = TogetherSync::new(id);
         sync.advance(start_ms * 1000);
-        let mut m = Member { id, host, sync, player: FakePlayer::new(), now: start_ms * 1000 };
+        let mut m = Member { id, host, sync, player: FakePlayer::new(), now: start_ms * 1000, gestures };
         if playing {
             m.player.play(m.now);
         }
@@ -855,6 +915,103 @@ mod tests {
         }
         let out = a.gesture(|p, now| p.seek(50.0, now));
         assert_eq!(out.c, Some(MAX_SAFE_CLOCK));
+    }
+
+    /// A player that counts gestures: a Pause the session commanded that the pipeline did not take
+    /// (busy, refusing) is not the person resuming. Without a count, the still-playing player read
+    /// after the settle window was a Play gesture, sent to everyone: the remote Pause echoed back
+    /// as a Play. With one, nothing is sent and the session's Pause is asked again.
+    #[test]
+    fn a_commanded_pause_the_player_did_not_take_is_never_read_back_as_a_play() {
+        let t0 = 15_000_000;
+        let mut h = member("h", true, true, t0);
+        let mut a = member_counting("a", false, true, t0, Some(0));
+        let ih = h.gesture(|p, now| p.pause(now));
+        a.player.deaf = true;
+        a.at(100);
+        assert!(a.on_intent(&ih));
+        assert!(!a.player.paused, "the pipeline did not take the Pause");
+        for _ in 0..8 {
+            a.at(500);
+            assert_eq!(a.poll(true), None, "no echo: the person did nothing");
+        }
+        // The pipeline takes commands again: the session's Pause is asked again and lands.
+        a.player.deaf = false;
+        for _ in 0..8 {
+            a.at(500);
+            assert_eq!(a.poll(true), None);
+        }
+        assert!(a.player.paused, "the session's Pause was asked again");
+        assert_eq!(a.sync.stamp(), Stamp { c: ih.c.unwrap(), by: "h".into() }, "the reference stands");
+    }
+
+    /// With a count, the person's gesture right after a correction is theirs: a Pause pressed half
+    /// a second after the session sought this player is sent, where the settle window used to
+    /// swallow it (and the session then dragged the player back to playing).
+    #[test]
+    fn a_counted_gesture_inside_the_settle_window_is_sent() {
+        let t0 = 16_000_000;
+        let mut h = member("h", true, true, t0);
+        let mut a = member_counting("a", false, true, t0, Some(7));
+        let ih = h.gesture(|p, now| p.seek(300.0, now));
+        a.at(100);
+        assert!(a.on_intent(&ih));
+        a.at(400);
+        let now = a.now;
+        a.player.pause(now);
+        a.count_gesture();
+        let out = a.poll(true).expect("the person's Pause is a command, settle window or not");
+        assert_eq!(out.action, SyncAction::Pause);
+        assert!(out.c > ih.c.unwrap());
+    }
+
+    /// A counted seek gesture is sent once it lands, however long the player reports a seek in
+    /// flight (an LG reopen takes seconds): the gesture waits for its landing.
+    #[test]
+    fn a_counted_seek_is_sent_when_it_lands_after_a_long_seek() {
+        let t0 = 17_000_000;
+        let mut a = member_counting("a", true, true, t0, Some(0));
+        a.at(500);
+        a.poll(true);
+        a.count_gesture();
+        let mut cmds = Vec::new();
+        for _ in 0..8 {
+            a.at(500);
+            let mut o = a.obs();
+            o.seeking = true;
+            assert_eq!(a.sync.poll(o, true, true, &mut cmds), None, "not landed yet");
+        }
+        let now = a.now;
+        a.player.seek(1_000.0, now);
+        a.at(500);
+        let out = a.poll(true).expect("the landed seek is the person's");
+        assert_eq!(out.action, SyncAction::Seek);
+        assert!((out.time - 1_000.5).abs() < 0.1, "{}", out.time);
+        assert!(cmds.is_empty());
+    }
+
+    /// With a count, a jump nobody asked for (the player's own recovery reopening a few seconds
+    /// back) is no gesture: a participant is brought back to the session instead of moving it.
+    #[test]
+    fn an_uncounted_jump_is_corrected_not_sent() {
+        let t0 = 18_000_000;
+        let mut h = member("h", true, true, t0);
+        let mut a = member_counting("a", false, true, t0, Some(0));
+        let ih = h.gesture(|p, now| p.seek(500.0, now));
+        a.at(100);
+        a.on_intent(&ih);
+        for _ in 0..6 {
+            a.at(500);
+            assert_eq!(a.poll(true), None);
+        }
+        let seeks = a.player.seeks.len();
+        let now = a.now;
+        let back = a.player.time(now) - 8.0;
+        a.player.pos = back;
+        a.player.since_us = now;
+        a.at(500);
+        assert_eq!(a.poll(true), None, "the player's own jump is not a command");
+        assert_eq!(a.player.seeks.len(), seeks + 1, "the participant is sought back to the session");
     }
 
     #[test]

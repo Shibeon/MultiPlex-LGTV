@@ -2172,7 +2172,7 @@ mod tests {
         let mut g = joining("z", &code);
         relay(&mut g, &mut [&mut h]);
         relay(&mut h, &mut [&mut g]);
-        let at = |time: f64, paused: bool| PlayerObs { time, paused, ready: true, seeking: false };
+        let at = |time: f64, paused: bool| PlayerObs { time, paused, ready: true, seeking: false, gestures: None };
         h.step(TogetherEvent::Attach { item: movie(), obs: at(0.0, true) });
         g.step(TogetherEvent::Attach { item: movie(), obs: at(0.0, true) });
         h.step(TogetherEvent::Player(at(0.0, true)));
@@ -2244,7 +2244,7 @@ mod tests {
     #[test]
     fn stray_answers_and_player_events_outside_a_session_change_nothing() {
         let mut d = Device::new();
-        let obs = PlayerObs { time: 1.0, paused: false, ready: true, seeking: false };
+        let obs = PlayerObs { time: 1.0, paused: false, ready: true, seeking: false, gestures: None };
         assert_eq!(d.step(TogetherEvent::Player(obs)), Handled::No);
         assert_eq!(d.step(TogetherEvent::Sealed { tag: 4, bytes: vec![1] }), Handled::No);
         assert_eq!(d.step(TogetherEvent::Opened { tag: 4, plain: None }), Handled::No);

@@ -285,7 +285,7 @@ fn the_player_is_attached_observed_every_half_second_and_detached() {
     let io = Script::default();
     let (mut store, mut held) = hosting(&mut world, &io);
     held.sent.clear();
-    world.player = Some(PlayerSnapshot { item: movie(), obs: PlayerObs { time: 10.0, paused: false, ready: true, seeking: false } });
+    world.player = Some(PlayerSnapshot { item: movie(), obs: PlayerObs { time: 10.0, paused: false, ready: true, seeking: false, gestures: None } });
     world.now_ms += 16;
     store.pump(&world.input());
     assert_eq!(store.attached, Some(movie()));

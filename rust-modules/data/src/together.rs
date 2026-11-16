@@ -8,6 +8,8 @@
 //! - [`relay`]: relay candidates from the Plex servers' addresses, and `findRoom` as a fold.
 //! - [`sync`]: the Lamport rule that keeps players together, with a keyframe-slack guard.
 //! - [`session`]: [`session::TogetherSession`], the machine of one session.
+//! - [`player`]: the player's side, pure: its facts as the session's observation, which playback a
+//!   session may drive, and the one gate a Follow goes through.
 //! - [`friends`]: PROVISIONAL pure pieces of the friends listing (being redesigned; not wired).
 //!
 //! `interop.json` was produced by the web client's own code under Node's WebCrypto; the tests below
@@ -16,6 +18,7 @@
 pub mod friends;
 pub mod invite;
 pub mod keys;
+pub mod player;
 pub mod relay;
 pub mod session;
 pub mod sync;
