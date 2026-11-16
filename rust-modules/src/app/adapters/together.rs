@@ -5,7 +5,8 @@
 //! exchange), each socket on its own off-frame worker running `plx_net::ws::run`, and the sends and
 //! closes on that socket's outbox, in the order the store pushed them. Every answer and socket event
 //! lands in the store's mailbox (which wakes the frame loop); a job that could not start is refused
-//! through its port, a socket that could not start reports `Closed`.
+//! through its port, a socket that could not start reports `Closed`. A socket's entry leaves the
+//! runner's table on its `Close`, or at the next job once its worker has ended by itself.
 //!
 //! **Relay TLS** (owner approved, kept narrow): each relay host this runner dials, and only those, is
 //! admitted to the bundled public roots (`keypin::admit_relay_host`), so a 2020 firmware whose store
@@ -155,10 +156,18 @@ impl TogetherIo for LiveTogetherIo<'_> {
     }
 }
 
-/// A socket the runner keeps: the outbox of its current attempt, and its cancel flag.
+/// A socket the runner keeps: the outbox of its current attempt, its cancel flag, and whether its
+/// worker has ended (set by the worker, last).
 pub(crate) struct Live {
     outbox: Arc<Mutex<Option<Outbox>>>,
     cancel: Arc<AtomicBool>,
+    ended: Arc<AtomicBool>,
+}
+
+impl Live {
+    fn ended(&self) -> bool {
+        self.ended.load(Ordering::Acquire)
+    }
 }
 
 /// The runner. `Held` (tests) parks the jobs instead of starting them.
@@ -190,6 +199,9 @@ impl TogetherRunner {
                 return;
             }
         };
+        // A socket that ended by itself (the relay closed it, the network failed) never sees a
+        // `Close`: its entry goes with the next job.
+        sockets.retain(|_, live| !live.ended());
         match job {
             TogetherJob::Work(Job { addr, req }, port) => {
                 let refusal = port.clone();
@@ -201,8 +213,8 @@ impl TogetherRunner {
                 }
             }
             TogetherJob::Socket { conn, url, port } => {
-                let live = Live { outbox: Arc::default(), cancel: Arc::default() };
-                if open_socket(conn, url, port.clone(), Arc::clone(&live.outbox), Arc::clone(&live.cancel)) {
+                let live = Live { outbox: Arc::default(), cancel: Arc::default(), ended: Arc::default() };
+                if open_socket(conn, url, port.clone(), Arc::clone(&live.outbox), Arc::clone(&live.cancel), Arc::clone(&live.ended)) {
                     sockets.insert(conn, live);
                 } else {
                     port.socket(conn, SocketNews::Closed);
@@ -232,7 +244,7 @@ impl TogetherRunner {
 }
 
 /// One socket's worker: `ws::run` (and the roots retry), its events to the store, `Closed` last.
-fn open_socket(conn: u32, url: String, port: TogetherPort, slot: Arc<Mutex<Option<Outbox>>>, cancel: Arc<AtomicBool>) -> bool {
+fn open_socket(conn: u32, url: String, port: TogetherPort, slot: Arc<Mutex<Option<Outbox>>>, cancel: Arc<AtomicBool>, ended: Arc<AtomicBool>) -> bool {
     admit(&url);
     plx_base::task::spawn_off_frame("together-ws", move |off| {
         let mut on = |event: Event| match event {
@@ -247,6 +259,7 @@ fn open_socket(conn: u32, url: String, port: TogetherPort, slot: Arc<Mutex<Optio
             plx_base::eventlog::log(&format!("together: socket {conn} ended: {}", end_word(&end)));
         }
         *slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        ended.store(true, Ordering::Release);
         port.socket(conn, SocketNews::Closed);
     })
 }
@@ -285,6 +298,27 @@ mod tests {
         assert_eq!(host_of("wss://x.plex.direct@evil.example/r"), None);
         assert_eq!(host_of("wss://[::1]:9/r"), None);
         assert_eq!(host_of("relais"), None);
+    }
+
+    /// A socket that ends by itself (here: an address the socket refuses at once) leaves the
+    /// runner's table by the next job, without waiting for a `Close` that may never come.
+    #[test]
+    fn a_socket_that_ended_by_itself_is_pruned() {
+        let store = plx_data::stores::together::TogetherStore::new();
+        let mut runner = TogetherRunner::default();
+        runner.start(vec![TogetherJob::Socket { conn: 1, url: "pas-une-adresse".into(), port: store.port() }]);
+        let start = std::time::Instant::now();
+        loop {
+            let TogetherRunner::Live { sockets } = &runner else { panic!() };
+            if sockets.get(&1).is_none_or(Live::ended) {
+                break;
+            }
+            assert!(start.elapsed() < Duration::from_secs(10), "the socket worker ends");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        runner.start(vec![TogetherJob::Send { conn: 2, frame: Frame::Text("t".into()) }]);
+        let TogetherRunner::Live { sockets } = &runner else { panic!() };
+        assert!(sockets.is_empty(), "the ended socket's entry is gone");
     }
 
     #[test]

@@ -10,8 +10,13 @@
 //!   as on the web); it may still host or join by code.
 //! - **The debug-build write gate** (`plex::together::together_write_gate`): announcing, and the
 //!   owner's delegation token, need a loopback server, an armed stand-in or the owner's live switch.
-//! - **Nothing runs while nothing is asked**: with no session, no request in flight and no command,
-//!   the pump is skipped and nothing is read.
+//! - **Nothing runs while nothing is asked**: with no session, no request in flight, no command and
+//!   nothing of the seated identity's held (its friends' sessions, its friend list), the pump is
+//!   skipped and nothing is read. While something of it is held the pump runs, so the frame another
+//!   identity is seated is the frame the store forgets it.
+//! - **A server's relay is found on what plex.tv publishes for it** (`SourceRef::published`, written
+//!   by discovery), not only on the address that answered, which at home is a LAN or `plex.direct`
+//!   name no relay can sit behind.
 //!
 //! The UI (commands, notices, the friends' sessions) and the player (its snapshot, the requests the
 //! session makes of it) are wired by the lanes that build them; this is their seam.
@@ -34,10 +39,17 @@ pub(crate) struct TogetherFeed {
     requests: Vec<TogetherPlayerRequest>,
 }
 
-/// The servers this identity sees, as the together store needs them: identity, the address that
-/// answered (its public name is where a friend's relay may be found), ownership, and this identity's
-/// own access token for each.
-fn together_servers(session: &plx_plex::plex::session::Session) -> Vec<TogetherServer> {
+/// The servers this identity sees, as the together store needs them: identity, the connections
+/// plex.tv publishes for each (a server's public names are where its relay, and a friend's, may be
+/// found: the web's `relayCandidates` reads the same list), ownership, the address that answered
+/// (the owner's delegation request goes there), and this identity's own access token for each.
+///
+/// The published list is what discovery wrote down (`SourceRef::published`); the address that
+/// answered joins it when the list does not name it (a dev boot, a session file written before the
+/// list was kept). A `local` or Plex-relay connection, an IP and a `plex.direct` name are never a
+/// relay candidate (`relay::relay_candidates`), so a server reached on its LAN is found by its
+/// published public name, or not at all.
+pub(crate) fn together_servers(session: &plx_plex::plex::session::Session) -> Vec<TogetherServer> {
     use plx_plex::plex::probe::Location;
     session
         .sources
@@ -45,10 +57,11 @@ fn together_servers(session: &plx_plex::plex::session::Session) -> Vec<TogetherS
         .filter(|s| !s.machine_id.is_empty())
         .map(|s| {
             let base = s.origin().map(|o| o.base());
-            let connections = base
-                .iter()
-                .map(|uri| PlexConnection { uri: uri.clone(), local: s.tier == Some(Location::Local), relay: s.tier == Some(Location::Relay) })
-                .collect();
+            let mut connections: Vec<PlexConnection> =
+                s.published.iter().map(|c| PlexConnection { uri: c.uri.clone(), local: c.local, relay: c.relay }).collect();
+            if let Some(uri) = base.as_ref().filter(|uri| !connections.iter().any(|c| c.uri.trim_end_matches('/') == uri.trim_end_matches('/'))) {
+                connections.push(PlexConnection { uri: uri.clone(), local: s.tier == Some(Location::Local), relay: s.tier == Some(Location::Relay) });
+            }
             let token = (!s.token.is_empty()).then(|| s.token.clone());
             TogetherServer::new(ServerInfo { id: s.machine_id.clone(), connections }, s.owned, base, token)
         })
@@ -160,5 +173,31 @@ mod tests {
         assert_eq!(feed.take_player_requests(), [TogetherPlayerRequest::Pause]);
         assert!(feed.take_notices().is_empty());
         assert!(feed.view().is_none());
+    }
+
+    /// The usual home: the server answers on its LAN address through a `plex.direct` name, which
+    /// no relay can sit behind, and publishes its public name on plex.tv. The relay is found on
+    /// that published name (as the web's `relayCandidates` reads plex.tv's connections), never on
+    /// a local, `plex.direct` or Plex-relay connection.
+    #[test]
+    fn a_server_reached_on_its_lan_name_is_found_by_its_published_public_name() {
+        let source: plx_plex::plex::session::SourceRef = serde_json::from_value(serde_json::json!({
+            "machine_id": "srv-1", "name": "nas", "owned": true, "address": "192.168.1.10", "port": 32400, "token": "server-token",
+            "origin": "https://192-168-1-10.0123456789abcdef.plex.direct:32400",
+            "published": [
+                {"uri": "https://192-168-1-10.0123456789abcdef.plex.direct:32400", "local": true, "relay": false},
+                {"uri": "https://203-0-113-9.0123456789abcdef.plex.direct:32400", "local": false, "relay": false},
+                {"uri": "https://plex.exemple.fr:443", "local": false, "relay": false},
+                {"uri": "https://146-0-0-1.0123456789abcdef.plex.direct:8443", "local": false, "relay": true}
+            ]
+        }))
+        .unwrap();
+        let session = plx_plex::plex::session::Session { sources: vec![source], ..Default::default() };
+        let servers = together_servers(&session);
+        assert_eq!(servers.len(), 1);
+        let infos: Vec<ServerInfo> = servers.iter().map(|s| s.info.clone()).collect();
+        let relays = plx_data::together::relay::relay_candidates(&infos);
+        assert_eq!(relays, ["wss://plex.exemple.fr/multiplex-relay", "wss://plex.exemple.fr"], "only the published public name");
+        assert!(plx_data::together::relay::relay_discoverable("wss://plex.exemple.fr/multiplex-relay", &infos));
     }
 }

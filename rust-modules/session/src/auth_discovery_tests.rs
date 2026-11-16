@@ -3416,3 +3416,36 @@ fn a_later_strict_failure_that_is_not_the_date_ends_no_key_on_the_control_plane(
     assert_eq!(failure.curl_rc, Some(60));
     assert_eq!(plx_net::net::keypin::fact_for(&key).blocked, None, "the date is no longer what fails");
 }
+
+/// **Discovery writes down every connection plex.tv publishes**, not only the one that answered:
+/// the share here answers on its `plex.direct` name and also publishes `media.example.internal`,
+/// the name Watch Together finds its relay on (`SourceRef::published`). A roster refresh of a server
+/// that did not answer this time re-reads the list from the wire row too.
+#[test]
+fn a_roster_keeps_every_connection_plex_tv_publishes() {
+    let d = Dialled::new(vec![
+        ("192.168.0.10", 200, identity_json("aaaa1111")),
+        ("203.0.113.9", 200, identity_json("bbbb2222")),
+    ]);
+    let resources = a_two_server_account();
+    let Resolved::Reached(roster) = resolve_roster(&resources, &[], CredentialPolicy::AllowPlaintext, &|o| d.dial(o))
+    else {
+        panic!("both servers answer");
+    };
+    let share = roster.iter().find(|s| s.machine_id == "bbbb2222").expect("the share");
+    assert_eq!(
+        share.published.iter().map(|c| (c.uri.as_str(), c.local, c.relay)).collect::<Vec<_>>(),
+        [
+            ("https://172-20-4-7.h.plex.direct:32400", true, false),
+            ("https://media.example.internal:31234", false, false),
+            ("https://203-0-113-9.h.plex.direct:31234", false, false),
+        ],
+    );
+    let ours = roster.iter().find(|s| s.machine_id == "aaaa1111").expect("ours");
+    assert!(ours.published.iter().any(|c| c.relay && c.uri == "https://plex-relay.example.net:8443"));
+
+    let stored: Vec<SourceRef> = roster.iter().map(|s| SourceRef { published: Vec::new(), ..s.clone() }).collect();
+    let next = refreshed_sources(&stored, &[], &resources, &[]);
+    let share = next.iter().find(|s| s.machine_id == "bbbb2222").expect("the share");
+    assert_eq!(share.published.len(), 3, "a refresh reads the list again");
+}

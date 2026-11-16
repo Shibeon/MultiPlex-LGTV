@@ -5443,7 +5443,7 @@ mod watchlist;
 #[path = "friends.rs"]
 mod friends;
 #[path = "together.rs"]
-mod together;
+pub(crate) mod together;
 
 #[cfg(test)]
 #[path = "friends_route_tests.rs"]

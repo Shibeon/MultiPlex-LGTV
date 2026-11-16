@@ -32,7 +32,8 @@
 //! | `FriendsAnswered`, `FriendIdsRead`, `GrantSealed` | the request that asked (by `tag`) | the announce, the listing, `SendText` |
 //! | `RefreshFriends` | any | `HttpRooms` per candidate relay of each server, `AskFriends` per relay found; `Notice::FriendSessions` |
 //! | `JoinFriend` | any (leaves the current one) | `RequestKey`, then `Derive`; `Live` when the room is the one listed |
-//! | `Permit` | any | may announce or not (off from construction); turned off: `release` |
+//! | `Permit` | any | may announce or not (off from construction); turned off: an announce under way stops at its step, an announced one says `release` |
+//! | `Forget` | any (leaves the current one) | another identity is seated: the friend allow-list, the friends' sessions and their tickets, the listing and the grants being sealed are dropped, announcing is off until the next `Permit`; `Notice::FriendSessions([])` when something was listed |
 //!
 //! A pair not listed (a stale `tag` or `conn`, a player event outside a session) is
 //! [`Handled::No`] and changes nothing. Volume, subtitles, audio and quality have no field in any
@@ -236,6 +237,10 @@ pub enum TogetherEvent {
     /// nor a managed profile, and a build allowed to write there). Off until said: a session is
     /// never announced, nor a key handed over, before a `Permit { announce: true }`.
     Permit { announce: bool },
+    /// Another identity (account or profile) is seated: leave the session and forget everything
+    /// this one was told or read. A request still in flight for the previous identity finds no
+    /// plan waiting for it.
+    Forget,
 }
 
 #[derive(Clone, PartialEq)]
@@ -258,8 +263,10 @@ pub enum TogetherFx {
     /// `POST {relay}/friends` with the token proper to `server` (its own access token, or a
     /// delegation token it hands its owner; never the plex.tv account token), answered
     /// `FriendsAnswered`. The relay was found on that server's public names and said it is that
-    /// server's (`/rooms`), which was checked before this effect.
-    AskFriends { tag: u32, relay: String, server: String },
+    /// server's (`/rooms`), which was checked before this effect. `announce`: asked for the host's
+    /// announce (the store shows no credential for one this identity may not make), not for a
+    /// listing of friends' sessions.
+    AskFriends { tag: u32, relay: String, server: String, announce: bool },
     /// Read this account's Plex friends (plex.tv `/api/users/`, with its own account token, here),
     /// answered `FriendIdsRead`.
     ReadFriendIds { tag: u32 },
@@ -510,6 +517,7 @@ impl fmt::Debug for TogetherEvent {
                 f.debug_struct("FriendKey").field("tag", tag).field("answer", &answer.as_ref().map(|_| HIDDEN)).finish()
             }
             TogetherEvent::Permit { announce } => f.debug_struct("Permit").field("announce", announce).finish(),
+            TogetherEvent::Forget => f.write_str("Forget"),
         }
     }
 }
@@ -530,7 +538,9 @@ impl fmt::Debug for TogetherFx {
             TogetherFx::Notice(n) => f.debug_tuple("Notice").field(n).finish(),
             // A control message can carry a ticket or a grant: its length only.
             TogetherFx::SendText { conn, text } => f.debug_struct("SendText").field("conn", conn).field("bytes", &text.len()).finish(),
-            TogetherFx::AskFriends { tag, relay, server } => f.debug_struct("AskFriends").field("tag", tag).field("relay", relay).field("server", server).finish(),
+            TogetherFx::AskFriends { tag, relay, server, announce } => {
+                f.debug_struct("AskFriends").field("tag", tag).field("relay", relay).field("server", server).field("announce", announce).finish()
+            }
             TogetherFx::ReadFriendIds { tag } => f.debug_struct("ReadFriendIds").field("tag", tag).finish(),
             TogetherFx::SealGrant { tag, .. } => f.debug_struct("SealGrant").field("tag", tag).finish_non_exhaustive(),
             TogetherFx::RequestKey { tag, relay, room, .. } => f.debug_struct("RequestKey").field("tag", tag).field("relay", relay).field("room", room).finish_non_exhaustive(),
@@ -736,6 +746,12 @@ impl TogetherSession {
     /// A friends' listing is under way.
     pub fn listing(&self) -> bool {
         !self.listing.is_empty()
+    }
+
+    /// Holds something of the seated identity's own (its friend allow-list, the friends' sessions
+    /// it listed, a listing under way): its owner must see an identity change at once.
+    pub fn remembers(&self) -> bool {
+        self.friend_ids.is_some() || !self.sessions.is_empty() || !self.listing.is_empty() || !self.list_servers.is_empty()
     }
 
     /// The machine's clock (the sum of the ticks' `dt_us`).
@@ -1008,14 +1024,29 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
         TogetherEvent::Permit { announce: on } => {
             desk.may_announce = on;
             match phase {
-                Phase::Live(mut live) if !on && matches!(live.announce, Announce::On(_)) && live.status == Status::Open => {
-                    fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("release") });
-                    live.announce = Announce::Off;
-                    set_listed(&mut live, None, fx);
+                Phase::Live(mut live) if !on => {
+                    // Whatever step the announce is at stops there (a late `/rooms`, `/friends` or
+                    // friend list finds nothing waiting); an announced session is released.
+                    withdraw(&mut live, fx);
                     (Phase::Live(live), Handled::Yes)
                 }
                 other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::Yes),
             }
+        }
+        TogetherEvent::Forget => {
+            leave(phase, desk, fx);
+            let listed = !desk.sessions.is_empty() || !desk.listing.is_empty();
+            desk.friend_ids = None;
+            desk.grants.clear();
+            desk.listing.clear();
+            desk.list_servers.clear();
+            desk.sessions.clear();
+            desk.backoff = RelayBackoff::default();
+            desk.may_announce = false;
+            if listed {
+                fx.push(TogetherFx::Notice(Notice::FriendSessions(Vec::new())));
+            }
+            (Phase::Idle, Handled::Yes)
         }
         TogetherEvent::SetVisible(on) => match phase {
             Phase::Live(mut live) => {
@@ -1044,18 +1075,18 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
             }
             other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
-        TogetherEvent::FriendIdsRead { tag, ids } => {
-            if let Some(ids) = &ids {
-                desk.friend_ids = Some((ids.clone(), desk.now_us));
-            }
-            match phase {
-                Phase::Live(mut live) if matches!(&live.announce, Announce::Ids(t, _) | Announce::On(Some(t)) if *t == tag) => {
-                    on_friend_ids(&mut live, ids, desk, fx);
-                    (Phase::Live(live), Handled::Yes)
+        TogetherEvent::FriendIdsRead { tag, ids } => match phase {
+            // Kept only when it is the read the announce waits for: a stale one (a previous
+            // identity's, a withdrawn announce's) never fills the cache.
+            Phase::Live(mut live) if matches!(&live.announce, Announce::Ids(t, _) | Announce::On(Some(t)) if *t == tag) => {
+                if let Some(ids) = &ids {
+                    desk.friend_ids = Some((ids.clone(), desk.now_us));
                 }
-                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+                on_friend_ids(&mut live, ids, desk, fx);
+                (Phase::Live(live), Handled::Yes)
             }
-        }
+            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+        },
         TogetherEvent::GrantSealed { tag, sealed } => {
             let Some((conn, peer)) = desk.grants.remove(&tag) else { return (phase, Handled::No) };
             if let (Phase::Live(live), Some((public, sealed))) = (&phase, sealed) {
@@ -1203,7 +1234,20 @@ fn refresh_announce(live: &mut Live, ids: Option<Vec<String>>, read_at: u64, now
     }
 }
 
+/// The announce stops where it stands: nothing announced yet is simply not; an announced session is
+/// released.
+fn withdraw(live: &mut Live, fx: &mut Vec<TogetherFx>) {
+    if matches!(live.announce, Announce::On(_)) && live.status == Status::Open {
+        fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("release") });
+    }
+    live.announce = Announce::Off;
+    set_listed(live, None, fx);
+}
+
 fn on_announce_rooms(live: &mut Live, body: Option<&str>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    if !desk.may_announce {
+        return withdraw(live, fx);
+    }
     let server = live.grant.as_ref().map(|(_, s)| s.clone()).unwrap_or_default();
     let hit = body.and_then(RoomsAnswer::read).filter(|a| a.friends && a.server.as_deref() == Some(server.as_str()));
     if hit.is_none() {
@@ -1211,10 +1255,13 @@ fn on_announce_rooms(live: &mut Live, body: Option<&str>, desk: &mut Desk, fx: &
     }
     let tag = desk.tag();
     live.announce = Announce::Friends(tag);
-    fx.push(TogetherFx::AskFriends { tag, relay: live.relay.clone(), server });
+    fx.push(TogetherFx::AskFriends { tag, relay: live.relay.clone(), server, announce: true });
 }
 
 fn on_announce_friends(live: &mut Live, answer: Option<FriendsAnswer>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    if !desk.may_announce {
+        return withdraw(live, fx);
+    }
     let server = live.grant.as_ref().map(|(_, s)| s.clone()).unwrap_or_default();
     let Some(answer) = answer.filter(|a| a.lists_for(&server)) else { return not_listed(live, desk.now_us, fx) };
     match fresh_friends(desk) {
@@ -1228,6 +1275,9 @@ fn on_announce_friends(live: &mut Live, answer: Option<FriendsAnswer>, desk: &mu
 }
 
 fn on_friend_ids(live: &mut Live, ids: Option<Vec<String>>, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
+    if !desk.may_announce {
+        return withdraw(live, fx);
+    }
     let now = desk.now_us;
     match std::mem::replace(&mut live.announce, Announce::Off) {
         Announce::Ids(_, answer) => first_announce(live, answer, ids, now, now, fx),
@@ -1409,7 +1459,7 @@ fn settle_listing(phase: Phase, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Ph
         let tag = desk.tag();
         if let Some(l) = desk.listing.iter_mut().find(|l| l.id == id && matches!(l.stage, ListStage::Search)) {
             l.stage = ListStage::Asking(tag, relay.clone());
-            fx.push(TogetherFx::AskFriends { tag, relay, server: id });
+            fx.push(TogetherFx::AskFriends { tag, relay, server: id, announce: false });
         }
     }
     if !desk.listing.iter().all(|l| matches!(l.stage, ListStage::Done(_))) {
@@ -2245,7 +2295,7 @@ mod tests {
         let (mut h, rooms) = visible_host();
         h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
         let out = h.take();
-        let asks = find(&out, |f| if let TogetherFx::AskFriends { tag, relay, server } = f { Some((*tag, relay.clone(), server.clone())) } else { None });
+        let asks = find(&out, |f| if let TogetherFx::AskFriends { tag, relay, server, .. } = f { Some((*tag, relay.clone(), server.clone())) } else { None });
         assert_eq!(asks.len(), 1, "{out:?}");
         assert_eq!((asks[0].1.as_str(), asks[0].2.as_str()), (RELAY, "srv-1"));
         h.step(TogetherEvent::FriendsAnswered { tag: asks[0].0, answer: Some(friends_ok("srv-1", "")) });
@@ -2442,7 +2492,7 @@ mod tests {
             f.step(TogetherEvent::RoomsAnswered { tag: *tag, body: None });
         }
         let out = f.take();
-        let asks = find(&out, |x| if let TogetherFx::AskFriends { tag, relay, server } = x { Some((*tag, relay.clone(), server.clone())) } else { None });
+        let asks = find(&out, |x| if let TogetherFx::AskFriends { tag, relay, server, .. } = x { Some((*tag, relay.clone(), server.clone())) } else { None });
         assert_eq!(asks.len(), 1, "{out:?}");
         assert_eq!((asks[0].1.as_str(), asks[0].2.as_str()), (RELAY, "srv-1"));
         f.step(TogetherEvent::FriendsAnswered { tag: asks[0].0, answer: Some(friends_ok("srv-1", &session)) });
@@ -2526,6 +2576,123 @@ mod tests {
         list(&mut f);
         let out = f.take();
         assert_eq!(find(&out, |x| matches!(x, TogetherFx::RequestKey { .. }).then_some(())).len(), 1, "{out:?}");
+    }
+
+    /// The announce of a visible host stopped at each proving step by a withdrawn permission: the
+    /// late answer of that step sends nothing further (no token, no friend read, no announce).
+    #[test]
+    fn a_withdrawn_permission_stops_an_announce_at_every_step() {
+        // During `/rooms`.
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::Permit { announce: false });
+        let out = h.take();
+        assert!(notices(&out).contains(&Notice::Listed(None)), "{out:?}");
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let out = h.take();
+        assert!(find(&out, |f| matches!(f, TogetherFx::AskFriends { .. }).then_some(())).is_empty(), "rooms: {out:?}");
+        // During `/friends`.
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let ask = find(&h.take(), |f| if let TogetherFx::AskFriends { tag, .. } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::Permit { announce: false });
+        h.take();
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", "")) });
+        let out = h.take();
+        assert!(find(&out, |f| matches!(f, TogetherFx::ReadFriendIds { .. }).then_some(())).is_empty(), "friends: {out:?}");
+        assert!(texts(&out).is_empty(), "friends: {out:?}");
+        // During the friend list read.
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let ask = find(&h.take(), |f| if let TogetherFx::AskFriends { tag, .. } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", "")) });
+        let read = find(&h.take(), |f| if let TogetherFx::ReadFriendIds { tag } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::Permit { announce: false });
+        h.take();
+        h.step(TogetherEvent::FriendIdsRead { tag: read, ids: Some(vec!["2001".into()]) });
+        let out = h.take();
+        assert!(texts(&out).is_empty(), "ids: {out:?}");
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"key-request","peer":"sid-1","pub":"PUB-1"}"#.into() });
+        assert!(h.take().is_empty());
+    }
+
+    /// The announce asks the relay for a ticket as an announce (the store gates its credential on
+    /// the permission); a listing asks it as a listing.
+    #[test]
+    fn an_ask_says_whether_it_is_for_an_announce() {
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let out = h.take();
+        assert_eq!(find(&out, |f| if let TogetherFx::AskFriends { announce, .. } = f { Some(*announce) } else { None }), [true]);
+        let mut f = Device::new();
+        f.step(TogetherEvent::RefreshFriends { servers: vec![srv1()] });
+        let rooms = find(&f.take(), |x| if let TogetherFx::HttpRooms { tag, .. } = x { Some(*tag) } else { None });
+        f.step(TogetherEvent::RoomsAnswered { tag: rooms[0], body: Some(rooms_ok("srv-1")) });
+        for t in &rooms[1..] {
+            f.step(TogetherEvent::RoomsAnswered { tag: *t, body: None });
+        }
+        assert_eq!(find(&f.take(), |x| if let TogetherFx::AskFriends { announce, .. } = x { Some(*announce) } else { None }), [false]);
+    }
+
+    /// Another identity seated: the session is left and everything of the previous one is
+    /// forgotten: its friend allow-list (read again, never reused within its 2 minutes), the
+    /// friends' sessions it listed (and their tickets), and the permission to announce.
+    #[test]
+    fn forgetting_the_identity_drops_its_friends_its_listing_and_its_permission() {
+        let room = derive_session("K7Q29XFD", "srv-1", ROUNDS).room.clone();
+        let session = format!(r#"{{"room":"{room}","card":{{"name":"D","title":"T","time":0,"playing":false}},"count":1,"age":0}}"#);
+        let mut h = announced();
+        h.step(TogetherEvent::RefreshFriends { servers: vec![srv1()] });
+        let rooms = find(&h.take(), |x| if let TogetherFx::HttpRooms { tag, .. } = x { Some(*tag) } else { None });
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms[0], body: Some(rooms_ok("srv-1")) });
+        for t in &rooms[1..] {
+            h.step(TogetherEvent::RoomsAnswered { tag: *t, body: None });
+        }
+        let ask = find(&h.take(), |x| if let TogetherFx::AskFriends { tag, .. } = x { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", &session)) });
+        h.take();
+        assert_eq!(h.s.friend_sessions().len(), 1);
+        assert!(h.s.remembers());
+        assert_eq!(h.step(TogetherEvent::Forget), Handled::Yes);
+        let out = h.take();
+        assert!(notices(&out).contains(&Notice::Left), "{out:?}");
+        assert!(notices(&out).contains(&Notice::FriendSessions(Vec::new())), "{out:?}");
+        assert!(h.s.view().is_none());
+        assert!(h.s.friend_sessions().is_empty());
+        assert!(!h.s.remembers());
+        // The old listing's ticket is gone: its session is not found.
+        h.step(TogetherEvent::JoinFriend { me: me("f", "Ami"), relay: RELAY.into(), room: room.clone() });
+        assert_eq!(notices(&h.take()), [Notice::JoinFailed(JoinError::NotFound)]);
+        // No announce before the new identity's own permission.
+        h.step(TogetherEvent::Host { me: me("n", "Nouveau"), relay: RELAY.into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketOpened { conn });
+        assert!(find(&h.take(), |f| matches!(f, TogetherFx::HttpRooms { .. }).then_some(())).is_empty());
+        // Permitted, within the previous list's 2 minutes: the list is read again.
+        h.step(TogetherEvent::Permit { announce: true });
+        h.step(TogetherEvent::SetVisible(true));
+        let rooms = find(&h.take(), |f| if let TogetherFx::HttpRooms { tag, .. } = f { Some(*tag) } else { None });
+        assert_eq!(rooms.len(), 1);
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms[0], body: Some(rooms_ok("srv-1")) });
+        let ask = find(&h.take(), |f| if let TogetherFx::AskFriends { tag, .. } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", "")) });
+        let out = h.take();
+        assert_eq!(find(&out, |f| matches!(f, TogetherFx::ReadFriendIds { .. }).then_some(())).len(), 1, "a fresh read: {out:?}");
+        assert!(texts(&out).is_empty(), "never the previous identity's list: {out:?}");
+    }
+
+    /// A friend list read that no announce is waiting for (a previous identity's, a stale tag)
+    /// fills nothing: the next announce reads its own.
+    #[test]
+    fn a_friend_list_no_announce_asked_for_is_not_kept() {
+        let (mut h, rooms) = visible_host();
+        h.step(TogetherEvent::FriendIdsRead { tag: 9_999, ids: Some(vec!["666".into()]) });
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms, body: Some(rooms_ok("srv-1")) });
+        let ask = find(&h.take(), |f| if let TogetherFx::AskFriends { tag, .. } = f { Some(*tag) } else { None })[0];
+        h.step(TogetherEvent::FriendsAnswered { tag: ask, answer: Some(friends_ok("srv-1", "")) });
+        let out = h.take();
+        assert_eq!(find(&out, |f| matches!(f, TogetherFx::ReadFriendIds { .. }).then_some(())).len(), 1, "{out:?}");
+        assert!(texts(&out).is_empty(), "{out:?}");
     }
 
     #[test]

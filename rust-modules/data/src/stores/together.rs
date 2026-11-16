@@ -26,7 +26,14 @@
 //! - **No announce without permission** ([`TogetherInput::may_announce`]): a Guest boot, a managed
 //!   profile, a device with no plex.tv identity, or a debug build talking to a real server (the
 //!   write gate, `plx_plex::plex::together::together_write_gate`) never announces, never asks a
-//!   delegation token and never hands a key over. Code sessions stay available to all of them.
+//!   delegation token and never hands a key over: the machine is told (`Permit`), and the store
+//!   shows no credential to an announce's `/friends` ask nor reads the friend list without it.
+//!   Only an identity that may list (not a Guest boot, not a managed profile, a plex.tv identity)
+//!   is shown a credential for a listing. Code sessions stay available to all of them.
+//! - **One identity at a time.** When another account or profile is seated, the session is left
+//!   and the machine forgets the previous identity (`TogetherEvent::Forget`: its friend
+//!   allow-list, the friends' sessions and their tickets, the listing); the requests still in
+//!   flight for it are dropped (their answers land nowhere), and so are its queued commands.
 //! - **The player** is read from a snapshot and driven through [`TogetherPlayerRequest`]s that the
 //!   Bridge takes ([`TogetherStore::take_player_requests`]).
 //!
@@ -186,7 +193,13 @@ pub struct TogetherInput<'a> {
 impl TogetherInput<'_> {
     /// May this device announce a session, ask a delegation token and hand a key over?
     pub fn may_announce(&self) -> bool {
-        self.auth.is_some() && !self.guest && !self.managed && self.writes_permitted
+        self.may_list() && self.writes_permitted
+    }
+
+    /// May this device list its friends' sessions (a plex.tv identity, neither a Guest boot nor a
+    /// managed profile, which has no Friends page, as on the web)?
+    pub fn may_list(&self) -> bool {
+        self.auth.is_some() && !self.guest && !self.managed
     }
 
     fn infos(&self) -> Vec<ServerInfo> {
@@ -590,9 +603,11 @@ impl TogetherStore {
         self.session.friend_sessions()
     }
 
-    /// Anything to do without a frame's input changing (a landing waiting, a command queued).
+    /// Anything to do without a frame's input changing (a landing waiting, a command queued), or
+    /// something of the seated identity held (its friends' sessions, its friend list) that must be
+    /// forgotten the frame another identity is seated.
     pub fn busy(&self) -> bool {
-        self.session.busy() || !self.cmds.is_empty() || !self.inflight.is_empty()
+        self.session.busy() || !self.cmds.is_empty() || !self.inflight.is_empty() || self.session.remembers()
     }
 
     /// One frame: the clock, the identity, the permission, the landings, the commands, the player.
@@ -603,10 +618,7 @@ impl TogetherStore {
 
         let identity = Identity { account: input.auth.map(|a| a.account_id.clone().unwrap_or_else(|| a.client_id.clone())), profile: input.profile.map(|p| p.name.clone()) };
         if self.identity.as_ref().is_some_and(|i| *i != identity) {
-            self.cmds.clear();
-            self.step_all(input, VecDeque::from([TogetherEvent::Leave]));
-            self.permit = None;
-            self.attached = None;
+            self.forget_identity(input);
         }
         self.identity = Some(identity);
 
@@ -640,6 +652,27 @@ impl TogetherStore {
         }
     }
 
+    /// Another identity is seated: its commands are dropped, the answers still owed to the previous
+    /// one are dropped (a job that lands finds no request waiting), and the machine leaves the
+    /// session and forgets it. Kept: this run's participant id being drawn, and the seals (a
+    /// farewell `bye` still closes the previous socket).
+    fn forget_identity(&mut self, input: &TogetherInput<'_>) {
+        self.cmds.clear();
+        self.inflight.retain(|_, pending| match pending {
+            Pending::Me | Pending::Seal(_) => true,
+            Pending::Host { .. } | Pending::Derive(_) | Pending::Open(_) | Pending::Grant(_) | Pending::Rooms(_) | Pending::Friends(_) | Pending::Ids(_) | Pending::Key(_) => false,
+        });
+        let inflight = &self.inflight;
+        self.jobs.retain(|job| match job {
+            TogetherJob::Work(work, _) => inflight.contains_key(&work.addr.req.0),
+            TogetherJob::Socket { .. } | TogetherJob::Send { .. } | TogetherJob::Close { .. } => true,
+        });
+        self.step_all(input, VecDeque::from([TogetherEvent::Forget]));
+        self.permit = None;
+        self.attached = None;
+        self.since_obs_us = 0;
+    }
+
     fn me(&self, input: &TogetherInput<'_>) -> Option<Me> {
         let profile = input.profile;
         Some(Me { id: self.me_id.clone()?, name: profile.map_or_else(String::new, |p| p.name.clone()), thumb: profile.and_then(|p| p.thumb.clone()) })
@@ -666,8 +699,8 @@ impl TogetherStore {
             TogetherCmd::SetVisible(on) => Some(TogetherEvent::SetVisible(on)),
             TogetherCmd::ShareTitle(item) => Some(TogetherEvent::ShareTitle(item)),
             // A managed profile reads no friends' sessions (it has no Friends page, as on the web).
-            TogetherCmd::RefreshFriends => (!input.managed && !input.guest && input.auth.is_some()).then(|| TogetherEvent::RefreshFriends { servers: input.infos() }),
-            TogetherCmd::JoinFriend { relay, room } => (!input.managed && !input.guest).then_some(TogetherEvent::JoinFriend { me, relay, room }),
+            TogetherCmd::RefreshFriends => input.may_list().then(|| TogetherEvent::RefreshFriends { servers: input.infos() }),
+            TogetherCmd::JoinFriend { relay, room } => input.may_list().then_some(TogetherEvent::JoinFriend { me, relay, room }),
         }
     }
 
@@ -805,10 +838,15 @@ impl TogetherStore {
                 PlayerCmd::Pause => TogetherPlayerRequest::Pause,
             }),
             TogetherFx::Notice(n) => self.notice(n, input),
-            TogetherFx::AskFriends { tag, relay, server } => match input.credential(&server) {
-                Some(credential) => self.work(TogetherReq::AskFriends { relay, credential }, Pending::Friends(tag)),
-                None => return Some(TogetherEvent::FriendsAnswered { tag, answer: None }),
-            },
+            // An announce's ask is shown a credential only when this identity may announce, a
+            // listing's only when it may list: the machine checks the same, this is the wall.
+            TogetherFx::AskFriends { tag, relay, server, announce } => {
+                let allowed = if announce { input.may_announce() } else { input.may_list() };
+                match input.credential(&server).filter(|_| allowed) {
+                    Some(credential) => self.work(TogetherReq::AskFriends { relay, credential }, Pending::Friends(tag)),
+                    None => return Some(TogetherEvent::FriendsAnswered { tag, answer: None }),
+                }
+            }
             TogetherFx::ReadFriendIds { tag } => match input.auth {
                 Some(auth) if input.may_announce() => self.work(TogetherReq::FriendIds { auth: auth.clone() }, Pending::Ids(tag)),
                 Some(_) | None => return Some(TogetherEvent::FriendIdsRead { tag, ids: None }),

@@ -56,6 +56,9 @@ struct Held {
     sent: Vec<(u32, Frame)>,
     closed: Vec<u32>,
     refuse: bool,
+    /// Park the plex.tv friend reads instead of running them (a read still in flight).
+    park_ids: bool,
+    parked: Vec<(Job<TogetherReq>, TogetherPort)>,
 }
 
 impl Held {
@@ -65,6 +68,8 @@ impl Held {
                 TogetherJob::Work(Job { addr, req }, port) => {
                     if self.refuse {
                         port.refused(addr);
+                    } else if self.park_ids && matches!(req, TogetherReq::FriendIds { .. }) {
+                        self.parked.push((Job { addr, req }, port));
                     } else {
                         finish_together_job(&port, addr, req, io);
                     }
@@ -320,4 +325,80 @@ fn a_friend_reads_the_hosts_grant_and_its_errors() {
     assert_eq!(friend.read(SocketNews::Opened), None);
     assert_eq!(room_socket_url("https://relais.exemple.fr", "R"), "wss://relais.exemple.fr/r/R");
     assert_eq!(room_socket_url("wss://relais.exemple.fr", "R"), "wss://relais.exemple.fr/r/R");
+}
+
+/// A friend's session listed by the relay, in a `/friends` answer.
+const FRIENDS_WITH_A_SESSION: &str = r#"{"multiplex":"relay","server":"srv-1","friendsOnly":true,"ticket":"T","ttl":120,"sessions":[{"room":"AUTRE-SALLE","card":{"name":"Ami","title":"Un Film","time":0,"playing":false},"count":1,"age":0}]}"#;
+
+/// Another identity seated within the friend list's 2 minutes: the previous identity's friends'
+/// sessions are gone at once, its friend read still in flight lands nowhere, and the new
+/// identity's announce reads its own friend list from plex.tv.
+#[test]
+fn another_identity_reads_its_own_friends_and_never_sees_the_previous_ones() {
+    let mut world = World::new();
+    let io = Script::default();
+    *io.rooms.lock().unwrap() = Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true,"server":"srv-1"}"#.into());
+    *io.friends.lock().unwrap() = Some(FRIENDS_WITH_A_SESSION.into());
+    *io.xml.lock().unwrap() = Some(r#"<MediaContainer><User id="2" title="Ami de A"/></MediaContainer>"#.into());
+    let (mut store, mut held) = (TogetherStore::new(), Held { park_ids: true, ..Held::default() });
+    store.command(TogetherCmd::Host { item: Some(movie()) });
+    world.settle(&mut store, &mut held, &io);
+    let (conn, _) = held.sockets.first().cloned().expect("a socket");
+    store.port().socket(conn, SocketNews::Opened);
+    world.settle(&mut store, &mut held, &io);
+    assert_eq!(held.parked.len(), 1, "A's friend read is in flight");
+    store.command(TogetherCmd::RefreshFriends);
+    world.settle(&mut store, &mut held, &io);
+    assert_eq!(store.friend_sessions().len(), 1, "A lists a friend's session");
+    store.take_notices();
+
+    // B is seated (another account, another profile).
+    world.auth = Some(TogetherAuth::new("client", Some("3"), "other-token"));
+    world.profile.name = "B".into();
+    world.servers[0] = TogetherServer::new(world.servers[0].info.clone(), true, Some("http://127.0.0.1:32400".into()), Some("other-token".into()));
+    world.now_ms += 1000;
+    world.settle(&mut store, &mut held, &io);
+    assert!(store.view().is_none());
+    assert!(store.friend_sessions().is_empty(), "A's friends' sessions are not B's");
+    assert!(store.take_notices().contains(&Notice::FriendSessions(Vec::new())));
+
+    // A's read lands late.
+    for (Job { addr, req }, port) in std::mem::take(&mut held.parked) {
+        finish_together_job(&port, addr, req, &io);
+    }
+    world.settle(&mut store, &mut held, &io);
+    held.park_ids = false;
+    *io.xml.lock().unwrap() = Some(r#"<MediaContainer><User id="7" title="Ami de B"/></MediaContainer>"#.into());
+    held.sent.clear();
+    held.sockets.clear();
+    store.command(TogetherCmd::Host { item: Some(movie()) });
+    world.settle(&mut store, &mut held, &io);
+    let (conn, _) = held.sockets.first().cloned().expect("B's socket");
+    store.port().socket(conn, SocketNews::Opened);
+    world.settle(&mut store, &mut held, &io);
+    assert!(io.asked().contains(&"FRIENDS other-token".to_string()), "B's list is read: {:?}", io.asked());
+    let announce = texts(&held).into_iter().find(|t| t["t"] == "announce").expect("B announces");
+    assert_eq!(announce["friends"], serde_json::json!(["7"]), "B's friends, never A's");
+}
+
+/// The store refuses a credential to an announce this identity may not make, whatever the
+/// machine asked; a listing is still shown the server's own token.
+#[test]
+fn an_announce_ask_without_permission_is_refused_its_credential() {
+    let mut world = World::new();
+    world.servers[0] = TogetherServer::new(world.servers[0].info.clone(), false, None, Some("share-token".into()));
+    world.writes = false;
+    let mut store = TogetherStore::new();
+    let input = world.input();
+    let ev = store.execute(TogetherFx::AskFriends { tag: 4, relay: "wss://relais.exemple.fr".into(), server: "srv-1".into(), announce: true }, &input);
+    assert!(matches!(ev, Some(TogetherEvent::FriendsAnswered { tag: 4, answer: None })), "{ev:?}");
+    assert!(store.take_jobs().is_empty());
+    let ev = store.execute(TogetherFx::AskFriends { tag: 5, relay: "wss://relais.exemple.fr".into(), server: "srv-1".into(), announce: false }, &input);
+    assert!(ev.is_none());
+    let jobs = store.take_jobs();
+    assert!(matches!(jobs.as_slice(), [TogetherJob::Work(Job { req: TogetherReq::AskFriends { credential: Credential::Share(_), .. }, .. }, _)]), "{jobs:?}");
+    // A Guest boot or a managed profile lists nothing either.
+    world.guest = true;
+    let ev = store.execute(TogetherFx::AskFriends { tag: 6, relay: "wss://relais.exemple.fr".into(), server: "srv-1".into(), announce: false }, &world.input());
+    assert!(matches!(ev, Some(TogetherEvent::FriendsAnswered { tag: 6, answer: None })), "{ev:?}");
 }

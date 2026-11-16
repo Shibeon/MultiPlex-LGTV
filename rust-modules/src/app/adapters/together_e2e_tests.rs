@@ -17,7 +17,6 @@ use super::*;
 use plx_data::stores::together::{
     PlayerSnapshot, TogetherCmd, TogetherInput, TogetherPlayerRequest, TogetherProfile, TogetherServer, TogetherSettings, TogetherStore,
 };
-use plx_data::together::relay::{PlexConnection, ServerInfo};
 use plx_data::together::session::{Listed, Notice, Status};
 use plx_data::together::sync::PlayerObs;
 use plx_data::together::wire::SharedItem;
@@ -109,20 +108,42 @@ struct Device {
     port: u16,
 }
 
+/// The server as the Bridge hands it to the store (`app::bridge::together::together_servers`, the
+/// production derivation): reached on its LAN through a `plex.direct` name (no relay can sit
+/// there), and publishing on plex.tv its public name, [`PUBLIC_HOST`], where the relay is found.
+fn published_server(server_token: &str) -> Vec<TogetherServer> {
+    use plx_plex::plex::session::{PublishedConnection, Session, SourceRef};
+    let lan = "https://192-168-1-10.0123456789abcdef.plex.direct:32400";
+    let source = SourceRef {
+        machine_id: SERVER_ID.into(),
+        name: "nas".into(),
+        address: "192.168.1.10".into(),
+        port: 32400,
+        token: server_token.into(),
+        tier: Some(plx_plex::plex::probe::Location::Local),
+        origin_url: lan.into(),
+        published: vec![
+            PublishedConnection { uri: lan.into(), local: true, relay: false },
+            PublishedConnection { uri: format!("https://{PUBLIC_HOST}:32400"), local: false, relay: false },
+        ],
+        ..SourceRef::default()
+    };
+    crate::app::bridge::together::together_servers(&Session { sources: vec![source], ..Session::default() })
+}
+
 fn movie() -> SharedItem {
     SharedItem { guid: "plex://movie/5d776825880197001ec967c4".into(), server: Some(SERVER_ID.into()), key: Some("42".into()), kind: "movie".into(), title: "Le Film".into(), sub: None }
 }
 
 impl Device {
     fn new(name: &str, account_id: &str, server_token: &str, relay: &str, port: u16) -> Device {
-        let info = ServerInfo { id: SERVER_ID.into(), connections: vec![PlexConnection { uri: format!("https://{PUBLIC_HOST}:32400"), local: false, relay: false }] };
         Device {
             store: TogetherStore::new(),
             runner: TogetherRunner::default(),
             profile: TogetherProfile { name: name.into(), thumb: None },
             auth: plx_data::stores::together::TogetherAuth::new("e2e-client", Some(account_id), &format!("plextv-account-{account_id}")),
             settings: TogetherSettings { relay: relay.into(), ..TogetherSettings::default() },
-            servers: vec![TogetherServer::new(info, false, None, Some(server_token.into()))],
+            servers: published_server(server_token),
             player: None,
             notices: Vec::new(),
             requests: Vec::new(),
