@@ -428,3 +428,21 @@ fn join_with_a_code_types_into_the_keyboard_and_ok_asks_to_join() {
     assert_eq!(together_asked(key(&mut h, Key::Ok)), vec![plx_data::stores::together::TogetherCmd::Join { code: "MPX-K7Q2-9XFD".into() }]);
     assert_eq!(h.screen.probe_code(), (false, ""), "the field empties once asked");
 }
+
+/// **The read-out stands clear of the shelves that stand with it.** The friends' sessions and the
+/// live shelf do not depend on the feed, so they stand over an empty, failed or account-less feed;
+/// the read-out that says so must not be drawn across them, in any shipped language.
+#[test]
+fn the_readout_clears_the_together_and_live_shelves_in_every_language() {
+    let live: Arc<[_]> = Arc::from(vec![live_row("Camille", LiveState::Playing)]);
+    for lang in plx_platform::i18n::SHIPPED {
+        let _l = language_on_this_thread_for_test(lang);
+        for feed in [FeedState::NoAccount, FeedState::Failed, FeedState::Ready(Arc::from(Vec::new()))] {
+            let mut h = H::new(FriendsView { feed: feed.clone(), live: live.clone(), ..Default::default() });
+            h.screen.input(FriendsIn::Together(vec![room("Camille", "Le Film", 2)]));
+            h.run(4);
+            let problems = h.screen.probe_readout_overlaps(&h.cx());
+            assert!(problems.is_empty(), "{lang:?} {feed:?}: {problems:#?}");
+        }
+    }
+}

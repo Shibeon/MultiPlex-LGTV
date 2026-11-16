@@ -133,6 +133,9 @@ const STATUS_GROUP: GroupId = GroupId(3);
 const TOGETHER_GROUP: GroupId = GroupId(4);
 /// Day shelf `i`'s group (`DAY_GROUP + i`).
 const DAY_GROUP: u32 = 16;
+/// The read-out's block in the flow, under the shelves that stand with it (`Page::status_in_flow`):
+/// the verdict and a Try again pill centred in it, with the air of the shelf rhythm around them.
+const STATUS_FLOW_H: f32 = 320.0;
 
 /// The shelves' cards: Home's poster row.
 const SHELF_STYLE: RowStyle = RowStyle::HOME;
@@ -528,6 +531,26 @@ impl Page {
         }
     }
 
+    /// **The read-out stands in the flow, under the shelves, when any shelf stands with it.** The
+    /// friends' sessions and the live shelf do not come from the feed, so they stand over an empty,
+    /// failed or account-less one; a page-filling read-out centred on the screen was drawn across
+    /// them. With a shelf standing it is a block of [`STATUS_FLOW_H`] after the last shelf, centred
+    /// in that block (not page-placed: the page is not the read-out's alone); with none it fills
+    /// the page as before.
+    fn status_in_flow(&self) -> bool {
+        self.readout().is_some() && !self.shelves().is_empty()
+    }
+
+    /// The read-out as drawn in its section's `frame` (in the flow), or filling the page.
+    fn overlay_at(&self, frame: Rect) -> Option<StatusOverlay<'static>> {
+        if !self.status_in_flow() {
+            return self.overlay();
+        }
+        let (caption, kind, retry) = self.readout()?;
+        let overlay = StatusOverlay::new(frame, caption, kind);
+        Some(if retry { overlay.action(plx_platform::i18n::msg::browse_action_retry_c()) } else { overlay })
+    }
+
     fn overlay(&self) -> Option<StatusOverlay<'static>> {
         let (caption, kind, retry) = self.readout()?;
         let overlay = StatusOverlay::new(Rect::FULL, caption, kind).page(plx_ui::icons::Icon::Crowd);
@@ -613,6 +636,11 @@ impl<H: ContentLike> StackPage<H> for Page {
         for sec in self.shelves() {
             out.push(SectionSpec::new(sec, Kind::Shelf { style: &SHELF_STYLE, heading: SHELF_LABEL_H }, Page::group_of(sec)));
         }
+        if self.status_in_flow() {
+            let focusable = self.view.feed == FeedState::Failed;
+            out.push(SectionSpec::new(Sec::Status, Kind::Custom { height: STATUS_FLOW_H, focusable }, STATUS_GROUP).ranked(2));
+            return;
+        }
         let retry = self.overlay().filter(|_| self.view.feed == FeedState::Failed).and_then(|o| o.action_frame_measured(cx.measure));
         out.push(
             SectionSpec::new(Sec::Status, Kind::Overlay { rect: retry.unwrap_or(Rect::FULL), focusable: retry.is_some() }, STATUS_GROUP)
@@ -691,6 +719,10 @@ impl<H: ContentLike> StackPage<H> for Page {
     fn focus_rect(&self, cx: &Cx<'_, H>, k: Sec, section: Rect) -> Rect {
         match k {
             Sec::Head => self.header_row(cx.measure).plate(SHARE_ELEM).map_or(section, |p| Rect::new(p.x, p.y + section.y, p.w, p.h)),
+            // Try again, where the read-out in the flow draws it
+            Sec::Status if self.status_in_flow() => {
+                self.overlay_at(section).and_then(|o| o.action_frame_measured(cx.measure)).unwrap_or(section)
+            }
             _ => section,
         }
     }
@@ -740,7 +772,7 @@ impl<H: ContentLike> StackPage<H> for Page {
                 row.draw(p, r.y, &self.header_capsules.borrow(), self.header_pop.scale_with(0, f.press.scale), &self.header_swap.borrow());
             }
             Sec::Status => {
-                if let Some(overlay) = self.overlay() {
+                if let Some(overlay) = self.overlay_at(r) {
                     let on = f.focus.current.is_some_and(|key| key.entry == self.entry && key.elem == RETRY_ELEM);
                     overlay.focused(on).draw_measured(&plx_ui::Env::inert(), p, f.measure);
                 }
@@ -822,6 +854,28 @@ impl FriendsScreen {
             }
         }
         self.page.rebuild();
+    }
+
+    /// **Where the read-out stands against the shelves standing with it**: one line per drawn band
+    /// of the read-out (its verdict, its Try again) that crosses a shelf's block, empty when it
+    /// clears them all (or there is no read-out).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn probe_readout_overlaps<H: ContentLike>(&self, cx: &Cx<'_, H>) -> Vec<String> {
+        let Some(frame) = self.stack.section_rect(&self.page, cx, Sec::Status) else { return Vec::new() };
+        let Some(overlay) = self.page.overlay_at(frame) else { return Vec::new() };
+        let mut bands = vec![("verdict", overlay.verdict_band_measured(cx.measure))];
+        bands.extend(overlay.action_frame_measured(cx.measure).map(|r| ("action", r)));
+        let mut out = Vec::new();
+        for sec in self.page.shelves() {
+            let Some(block) = self.stack.section_rect(&self.page, cx, sec) else { continue };
+            for (what, band) in &bands {
+                let cut = band.intersect(block);
+                if cut.w > 0.0 && cut.h > 0.0 {
+                    out.push(format!("the read-out's {what} {band:?} crosses {sec:?} {block:?}"));
+                }
+            }
+        }
+        out
     }
 
     /// The friends' sessions' cards (title, caption).
