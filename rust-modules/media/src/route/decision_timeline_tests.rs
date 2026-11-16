@@ -874,18 +874,21 @@ fn a_together_join_quit_seconds_in_keeps_the_servers_old_resume_point() {
     assert_eq!(joined.len(), 1, "`stopped` alone, no unscrobble: {joined:?}");
     assert!(joined[0].contains("state=stopped"), "{joined:?}");
     let _ = take_landed_stops();
-
-    // The next request is the viewer's own: its waiver is gone.
-    let mut meta = plx_data::stores::metadata::MetadataStore::default();
-    let _ = request_play(
-        &mut ps, &mut meta, plx_platform::devcaps::caps(), sid, "7", "/library/parts/2/file.mkv", "h264", "aac", "Film", "", None, "",
-    );
-    assert!(!resume_reset_waived(&ps), "a new request clears the waiver");
-
     server.stop();
     plx_plex::plex::reset_servers_for_test();
-    reset_session(&mut ps);
+
+    // The next request is the viewer's own: its waiver is gone. (No server answers it: the resolve
+    // it starts is withdrawn and joined before the next test registers one.)
+    let mut meta = plx_data::stores::metadata::MetadataStore::default();
+    assert!(request_play(
+        &mut ps, &mut meta, plx_platform::devcaps::caps(), ServerId::from_raw(0), "7", "/library/parts/2/file.mkv", "h264", "aac", "Film", "", None, "",
+    ));
+    assert!(!resume_reset_waived(&ps), "a new request clears the waiver");
+
+    cancel_play(&mut ps);
+    let _ = wait_resolve_workers_for_test(std::time::Duration::from_secs(10));
     reset_player_control_for_test(&ps);
+    reset_session(&mut ps);
 }
 
 /// A `finished` flag no stop took (Up Next with nothing playing to stop) must not mark the item
