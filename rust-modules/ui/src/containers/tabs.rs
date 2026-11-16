@@ -35,6 +35,10 @@ use super::transition::Transition;
 
 /// The strip's group id — a library constant so a page's `Link` can name it.
 pub const STRIP: GroupId = GroupId(0xFFFF_0001);
+/// The application's transient notice as a focus group ([`crate::action_notice`]): one control,
+/// composed after the top page's own groups while the notice offers an action, and reached only by
+/// the link the dispatcher declares off the page's top (`dispatch::NOTICE_ELEM`).
+pub const NOTICE: GroupId = GroupId(0xFFFF_0002);
 
 #[derive(Clone, Copy)]
 pub struct StripMember<K> {
@@ -68,6 +72,10 @@ pub struct TabContainer<H: Host> {
     /// Not hashed, like the members' geometry: it is rewritten every frame from state the hash
     /// already holds (the route and the directory), so two replays of one input stream agree on it.
     pub strip_selected: Option<H::Elem>,
+    /// **The actionable notice's card, as the focus group [`NOTICE`]**: published by the application
+    /// every frame (`Dispatcher::set_notice`) while its transient notice offers an action, `None`
+    /// otherwise. Not hashed, like the members' geometry: a replay never has one standing.
+    pub notice: Option<Rect>,
     /// The selected pill: the destination's while a transition is in flight (`ui::nav::view_tab`).
     pub selected: usize,
 }
@@ -80,6 +88,7 @@ impl<H: Host> TabContainer<H> {
             strip: Vec::new(),
             strip_fallback: None,
             strip_selected: None,
+            notice: None,
             selected: 0,
         }
     }
@@ -101,6 +110,21 @@ impl<H: Host> TabContainer<H> {
             edge: [EdgeRule::Geometric, EdgeRule::Geometric, EdgeRule::Stop, EdgeRule::Stop],
             extent,
             len: self.strip.len(),
+            elem: ElemKind::Control,
+        }
+    }
+
+    /// The notice's card as a focus group: one control no geometric search reaches (its mask is
+    /// empty) and whose every edge stops; the dispatcher answers its keys itself.
+    pub fn notice_group(card: Rect) -> GroupSpec {
+        GroupSpec {
+            id: NOTICE,
+            kind: GroupKind::Row { wrap: false },
+            seat: Seat::First,
+            reachable: AxisMask(0),
+            edge: [EdgeRule::Stop; 4],
+            extent: card,
+            len: 1,
             elem: ElemKind::Control,
         }
     }

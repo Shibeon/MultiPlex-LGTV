@@ -373,25 +373,149 @@ fn the_strip_is_the_containers_group_and_the_page_gates_it() {
     assert_eq!(elem(&d), Some(0), "nothing above a snapped grid");
 }
 
-/// The transient notice's reach (`action_notice`): an UP the focus model answers with nothing while
-/// a focus is seated is reported once as an overshoot; an UP that moved focus is not.
+/// The transient notice's card as a fixture places it: right of the row, at its own height.
+const CARD: Rect = Rect { x: 1200.0, y: 140.0, w: 560.0, h: 116.0 };
+
+fn other(at: Tick) -> InputEvent<u32> {
+    ev(InputKind::Key { key: Key::Other, sym: 0, wcode: 415, edge: Edge::Down, at_edge: false }, at)
+}
+
+/// **The notice is a focus group the engine reaches by a declared link off the page's top**
+/// (pr-reviewer #1): UP from a row with nothing above it lands on `NOTICE_ELEM`, and UP from under
+/// the bar still lands on the bar first, the notice one UP further. A notice that offers nothing is
+/// not a stop at all.
 #[test]
-fn an_up_answered_with_nothing_is_reported_once_as_an_overshoot() {
+fn an_up_off_the_pages_top_reaches_the_actionable_notice() {
+    use super::dispatch::NOTICE_ELEM;
     let (mut d, mut rig) = boot(FixtureArg::Snapped);
     let e = d.nav.top_page().unwrap().id;
     d.set_focus(Some(FocusKey { entry: e, elem: 0 }));
+    d.set_notice(Some(CARD), false);
     d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
-    assert_eq!(elem(&d), Some(0), "focus stayed");
-    assert_eq!(d.take_overshoot(), Some(super::screen::Dir::Up));
-    assert_eq!(d.take_overshoot(), None, "drained once");
+    assert_eq!(elem(&d), Some(0), "a passive card is no stop");
+    d.set_notice(Some(CARD), true);
+    d.frame(&mut rig, tick(32), vec![key(Key::Up, tick(32))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(NOTICE_ELEM), "UP off the top row reaches the card");
+    assert!(d.notice_focused());
 
     let (mut d, mut rig, _) = booted();
     d.nav.tabs.strip = vec![StripMember::new(STRIP_BASE, Rect::new(100.0, 10.0, 160.0, 48.0))];
     let home = d.nav.top_page().unwrap().id;
     d.set_focus(Some(FocusKey { entry: home, elem: 2 }));
+    d.set_notice(Some(CARD), true);
     d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
-    assert_eq!(elem(&d), Some(STRIP_BASE), "UP moved to the strip");
-    assert_eq!(d.take_overshoot(), None, "a move is not an overshoot");
+    assert_eq!(elem(&d), Some(STRIP_BASE), "the bar first");
+    d.frame(&mut rig, tick(32), vec![key(Key::Up, tick(32))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(NOTICE_ELEM), "then the card, off the bar");
+}
+
+/// OK on the notice takes its action and gives the focus back where it came from; BACK and DOWN give
+/// it back without the action; LEFT, RIGHT and UP stop at its walls; and the page never sees any of
+/// those keys, nor the key-ups of the presses the notice answered.
+#[test]
+fn the_notice_answers_ok_back_and_down_and_gives_the_focus_back() {
+    use super::dispatch::NOTICE_ELEM;
+    for (give_back, takes) in [(Key::Ok, true), (Key::Back, false), (Key::Down, false)] {
+        let (mut d, mut rig) = boot(FixtureArg::Page(801));
+        let e = d.nav.top_page().unwrap().id;
+        d.set_focus(Some(FocusKey { entry: e, elem: 1 }));
+        d.set_notice(Some(CARD), true);
+        d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
+        assert_eq!(elem(&d), Some(NOTICE_ELEM));
+        let heard = events_of(&d, 0).matches("entry_owner").count();
+        for (i, k) in [Key::Left, Key::Right, Key::Up].into_iter().enumerate() {
+            let at = tick(32 + 16 * i as u32);
+            d.frame(&mut rig, at, vec![key(k, at), key_up(k, at)], vec![], &mut NoTap);
+            assert_eq!(elem(&d), Some(NOTICE_ELEM), "{k:?} stops at the card's wall");
+        }
+        d.frame(&mut rig, tick(96), vec![key(give_back, tick(96))], vec![], &mut NoTap);
+        assert_eq!(elem(&d), Some(1), "{give_back:?} gives the focus back to the row it came from");
+        assert_eq!(d.take_notice_activation(), takes, "{give_back:?}");
+        assert!(!d.take_notice_activation(), "drained once");
+        d.frame(&mut rig, tick(112), vec![key_up(give_back, tick(112))], vec![], &mut NoTap);
+        assert_eq!(events_of(&d, 0).matches("entry_owner").count(), heard, "the page heard none of the notice's keys");
+        assert!(events_of(&d, 0).contains("by_restore"), "the page is told its focus came back");
+        assert!(d.input.arm.is_none(), "OK on the notice armed no press on the page");
+    }
+}
+
+/// **A transport key is never the notice's** (pr-reviewer #1): play, pause, the seeks and stop reach the
+/// page while the card holds the focus, so a notice over playback takes nothing from it.
+#[test]
+fn a_media_key_passes_the_focused_notice_to_the_page() {
+    use super::dispatch::NOTICE_ELEM;
+    let (mut d, mut rig) = boot(FixtureArg::Page(801));
+    let e = d.nav.top_page().unwrap().id;
+    d.set_focus(Some(FocusKey { entry: e, elem: 1 }));
+    d.set_notice(Some(CARD), true);
+    d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(NOTICE_ELEM));
+    let heard = events_of(&d, 0).matches("entry_owner").count();
+    d.frame(&mut rig, tick(32), vec![other(tick(32))], vec![], &mut NoTap);
+    assert_eq!(events_of(&d, 0).matches("entry_owner").count(), heard + 1, "the page heard the media key");
+    assert_eq!(elem(&d), Some(NOTICE_ELEM), "and the card keeps the focus");
+}
+
+/// A notice that goes (or stops offering its action) while it holds the focus gives it back.
+#[test]
+fn a_notice_that_goes_gives_the_focus_back() {
+    use super::dispatch::NOTICE_ELEM;
+    let (mut d, mut rig) = boot(FixtureArg::Snapped);
+    let e = d.nav.top_page().unwrap().id;
+    d.set_focus(Some(FocusKey { entry: e, elem: 2 }));
+    d.set_notice(Some(CARD), true);
+    d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(NOTICE_ELEM));
+    d.set_notice(None, false);
+    assert_eq!(elem(&d), Some(2));
+    d.frame(&mut rig, tick(32), vec![], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(2));
+    assert!(!d.take_notice_activation());
+}
+
+/// **A click on the card is the notice's, never the control beneath it** (pr-reviewer #5): on the top
+/// page it takes the action; over a surface it is swallowed, and neither the surface's row nor the
+/// page's under the card is activated.
+#[test]
+fn a_click_on_the_card_takes_the_action_on_the_page_and_is_swallowed_over_a_surface() {
+    let (mut d, mut rig) = boot(FixtureArg::Page(600));
+    d.draw(&mut rig, true);
+    let under = d.input.hit.front()[0].rect;
+    let card = Rect::new(under.x, under.y, under.w.min(400.0), under.h);
+    d.set_notice(Some(card), true);
+    d.draw(&mut rig, true);
+    let before = events_of(&d, 0);
+    d.frame(&mut rig, tick(16), vec![click(card.cx(), card.cy(), tick(16))], vec![], &mut NoTap);
+    assert!(d.take_notice_activation(), "the click took the action");
+    assert!(d.input.arm.is_none(), "the row under the card armed nothing");
+    for ms in (32..=320).step_by(16) { d.frame(&mut rig, tick(ms), vec![], vec![], &mut NoTap); }
+    assert_eq!(events_of(&d, 0).matches("press_commit").count(), before.matches("press_commit").count());
+
+    let (mut d, mut rig, _) = booted();
+    d.nav.next_style = Style::Compact;
+    d.request(MachineId::Nav, NavOp::Present(FixtureArg::Modal));
+    d.frame(&mut rig, tick(16), vec![], vec![], &mut NoTap);
+    for ms in (32..=1600).step_by(16) {
+        d.frame(&mut rig, tick(ms), vec![], vec![], &mut NoTap);
+    }
+    assert_eq!(d.nav.modals.top().unwrap().phase, super::containers::modal::Phase::Open);
+    d.draw(&mut rig, true);
+    let modal = d.nav.modals.top().unwrap().entry.id;
+    let row = d.input.hit.front().iter().rev().find(|s| s.key.entry == modal)
+        .expect("the surface's row has a stop").rect;
+    let card = Rect::new(row.x, row.y, row.w.min(400.0), row.h);
+    d.set_notice(Some(card), true);
+    d.draw(&mut rig, true);
+    d.frame(&mut rig, tick(1616), vec![click(card.cx(), card.cy(), tick(1616))], vec![], &mut NoTap);
+    assert!(!d.take_notice_activation(), "over a surface the card takes nothing");
+    assert!(d.input.arm.is_none(), "and the surface's row under it armed nothing");
+    assert_eq!(d.nav.modals.top().unwrap().phase, super::containers::modal::Phase::Open, "nor is the click a miss");
+
+    // Without the card the same click is the surface's row: the stop is what swallowed it.
+    d.set_notice(None, false);
+    d.draw(&mut rig, true);
+    d.frame(&mut rig, tick(1632), vec![click(card.cx(), card.cy(), tick(1632))], vec![], &mut NoTap);
+    assert!(d.input.arm.is_some() || d.focus().is_some_and(|k| k.entry == modal), "control: the row takes the click");
 }
 
 #[test]
@@ -1140,4 +1264,24 @@ fn a_direction_key_that_moves_focus_abandons_a_held_card_press() {
         assert_eq!(d.input.dip_owner, None, "page {page}: the owner is released with the spring");
         assert_eq!(d.parts(tick(ms)).press.owner, None, "page {page}: parts() publishes no owner once the spring settled");
     }
+}
+
+/// (Regression, pr-reviewer #2.) A surface's top row is not the page's top: an UP there must not
+/// reach the application's transient notice, whose OK would then join a session under a row that
+/// still looks focused.
+#[test]
+fn an_up_on_a_surfaces_top_row_does_not_reach_the_notice() {
+    let (mut d, mut rig, _) = booted();
+    d.nav.next_style = Style::Compact;
+    d.request(MachineId::Nav, NavOp::Present(FixtureArg::Page(600)));
+    d.frame(&mut rig, tick(16), vec![], vec![], &mut NoTap);
+    assert!(d.nav.modals.top().is_some(), "a surface is up");
+    let seated = d.focus();
+    assert!(seated.is_some(), "its row is seated");
+    d.set_notice(Some(CARD), true);
+    d.frame(&mut rig, tick(32), vec![key(Key::Up, tick(32))], vec![], &mut NoTap);
+    assert!(!d.notice_focused(), "a surface's UP reaches nothing beyond it");
+    assert_eq!(d.focus(), seated);
+    d.frame(&mut rig, tick(48), vec![key(Key::Ok, tick(48))], vec![], &mut NoTap);
+    assert!(!d.take_notice_activation(), "and its OK is the surface's");
 }

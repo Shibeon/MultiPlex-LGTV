@@ -26,7 +26,7 @@ use plx_data::together::player::{FollowAnswer, FollowState};
 use plx_data::together::session::{FriendSession, JoinError, Notice};
 use plx_data::together::wire::SyncAction;
 use plx_platform::i18n::msg;
-use plx_ui::action_notice::{ActionNotice, Answer, Notice as Card, NoticeKey};
+use plx_ui::action_notice::{ActionNotice, Notice as Card};
 use plx_ui::icons::Icon;
 
 /// The friends' listing is asked again this often.
@@ -112,8 +112,6 @@ pub(crate) struct TogetherUi {
     follow_on_player: bool,
     /// The friends' sessions last listed, for the Friends page.
     pub(crate) sessions: Vec<FriendRoom>,
-    /// A key-down the engaged notice took: its key-up is the notice's too.
-    pub(crate) swallow_sym: Option<u32>,
 }
 
 fn friend_id(room: &str) -> u64 {
@@ -297,12 +295,11 @@ impl TogetherUi {
         Some(self.actions.remove(i).1)
     }
 
-    /// A key, offered to the notice before the page.
-    pub(crate) fn key(&mut self, key: NoticeKey) -> (Answer, Option<NoticeAction>) {
-        match self.notice.key(key) {
-            Answer::Activated(id) => (Answer::Activated(id), self.activate(id)),
-            other => (other, None),
-        }
+    /// The dispatcher reported the card's action taken (OK on the focused card, or a click on it):
+    /// the card leaves, and this is what to do.
+    pub(crate) fn take_action(&mut self) -> Option<NoticeAction> {
+        let id = self.notice.take_action()?;
+        self.activate(id)
     }
 }
 
@@ -345,11 +342,11 @@ mod tests {
         let cur = ui.notice.current().unwrap().clone();
         assert_eq!(cur.text, msg::together_friend_started("Camille", "Dune"));
         assert_eq!(cur.action.as_deref(), Some(msg::together_join()));
-        assert_eq!(ui.key(NoticeKey::Ok).0, Answer::Ignored, "it took no focus");
-        assert!(ui.notice.engage(), "the UP overshoot reaches it");
-        let (answer, action) = ui.key(NoticeKey::Ok);
-        assert_eq!(answer, Answer::Activated(cur.id));
+        assert!(ui.notice.actionable(), "the top page's UP can reach it");
+        assert!(!ui.notice.focused(), "it took no focus on its own");
+        let action = ui.take_action();
         assert_eq!(action, Some(NoticeAction::JoinFriend { relay: "wss://relais.exemple.fr".into(), room: "room-1".into() }));
+        assert!(!ui.notice.actionable(), "taken: the card leaves");
         // listed again: not announced twice
         ui.on_friend_sessions(&list, &ctx());
         for _ in 0..200 {
@@ -407,8 +404,8 @@ mod tests {
         let mut ui = TogetherUi::default();
         ui.on_follow(&ask, &ctx());
         ui.notice.step(16);
-        assert!(ui.notice.engage());
-        assert_eq!(ui.key(NoticeKey::Ok).1, Some(NoticeAction::Follow(FollowAnswer::Join)));
+        assert!(ui.notice.actionable());
+        assert_eq!(ui.take_action(), Some(NoticeAction::Follow(FollowAnswer::Join)));
         ui.on_follow(&FollowState::Idle, &ctx());
         assert!(ui.activate(ID_ASK).is_none());
     }

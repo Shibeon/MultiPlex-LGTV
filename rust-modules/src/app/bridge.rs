@@ -728,6 +728,12 @@ impl Bridge {
     /// The measurer every screen of this bridge lays out with (a host test's has no fonts): the HUD
     /// package is compiled with it, outside the draw, so the plan's widths are the draw's.
     pub(crate) fn measure(&self) -> &dyn Measure { &self.measure }
+
+    /// Watch Together's transient notice published to the dispatcher for this frame, laid out with
+    /// the frame's own measure (`together::Together::notice_frame`).
+    pub(crate) fn together_notice_frame(&mut self, pages: &mut plx_ui::dispatch::Dispatcher<AppHost>, top: f32) {
+        self.together.notice_frame(pages, &self.measure, top);
+    }
     pub(crate) fn prepare_measurements(&mut self, replay: Option<&std::collections::HashMap<plx_ui::rec::MetricKey,u32>>) {
         self.measure.prepare(replay);
     }

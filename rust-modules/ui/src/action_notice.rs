@@ -8,20 +8,25 @@
 //! instance, posts to it, steps it from its frame tick and draws it LAST, over every page and
 //! surface (the card is part of no page).
 //!
-//! # Focus: the notice never takes it
+//! # Focus: the notice never takes it, the viewer goes up to it
 //!
-//! A notice arrives in the corner and leaves on its own ([`LIFE_MS`], [`ACTION_LIFE_MS`]); it is
-//! not a focus stop and no key reaches it while it merely stands, so a viewer pressing keys on a
-//! page or in the player keeps doing exactly what they were doing (the owner's rule: a notice must
-//! not steal focus from playback). An actionable notice says how to reach it on its second line —
-//! the UP key cap and the action's name ("[▲] Join") — because that is how it is reached: an UP
-//! press that the page's focus model answers with nothing (UP from the top row of a page, from the
-//! player's head, or from the bare picture's own top) is an OVERSHOOT, which the dispatcher reports
-//! ([`crate::dispatch::Dispatcher::take_overshoot`]) and the application hands to [`ActionNotice::engage`].
-//! Engaged, the card shows its action as a focused pill, keeps its place and stops counting its
-//! life; OK performs the action ([`Answer::Activated`]), BACK or DOWN gives the keys back
-//! ([`Answer::Released`]), and every other key is swallowed while it holds them. An engaged notice
-//! nobody answers gives the keys back after [`ENGAGED_IDLE_MS`].
+//! A notice arrives in the corner and leaves on its own ([`LIFE_MS`], [`ACTION_LIFE_MS`]); it never
+//! seats the focus itself, so a viewer pressing keys on a page or in the player keeps doing exactly
+//! what they were doing (the owner's rule: a notice must not steal focus from playback). An
+//! actionable notice says how to reach it on its second line — the UP key cap and the action's
+//! name ("[▲] Join") — because that is how it is reached: the owner publishes the card to the
+//! dispatcher every frame ([`crate::dispatch::Dispatcher::set_notice`]), which composes it as the
+//! focus group [`crate::containers::tabs::NOTICE`] after the TOP page's own and declares the one
+//! link into it, UP off the page's top: off the bar on a page that wears one, off the first row of a
+//! page that does not, off the player's topmost transport group (whose own answer to that UP would
+//! hide the transport). A surface's rows never reach it. Focused ([`ActionNotice::set_focused`]),
+//! the card shows its action as a focused pill and stops counting its life; the dispatcher answers
+//! its keys — OK takes the action, BACK or DOWN gives the focus back where it came from, the other
+//! directions stop at its walls — and passes every other key (play, pause, the seeks) to the page.
+//! A focused notice nobody answers asks for the focus back after [`FOCUSED_IDLE_MS`]
+//! ([`ActionNotice::wants_release`]). The card is also a pointer stop over everything: a click on it
+//! takes the action from the top page and is swallowed over a surface, never falling through to the
+//! control under it.
 //!
 //! # Queue
 //!
@@ -43,7 +48,7 @@
 //! framebuffer under it is the video plane's hole, not a picture to blur. Time is the `dt` it is
 //! handed: it reads no clock.
 //!
-//! Sans-IO: values in, a typed [`Answer`] out; the action itself is the application's to perform.
+//! Sans-IO: values in, the standing notice's id out; the action itself is the application's to perform.
 
 use std::collections::VecDeque;
 use std::ffi::CString;
@@ -56,19 +61,23 @@ use crate::{theme, Painter, Rect, Spring};
 
 /// A passive notice stands this long once in.
 pub const LIFE_MS: u32 = 4_000;
-/// An actionable notice stands this long once in (unengaged): long enough to read, decide and press.
+/// An actionable notice stands this long once in (unfocused): long enough to read, decide and press.
 pub const ACTION_LIFE_MS: u32 = 10_000;
-/// An engaged notice nobody answers gives the keys back after this long.
-pub const ENGAGED_IDLE_MS: u32 = 12_000;
+/// A focused notice nobody answers asks for the focus back after this long.
+pub const FOCUSED_IDLE_MS: u32 = 12_000;
 /// At most this many notices wait behind the one standing.
 pub const MAX_QUEUED: usize = 4;
 /// The card's widest; a message longer than this elides (it carries server text: names, titles).
 pub const MAX_W: f32 = 760.0;
 /// The card's right edge from the right of the frame (the safe area's own margin).
 pub const RIGHT: f32 = crate::consts::MARGIN_X;
-/// The card's top from the top of the frame: under the tab strip on a page, under the clock and the
-/// title band of the player's head, so it covers neither.
-pub const TOP: f32 = 170.0;
+/// The card's top on a page: under the page header's whole block (the title and the row of chips
+/// under it, `page_header::TOP` + title + gap + block), so it covers none of a page's header
+/// controls (the Friends page's Share and Join-with-code chips, the Library's sort).
+pub const PAGE_TOP: f32 = crate::page_header::TOP + crate::page_header::TITLE_H + crate::page_header::TITLE_ROW_GAP
+    + crate::page_header::BLOCK_H;
+/// The card's top over the player: under the clock and the title band of the player's head.
+pub const PLAYER_TOP: f32 = 170.0;
 /// The card slides this far in from the right as it appears.
 pub const SLIDE_PX: f32 = 24.0;
 /// Padding inside the card.
@@ -79,7 +88,7 @@ const MARK: f32 = 36.0;
 const MARK_GAP: f32 = 18.0;
 /// Line pitch of the two lines.
 const LINE_H: f32 = 38.0;
-/// The action line's pill height and padding when engaged.
+/// The action line's pill height and padding when focused.
 const PILL_H: f32 = 44.0;
 const PILL_PAD: f32 = 20.0;
 /// Space between the key cap and the action's name.
@@ -142,41 +151,17 @@ impl Notice {
     }
 }
 
-/// A key while the notice holds the keys ([`ActionNotice::key`]).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NoticeKey {
-    Ok,
-    Back,
-    Up,
-    Down,
-    Left,
-    Right,
-    Other,
-}
-
-/// What a key did.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Answer {
-    /// The notice does not hold the keys: the key is the page's.
-    Ignored,
-    /// Held and swallowed.
-    Consumed,
-    /// The keys are given back (BACK, DOWN): the page keeps its focus as it was.
-    Released,
-    /// OK on the action: the poster performs notice `id`'s action. The card leaves.
-    Activated(u64),
-}
-
 /// The notice's state: what stands, what waits, and the two springs. One per application.
 pub struct ActionNotice {
     current: Option<Notice>,
     queue: VecDeque<Notice>,
     /// The standing card is leaving (expired, withdrawn, answered).
     leaving: bool,
-    engaged: bool,
-    /// Time stood fully in, unengaged (ms).
+    /// The dispatcher holds the focus on the card ([`Self::set_focused`]).
+    focused: bool,
+    /// Time stood fully in, unfocused (ms).
     stood_ms: u32,
-    /// Time engaged without an answer (ms).
+    /// Time focused without an answer (ms).
     idle_ms: u32,
     fade: Spring,
 }
@@ -189,7 +174,7 @@ impl Default for ActionNotice {
 
 impl ActionNotice {
     pub const fn new() -> Self {
-        Self { current: None, queue: VecDeque::new(), leaving: false, engaged: false, stood_ms: 0, idle_ms: 0, fade: Spring::at(0.0) }
+        Self { current: None, queue: VecDeque::new(), leaving: false, focused: false, stood_ms: 0, idle_ms: 0, fade: Spring::at(0.0) }
     }
 
     /// Post a notice (see the module doc's "Queue").
@@ -219,7 +204,7 @@ impl ActionNotice {
         self.queue.push_back(n);
     }
 
-    /// Take notice `id` away: a standing card leaves (and gives the keys back), a waiting one is forgotten.
+    /// Take notice `id` away: a standing card leaves (and stops being a stop), a waiting one is forgotten.
     pub fn withdraw(&mut self, id: u64) {
         self.queue.retain(|q| q.id != id);
         if self.current.as_ref().is_some_and(|c| c.id == id) {
@@ -229,7 +214,6 @@ impl ActionNotice {
 
     fn leave(&mut self) {
         self.leaving = true;
-        self.engaged = false;
     }
 
     /// Advance by `dt_ms`, the time since the previous step (the owner's clock difference, so an
@@ -242,7 +226,6 @@ impl ActionNotice {
                 Some(n) => {
                     self.current = Some(n);
                     self.leaving = false;
-                    self.engaged = false;
                     self.stood_ms = 0;
                     self.idle_ms = 0;
                 }
@@ -256,16 +239,11 @@ impl ActionNotice {
                 self.fade.jump(0.0);
                 self.current = None;
                 self.leaving = false;
-                self.engaged = false;
             }
             return;
         }
-        if self.engaged {
+        if self.focused {
             self.idle_ms = self.idle_ms.saturating_add(dt_ms);
-            if self.idle_ms >= ENGAGED_IDLE_MS {
-                self.engaged = false;
-                self.idle_ms = 0;
-            }
             return;
         }
         if self.fade.pos >= IN {
@@ -278,40 +256,38 @@ impl ActionNotice {
         }
     }
 
-    /// The overshoot (an UP the page answered with nothing) reaches the standing card: an
-    /// actionable notice that is not leaving takes the keys. Returns whether it did.
-    pub fn engage(&mut self) -> bool {
-        let actionable = self.current.as_ref().is_some_and(|c| c.action.is_some());
-        if actionable && !self.leaving && self.visible() {
-            self.engaged = true;
+    /// The card offers its action and is not on its way out: the owner publishes it as actionable
+    /// (`Dispatcher::set_notice`), so the focus can go up to it.
+    pub fn actionable(&self) -> bool {
+        self.current.as_ref().is_some_and(|c| c.action.is_some()) && !self.leaving && self.visible()
+    }
+
+    /// The dispatcher's focus is (or is no longer) on the card, as the owner reads it every frame
+    /// (`Dispatcher::notice_focused`). Focused, the card shows its action as the focused pill and its
+    /// life stands still; each new focusing restarts the idle count.
+    pub fn set_focused(&mut self, focused: bool) {
+        if focused && !self.focused {
             self.idle_ms = 0;
         }
-        self.engaged
+        self.focused = focused;
     }
 
-    /// A key, offered to the notice before the page. Only an engaged notice answers anything but
-    /// [`Answer::Ignored`].
-    pub fn key(&mut self, key: NoticeKey) -> Answer {
-        if !self.engaged {
-            return Answer::Ignored;
-        }
-        self.idle_ms = 0;
-        match key {
-            NoticeKey::Ok => {
-                let id = self.current.as_ref().map_or(0, |c| c.id);
-                self.leave();
-                Answer::Activated(id)
-            }
-            NoticeKey::Back | NoticeKey::Down => {
-                self.engaged = false;
-                Answer::Released
-            }
-            NoticeKey::Up | NoticeKey::Left | NoticeKey::Right | NoticeKey::Other => Answer::Consumed,
-        }
+    pub fn focused(&self) -> bool {
+        self.focused
     }
 
-    pub fn engaged(&self) -> bool {
-        self.engaged
+    /// A focused card nobody answered for [`FOCUSED_IDLE_MS`]: the owner gives the focus back
+    /// (`Dispatcher::release_notice`).
+    pub fn wants_release(&self) -> bool {
+        self.focused && self.idle_ms >= FOCUSED_IDLE_MS
+    }
+
+    /// The action of the standing card was taken (OK, or a click): the card leaves, and the owner
+    /// performs what its id names. `None` when nothing actionable stands.
+    pub fn take_action(&mut self) -> Option<u64> {
+        let id = self.current.as_ref().filter(|c| c.action.is_some() && !self.leaving)?.id;
+        self.leave();
+        Some(id)
     }
 
     pub fn visible(&self) -> bool {
@@ -328,23 +304,24 @@ impl ActionNotice {
         self.current.is_some() || !self.queue.is_empty()
     }
 
-    /// The card's rect at rest, under `measure` (also the hit rect a pointer owner registers).
-    pub fn rect(&self, measure: &dyn Measure) -> Option<Rect> {
-        let n = self.current.as_ref()?;
-        let lay = Layout::of(n, self.engaged, measure);
-        Some(Rect::new(crate::consts::SCR_W - RIGHT - lay.w, TOP, lay.w, lay.h))
+    /// The card's rect at rest with its top at `top` ([`PAGE_TOP`], [`PLAYER_TOP`]), under `measure`
+    /// (also the pointer stop the dispatcher registers for it). `None` while nothing is visible.
+    pub fn rect(&self, measure: &dyn Measure, top: f32) -> Option<Rect> {
+        let n = self.current.as_ref().filter(|_| self.visible())?;
+        let lay = Layout::of(n, self.focused, measure);
+        Some(Rect::new(crate::consts::SCR_W - RIGHT - lay.w, top, lay.w, lay.h))
     }
 
-    /// Draw the card, last, over everything.
-    pub fn draw(&self, p: Painter, measure: &dyn Measure) {
+    /// Draw the card, last, over everything, with its top at `top`.
+    pub fn draw(&self, p: Painter, measure: &dyn Measure, top: f32) {
         let Some(n) = self.current.as_ref() else { return };
         let opacity = self.fade.pos.clamp(0.0, 1.0);
         if opacity <= VISIBLE {
             return;
         }
-        let lay = Layout::of(n, self.engaged, measure);
+        let lay = Layout::of(n, self.focused, measure);
         let slide = (1.0 - opacity) * SLIDE_PX;
-        let r = Rect::new(crate::consts::SCR_W - RIGHT - lay.w + slide, TOP, lay.w, lay.h);
+        let r = Rect::new(crate::consts::SCR_W - RIGHT - lay.w + slide, top, lay.w, lay.h);
         let radius = 24.0;
         let p = p.alpha(opacity);
         let boost = theme::GLASS_RIM_LIGHT[3] - theme::GLASS_RIM[3];
@@ -358,9 +335,9 @@ impl ActionNotice {
         let sz = theme::size::BODY;
         p.text(lay.text.as_ptr(), x, plx_gfx::text::text_vcenter_y(sz, 0, line1), sz, theme::TEXT_PRIMARY, 0, 0);
         let Some(action) = lay.action.as_ref() else { return };
-        let line2 = line1 + LINE_H + if self.engaged { (PILL_H - LINE_H) * 0.5 + 6.0 } else { 0.0 };
+        let line2 = line1 + LINE_H + if self.focused { (PILL_H - LINE_H) * 0.5 + 6.0 } else { 0.0 };
         let asz = theme::size::LABEL;
-        if self.engaged {
+        if self.focused {
             // The action as the focused control it now is: the accent pill, OK on its cap.
             let pill = Rect::new(x, line2 - PILL_H * 0.5, lay.action_w + PILL_PAD * 2.0, PILL_H);
             p.rect(pill, PILL_H * 0.5, theme::ACCENT, theme::ACCENT, 1.0);
@@ -399,7 +376,7 @@ struct Layout {
 }
 
 impl Layout {
-    fn of(n: &Notice, engaged: bool, measure: &dyn Measure) -> Layout {
+    fn of(n: &Notice, focused: bool, measure: &dyn Measure) -> Layout {
         let lead = if n.mark.is_some() { MARK + MARK_GAP } else { 0.0 };
         let room = MAX_W - PAD_X * 2.0 - lead;
         let sz = theme::size::BODY;
@@ -410,14 +387,14 @@ impl Layout {
         let action_w = action.as_ref().map_or(0.0, |a| measure.width(a, asz, true));
         let cap_w = widgets::key_cap_w_with(CapFace::Glyph(Icon::ChevronUp), CapMetrics::HINT, measure);
         let ok_w = widgets::key_cap_w_with(CapFace::Label(c"OK"), CapMetrics::HINT, measure);
-        let line2_w = match (&action, engaged) {
+        let line2_w = match (&action, focused) {
             (None, _) => 0.0,
             (Some(_), false) => cap_w + CAP_GAP + action_w,
             (Some(_), true) => action_w + PILL_PAD * 2.0 + CAP_GAP + ok_w,
         };
         let w = (PAD_X * 2.0 + lead + text_w.max(line2_w)).min(MAX_W);
         let lines = if action.is_some() { 2.0 } else { 1.0 };
-        let extra = if action.is_some() && engaged { PILL_H - LINE_H + 12.0 } else { 0.0 };
+        let extra = if action.is_some() && focused { PILL_H - LINE_H + 12.0 } else { 0.0 };
         let h = PAD_Y * 2.0 + LINE_H * lines + extra;
         Layout { text: CString::new(text).unwrap_or_default(), action, action_w, cap_w, w, h }
     }
@@ -479,53 +456,50 @@ mod tests {
     }
 
     #[test]
-    fn a_standing_notice_takes_no_key_until_the_overshoot_engages_it() {
+    fn a_standing_notice_is_actionable_until_its_action_is_taken() {
         let mut n = ActionNotice::new();
         n.post(Notice::actionable(7, "Camille is watching “Dune” together", "Join"));
+        assert!(!n.actionable(), "not before it is visible");
         n.step(FRAME);
-        for k in [NoticeKey::Ok, NoticeKey::Back, NoticeKey::Up, NoticeKey::Down] {
-            assert_eq!(n.key(k), Answer::Ignored, "{k:?} is the page's while the notice only stands");
-        }
-        assert!(n.engage());
-        assert!(n.engaged());
-        assert_eq!(n.key(NoticeKey::Left), Answer::Consumed);
-        assert_eq!(n.key(NoticeKey::Ok), Answer::Activated(7));
-        assert!(!n.engaged(), "answered: the keys are the page's again");
+        assert!(n.actionable());
+        assert_eq!(n.take_action(), Some(7));
+        assert!(!n.actionable(), "taken: the card is leaving");
+        assert_eq!(n.take_action(), None, "once");
         assert!(run_until(&mut n, 2_000, |n| !n.busy()).is_some(), "and the card leaves");
     }
 
     #[test]
-    fn back_or_down_gives_the_keys_back_and_the_card_resumes_its_life() {
-        for give_back in [NoticeKey::Back, NoticeKey::Down] {
-            let mut n = ActionNotice::new();
-            n.post(Notice::actionable(3, "x", "Join"));
-            n.step(FRAME);
-            assert!(n.engage());
-            assert_eq!(n.key(give_back), Answer::Released);
-            assert!(!n.engaged());
-            assert_eq!(n.key(NoticeKey::Ok), Answer::Ignored, "released: OK is the page's again");
-            assert!(run_until(&mut n, ACTION_LIFE_MS + 3_000, |n| !n.busy()).is_some());
-        }
-    }
-
-    #[test]
-    fn an_engaged_notice_does_not_expire_but_gives_the_keys_back_when_left_alone() {
+    fn a_focused_notice_does_not_expire_but_asks_for_the_focus_back_when_left_alone() {
         let mut n = ActionNotice::new();
         n.post(Notice::actionable(3, "x", "Join"));
         n.step(FRAME);
-        assert!(n.engage());
-        let released = run_until(&mut n, ENGAGED_IDLE_MS + 1_000, |n| !n.engaged()).expect("released");
-        assert!(released >= ENGAGED_IDLE_MS, "{released}");
-        assert!(n.busy(), "the engaged time did not count against its life");
+        n.set_focused(true);
+        let asked = run_until(&mut n, FOCUSED_IDLE_MS + 1_000, ActionNotice::wants_release).expect("asks");
+        assert!(asked >= FOCUSED_IDLE_MS, "{asked}");
+        assert!(n.busy(), "the focused time did not count against its life");
+        n.set_focused(false);
+        assert!(!n.wants_release());
+        assert!(run_until(&mut n, ACTION_LIFE_MS + 3_000, |n| !n.busy()).is_some(), "unfocused, its life runs again");
     }
 
     #[test]
-    fn a_passive_notice_cannot_be_engaged() {
+    fn a_passive_notice_offers_nothing() {
         let mut n = ActionNotice::new();
         n.post(Notice::passive(1, "x"));
         n.step(FRAME);
-        assert!(!n.engage());
-        assert_eq!(n.key(NoticeKey::Ok), Answer::Ignored);
+        assert!(!n.actionable());
+        assert_eq!(n.take_action(), None);
+    }
+
+    #[test]
+    fn a_focused_card_is_taller_for_its_pill() {
+        let m = crate::fixture::FixtureMeasure;
+        let mut n = ActionNotice::new();
+        n.post(Notice::actionable(3, "x", "Join"));
+        n.step(FRAME);
+        let rest = n.rect(&m, PAGE_TOP).unwrap();
+        n.set_focused(true);
+        assert!(n.rect(&m, PAGE_TOP).unwrap().h > rest.h);
     }
 
     #[test]
@@ -564,14 +538,14 @@ mod tests {
     }
 
     #[test]
-    fn withdrawing_the_engaged_card_gives_the_keys_back() {
+    fn a_withdrawn_card_stops_offering_its_action() {
         let mut n = ActionNotice::new();
         n.post(Notice::actionable(3, "x", "Join"));
         n.step(FRAME);
-        n.engage();
+        n.set_focused(true);
         n.withdraw(3);
-        assert!(!n.engaged());
-        assert_eq!(n.key(NoticeKey::Ok), Answer::Ignored);
+        assert!(!n.actionable(), "the owner publishes it as no longer actionable, which gives the focus back");
+        assert_eq!(n.take_action(), None);
     }
 
     #[test]
@@ -580,9 +554,29 @@ mod tests {
         let mut n = ActionNotice::new();
         n.post(Notice::actionable(3, "Camille is watching “A very long title that goes on and on and on” together", "Join"));
         n.step(FRAME);
-        let r = n.rect(&m).unwrap();
+        let r = n.rect(&m, PLAYER_TOP).unwrap();
         assert!(r.w <= MAX_W + 0.01);
         assert!((r.x + r.w - (crate::consts::SCR_W - RIGHT)).abs() < 0.01, "right-aligned to the safe margin");
         assert!(r.y >= crate::consts::MARGIN_Y);
+    }
+
+    /// (Regression, pr-reviewer #5.) On a page the card stands under the page header's whole block:
+    /// the header's chips (the Friends page's Share and Join-with-code, the Library's sort and its
+    /// direction on the row under the title) lie above the card's top, so it covers none of them.
+    #[test]
+    fn on_a_page_the_card_clears_the_header_block() {
+        use crate::page_header;
+        let chip_row = page_header::TOP + page_header::TITLE_H + page_header::TITLE_ROW_GAP;
+        let chips = Rect::new(crate::consts::SCR_W - RIGHT - MAX_W, page_header::TOP, MAX_W, chip_row + page_header::BLOCK_H - page_header::TOP);
+        let m = crate::fixture::FixtureMeasure;
+        let mut n = ActionNotice::new();
+        n.post(Notice::actionable(3, "Camille is watching “Dune” together", "Join"));
+        n.step(FRAME);
+        for focused in [false, true] {
+            n.set_focused(focused);
+            let r = n.rect(&m, PAGE_TOP).unwrap();
+            let i = r.intersect(chips);
+            assert!(i.w <= 0.0 || i.h <= 0.0, "the card {r:?} covers the header block {chips:?}");
+        }
     }
 }

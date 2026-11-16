@@ -44,6 +44,13 @@ use super::{Painter, Rect};
 pub const STRIP_BASE: u32 = 0xFFFF_0000;
 const _: () = assert!(STRIP_BASE >= super::geom::NAMESPACE_FLOOR);
 
+/// **The application's transient notice, as one focusable control** ([`crate::action_notice`]): the
+/// element of the [`NOTICE`](super::containers::tabs::NOTICE) group the dispatcher composes after
+/// the top page's own while the notice offers an action ([`Dispatcher::set_notice`]). Above every
+/// strip identity (`STRIP_BASE + stable_id`) and every page namespace, so no page or pill can name it.
+pub const NOTICE_ELEM: u32 = 0xFFFF_FFF0;
+const _: () = assert!(NOTICE_ELEM > STRIP_BASE + 0xFFF);
+
 /// The input owner's page COMPOSED with the container's strip (§6.2): the strip is a `Row`
 /// group above the page's own, contributed only while the page allows it.
 struct PageWithStrip<'a, H: Host> {
@@ -52,7 +59,42 @@ struct PageWithStrip<'a, H: Host> {
     strip_fallback: Option<H::Elem>,
     /// The page's own pill (`TabContainer::strip_selected`): where a move up from the page lands.
     strip_selected: Option<H::Elem>,
+    /// The actionable notice's card (`TabContainer::notice`), composed for the TOP page only: a
+    /// surface's rows never reach it, and neither does a page under one.
+    notice: Option<Rect>,
     entry: EntryId,
+}
+
+impl<H: Host> PageWithStrip<'_, H>
+where
+    H::Elem: IndexElem,
+{
+    fn is_notice(key: &H::Elem) -> bool {
+        key.index() == Some(NOTICE_ELEM)
+    }
+
+    /// **The one way into the notice**: a declared `Link` UP from the group the focus is in, when the
+    /// page's own model has nowhere to take that UP — a group whose UP edge is `Geometric` with
+    /// nothing above it (the top of a bar page is the strip; of a page without one, its first row),
+    /// or `Screen` (the player's transport, whose answer would hide it). A `Stop` edge (a decision
+    /// card, a wall the page declared) and a `Nav` edge are the page's own word and are kept, and so
+    /// is a link the page declared itself. Asked only after the page's own move answered nothing.
+    fn notice_link(&self, cur: FocusKey<H::Elem>, links: &[super::screen::Link], cx: &Cx<'_, H>)
+        -> Option<super::screen::Link> {
+        self.notice?;
+        if Self::is_notice(&cur.elem) {
+            return None;
+        }
+        let g = self.group_of(&cur.elem, cx)?;
+        if links.iter().any(|l| l.from == g && l.dir == Dir::Up) {
+            return None;
+        }
+        let mut groups = Vec::new();
+        self.groups(cx, &mut groups);
+        let spec = groups.iter().find(|s| s.id == g)?;
+        matches!(spec.edge[0], EdgeRule::Geometric | EdgeRule::Screen)
+            .then_some(super::screen::Link { from: g, dir: Dir::Up, to: super::containers::tabs::NOTICE })
+    }
 }
 
 impl<H: Host> Focusable<H> for PageWithStrip<'_, H>
@@ -64,8 +106,14 @@ where
             out.push(*spec);
         }
         self.page.groups(cx, out);
+        if let Some(card) = self.notice {
+            out.push(super::containers::tabs::TabContainer::<H>::notice_group(card));
+        }
     }
     fn group_of(&self, key: &H::Elem, cx: &Cx<'_, H>) -> Option<GroupId> {
+        if Self::is_notice(key) {
+            return self.notice.map(|_| super::containers::tabs::NOTICE);
+        }
         match key.index() {
             Some(i) if i >= STRIP_BASE => self.strip.as_ref()
                 .filter(|(_, members)| members.iter().any(|m| m.elem == *key)).map(|(s, _)| s.id),
@@ -73,6 +121,9 @@ where
         }
     }
     fn neighbour(&self, k: FocusKey<H::Elem>, dir: Dir, cx: &Cx<'_, H>) -> Step<H::Elem> {
+        if Self::is_notice(&k.elem) {
+            return Step::Edge;
+        }
         match (k.elem.index(), &self.strip) {
             (Some(i), Some((_, members))) if i >= STRIP_BASE => {
                 let Some(i) = members.iter().position(|m| m.elem == k.elem) else { return Step::Edge };
@@ -90,6 +141,9 @@ where
         }
     }
     fn place(&self, key: &H::Elem, cx: &Cx<'_, H>, at: At) -> Option<Placed> {
+        if Self::is_notice(key) {
+            return self.notice.map(|card| Placed { rect: card, rest_rect: card, clip: Rect::FULL, index: Some(0) });
+        }
         match (key.index(), &self.strip) {
             (Some(i), Some((_, members))) if i >= STRIP_BASE => {
                 let index = members.iter().position(|m| m.elem == *key)?;
@@ -105,6 +159,9 @@ where
         }
     }
     fn reconcile(&self, want: FocusKey<H::Elem>, cx: &Cx<'_, H>) -> FocusKey<H::Elem> {
+        if Self::is_notice(&want.elem) && self.notice.is_some() {
+            return want;
+        }
         match (want.elem.index(), &self.strip) {
             (Some(i), Some((_, members))) if i >= STRIP_BASE =>
                 FocusKey { entry: self.entry,
@@ -115,6 +172,9 @@ where
         }
     }
     fn seat(&self, g: GroupId, from: Placed, cx: &Cx<'_, H>) -> FocusKey<H::Elem> {
+        if g == super::containers::tabs::NOTICE && self.notice.is_some() {
+            return FocusKey { entry: self.entry, elem: H::Elem::of_index(NOTICE_ELEM) };
+        }
         match &self.strip {
             Some((spec, members)) if spec.id == g => {
                 // **One landing rule for every page that wears the bar:** the page's own pill, not
@@ -442,11 +502,18 @@ pub struct Dispatcher<H: Host> {
     /// The previous frame's page-owned motion/resource verdict, retained past `Present::take` so
     /// the held transition image can wait for the destination's visual quiescence.
     page_quiescent: bool,
-    /// The last direction key the focus model answered with nothing while a focus was seated (an
-    /// UP from a page's top row, a DOWN past a list's end): the application's shared transient
-    /// notice is reached by an UP overshoot ([`crate::action_notice`]). Observes only; drained by
-    /// [`Self::take_overshoot`].
-    overshoot: Option<Dir>,
+    /// The transient notice's card as the application published it this frame
+    /// ([`Self::set_notice`]), actionable or not: the pointer stop that keeps a click on the card
+    /// from falling through to the control beneath it.
+    notice_card: Option<Rect>,
+    /// Where the focus was when it went up into the notice: `(entry, key, group)`, restored when the
+    /// notice gives the keys back ([`Self::release_notice`]).
+    notice_from: Option<(EntryId, FocusKey<H::Elem>, Option<GroupId>)>,
+    /// OK (or a click) took the notice's action; drained by [`Self::take_notice_activation`].
+    notice_taken: bool,
+    /// A key whose DOWN edge the notice answered: its repeats and its UP edge are the notice's too,
+    /// so the page never sees half a press.
+    notice_swallow: Option<Key>,
 }
 
 impl<H: Host> Default for Dispatcher<H>
@@ -497,7 +564,10 @@ where
             lifted_last: None,
             prepared: false,
             page_quiescent: false,
-            overshoot: None,
+            notice_card: None,
+            notice_from: None,
+            notice_taken: false,
+            notice_swallow: None,
         }
     }
 
@@ -884,7 +954,8 @@ where
         let is_top_page = nav.top_page().map(|t| t.id) == Some(entry);
         let strip = (is_top_page && page.strip_reachable() && !nav.tabs.strip.is_empty())
             .then(|| (nav.tabs.strip_group(), nav.tabs.strip.as_slice()));
-        Some(PageWithStrip { page, strip, strip_fallback: nav.tabs.strip_fallback, strip_selected: nav.tabs.strip_selected, entry })
+        let notice = nav.tabs.notice.filter(|_| is_top_page);
+        Some(PageWithStrip { page, strip, strip_fallback: nav.tabs.strip_fallback, strip_selected: nav.tabs.strip_selected, notice, entry })
     }
 
     /// **Is this frame's picture a hardware VIDEO PLANE?** (spec §9, §16 risk 10.)
@@ -1907,6 +1978,16 @@ where
         // the hit map swaps only on a presented frame (§7.6); a legacy page registers nothing
         let hit_page = self.hit_page();
         plx_gfx::gfx::set_video_plane_frame(was_video_plane);
+        // **The notice's card, last: above the page, the bar and every surface**, because the
+        // application draws it over all of them. Keyed to whoever owns the input, so a click on it
+        // is always the notice's (`notice_answers`) and never the control under it.
+        if let (Some(card), Some(owner)) = (self.notice_card, self.owner_entry()) {
+            stops.push(Stop {
+                key: FocusKey { entry: owner, elem: H::Elem::of_index(NOTICE_ELEM) },
+                rect: card, rest_rect: card, clip: Rect::FULL,
+                hover: super::screen::Hover::Ignore, activate: Activate::Direct,
+            });
+        }
         if !plx_gfx::gfx::blur_source_pass() {
             self.input.hit.fill(if hit_page { stops } else { Vec::new() });
             self.input.hit.swap();
@@ -2209,6 +2290,14 @@ where
                         return;
                     }
                 }
+                // **The notice answers its own keys** while the engine holds it (`NOTICE_ELEM`): it is
+                // the dispatcher's control, not the page's, so the page never sees a key aimed at it.
+                // OK takes the action, BACK or DOWN gives the focus back where it came from, the other
+                // directions stop at its walls — and every other key (play, pause, the seeks, stop)
+                // is still the page's: a notice standing over playback takes nothing from it.
+                if self.notice_answers(id, &ev, out) {
+                    return;
+                }
                 // A direction or OK pressed (DOWN edge) on a page the focus engine owns: the key the
                 // repeated-key signal watches. The player page and a keyboard-owned screen are not
                 // the engine's, so a seek or a typed letter is never a dead press.
@@ -2296,6 +2385,110 @@ where
         }
     }
 
+    /// The notice's half of [`Self::execute_deliver`]: whether `ev`, addressed to instance `id`, was
+    /// the notice's (and is answered).
+    fn notice_answers(&mut self, id: InstanceId, ev: &ScreenEvent<H>, out: &mut Vec<Stamped<H>>) -> bool {
+        let owner = self.owner_entry().filter(|e| self.nav.instance_of(*e) == Some(id));
+        match ev {
+            // A click on the card: its stop is registered over whatever the owner is, so a click there
+            // never falls through to the control beneath it. It takes the action only from the top
+            // page, and only while the card offers one.
+            ScreenEvent::Activate(elem) if elem.index() == Some(NOTICE_ELEM) => {
+                let top = self.nav.top_page().map(|t| t.id);
+                if owner.is_some() && owner == top && self.nav.tabs.notice.is_some() {
+                    self.notice_taken = true;
+                    if self.notice_focused() {
+                        out.extend(self.restore_from_notice());
+                    }
+                }
+                true
+            }
+            ScreenEvent::Input(InputEvent { kind: InputKind::Key { key, edge, .. }, .. }) => {
+                if *edge != Edge::Down && self.notice_swallow == Some(*key) {
+                    if *edge == Edge::Up {
+                        self.notice_swallow = None;
+                    }
+                    return true;
+                }
+                if owner.is_none() || self.input.keyboard || !self.notice_focused() {
+                    return false;
+                }
+                let dir = Dir::of_key(*key);
+                if *key != Key::Ok && *key != Key::Back && dir.is_none() {
+                    return false;
+                }
+                if *edge == Edge::Down {
+                    match (key, dir) {
+                        (Key::Ok, _) => {
+                            self.notice_taken = true;
+                            out.extend(self.restore_from_notice());
+                        }
+                        (Key::Back, _) | (_, Some(Dir::Down)) => out.extend(self.restore_from_notice()),
+                        _ => {}
+                    }
+                    self.notice_swallow = Some(*key);
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Put the focus back where it was when it went up into the notice, as a `Restore` the page is
+    /// told of; `None` when the focus is not on the notice.
+    fn restore_from_notice(&mut self) -> Option<Stamped<H>> {
+        let entry = self.owner_entry()?;
+        let owner = InputOwner::Entry(entry);
+        let cur = self.input.engine.current(owner).filter(|k| k.elem.index() == Some(NOTICE_ELEM))?;
+        let outcome = match self.notice_from.take() {
+            Some((from_entry, key, group)) if from_entry == entry => self.input.engine.set(owner, key, group, super::screen::By::Restore),
+            // No record of where it came from (it cannot happen through the engine): no focus, and
+            // the page's next direction seats its first group.
+            _ => {
+                self.input.engine.clear(owner);
+                Outcome::Moved { from: Some(cur), to: cur, by: super::screen::By::Restore }
+            }
+        };
+        let Outcome::Moved { from, to, by } = outcome else { return None };
+        let inst = self.nav.instance_of(entry)?;
+        Some(Stamped {
+            from: MachineId::Input,
+            fx: Fx::Deliver(MachineId::Instance(inst), Delivery::Screen(ScreenEvent::FocusMoved { from, to, by })),
+        })
+    }
+
+    /// **The application's transient notice, published for this frame** ([`crate::action_notice`]):
+    /// `card` is where it stands (or `None`), `actionable` whether it offers an action. A card that
+    /// stands registers a pointer stop over everything (a click on it never reaches the control
+    /// beneath); an actionable one is also the [`NOTICE`](super::containers::tabs::NOTICE) focus
+    /// group the top page's UP reaches. A notice that goes, or stops offering its action, while it
+    /// holds the focus gives it back.
+    pub fn set_notice(&mut self, card: Option<Rect>, actionable: bool) {
+        self.notice_card = card;
+        self.nav.tabs.notice = card.filter(|_| actionable);
+        if self.nav.tabs.notice.is_none() {
+            self.release_notice();
+        }
+    }
+
+    /// Whether the input owner's focus is on the notice.
+    pub fn notice_focused(&self) -> bool {
+        self.owner_entry().is_some_and(|e| self.input.engine.current(InputOwner::Entry(e))
+            .is_some_and(|k| k.elem.index() == Some(NOTICE_ELEM)))
+    }
+
+    /// Give the focus back from the notice to where it came from (the notice timed out, or went).
+    pub fn release_notice(&mut self) {
+        if let Some(st) = self.restore_from_notice() {
+            self.queue.push_back(st);
+        }
+    }
+
+    /// Whether OK (or a click) took the notice's action since the last call.
+    pub fn take_notice_activation(&mut self) -> bool {
+        std::mem::take(&mut self.notice_taken)
+    }
+
     fn cancel_keyboard_gestures(&mut self, report: &mut FrameReport) {
         self.input.cancel_press();
         // Tick may have queued a result behind this ownership edge. Returning to the same
@@ -2368,10 +2561,27 @@ where
                         return KeyFate::Dead; // re-delivered under EdgeRule::Screen and still unhandled: dropped
                     }
                     let mut links = Vec::new();
+                    let before = self.input.engine.current(owner).map(|k| (k, self.input.engine.current_group(owner)));
                     let outcome = self.focus_resolution(rig, parts, entry, 1, tap, |engine, view, cx| {
                         view.page.links(&mut links);
-                        engine.move_dir(owner, view, &links, dir, cx)
+                        let outcome = engine.move_dir(owner, view, &links, dir, cx);
+                        // An UP the page's own model has nowhere to take goes on to the notice, by
+                        // the one link `PageWithStrip::notice_link` declares (never a Stop or Nav edge).
+                        let off_the_top = dir == Dir::Up
+                            && matches!(outcome, Outcome::Nothing | Outcome::Edge(EdgeRule::Screen));
+                        match engine.current(owner).filter(|_| off_the_top).and_then(|cur| view.notice_link(cur, &links, cx)) {
+                            Some(link) => {
+                                links.push(link);
+                                engine.move_dir(owner, view, &links, dir, cx)
+                            }
+                            None => outcome,
+                        }
                     });
+                    if let (Outcome::Moved { to, .. }, Some((from, group))) = (&outcome, before) {
+                        if to.elem.index() == Some(NOTICE_ELEM) {
+                            self.notice_from = Some((entry, from, group));
+                        }
+                    }
                     if self.input.engine.take_fell_back() {
                         rig.log("focus: no current focus — seated by the first group's policy");
                     }
@@ -2465,16 +2675,10 @@ where
                         // direction reached a boundary and acted as the focus model says (stay
                         // put), which tapping Down past a short list's last row does at
                         // once; only a press with nothing seated to take it is dead.
-                        Outcome::Edge(_) => {
-                            if self.input.engine.current(owner).is_some() && *edge == Edge::Down {
-                                self.overshoot = Some(dir);
-                            }
-                        }
+                        Outcome::Edge(_) => {}
                         Outcome::Nothing => {
                             if self.input.engine.current(owner).is_none() {
                                 fate = KeyFate::Dead;
-                            } else if *edge == Edge::Down {
-                                self.overshoot = Some(dir);
                             }
                         }
                     }
@@ -2826,19 +3030,6 @@ where
     /// The heartbeat's `carried=`/`dropped=` (§8.4), once a second: the queue depth the LAST
     /// frame of the second carried forward, and every delivery dropped since the previous read.
     /// `carried` is a level and is not reset; `dropped` is a count and is.
-    /// The direction key the focus model last answered with nothing while a focus was seated, once
-    /// (a fresh press only, never a held key's repeat): the reach of the application's transient
-    /// notice ([`crate::action_notice`]), which an UP overshoot engages.
-    pub fn take_overshoot(&mut self) -> Option<Dir> {
-        self.overshoot.take()
-    }
-
-    /// Record an overshoot a page reported itself, for a page whose direction keys are its own
-    /// (the player's bare picture and its top controls answer UP themselves).
-    pub fn note_overshoot(&mut self, dir: Dir) {
-        self.overshoot = Some(dir);
-    }
-
     pub fn take_heartbeat_counters(&mut self) -> (usize, u32) {
         (self.last_carried, std::mem::take(&mut self.dropped_deliveries))
     }

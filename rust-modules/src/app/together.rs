@@ -256,52 +256,79 @@ impl TogetherFeed {
         }
     }
 
-    /// The UP overshoot this frame's focus model reported: it reaches a notice that offers an action.
-    pub(crate) fn overshoot(&mut self, dir: Option<plx_ui::screen::Dir>) {
-        if dir == Some(plx_ui::screen::Dir::Up) && self.ui.notice.engage() {
+    /// **The notice's frame with the dispatcher** (`action_notice`, `Dispatcher::set_notice`): the card is
+    /// published where it stands (`top`) and whether it offers its action; an action the dispatcher saw
+    /// taken is performed; the card reads whether the focus is on it, and a focused card nobody answered
+    /// gives the focus back.
+    pub(crate) fn notice_frame<H: plx_machine::machine::Host>(&mut self, pages: &mut plx_ui::dispatch::Dispatcher<H>,
+        measure: &dyn plx_machine::machine::Measure, top: f32)
+    where H::Elem: plx_ui::geom::IndexElem {
+        if pages.take_notice_activation() {
+            if let Some(action) = self.ui.take_action() {
+                self.perform(action);
+            }
             plx_machine::idle::invalidate();
         }
-    }
-
-    /// A key, offered to the notice before anything else: `true` when the notice took it (its
-    /// key-up is then the notice's too).
-    pub(crate) fn notice_key(&mut self, sym: u32, down: bool, key: plx_ui::consts::Key) -> bool {
-        use plx_ui::action_notice::{Answer, NoticeKey};
-        if !down {
-            if self.ui.swallow_sym == Some(sym) {
-                self.ui.swallow_sym = None;
-                return true;
-            }
-            return false;
+        let notice = &mut self.ui.notice;
+        pages.set_notice(notice.rect(measure, top), notice.actionable());
+        let focused = pages.notice_focused();
+        if focused != notice.focused() {
+            plx_machine::idle::invalidate();
         }
-        if !self.ui.notice.engaged() {
-            return false;
+        notice.set_focused(focused);
+        if notice.wants_release() {
+            pages.release_notice();
+            notice.set_focused(false);
+            plx_machine::idle::invalidate();
         }
-        let k = match key {
-            plx_ui::consts::Key::Ok => NoticeKey::Ok,
-            plx_ui::consts::Key::Back => NoticeKey::Back,
-            plx_ui::consts::Key::Up => NoticeKey::Up,
-            plx_ui::consts::Key::Down => NoticeKey::Down,
-            plx_ui::consts::Key::Left { .. } => NoticeKey::Left,
-            plx_ui::consts::Key::Right { .. } => NoticeKey::Right,
-            _ => NoticeKey::Other,
-        };
-        let (answer, action) = self.ui.key(k);
-        if answer == Answer::Ignored {
-            return false;
-        }
-        self.ui.swallow_sym = Some(sym);
-        if let Some(a) = action {
-            self.perform(a);
-        }
-        plx_machine::idle::invalidate();
-        true
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// (pr-reviewer #1, #5, on the product's own page.) On the Friends page an UP off the page's top
+    /// reaches the friend's "Join" card as the dispatcher's focus group, OK on it joins (and gives the
+    /// focus back), and a click on the card is the card's, never the Share chip's under it.
+    #[test]
+    fn on_the_friends_page_up_reaches_the_join_card_and_ok_joins() {
+        use crate::app::bridge::{frame, show_page, AppHost, Bridge};
+        use plx_screens::registry::AppArg;
+        use plx_machine::machine::{Key, Tick};
+        use plx_ui::dispatch::Dispatcher;
+        let _g = plx_base::testlock::serial();
+        let t = |ms: u32| Tick { ms, dt_us: 16_000 };
+        let mut d = Dispatcher::<AppHost>::new();
+        let mut rig = Bridge::for_test(|| 0);
+        show_page(&mut d, AppArg::Friends);
+        frame(&mut d, &mut rig, t(0), vec![]);
+        let room = ui::FriendRoom { relay: "wss://relais.exemple.fr".into(), server: String::new(), key: None,
+            room: "room-1".into(), name: "Camille".into(), title: "Dune".into(), sub: None, count: 2, playing: true };
+        rig.together.ui.on_friend_sessions(&[room],
+            &ui::UiCtx { in_session: false, friend_alerts: true, friends_page: true, player_page: false });
+        for _ in 0..40 {
+            rig.together.ui.notice.step(16);
+        }
+        let top = plx_ui::action_notice::PAGE_TOP;
+        rig.together_notice_frame(&mut d, top);
+        let mut ms = 16;
+        for _ in 0..6 {
+            if d.notice_focused() {
+                break;
+            }
+            frame(&mut d, &mut rig, t(ms), vec![plx_ui::fixture::key(Key::Up, t(ms)), plx_ui::fixture::key_up(Key::Up, t(ms))]);
+            rig.together_notice_frame(&mut d, top);
+            ms += 16;
+        }
+        assert!(d.notice_focused(), "UP off the Friends page's top reaches the card");
+        assert!(rig.together.ui.notice.focused(), "and the card shows its action as the focused pill");
+        assert!(!rig.together.store.due(0), "nothing asked yet");
+        frame(&mut d, &mut rig, t(ms), vec![plx_ui::fixture::key(Key::Ok, t(ms))]);
+        rig.together_notice_frame(&mut d, top);
+        assert!(rig.together.store.due(0), "OK on the card joined the friend's session");
+        assert!(!d.notice_focused(), "and gave the focus back to the page");
+    }
 
     #[test]
     fn the_seam_queues_a_command_and_hands_out_what_it_holds() {

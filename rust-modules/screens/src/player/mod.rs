@@ -381,7 +381,7 @@ impl PlayerScreen {
             open: self.hud.sections.bits(),
             slot: self.draw_slot(),
             busy: self.busy,
-            focus: self.hud.nav.focus,
+            focus: Self::ring_group(self.hud.nav.focus, df.cx.focus.current.and_then(|k| k.elem.index())),
             btn: self.hud.nav.btn,
             tab: self.hud.nav.tab,
             now,
@@ -868,7 +868,7 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Machine<H> for PlayerScreen 
                 // spring advanced in the draw would run at a rate that depended on which overlay
                 // was open (`HudMotion::step`'s own doc).
                 self.row
-                    .step(self.eff_slot(), self.hud.nav.focus, self.hud.nav.btn, tick.dt(), tick.ms,
+                    .step(self.eff_slot(), Self::ring_group(self.hud.nav.focus, cx.focus.current.map(|k| k.elem)), self.hud.nav.btn, tick.dt(), tick.ms,
                         plx_media::player::is_started(H::session(cx)), H::transport_paused(cx));
                 // …and the sections' appear springs, pointed at the sections that are open (a write to
                 // `hud.sections` that did not tell them is caught up here) and stepped once per frame.
@@ -2434,6 +2434,14 @@ impl PlayerScreen {
             .filter(|&(i, _, cy)| i != from && if down { cy > here.y + here.h } else { cy < here.y })
             .min_by(|a, b| ((a.2 - hy).abs(), (a.1 - hx).abs()).partial_cmp(&((b.2 - hy).abs(), (b.1 - hx).abs())).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _, _)| i)
+    }
+
+    /// **The group the HUD's ring is drawn on**: the one it holds, except while the engine holds the
+    /// focus on the application's transient notice (`dispatch::NOTICE_ELEM`, reached UP off the
+    /// topmost transport group): then no HUD control is focused, so the card's pill is the ONE ring
+    /// on screen. `hud.nav` keeps its group, which is where BACK or DOWN off the card lands.
+    fn ring_group(held: GroupId, engine: Option<u32>) -> GroupId {
+        if engine == Some(plx_ui::dispatch::NOTICE_ELEM) { plx_ui::containers::tabs::NOTICE } else { held }
     }
 
     fn hud_group_of(elem: u32) -> Option<GroupId> {

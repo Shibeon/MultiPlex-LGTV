@@ -1300,12 +1300,6 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
             (state & 0xff) == 1,
             state & 0x100 != 0,
         ));
-        // Watch Together's notice, reached by an UP overshoot (`action_notice`): while it is
-        // engaged it answers the remote before the page does, and the key-up of a press it took is
-        // its own too (the page never saw that key go down).
-        if app.bridge.together.notice_key(sym, (state & 0xff) == 1, key) {
-            return;
-        }
         // **Does the TREE own this key?** (phase 5b, `app/bridge.rs`'s coexistence
         // contract.) Asked once, here, above all three edges — because the dispatcher's
         // press machine wants ALL of them: `Edge::Down` arms, `Edge::Repeat` is the
@@ -2067,6 +2061,16 @@ fn did_foreground_with_link(app: &mut App) -> ForegroundActivation {
     );
     super::deeplink::perform(out, &mut app.pages, &mut app.menu_play_await, now);
     activation
+}
+
+/// Where the transient notice's card stands on the route on top: under the page header's block on a
+/// page, under the player head's clock and title band over the player.
+fn notice_top(pages: &plx_ui::dispatch::Dispatcher<super::bridge::AppHost>) -> f32 {
+    if pages.top_arg() == Some(&AppArg::Player) {
+        plx_ui::action_notice::PLAYER_TOP
+    } else {
+        plx_ui::action_notice::PAGE_TOP
+    }
 }
 
 /// The facts of whether a playback session stands, for the launch link's step
@@ -3061,14 +3065,16 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
             held: together_held,
         });
         // …then what the session tells the viewer (`bridge::together::ui`): its notices and the
-        // gate's standing on the one transient notice, the friends' listing on its cadence, and an
-        // UP overshoot the focus model reported reaching a notice that offers an action.
+        // gate's standing on the one transient notice, the friends' listing on its cadence, and the
+        // card published to the dispatcher, which makes an actionable one the focus group the top
+        // page's UP reaches (`action_notice`).
         {
             let friends_page = app.pages.top_arg() == Some(&AppArg::Friends);
             let player_page = (app.pages.top_arg() == Some(&AppArg::Player)).then(|| app.pages.top_page()).flatten();
             app.bridge.together.set_preferences(plx_media::route::together_visible(), plx_media::route::together_notify());
             app.bridge.together.ui_frame(fr.now, friends_page, player_page.is_some());
-            app.bridge.together.overshoot(app.pages.take_overshoot());
+            let top = notice_top(&app.pages);
+            app.bridge.together_notice_frame(&mut app.pages, top);
             // The gate's question, asked on the player page's own decision card.
             if let Some((page, ask)) = app.bridge.together.player_ask(player_page) {
                 let page = plx_machine::machine::MachineId::Instance(page);
@@ -3432,11 +3438,9 @@ pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32)
                                                      // The lab upload read-out, over everything, on every route — including the
                                                      // player, where the two branches above diverge and this one must not.
                     // Watch Together's notice, over every route and every surface but the lab
-                    // read-out: it takes no focus, so nothing under it is ever hidden for long.
-                    {
-                        static TTF: plx_gfx::text::TtfMeasure = plx_gfx::text::TtfMeasure;
-                        app.bridge.together.ui.notice.draw(plx_ui::Painter::root(), &TTF);
-                    }
+                    // read-out: it seats no focus of its own, so nothing under it is hidden for long.
+                    // Measured with the frame's own measure, the one its pointer stop was laid with.
+                    app.bridge.together.ui.notice.draw(plx_ui::Painter::root(), app.bridge.measure(), notice_top(&app.pages));
                     crate::lab::draw(app.diagnostics.frame_if_shown());
                     #[cfg(feature = "threadcheck")]
                     plx_ui::runtime_warning::draw(app.boot_initial.is_some());
