@@ -373,6 +373,27 @@ fn the_strip_is_the_containers_group_and_the_page_gates_it() {
     assert_eq!(elem(&d), Some(0), "nothing above a snapped grid");
 }
 
+/// The transient notice's reach (`action_notice`): an UP the focus model answers with nothing while
+/// a focus is seated is reported once as an overshoot; an UP that moved focus is not.
+#[test]
+fn an_up_answered_with_nothing_is_reported_once_as_an_overshoot() {
+    let (mut d, mut rig) = boot(FixtureArg::Snapped);
+    let e = d.nav.top_page().unwrap().id;
+    d.set_focus(Some(FocusKey { entry: e, elem: 0 }));
+    d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(0), "focus stayed");
+    assert_eq!(d.take_overshoot(), Some(super::screen::Dir::Up));
+    assert_eq!(d.take_overshoot(), None, "drained once");
+
+    let (mut d, mut rig, _) = booted();
+    d.nav.tabs.strip = vec![StripMember::new(STRIP_BASE, Rect::new(100.0, 10.0, 160.0, 48.0))];
+    let home = d.nav.top_page().unwrap().id;
+    d.set_focus(Some(FocusKey { entry: home, elem: 2 }));
+    d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(STRIP_BASE), "UP moved to the strip");
+    assert_eq!(d.take_overshoot(), None, "a move is not an overshoot");
+}
+
 #[test]
 fn the_home_strip_walks_both_endpoints_for_every_type_composition() {
     for types in [vec![], vec![1], vec![2], vec![1, 2]] {

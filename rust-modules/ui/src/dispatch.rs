@@ -442,6 +442,11 @@ pub struct Dispatcher<H: Host> {
     /// The previous frame's page-owned motion/resource verdict, retained past `Present::take` so
     /// the held transition image can wait for the destination's visual quiescence.
     page_quiescent: bool,
+    /// The last direction key the focus model answered with nothing while a focus was seated (an
+    /// UP from a page's top row, a DOWN past a list's end): the application's shared transient
+    /// notice is reached by an UP overshoot ([`crate::action_notice`]). Observes only; drained by
+    /// [`Self::take_overshoot`].
+    overshoot: Option<Dir>,
 }
 
 impl<H: Host> Default for Dispatcher<H>
@@ -492,6 +497,7 @@ where
             lifted_last: None,
             prepared: false,
             page_quiescent: false,
+            overshoot: None,
         }
     }
 
@@ -2459,10 +2465,16 @@ where
                         // direction reached a boundary and acted as the focus model says (stay
                         // put), which tapping Down past a short list's last row does at
                         // once; only a press with nothing seated to take it is dead.
-                        Outcome::Edge(_) => {}
+                        Outcome::Edge(_) => {
+                            if self.input.engine.current(owner).is_some() && *edge == Edge::Down {
+                                self.overshoot = Some(dir);
+                            }
+                        }
                         Outcome::Nothing => {
                             if self.input.engine.current(owner).is_none() {
                                 fate = KeyFate::Dead;
+                            } else if *edge == Edge::Down {
+                                self.overshoot = Some(dir);
                             }
                         }
                     }
@@ -2814,6 +2826,19 @@ where
     /// The heartbeat's `carried=`/`dropped=` (§8.4), once a second: the queue depth the LAST
     /// frame of the second carried forward, and every delivery dropped since the previous read.
     /// `carried` is a level and is not reset; `dropped` is a count and is.
+    /// The direction key the focus model last answered with nothing while a focus was seated, once
+    /// (a fresh press only, never a held key's repeat): the reach of the application's transient
+    /// notice ([`crate::action_notice`]), which an UP overshoot engages.
+    pub fn take_overshoot(&mut self) -> Option<Dir> {
+        self.overshoot.take()
+    }
+
+    /// Record an overshoot a page reported itself, for a page whose direction keys are its own
+    /// (the player's bare picture and its top controls answer UP themselves).
+    pub fn note_overshoot(&mut self, dir: Dir) {
+        self.overshoot = Some(dir);
+    }
+
     pub fn take_heartbeat_counters(&mut self) -> (usize, u32) {
         (self.last_carried, std::mem::take(&mut self.dropped_deliveries))
     }
