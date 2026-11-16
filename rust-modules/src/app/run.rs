@@ -3039,13 +3039,17 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         // (`deeplink`) arms the same wait once Home is up.
         // Watch Together's player side: the session's requests, its Follows through the one gate
         // (a Follow arms the same wait, so it runs first and the wait ticks this frame) and the
-        // player's snapshot for the next pump (`bridge::together::player`).
+        // player's snapshot for the next pump (`bridge::together::player`). Held, as the launch
+        // link is, while the app is hidden or the foreground lifecycle brings the parked playback
+        // back: that playback is the lifecycle's until it has.
+        let together_held = !app.window_activity.allow_present(true) || app.player.lifecycle.awaiting_load();
         app.bridge.together_player_frame(super::bridge::together::player::PlayerSide {
             player: &mut app.player,
             pa: &mut app.adapters.player,
             pages: &mut app.pages,
             menu_play_await: &mut app.menu_play_await,
             now: fr.now,
+            held: together_held,
         });
         let stands = link_session_stands(app);
         super::deeplink::frame(&mut app.pages, &mut app.deeplink, &mut app.menu_play_await,

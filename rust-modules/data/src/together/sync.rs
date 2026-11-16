@@ -26,8 +26,10 @@
 //! sent only when a gesture preceded it ([`SETTLE_US`] to show up, kept open while a seek or a
 //! rebuffer is in flight), so a correction that lands late, a command the pipeline did not take, or
 //! the player's own recovery never echoes back as a new command, and a gesture made right after a
-//! correction is not swallowed by its settle window. A change no gesture explains brings a
-//! participant back to the session instead. Without a count (`None`) the web's rule applies.
+//! correction is not swallowed by its settle window. Another member's newer command closes that
+//! window: what changes after it is the command landing, not the press before it. A change no
+//! gesture explains brings a participant back to the session instead. Without a count (`None`) the
+//! web's rule applies.
 
 use super::wire::{IntentIn, SyncAction, TickIn};
 
@@ -281,8 +283,15 @@ impl TogetherSync {
             return false;
         }
         self.set_reference(SyncRef { time: finite(m.time), playing: m.playing, at_us: self.now_us, stamp: s });
-        self.apply(true, cmds);
+        self.apply_remote(cmds);
         true
+    }
+
+    /// Apply a newer reference another member set: whatever changes next is that command landing,
+    /// so a press counted before it (its window still open) no longer explains it.
+    fn apply_remote(&mut self, cmds: &mut Vec<PlayerCmd>) {
+        self.gesture_until_us = None;
+        self.apply(true, cmds);
     }
 
     /// Another participant's tick.
@@ -300,12 +309,12 @@ impl TogetherSync {
                 return TickVerdict::Ignore;
             }
             self.set_reference(SyncRef { time, playing, at_us, stamp: s.unwrap_or_default() });
-            self.apply(true, cmds);
+            self.apply_remote(cmds);
             return TickVerdict::Adopt;
         };
         if let Some(s) = s.as_ref().filter(|s| newer(s, &current)) {
             self.set_reference(SyncRef { time, playing, at_us, stamp: s.clone() });
-            self.apply(true, cmds);
+            self.apply_remote(cmds);
             return TickVerdict::Adopt;
         }
         let same = s.as_ref().is_none_or(|s| *s == current);
@@ -1012,6 +1021,31 @@ mod tests {
         a.at(500);
         assert_eq!(a.poll(true), None, "the player's own jump is not a command");
         assert_eq!(a.player.seeks.len(), seeks + 1, "the participant is sought back to the session");
+    }
+
+    /// A counted press is the person's only until the session's next command: a remote Seek applied
+    /// right after it (inside its window) lands a keyframe short, and that landing is the command's,
+    /// never re-sent as this member's own Seek.
+    #[test]
+    fn a_remote_command_closes_the_window_of_a_press_just_before_it() {
+        let t0 = 19_000_000;
+        let mut h = member("h", true, true, t0);
+        let mut a = member_counting("a", false, true, t0, Some(0));
+        a.player.gop = 4.0;
+        a.at(500);
+        assert_eq!(a.poll(true), None);
+        // The person presses something that changes nothing (the count moves, the player does not).
+        a.count_gesture();
+        a.at(100);
+        assert_eq!(a.poll(true), None, "a press that changed nothing sends nothing");
+        let ih = h.gesture(|p, now| p.seek(900.0, now));
+        a.at(100);
+        assert!(a.on_intent(&ih));
+        for _ in 0..6 {
+            a.at(300);
+            assert_eq!(a.poll(true), None, "the session's own Seek landing is not this member's gesture");
+        }
+        assert_eq!(a.sync.stamp(), Stamp { c: ih.c.unwrap(), by: "h".into() }, "the host's Seek stands");
     }
 
     #[test]

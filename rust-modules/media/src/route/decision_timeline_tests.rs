@@ -839,7 +839,7 @@ fn a_restart_from_the_beginning_quit_seconds_in_clears_the_servers_old_resume_po
 }
 
 /// Joining a Watch Together session near the beginning of a title the viewer had left at 45:00 is
-/// not a Play from Start: the session opened (or moved) this playback, so its stop seconds in
+/// not a Play from Start: the session opened this playback, so its stop seconds in
 /// reports `stopped` exactly as any play does and clears nothing (`waive_resume_reset`). The waiver
 /// survives the plan's landing and belongs to that playback only: the next request is the
 /// viewer's own again.

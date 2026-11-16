@@ -331,9 +331,12 @@ something.
   viewer's own `player::pause`, so `player::state()` answers `Buffering` and the existing
   transport spinner draws; a seek flight engages the same hold from
   `start_transcode_seek_flight`) and `take` + `release` AFTER `run_claim_tail`, so an accepted
-  claim's Play lands on the new stream and a rejected one's on the kept Engine. A viewer press
+  claim's Play lands on the new stream and a rejected one's on the kept Engine. A transport press
   (`player::transport::set_transport_paused` -> `note_user_transport`) forgets the restore: the
-  viewer's last transport press always stands. A stream already paused at claim time stays paused.
+  viewer's own, and a Watch Together session's Play or Pause, which comes through the same door
+  (`player::together::perform`) so that a remote Pause during a flight is not undone by the
+  landing's give-back. The last transport press always stands. A stream already paused at claim
+  time stays paused.
   While the hold's pause stands the viewer's transport reads see PLAYING
   (`player::transport::viewer_paused`, `claim_hold::owns_pause`): the OK toggle means Pause and a
   seek's `resume_if_paused` leaves the hold alone (its seek is carried past the reload by

@@ -51,6 +51,8 @@ pub(crate) struct TogetherFeed {
     answer: Option<FollowAnswer>,
     /// The playing title as the session names it, identified once per playback.
     item: Option<((plx_plex::plex::ServerId, String), SharedItem)>,
+    /// The session drives the player: the last unheld frame handed it a snapshot (`player`).
+    drives: bool,
 }
 
 /// The servers this identity sees, as the together store needs them: identity, the connections

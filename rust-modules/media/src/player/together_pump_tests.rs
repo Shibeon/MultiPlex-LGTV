@@ -192,3 +192,20 @@ fn a_session_pause_is_not_echoed_and_only_the_persons_own_pause_is_sent() {
         assert_eq!(m.log.first(), Some(&PlayerCmd::Play), "it is put back to the session: {:?}", m.log);
     }
 }
+
+/// A claim's presentation hold is up (this member picked a track and its PMS half flies) and owes
+/// the stream a Play back at the landing. The session's Pause, performed through the one transport
+/// door, is a transport press like the viewer's own (`claim_hold::note_user_transport`): it forgets
+/// that restore, so the landing leaves this member paused with the session instead of playing on.
+#[test]
+fn a_session_pause_during_a_claim_hold_stands_past_the_landing() {
+    let _serial = plx_base::testlock::serial();
+    let mut m = Member::playing();
+    FEED_SHARED.reset_hls_clock_for_test();
+    crate::player::claim_hold::hold_for_test(9, true);
+    let paused = perform(&mut m.rig.ps, &mut m.rig.pa, PlayerCmd::Pause);
+    let restore = crate::player::claim_hold::take(9);
+    crate::player::claim_hold::clear();
+    assert!(paused, "the session's Pause was taken");
+    assert!(!restore, "the landing owes no Play back over the session's Pause");
+}

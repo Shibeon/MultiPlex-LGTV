@@ -11,8 +11,10 @@
 //!   one re-application of the session when it resumes, never a gesture.
 //! - **Performed** through `PlayerAdapter::request_seek` (the backend-agnostic seek the scrub
 //!   commit takes: a paused film stays paused, the pump owns that) and `set_transport_paused` (the
-//!   one door every Play and Pause press goes through). No playback-rate nudging: the LG pipeline
-//!   cannot change rate without a reload, so a drift is left or sought (`together::sync`).
+//!   one door every Play and Pause press goes through, so a session's Pause during a claim's flight
+//!   outranks the hold's give-back as the viewer's own does, `claim_hold::note_user_transport`).
+//!   No playback-rate nudging: the LG pipeline cannot change rate without a reload, so a drift is
+//!   left or sought (`together::sync`).
 //! - **A request is not a gesture.** The person's play, pause and seek presses are counted at the
 //!   application's own transport doors (`route::note_gesture`); [`perform`] goes around them, so a
 //!   change the session asked for never moves the count and is never sent back to it.

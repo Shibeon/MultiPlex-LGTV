@@ -199,7 +199,7 @@ pub struct PlaybackSession {
     /// request and every landing. A stop that never presented one (Back while a Play from Start
     /// buffered) watched nothing, so it owes the server no resume reset ([`scrobble_stop`]).
     presented: bool,
-    /// This playback was opened, or moved, by a Watch Together session ([`waive_resume_reset`]),
+    /// This playback was opened by a Watch Together session's Follow ([`waive_resume_reset`]),
     /// not by the viewer's own Play from Start: its stop owes the server no resume reset
     /// ([`plx_data::viewstate::restart_owes_resume_reset`]). Joining a session that is near the
     /// beginning is not the viewer throwing away the point they had; the ordinary `stopped` report
@@ -7079,9 +7079,10 @@ pub fn cur_memory_note(ps: &PlaybackSession) -> bool {
 pub fn cur_rk(ps: &PlaybackSession) -> String {
     ps.cur_rk.clone()
 }
-/// A Watch Together session opened this playback (a Follow) or moved it (a seek the session
-/// asked for): its stop owes no resume reset ([`PlaybackSession::resume_reset_waived`]). Call it
-/// after the request that opened the playback, which clears it.
+/// A Watch Together session opened this playback (a Follow): its stop owes no resume reset
+/// ([`PlaybackSession::resume_reset_waived`]). Call it after the request that opened the playback,
+/// which clears it. A seek the session asks for on a playback it did not open waives nothing: the
+/// host's own Play from Start still owes its reset.
 pub fn waive_resume_reset(ps: &mut PlaybackSession) {
     ps.resume_reset_waived = true;
 }
