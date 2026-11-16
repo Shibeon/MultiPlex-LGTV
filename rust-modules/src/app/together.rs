@@ -99,41 +99,66 @@ impl Bridge {
             plx_machine::idle::invalidate();
         }
     }
+}
 
+/// The seam the UI and the player lanes wire: commands in, notices and player requests out.
+impl TogetherFeed {
     /// The UI's command to the together store, applied on the next frame's pump.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn together_command(&mut self, cmd: TogetherCmd) {
-        self.together.store.command(cmd);
+    pub(crate) fn command(&mut self, cmd: TogetherCmd) {
+        self.store.command(cmd);
         plx_machine::idle::invalidate();
     }
 
     /// The settings the store reads (the relay, a hosted session's default visibility, the notices).
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn set_together_settings(&mut self, settings: TogetherSettings) {
-        self.together.settings = settings;
+    pub(crate) fn set_settings(&mut self, settings: TogetherSettings) {
+        self.settings = settings;
     }
 
     /// What the player plays, for the session to follow (lane 4 hands it each frame).
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn set_together_player(&mut self, snapshot: Option<PlayerSnapshot>) {
-        self.together.player = snapshot;
+    pub(crate) fn set_player(&mut self, snapshot: Option<PlayerSnapshot>) {
+        self.player = snapshot;
     }
 
     /// The notices the UI has not taken yet.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn take_together_notices(&mut self) -> Vec<Notice> {
-        std::mem::take(&mut self.together.notices)
+    pub(crate) fn take_notices(&mut self) -> Vec<Notice> {
+        std::mem::take(&mut self.notices)
     }
 
     /// What the session asked of the player and the player has not taken yet.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn take_together_player_requests(&mut self) -> Vec<TogetherPlayerRequest> {
-        std::mem::take(&mut self.together.requests)
+    pub(crate) fn take_player_requests(&mut self) -> Vec<TogetherPlayerRequest> {
+        std::mem::take(&mut self.requests)
     }
 
     /// The live session's view, for the UI.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn together_view(&self) -> Option<plx_data::together::session::View> {
-        self.together.store.view()
+    pub(crate) fn view(&self) -> Option<plx_data::together::session::View> {
+        self.store.view()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_seam_queues_a_command_and_hands_out_what_it_holds() {
+        let mut feed = TogetherFeed::default();
+        assert!(!feed.store.busy());
+        feed.command(TogetherCmd::Leave);
+        assert!(feed.store.busy(), "a queued command makes the next frame pump");
+        feed.set_settings(TogetherSettings { relay: "relais.exemple.fr".into(), ..TogetherSettings::default() });
+        assert_eq!(feed.settings.relay, "relais.exemple.fr");
+        feed.set_player(None);
+        feed.notices.push(Notice::Left);
+        feed.requests.push(TogetherPlayerRequest::Pause);
+        assert_eq!(feed.take_notices(), [Notice::Left]);
+        assert_eq!(feed.take_player_requests(), [TogetherPlayerRequest::Pause]);
+        assert!(feed.take_notices().is_empty());
+        assert!(feed.view().is_none());
     }
 }

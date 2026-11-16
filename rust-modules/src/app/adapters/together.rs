@@ -252,9 +252,17 @@ fn open_socket(conn: u32, url: String, port: TogetherPort, slot: Arc<Mutex<Optio
 }
 
 /// A word for the log (no address, no message).
-fn end_word(end: &End) -> &'static str {
-    match end {
-        End::Refused(_) => "refused",
+fn end_word(end: &End) -> String {
+    let word = match end {
+        End::Refused(Refusal::Url) => "refused (address)",
+        End::Refused(Refusal::Entropy) => "refused (entropy)",
+        End::Refused(Refusal::Open(OpenError::Connect { rc, .. })) => return format!("refused (libcurl {rc})"),
+        End::Refused(Refusal::Open(OpenError::Unavailable)) => "refused (no libcurl)",
+        End::Refused(Refusal::Open(OpenError::SerialTls)) => "refused (serial TLS only)",
+        End::Refused(Refusal::Open(OpenError::Address)) => "refused (address)",
+        End::Refused(Refusal::Open(OpenError::Refused(why))) => return format!("refused ({why})"),
+        End::Refused(Refusal::Open(OpenError::NoSocket)) => "refused (no socket)",
+        End::Refused(Refusal::Open(OpenError::Cancelled)) => "cancelled",
         End::Closed { .. } => "closed",
         End::Failed(_) => "failed",
         End::Lost => "lost",
@@ -262,7 +270,8 @@ fn end_word(end: &End) -> &'static str {
         End::Idle => "idle",
         End::NoEntropy => "no entropy",
         End::Cancelled => "cancelled",
-    }
+    };
+    word.to_string()
 }
 
 #[cfg(test)]
@@ -291,3 +300,7 @@ mod tests {
         assert!(matches!(parked.as_slice(), [TogetherJob::Socket { .. }, TogetherJob::Send { .. }, TogetherJob::Close { .. }]));
     }
 }
+
+#[cfg(test)]
+#[path = "together_e2e_tests.rs"]
+mod e2e_tests;
