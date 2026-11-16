@@ -37,9 +37,11 @@
 //!
 //! It fades in on the shared appear stiffness ([`crate::popover::K_APPEAR`]) and slides
 //! [`SLIDE_PX`] in from the right on the same spring, inside `idle::decorative` (it stands over the
-//! page and moves nothing under it). The card is the hold hint's standing glass
-//! ([`crate::hold_hint`]: `Glass::DYNAMIC_BACKDROP` with the flat track fallback), so the two
-//! standing notes of the app are one material. Time is the `dt` it is handed: it reads no clock.
+//! page and moves nothing under it). The card stands on the top bar's flat track material (the
+//! fallback ground the hold hint's glass falls back to), never the live blur: the blur path is
+//! chrome-only (`widgets::glass_budget_tests`), and the card also stands over the player, where the
+//! framebuffer under it is the video plane's hole, not a picture to blur. Time is the `dt` it is
+//! handed: it reads no clock.
 //!
 //! Sans-IO: values in, a typed [`Answer`] out; the action itself is the application's to perform.
 
@@ -344,21 +346,9 @@ impl ActionNotice {
         let slide = (1.0 - opacity) * SLIDE_PX;
         let r = Rect::new(crate::consts::SCR_W - RIGHT - lay.w + slide, TOP, lay.w, lay.h);
         let radius = 24.0;
-        let glass = widgets::Glass::DYNAMIC_BACKDROP.backdrop_rising(
-            p,
-            r,
-            0.0,
-            radius,
-            [1.0, 1.0, 1.0, opacity],
-            plx_gfx::gfx::GlassRim::Standing,
-            widgets::chip_face(crate::hold_hint::glass_face(), opacity),
-            theme::Material::UltraThin,
-        );
         let p = p.alpha(opacity);
-        if !glass {
-            let boost = theme::GLASS_RIM_LIGHT[3] - theme::GLASS_RIM[3];
-            p.rect_rimmed(r, radius, theme::TAB_TRACK_TOP, theme::TAB_TRACK_BOT, theme::GLASS_RIM, boost);
-        }
+        let boost = theme::GLASS_RIM_LIGHT[3] - theme::GLASS_RIM[3];
+        p.rect_rimmed(r, radius, theme::TAB_TRACK_TOP, theme::TAB_TRACK_BOT, theme::GLASS_RIM, boost);
         let mut x = r.x + PAD_X;
         let line1 = r.y + PAD_Y + LINE_H * 0.5;
         if let Some(mark) = n.mark {
