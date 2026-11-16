@@ -128,7 +128,7 @@ static PRIVACY: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| [
 /// [`privacy_policy`] for a build with no reporting destination: the same sections where they are
 /// true of it (Plex services and Continue Watching artwork, servers, the unencrypted-connection
 /// answer), its own text where the reporting build's names reports, identifiers or choices, and
-/// the connections `PRIVACY.md` lists.
+/// the connections `PRIVACY.md` lists (Watch Together's relay included).
 static PRIVACY_LOCAL: std::sync::LazyLock<String> = std::sync::LazyLock::new(privacy_local_text);
 fn privacy_local_text() -> String {
     [
@@ -142,6 +142,8 @@ fn privacy_local_text() -> String {
     plx_platform::i18n::msg::settings_legal_privacy_plex_link(),
     plx_platform::i18n::msg::settings_legal_privacy_servers(),
     plx_platform::i18n::msg::settings_legal_privacy_servers_body(),
+    plx_platform::i18n::msg::settings_legal_privacy_together(),
+    plx_platform::i18n::msg::settings_legal_privacy_together_body(),
     plx_platform::i18n::msg::settings_legal_privacy_other(),
     plx_platform::i18n::msg::settings_legal_privacy_other_body(),
     plx_platform::i18n::msg::settings_legal_privacy_local(),
@@ -753,6 +755,12 @@ mod tests {
             "community.plex.tv",
             "discover.provider.plex.tv",
             "metadata.provider.plex.tv",
+            "WATCH TOGETHER",
+            "/multiplex-relay",
+            "the list of your Plex friends",
+            "delegation token",
+            "Your Plex account token never goes to a relay",
+            "Let’s Encrypt",
             "what you typed",
             "Continue Watching",
             "github.com",
@@ -774,7 +782,7 @@ mod tests {
             for gone in ["Sentry", "PostHog"] {
                 assert!(!text.contains(gone), "{}: the no-reporting policy names {gone}", language.tag());
             }
-            for host in ["clients.plex.tv", "community.plex.tv", "discover.provider.plex.tv", "metadata.provider.plex.tv", "github.com"] {
+            for host in ["clients.plex.tv", "community.plex.tv", "discover.provider.plex.tv", "metadata.provider.plex.tv", "/multiplex-relay", "Let’s Encrypt", "github.com"] {
                 assert!(text.contains(host), "{}: the no-reporting policy omits {host}", language.tag());
             }
         }

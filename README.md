@@ -192,6 +192,14 @@ what I watch" setting, which changes only when you press its switch), and to
 `discover.provider.plex.tv` for cast biographies, for the Watchlist (reading it, and adding or
 removing a title when you ask, with the active profile's plex.tv token) and for the cover artwork of
 each title in Continue Watching (which tells Plex which titles are in that row for the profile in use).
+Watch Together also talks to a relay (MultiPlex has none of its own: the one an invitation code
+names, or one at `/multiplex-relay` on a public address plex.tv publishes for one of your servers,
+for example `https://plex.exemple.fr/multiplex-relay`), when you start or join a session and, while
+"Friends' session alerts" is on (the default) or the Friends page is shown, to list the sessions
+your Plex friends made visible to you. What participants exchange is end-to-end encrypted; a session
+you make visible to your Plex friends is announced to the relay with its title, position and your
+friends' plex.tv account numbers, read from `plex.tv` for that purpose. [`PRIVACY.md`](PRIVACY.md)
+says exactly what each request carries.
 
 **Crash reports and usage analytics are off until you turn them on** — two separate first-run
 questions, each answerable with Don't Share, both reversible later under Account → Settings →

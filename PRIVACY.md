@@ -1,6 +1,6 @@
 # MultiPlex Privacy Policy
 
-Applies to MultiPlex 0.11.0. Last updated 15 November 2026.
+Applies to MultiPlex 0.11.0. Last updated 16 November 2026.
 
 ## Who is responsible for MultiPlex data
 
@@ -33,7 +33,10 @@ Policy](https://www.plex.tv/about/privacy-legal/). MultiPlex’s developer does 
 
 **plex.tv.** Signing in with the code shown on screen; your account details and Plex features (for
 example whether Plex Pass offers automatic intro skipping); the list of your servers and how to
-reach them; the Home profiles on your account, switching between them, and their pictures.
+reach them; the Home profiles on your account, switching between them, and their pictures; and,
+while a Watch Together session you host is visible to your Plex friends, the list of your Plex
+friends (`/api/users/`, read only, with the profile's own account token, about every two minutes
+while the session is listed, and only to tell its relay who may see it: see below).
 
 **clients.plex.tv.** Your account's audio and subtitle preferences (languages and automatic
 selection), read and, when you change them in MultiPlex, saved.
@@ -77,7 +80,80 @@ server (posters, cast photos) is fetched by your server, not by the television. 
 your friends' pictures, and Plex's catalog posters of titles none of your servers holds, are
 fetched only through a server you own, never through a server someone shares with you (without
 one, a friend's initial is drawn instead), and "Watching now" reads what plays on the servers you
-own.
+own. For Watch Together, a server you own is also asked, with your account token, for a temporary
+delegation token (see below), and only once a relay has been found on that server's own public
+address.
+
+**A Watch Together relay.** Watch Together keeps the people in a session on the same title and
+position through a relay: a small service that passes messages between them. MultiPlex has no relay
+of its own and no relay address built in. A session's relay is the one its invitation code names, or
+one MultiPlex finds on the public addresses plex.tv publishes for the Plex servers your account
+sees: at `/multiplex-relay` on such an address, then at its root, on the address's own port and then
+on port 443 (for a server published as `https://plex.exemple.fr:32400`, for example,
+`wss://plex.exemple.fr:32400/multiplex-relay` first). Home-network addresses, IP addresses,
+`*.plex.direct` names and Plex's own relay are never tried. Whoever runs the service at that address
+— normally the owner of that Plex server — operates the relay; MultiPlex's developer does not, and
+receives nothing it handles.
+
+*When.* A relay is contacted only for Watch Together:
+
+- when you start a session, or join one with a code or from a friend's session card;
+- to list the sessions your Plex friends have made visible to you, for a profile with its own Plex
+  account (never a managed Home profile): each time the Friends page is shown, and in the background
+  about every 45 seconds while Settings → Video & playback → Watch together → **Friends' session
+  alerts** is on (it is on by default) and you are in no session yourself. Turning that setting off
+  stops the background listing; the Friends page still lists when it is shown.
+
+*What it receives.* Every request to a relay carries the app's `User-Agent` (MultiPlex, its version
+and "LG webOS TV") and, like any connection, your network address; none of the Plex identity
+described above.
+
+- *Inside a session*, everything the participants exchange — each one's profile name and picture
+  address, who hosts, the title being watched (its Plex catalog identifier, its server and item
+  number, its type, its title and its season, episode and episode title or its year), the position,
+  and play, pause and seek — is encrypted (AES-GCM) with the session's key, which is derived from
+  the invitation's secret and never sent to the relay. The relay sees the session's room identifier
+  (derived from that secret, from which the secret cannot be recovered), when and how much is sent,
+  and nothing else of it. Looking a session up by code sends the relay only such room identifiers.
+- *Listing your friends' sessions.* For each Plex server your account sees (at most 16), MultiPlex
+  first asks each candidate address on that server's own public names, in the order above, whether
+  it is a MultiPlex relay, whether it lists sessions to their host's Plex friends only, and which
+  server it belongs to. That question carries no token and nothing about you beyond the request
+  itself; it can reach the Plex Media Server at that address, or anything else answering there, and
+  an address that answers as no relay is not asked again while the app runs. Only when a relay
+  answers that it belongs to that very server and lists to friends only does MultiPlex send it, in
+  the body of the request, an access token for that server: the token plex.tv gives your account for
+  that server or, for a server you own, the temporary delegation token that server issues to the app
+  (above). The relay uses it to check who you are on that server. Your plex.tv account token never
+  goes to a relay.
+- *A session you host, visible to your Plex friends.* Settings → Video & playback → Watch together →
+  **Visible to my Plex friends** (on by default) makes a new session visible, and the player's menu
+  turns it off or on for each session. While a session you host is visible, MultiPlex announces it
+  to the relay found on the public addresses of the server the session belongs to (the one you are
+  browsing), after the same checks: in clear, since the relay must show it to your friends, your
+  profile name, the title (with its season, episode and episode title, or its year), its type, Plex
+  catalog identifier and item number on that server, the position and whether it is playing, with
+  the plex.tv account numbers of your Plex friends (no names, at most 1,000), read from plex.tv as
+  described above, so that the relay lists the session to them only. When a friend the relay has
+  admitted asks to join, MultiPlex hands over the session key encrypted for that friend alone (an
+  elliptic-curve key exchange the relay cannot read), at most five hand-overs every ten seconds. Who
+  counts as your friend is the relay's decision: a relay that misbehaved could admit someone else. A
+  session that is not visible is announced to no one, and only people who have its code can find it.
+  A managed Home profile never announces a session, never lists friends' sessions and never sends a
+  relay a token; it can still start or join a session with a code.
+
+*Encryption of the connection.* Relays are reached over HTTPS and secure WebSockets. An invitation
+code (older ones especially) can name an unencrypted `ws://` or `http://` relay; the session's
+messages are then still encrypted end to end as described above. When the television's own
+certificate store does not hold the root a relay's certificate chains to (a 2020 firmware lacks
+Let's Encrypt's 2025 roots), MultiPlex retries that connection once against the four Let's Encrypt
+root certificates it ships (ISRG Root X1, X2, YR and YE) — for the relay hosts it is about to
+contact, at most 16 of them, as it already does for `*.plex.direct` server names — with the chain,
+dates and host name still checked.
+
+Watch Together stores nothing on the television but its two settings, Friends' session alerts and
+Visible to my Plex friends: invitation codes, session keys, tokens and the friends list are held in
+memory only, for the session or listing that uses them.
 
 **An address you type for a player HUD.** If you install a player HUD package from an address, the
 app downloads the package from that address (a GitHub repository name you type is fetched from
@@ -102,16 +178,16 @@ profile, a one-way check computed from that PIN rather than the PIN itself. It a
 client identifier, the addresses and identifiers of those servers, the profile names and pictures on
 your account — pictures and other downloaded artwork (posters, backdrops and cast images) are cached
 as bounded files for reuse across restarts — your Home library choices, your recent searches, your
-settings, any player HUD packages you installed, and local technical logs: an event log and an
-error-output log, each emptied every time the app launches, a crash log that is kept until the
-television restarts, a marker recording how much of the crash log has already been read, and a
-bounded storage status snapshot. For a server you were asked about, it keeps whether you allowed it
-to be reached without encryption on your home network (the answer only, for the Plex account that
-gave it: the permission itself is never stored, and ends when a fresh check of the server no longer
-reaches the same address, at a sign-in or sign-out, at a profile switch unless the new profile
-reaches that server at the same address, or when the app returns from the background). It keeps no
-bookmark of its own for where you stopped watching: playback position is held by your Plex Media
-Server.
+settings (Watch Together's two among them), any player HUD packages you installed, and local
+technical logs: an event log and an error-output log, each emptied every time the app launches, a
+crash log that is kept until the television restarts, a marker recording how much of the crash log
+has already been read, and a bounded storage status snapshot. For a server you were asked about, it
+keeps whether you allowed it to be reached without encryption on your home network (the answer only,
+for the Plex account that gave it: the permission itself is never stored, and ends when a fresh
+check of the server no longer reaches the same address, at a sign-in or sign-out, at a profile
+switch unless the new profile reaches that server at the same address, or when the app returns from
+the background). It keeps no bookmark of its own for where you stopped watching: playback position
+is held by your Plex Media Server.
 
 The sign-in and settings are kept in the television's app database under a record name of
 MultiPlex's own. Earlier MultiPlex builds used a name that PlxNative also uses. When MultiPlex
