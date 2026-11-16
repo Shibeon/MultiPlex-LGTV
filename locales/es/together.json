@@ -1,10 +1,10 @@
 {
   "together.title": "Ver juntos",
-  "together.status.connecting": "Conectando con el relé…",
+  "together.status.connecting": "Conectando…",
   "together.status.connected": "Conectado",
   "together.create": "Crear una sesión",
   "together.code": "Invitación",
-  "together.visible": "Visible para mis amigos de Plex",
+  "together.visible": "Visible a mis amigos Plex",
   "together.listed.pending": "Avisando a tus amigos…",
   "together.listed.yes": "Visible para tus amigos de Plex",
   "together.listed.no": "No listada: solo con invitación",

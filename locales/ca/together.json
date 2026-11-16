@@ -1,10 +1,10 @@
 {
   "together.title": "Mirar junts",
-  "together.status.connecting": "Connectant amb el relé…",
+  "together.status.connecting": "Connectant…",
   "together.status.connected": "Connectat",
   "together.create": "Crear una sessió",
   "together.code": "Invitació",
-  "together.visible": "Visible per als meus amics de Plex",
+  "together.visible": "Visible als meus amics Plex",
   "together.listed.pending": "Avisant els teus amics…",
   "together.listed.yes": "Visible per als teus amics de Plex",
   "together.listed.no": "No llistada: només amb invitació",

@@ -1,10 +1,10 @@
 {
   "together.title": "Oglądaj razem",
-  "together.status.connecting": "Łączenie z przekaźnikiem…",
+  "together.status.connecting": "Łączenie…",
   "together.status.connected": "Połączono",
   "together.create": "Rozpocznij sesję",
   "together.code": "Zaproszenie",
-  "together.visible": "Widoczna dla moich znajomych z Plex",
+  "together.visible": "Widoczna dla znajomych z Plex",
   "together.listed.pending": "Powiadamianie znajomych…",
   "together.listed.yes": "Widoczna dla Twoich znajomych z Plex",
   "together.listed.no": "Niewidoczna: tylko z zaproszeniem",

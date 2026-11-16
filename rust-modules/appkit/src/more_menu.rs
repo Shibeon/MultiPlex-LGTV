@@ -1250,7 +1250,7 @@ fn together_form(t: &TogetherMenu) -> MoreForm {
     let status = if l.connecting { msg::together_status_connecting() } else { msg::together_status_connected() };
     let mut head = FormSection::new("")
         .item(MoreRow::TogetherLine(0), RowKind::Button, Action::None, Row::new(msg::together_title()).value(status))
-        .item(MoreRow::TogetherLine(1), RowKind::Button, Action::None, Row::new(msg::together_code()).value(&l.code));
+        .item(MoreRow::TogetherLine(1), RowKind::Button, Action::None, Row::new(msg::together_code()).value(&l.code).server_value());
     if l.host {
         // the switch states the session's value; OK asks for the other one
         let a = Action::TogetherVisible(!l.visible);
@@ -1263,10 +1263,18 @@ fn together_form(t: &TogetherMenu) -> MoreForm {
         head = head.item(MoreRow::Act(a), RowKind::Toggle, a, Row::new(label(a)).toggle(l.visible).detail(listed));
     }
     let mut people = FormSection::new(msg::together_participants());
-    // everyone, the viewer first: past the room the panel's table scrolls
+    // everyone, the viewer first: past the room the panel's table scrolls. A name is the person's
+    // own (server text: it may elide); who hosts is the app's word on the line under it, never glued
+    // to a name that could push it out of the row.
     for (i, p) in l.people.iter().enumerate() {
-        let name = if p.host { format!("{} · {}", p.name, msg::together_host()) } else { p.name.clone() };
-        people = people.item(MoreRow::TogetherLine(2 + i as u32), RowKind::Button, Action::None, Row::new(name).value(p.state.unwrap_or("")));
+        let mut row = Row::new(&p.name).value(p.state.unwrap_or(""));
+        if !p.me {
+            row = row.server_label();
+        }
+        if p.host {
+            row = row.detail(msg::together_host());
+        }
+        people = people.item(MoreRow::TogetherLine(2 + i as u32), RowKind::Button, Action::None, row);
     }
     if l.people.len() == 1 {
         people = people.item(MoreRow::TogetherLine(2 + l.people.len() as u32), RowKind::Button, Action::None, Row::new(msg::together_alone()));
@@ -2221,8 +2229,51 @@ mod focus_tests {
                     check(language.tag(), &root.form);
                 }
             }
+            // Watch Together: the root reading out a session's count beside its row, and the page with
+            // no session, hosting (shown with each listing state, then hidden) and as a guest, every
+            // state word in the participants (a name is server text: it may elide, the words may not).
+            for menu in together_fixtures() {
+                let mut root = MoreMenuState::new(&ps);
+                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[], &menu), None);
+                check(language.tag(), &root.form);
+                let mut page = MoreMenuState::new(&ps);
+                page.together = menu.clone();
+                page.focus_key(MoreRow::OpenTogether.key().0);
+                page.push(&ps, MorePage::Together);
+                assert_eq!(page.page(), Some(MorePage::Together), "{}", language.tag());
+                check(language.tag(), &page.form);
+            }
         }
         plx_ui::table::assert_no_fit_failures(&out);
+    }
+
+    /// The Watch Together digests the fit test lays out, in the language on this thread.
+    fn together_fixtures() -> Vec<TogetherMenu> {
+        use plx_data::together::session::Listed;
+        use plx_platform::i18n::msg;
+        let person = |name: &str, host: bool, state: Option<&'static str>| TogetherPerson { name: name.to_owned(), me: false, host, state };
+        let me = |host: bool| TogetherPerson { name: msg::together_me().to_owned(), me: true, host, state: None };
+        let others = || vec![
+            person("Camille", false, Some(msg::together_state_playing())),
+            person("Léo", false, Some(msg::together_state_paused())),
+            person("Inès", false, Some(msg::together_state_away())),
+        ];
+        let live = |host: bool, visible: bool, listed: Option<Listed>, people: Vec<TogetherPerson>| TogetherMenu {
+            live: Some(TogetherLive { code: "MPX-K7Q2-9XFD".into(), connecting: false, host, visible, listed, people }),
+        };
+        let mut out = vec![TogetherMenu::default()];
+        for listed in [Some(Listed::Pending), Some(Listed::Yes), Some(Listed::No), None] {
+            out.push(live(true, true, listed, [vec![me(true)], others()].concat()));
+        }
+        out.push(live(true, false, None, vec![me(true)]));
+        let mut guest = [vec![me(false)], others()].concat();
+        guest[1].host = true;
+        out.push(live(false, true, None, guest));
+        if let Some(TogetherMenu { live: Some(l) }) = out.last_mut().cloned().as_mut() {
+            l.connecting = true;
+            out.push(TogetherMenu { live: Some(l.clone()) });
+        }
+        out
     }
 
     fn detail_at(st: &mut MoreMenuState, id: MoreRow) -> String {
@@ -2781,7 +2832,8 @@ mod together_tests {
         assert_eq!(st.sel_id(), Some(MoreRow::Act(Action::TogetherLeave)));
         let i = st.form.index_of(&MoreRow::TogetherLine(3)).expect("Camille's line");
         let row = st.form.table.sections.iter().flat_map(|s| s.rows.iter()).nth(i).expect("the row");
-        assert_eq!(row.label, format!("Camille · {}", msg::together_host()));
+        assert_eq!(row.label, "Camille", "the name alone: the person's own text, which may elide");
+        assert_eq!(row.detail, msg::together_host(), "who hosts is the app's word, on the line under the name");
         assert_eq!(row.value.as_deref(), Some(msg::together_state_paused()));
     }
 

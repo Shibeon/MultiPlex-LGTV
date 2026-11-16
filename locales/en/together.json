@@ -4,7 +4,7 @@
     "description": "Title of the Watch Together panel (opened from the player's More menu) and of its row there. Watch Together keeps several people's players at the same place, each with their own Plex access."
   },
   "together.status.connecting": {
-    "value": "Connecting to the relay…",
+    "value": "Connecting…",
     "description": "Watch Together panel: the session's state while its encrypted relay connection is being opened."
   },
   "together.status.connected": {
