@@ -1,4 +1,4 @@
-{"updated":"2026-11-16T17:21:40Z",
+{"updated":"2026-11-16T17:24:04Z",
 "ci":[
 {"id":43517997405,"at":"2026-11-13T22:17:04Z","sha":"3f4899126","title":"Texte visible : \u00ab Made for a newer MultiPlex \u00bb","pr":null,"conclusion":"failure","attempt":1,"jobs":{"which gates apply":6,"host python/shell/C gates":590,"armv7 cross-build and artifact assertions":489,"host lint + type-checks":304,"host harness tests":412,"cross-build (armv7) + artifact assertions":4},"failed":["host checks (NOT a device gate)","host unit tests (default features)","host unit tests (hostsim)"]},
 {"id":43527317455,"at":"2026-11-13T23:28:03Z","sha":"2eaca7291","title":"Confidentialit\u00e9 : pas de question de consentement sans destination de rapports, mentions l\u00e9gales MultiPlex","pr":null,"conclusion":"failure","attempt":1,"jobs":{"which gates apply":5,"host unit tests (default features)":407,"host python/shell/C gates":397,"armv7 cross-build and artifact assertions":380,"host harness tests":426,"host lint + type-checks":233,"cross-build (armv7) + artifact assertions":4},"failed":["host checks (NOT a device gate)","host unit tests (hostsim)"]},
@@ -55,7 +55,8 @@
 {"id":43749867531,"at":"2026-11-15T18:59:52Z","sha":"bec8b7bce","title":"Molette = page, sections a\u00e9r\u00e9es, disponibilit\u00e9 dans Ma liste, Lecture ivoire","pr":null,"conclusion":"success","attempt":1,"jobs":{"Linux simulator build + launch":321,"Windows launcher syntax":15,"macOS tests against bundled FFmpeg and ASS":197,"macOS simulator build + launch":267}},
 {"id":43759791583,"at":"2026-11-15T20:44:52Z","sha":"478ba21a7","title":"Reprise : \u00ab Depuis le d\u00e9but \u00bb efface l'ancien point de reprise","pr":null,"conclusion":"success","attempt":1,"jobs":{"Windows launcher syntax":19,"macOS simulator build + launch":312,"Linux simulator build + launch":334,"macOS tests against bundled FFmpeg and ASS":212}},
 {"id":43773640543,"at":"2026-11-15T23:13:32Z","sha":"878a40a65","title":"Amis : la page Amis arrive sur la TV","pr":null,"conclusion":"success","attempt":1,"jobs":{"Linux simulator build + launch":305,"macOS simulator build + launch":198,"Windows launcher syntax":18,"macOS tests against bundled FFmpeg and ASS":251}},
-{"id":43909524209,"at":"2026-11-16T16:37:20Z","sha":"fd6694784","title":"Regarder ensemble : les s\u00e9ances entre amis Plex arrivent sur la TV","pr":null,"conclusion":"failure","attempt":1,"jobs":{"Windows launcher syntax":19,"Linux simulator build + launch":525}}
+{"id":43909524209,"at":"2026-11-16T16:37:20Z","sha":"fd6694784","title":"Regarder ensemble : les s\u00e9ances entre amis Plex arrivent sur la TV","pr":null,"conclusion":"failure","attempt":1,"jobs":{"Windows launcher syntax":19,"Linux simulator build + launch":525}},
+{"id":43915253436,"at":"2026-11-16T17:08:50Z","sha":"65e3baaa6","title":"Ensemble : d\u00e9lai total du relais converti en c_long sans From<u32> (cible armv7)","pr":null,"conclusion":"failure","attempt":1,"jobs":{"Windows launcher syntax":21,"Linux simulator build + launch":397}}
 ],
 "nightly":[],
 "cancelled":{"2026-11-14":{"push":4,"pull_request":0},"2026-11-15":{"push":3,"pull_request":0}},
