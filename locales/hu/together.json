@@ -40,6 +40,7 @@
   "together.error.no_host": "A házigazda nem válaszolt. Próbáld újra kicsit később",
   "together.error.failed": "A munkamenet nem nyitható meg",
   "together.error.host": "A munkamenet nem indítható",
+  "together.error.no_relay": "Nem található „Közös nézés” relé ezen a szerveren",
   "together.left": "Kiléptél a munkamenetből",
   "together.host_now": "Most te vagy a házigazda",
   "together.count": {

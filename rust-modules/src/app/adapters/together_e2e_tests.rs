@@ -8,10 +8,10 @@
 //! `TOGETHER_RELAY=<web repo>/apps/relay/server.mjs [TOGETHER_NODE=<node>] cargo test --lib
 //! together_e2e -- --ignored`.
 //!
-//! The friends-only half needs the relay at a PUBLIC https name (a host only finds, and announces
-//! to, a relay on its server's public names, and so does a friend), which loopback is not: its relay
-//! is `relais.test`, and the test's IO rewrites that one name to the loopback relay (`https`/`wss` to
-//! `http`/`ws`) before the production IO dials. The plex.tv friends read is the one canned answer
+//! Every host needs the relay at a PUBLIC https name (a host finds its relay on its server's public
+//! names, nothing is typed, and so does a friend or a short code), which loopback is not: its relay
+//! is `relais.test`, which the server publishes (`published_server`), and the test's IO rewrites
+//! that one name to the loopback relay (`https`/`wss` to `http`/`ws`) before the production IO dials. The plex.tv friends read is the one canned answer
 //! (the account's friends, as plex.tv `/api/users/` lists them); the rest is the real wire.
 use super::*;
 use plx_data::stores::together::{
@@ -136,13 +136,13 @@ fn movie() -> SharedItem {
 }
 
 impl Device {
-    fn new(name: &str, account_id: &str, server_token: &str, relay: &str, port: u16) -> Device {
+    fn new(name: &str, account_id: &str, server_token: &str, port: u16) -> Device {
         Device {
             store: TogetherStore::new(),
             runner: TogetherRunner::default(),
             profile: TogetherProfile { name: name.into(), thumb: None },
             auth: plx_data::stores::together::TogetherAuth::new("e2e-client", Some(account_id), &format!("plextv-account-{account_id}")),
-            settings: TogetherSettings { relay: relay.into(), ..TogetherSettings::default() },
+            settings: TogetherSettings::default(),
             servers: published_server(server_token),
             player: None,
             notices: Vec::new(),
@@ -233,9 +233,8 @@ fn playing(time: f64, paused: bool) -> Option<PlayerSnapshot> {
 fn together_e2e_code_session_and_intents_through_the_real_relay() {
     let relay = start_relay();
     let start = Instant::now();
-    let base = format!("http://127.0.0.1:{}/multiplex-relay", relay.port);
-    let mut a = Device::new("Hôte", "2002", "host-server-token", &base, relay.port);
-    let mut b = Device::new("Invité", "2001", "friend-server-token", &base, relay.port);
+    let mut a = Device::new("Hôte", "2002", "host-server-token", relay.port);
+    let mut b = Device::new("Invité", "2001", "friend-server-token", relay.port);
     a.settings.visible_default = false;
 
     a.store.command(TogetherCmd::Host { item: Some(movie()) });
@@ -272,12 +271,11 @@ fn together_e2e_code_session_and_intents_through_the_real_relay() {
 fn together_e2e_friends_only_announce_list_and_join_through_the_real_relay() {
     let relay = start_relay();
     let start = Instant::now();
-    let public = format!("{PUBLIC_HOST}/multiplex-relay");
     // The host (plex.tv 2002) is friends with 2001 only; 2003 sees the same server but is not a friend.
-    let mut host = Device::new("Hôte", "2002", "host-server-token", &public, relay.port);
+    let mut host = Device::new("Hôte", "2002", "host-server-token", relay.port);
     host.friends_xml = r#"<MediaContainer size="1"><User id="2001" title="Camille" username="camille"/></MediaContainer>"#.into();
-    let mut friend = Device::new("Camille", "2001", "friend-server-token", &public, relay.port);
-    let mut other = Device::new("Eli", "2003", "other-server-user-token", &public, relay.port);
+    let mut friend = Device::new("Camille", "2001", "friend-server-token", relay.port);
+    let mut other = Device::new("Eli", "2003", "other-server-user-token", relay.port);
 
     host.store.command(TogetherCmd::Host { item: Some(movie()) });
     host.player = playing(42.0, false);
@@ -302,4 +300,51 @@ fn together_e2e_friends_only_announce_list_and_join_through_the_real_relay() {
     let (hv, fv) = (host.store.view().unwrap(), friend.store.view().unwrap());
     assert_eq!(hv.code, fv.code, "the same session");
     assert!(!fv.host);
+}
+
+/// **The production host path** (the More menu's *Create a session*): no relay is typed anywhere.
+/// The host's relay is found on the public name its server publishes on plex.tv (the derivation
+/// `together_servers` makes of the session's sources), exactly where a friend looks for it; a second
+/// client joins with the short code (no relay in it: found the same way), a third, the host's Plex
+/// friend, from the friends' listing.
+#[test]
+#[ignore = "needs Node.js and the web repository's relay: TOGETHER_RELAY=<web repo>/apps/relay/server.mjs"]
+fn together_e2e_a_session_hosted_on_the_discovered_relay_is_joined_by_code_and_by_friend_listing() {
+    let relay = start_relay();
+    let start = Instant::now();
+    let mut host = Device::new("Hôte", "2002", "host-server-token", relay.port);
+    host.friends_xml = r#"<MediaContainer size="1"><User id="2001" title="Camille" username="camille"/></MediaContainer>"#.into();
+    let mut guest = Device::new("Eli", "2003", "other-server-user-token", relay.port);
+    let mut friend = Device::new("Camille", "2001", "friend-server-token", relay.port);
+
+    host.store.command(TogetherCmd::Host { item: Some(movie()) });
+    host.player = playing(42.0, false);
+    spin(&mut [&mut host], start, 40, "the hosted session opens on the discovered relay and is listed to the host's friends", |d| {
+        d[0].open() && d[0].notices.contains(&Notice::Listed(Some(Listed::Yes)))
+    });
+    let (code, full) = host
+        .notices
+        .iter()
+        .find_map(|n| if let Notice::Opened { code, full_code: Some(full), host: true } = n { Some((code.clone(), full.clone())) } else { None })
+        .expect("the host's codes");
+    assert!(full.ends_with(&format!("@{PUBLIC_HOST}:32400/multiplex-relay")), "the relay found on the server's public name: {full}");
+
+    guest.store.command(TogetherCmd::Join { code });
+    spin(&mut [&mut host, &mut guest], start, 40, "the short code finds the session", |d| {
+        d[1].open() && d[0].store.view().is_some_and(|v| v.peers.len() == 1)
+    });
+
+    friend.store.command(TogetherCmd::RefreshFriends);
+    spin(&mut [&mut host, &mut guest, &mut friend], start, 20, "the friend's listing answered", |d| {
+        d[2].notices.iter().any(|n| matches!(n, Notice::FriendSessions(_)))
+    });
+    let listed = friend.store.friend_sessions().to_vec();
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    friend.store.command(TogetherCmd::JoinFriend { relay: listed[0].relay.clone(), room: listed[0].room.clone() });
+    spin(&mut [&mut host, &mut guest, &mut friend], start, 40, "the friend is in the host's session", |d| {
+        d[2].open() && d[0].store.view().is_some_and(|v| v.peers.len() == 2)
+    });
+    let (hv, gv, fv) = (host.store.view().unwrap(), guest.store.view().unwrap(), friend.store.view().unwrap());
+    assert!(hv.host && !gv.host && !fv.host);
+    assert_eq!((gv.code.as_str(), fv.code.as_str()), (hv.code.as_str(), hv.code.as_str()), "one session");
 }

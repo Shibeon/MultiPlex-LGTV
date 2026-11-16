@@ -42,6 +42,7 @@
   "together.error.no_host": "Gospodarz nie odpowiedział. Spróbuj za chwilę",
   "together.error.failed": "Nie udało się otworzyć sesji",
   "together.error.host": "Nie udało się rozpocząć sesji",
+  "together.error.no_relay": "Nie znaleziono przekaźnika „Oglądaj razem” na tym serwerze",
   "together.left": "Opuszczono sesję",
   "together.host_now": "Jesteś teraz gospodarzem",
   "together.count": {

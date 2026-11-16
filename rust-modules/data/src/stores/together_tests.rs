@@ -104,7 +104,7 @@ impl World {
             guest: false,
             managed: false,
             writes: true,
-            settings: TogetherSettings { relay: "relais.exemple.fr".into(), ..TogetherSettings::default() },
+            settings: TogetherSettings::default(),
             servers: vec![TogetherServer::new(info, true, Some("http://127.0.0.1:32400".into()), Some("account-token".into()))],
             player: None,
             now_ms: 1000,
@@ -157,13 +157,18 @@ fn texts(held: &Held) -> Vec<serde_json::Value> {
     held.sent.iter().filter_map(|(_, f)| if let Frame::Text(t) = f { serde_json::from_str(t).ok() } else { None }).collect()
 }
 
-/// A host whose socket opened, its jobs run through `io`.
+/// Where the host's relay is found: the best-ranked candidate on `srv-1`'s public name.
+const RELAY: &str = "relais.exemple.fr:32400/multiplex-relay";
+
+/// A host whose socket opened, its jobs run through `io` (whose `/rooms` answers as a relay unless
+/// the test scripted another answer).
 fn hosting(world: &mut World, io: &Script) -> (TogetherStore, Held) {
+    io.rooms.lock().unwrap().get_or_insert_with(|| r#"{"multiplex":"relay","found":[]}"#.into());
     let (mut store, mut held) = (TogetherStore::new(), Held::default());
     store.command(TogetherCmd::Host { item: Some(movie()) });
     world.settle(&mut store, &mut held, io);
     let (conn, url) = held.sockets.first().cloned().expect("a socket");
-    assert!(url.starts_with("wss://relais.exemple.fr/r/"), "{url}");
+    assert!(url.starts_with(&format!("wss://{RELAY}/r/")), "{url}");
     store.port().socket(conn, SocketNews::Opened);
     world.settle(&mut store, &mut held, io);
     (store, held)
@@ -185,6 +190,18 @@ fn a_participant_id_is_drawn_before_any_command_and_a_host_derives_off_the_frame
     store.pump(&world.input());
     let jobs = store.take_jobs();
     assert!(matches!(jobs.as_slice(), [TogetherJob::Work(Job { req: TogetherReq::Random { n: 32 }, .. }, _)]), "{jobs:?}");
+    for job in jobs {
+        if let TogetherJob::Work(Job { addr, req }, port) = job {
+            finish_together_job(&port, addr, req, &io);
+        }
+    }
+    // The relay, searched on the server's public names before anything is derived.
+    *io.rooms.lock().unwrap() = Some(r#"{"multiplex":"relay","found":[]}"#.into());
+    store.pump(&world.input());
+    let jobs = store.take_jobs();
+    let urls: Vec<&str> = jobs.iter().filter_map(|j| if let TogetherJob::Work(Job { req: TogetherReq::Rooms { url, .. }, .. }, _) = j { Some(url.as_str()) } else { None }).collect();
+    assert_eq!(urls.len(), jobs.len(), "{jobs:?}");
+    assert_eq!(urls.first().copied(), Some(format!("https://{RELAY}/rooms?ids=").as_str()));
     for job in jobs {
         if let TogetherJob::Work(Job { addr, req }, port) = job {
             finish_together_job(&port, addr, req, &io);
@@ -219,7 +236,7 @@ fn a_visible_host_announces_with_the_delegated_token_and_its_friends() {
     assert!(asked.contains(&"DELEGATION http://127.0.0.1:32400 account-token".to_string()), "{asked:?}");
     assert!(asked.contains(&"FRIENDS account-token".to_string()), "{asked:?}");
     let post = asked.iter().find(|a| a.starts_with("POST ")).expect("a /friends post");
-    assert_eq!(post, r#"POST https://relais.exemple.fr/friends {"token":"delegated"}"#);
+    assert_eq!(post, &format!(r#"POST https://{RELAY}/friends {{"token":"delegated"}}"#));
     assert!(!asked.iter().any(|a| (a.starts_with("POST") || a.starts_with("GET")) && a.contains("account-token")), "{asked:?}");
     let announce = texts(&held).into_iter().find(|t| t["t"] == "announce").expect("an announce");
     assert_eq!(announce["friends"], serde_json::json!(["2"]));
@@ -274,7 +291,7 @@ fn a_refused_job_lands_as_its_negative_answer() {
     store.command(TogetherCmd::Join { code: "MPX-K7Q2-9XFD@relais.exemple.fr".into() });
     world.settle(&mut store, &mut held, &io);
     let notices = store.take_notices();
-    assert!(notices.contains(&Notice::HostFailed) || notices.iter().any(|n| matches!(n, Notice::JoinFailed(_))), "{notices:?}");
+    assert!(notices.iter().any(|n| matches!(n, Notice::HostFailed(_) | Notice::JoinFailed(_))), "{notices:?}");
     assert!(store.view().is_none());
     assert!(store.inflight.is_empty());
 }
@@ -309,18 +326,49 @@ fn another_identity_leaves_the_session() {
     assert!(!held.closed.is_empty());
 }
 
+/// Another participant's gesture always reaches the UI (the web has no setting that silences it);
+/// a new title is also the player's Follow.
 #[test]
-fn the_notify_setting_silences_the_others_gestures() {
-    let mut world = World::new();
-    world.settings.notify = false;
+fn the_others_gestures_reach_the_ui_and_a_new_title_is_followed() {
     let mut store = TogetherStore::new();
-    store.notice(Notice::Action { name: "Ami".into(), action: None }, &world.input());
-    assert!(store.take_notices().is_empty());
-    world.settings.notify = true;
-    store.notice(Notice::Action { name: "Ami".into(), action: None }, &world.input());
+    store.notice(Notice::Action { name: "Ami".into(), action: None });
     assert_eq!(store.take_notices().len(), 1);
-    store.notice(Notice::Item(movie()), &world.input());
+    store.notice(Notice::Item(movie()));
     assert_eq!(store.take_player_requests(), [TogetherPlayerRequest::Follow { item: movie(), position: None }]);
+}
+
+/// The session belongs to the server of what is shared: its relay is searched on THAT server's
+/// public names (here `srv-2`, though `srv-1` is the one browsed), never on the browsed one's.
+#[test]
+fn a_hosted_session_looks_for_its_relay_on_the_shared_titles_server() {
+    let mut world = World::new();
+    let info = ServerInfo { id: "srv-2".into(), connections: vec![PlexConnection { uri: "https://autre.exemple.fr".into(), local: false, relay: false }] };
+    world.servers.push(TogetherServer::new(info, false, None, Some("share".into())));
+    let io = Script::default();
+    *io.rooms.lock().unwrap() = Some(r#"{"multiplex":"relay","found":[]}"#.into());
+    let (mut store, mut held) = (TogetherStore::new(), Held::default());
+    store.command(TogetherCmd::Host { item: Some(SharedItem { server: Some("srv-2".into()), ..movie() }) });
+    world.settle(&mut store, &mut held, &io);
+    let gets: Vec<String> = io.asked().into_iter().filter(|a| a.starts_with("GET ")).collect();
+    assert_eq!(gets, ["GET https://autre.exemple.fr/multiplex-relay/rooms?ids=", "GET https://autre.exemple.fr/rooms?ids="]);
+    let (_, url) = held.sockets.first().cloned().expect("a socket");
+    assert!(url.starts_with("wss://autre.exemple.fr/multiplex-relay/r/"), "{url}");
+}
+
+/// No relay on the session's server: the UI is told so (a typed failure), and nothing opens.
+#[test]
+fn a_host_with_no_relay_on_its_server_is_told_so() {
+    let mut world = World::new();
+    world.servers[0] = TogetherServer::new(
+        ServerInfo { id: "srv-1".into(), connections: vec![PlexConnection { uri: "https://192-168-1-10.abc.plex.direct:32400".into(), local: true, relay: false }] },
+        true, None, Some("account-token".into()));
+    let io = Script::default();
+    let (mut store, mut held) = (TogetherStore::new(), Held::default());
+    store.command(TogetherCmd::Host { item: Some(movie()) });
+    world.settle(&mut store, &mut held, &io);
+    assert!(store.take_notices().contains(&Notice::HostFailed(HostError::NoRelay)));
+    assert!(io.asked().iter().all(|a| !a.starts_with("GET ")), "{:?}", io.asked());
+    assert!(held.sockets.is_empty() && store.view().is_none() && !store.busy());
 }
 
 #[test]

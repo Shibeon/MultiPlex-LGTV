@@ -40,6 +40,7 @@
   "together.error.no_host": "De host antwoordde niet. Probeer het zo opnieuw",
   "together.error.failed": "Kan de sessie niet openen",
   "together.error.host": "Kan de sessie niet starten",
+  "together.error.no_relay": "Geen ‘Samen kijken’-relay gevonden op deze server",
   "together.left": "Je hebt de sessie verlaten",
   "together.host_now": "Jij bent nu de host",
   "together.count": {

@@ -18,8 +18,9 @@
 //!
 //! | event | in phase | effects, next phase |
 //! |---|---|---|
-//! | `Host` | any (leaves the current one) | `Derive` (PBKDF2 of a new secret, salted by the server); `Deriving` |
-//! | `Join` | any (leaves the current one) | v1/v2: `OpenSocket`, `Live`. v3: `Derive` per visible server, then `HttpRooms` per candidate relay; `Live` on the best-ranked hit, else `Notice::JoinFailed` |
+//! | `Host` | any (leaves the current one) | `HttpRooms` per candidate relay on the public names of the session's server (`relay_candidates`); `Finding`, else `Notice::HostFailed(NoRelay)` |
+//! | `RoomsAnswered` | `Finding`, the tag it asked | on the best-ranked relay that answered as one: `Derive` (PBKDF2 of a new secret, salted by the server), `Deriving`; none: `Notice::HostFailed(NoRelay)` |
+//! | `Join` | any (leaves the current one) | v1/v2: `OpenSocket`, `Live`. v3: `Derive` per visible server, then `HttpRooms` per candidate relay (the code's own, then the servers' public names); `Live` on the best-ranked hit, else `Notice::JoinFailed` |
 //! | `Derived`, `RoomsAnswered` | the plan that asked (by `tag`) | as above |
 //! | `SocketOpened` / `SocketClosed` | `Live`, its `conn` | send a `want` tick / reconnect after 1, 2, 4 … 15 s |
 //! | `SocketBinary` → `Opened` | `Live`, its `conn` | `Open`, then the message: peers, `sync`, host step-down, `Player` commands, `Notice::Action` |
@@ -48,7 +49,7 @@ use super::friends::{
     announce_text, control_text, friends_for_announce, key_grant_text, Control, FriendCard, FriendsAnswer, FriendsSent, GrantPayload, GrantState,
     RelayBackoff, RelaySearch, FRIENDS_TTL_US, UNLISTED_ERRORS,
 };
-use super::invite::{format_invite, invite_text, parse_invite, relay_url, secret_from_bytes, Invite};
+use super::invite::{format_invite, invite_text, parse_invite, secret_from_bytes, Invite};
 use super::keys::{derive_legacy, SessionKeys, INVITE_ITERATIONS};
 use super::relay::{dedupe, relay_candidates, relay_discoverable, rooms_url, KnownRelays, RoomSearch, RoomsAnswer, ServerInfo, MAX_ROOM_LOOKUP};
 use super::sync::{host_yields, tick_clock, PlayerCmd, PlayerObs, Stamp, TogetherSync};
@@ -98,13 +99,23 @@ pub enum Status {
 pub enum JoinError {
     /// The text is not an invitation.
     Code,
-    /// No relay to ask: none configured, none given, none findable.
+    /// No relay to ask: none in the code, none findable on the servers' public names.
     Relay,
     /// No relay knows the session (or a friend's session is no longer listed).
     NotFound,
     /// A friend's session: its host is not connected to hand the key over.
     NoHost,
     /// A friend's session: the key hand-over failed or did not open the listed room.
+    Failed,
+}
+
+/// Why hosting failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostError {
+    /// No relay answered on the public names of the session's server (`relay_candidates`), or the
+    /// session has no server to look on: nothing to host on.
+    NoRelay,
+    /// Anything else: no randomness handed in, a derivation that did not run.
     Failed,
 }
 
@@ -177,8 +188,8 @@ pub enum Notice {
     HostChanged { host: bool },
     /// The session's title changed (the host moved on).
     Item(SharedItem),
-    /// A host could not be started: no relay configured, or no randomness handed in.
-    HostFailed,
+    /// A host could not be started (see [`HostError`]).
+    HostFailed(HostError),
     JoinFailed(JoinError),
     Left,
     /// The session is visible to the host's friends, or not (the host's choice, read from its ticks).
@@ -192,14 +203,14 @@ pub enum Notice {
 pub enum TogetherEvent {
     /// The frame time.
     Tick { dt_us: u64 },
-    /// Open a new session as host. `relay`: the relay setting as typed; `server`: the current Plex
-    /// server's identifier (salts the secret); `random`: at least 16 bytes the runner drew.
-    /// `visible`: listed to the host's Plex friends; `servers`: what this account sees (the host's
-    /// server's public names say whether friends find the relay).
-    Host { me: Me, relay: String, server: Option<String>, item: Option<SharedItem>, random: Vec<u8>, visible: bool, servers: Vec<ServerInfo> },
-    /// Join by a pasted code. `relay`: the relay setting; `server` and `servers`: what this account
-    /// sees (the secret is salted by the host's server, and the relay is found on servers' names).
-    Join { me: Me, code: String, relay: String, server: Option<String>, servers: Vec<ServerInfo> },
+    /// Open a new session as host. `server`: the identifier of the Plex server the session belongs
+    /// to (it salts the secret, and its relay is searched on its public names, as a friend searches
+    /// it: nothing is typed); `random`: at least 16 bytes the runner drew. `visible`: listed to the
+    /// host's Plex friends; `servers`: what this account sees.
+    Host { me: Me, server: Option<String>, item: Option<SharedItem>, random: Vec<u8>, visible: bool, servers: Vec<ServerInfo> },
+    /// Join by a pasted code. `server` and `servers`: what this account sees (the secret is salted
+    /// by the host's server, and the relay is found in the code or on the servers' public names).
+    Join { me: Me, code: String, server: Option<String>, servers: Vec<ServerInfo> },
     Derived { tag: u32, keys: SessionKeys },
     /// A `/rooms` answer body, or `None` for a failed request.
     RoomsAnswered { tag: u32, body: Option<String> },
@@ -371,6 +382,20 @@ struct HostPlan {
     servers: Vec<ServerInfo>,
 }
 
+/// A host start looking for its relay on the public names of its server (the web's `findRelay`).
+#[derive(Clone, PartialEq)]
+struct HostFind {
+    me: Me,
+    secret: String,
+    item: Option<SharedItem>,
+    server: String,
+    visible: bool,
+    servers: Vec<ServerInfo>,
+    search: RelaySearch,
+    /// The `/rooms` request tag of each relay of `search`.
+    asked: Vec<u32>,
+}
+
 /// Entering a friend's session.
 #[derive(Clone, Debug, PartialEq)]
 struct FriendPlan {
@@ -438,6 +463,7 @@ struct JoinPlan {
 #[derive(Clone, Debug, PartialEq)]
 enum Phase {
     Idle,
+    Finding(HostFind),
     Deriving(HostPlan),
     Joining(JoinPlan),
     FriendJoin(FriendPlan),
@@ -467,7 +493,7 @@ impl fmt::Debug for Notice {
             Notice::Action { name, action } => f.debug_struct("Action").field("name", name).field("action", action).finish(),
             Notice::HostChanged { host } => f.debug_struct("HostChanged").field("host", host).finish(),
             Notice::Item(i) => f.debug_tuple("Item").field(i).finish(),
-            Notice::HostFailed => f.write_str("HostFailed"),
+            Notice::HostFailed(e) => f.debug_tuple("HostFailed").field(e).finish(),
             Notice::JoinFailed(e) => f.debug_tuple("JoinFailed").field(e).finish(),
             Notice::Left => f.write_str("Left"),
             Notice::Visible(v) => f.debug_tuple("Visible").field(v).finish(),
@@ -481,18 +507,17 @@ impl fmt::Debug for TogetherEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TogetherEvent::Tick { dt_us } => f.debug_struct("Tick").field("dt_us", dt_us).finish(),
-            TogetherEvent::Host { me, relay, server, item, random, visible, servers } => f
+            TogetherEvent::Host { me, server, item, random, visible, servers } => f
                 .debug_struct("Host")
                 .field("me", me)
-                .field("relay", relay)
                 .field("server", server)
                 .field("item", item)
                 .field("random", &format_args!("<{} bytes>", random.len()))
                 .field("visible", visible)
                 .field("servers", servers)
                 .finish(),
-            TogetherEvent::Join { me, relay, server, servers, .. } => {
-                f.debug_struct("Join").field("me", me).field("code", &HIDDEN).field("relay", relay).field("server", server).field("servers", servers).finish()
+            TogetherEvent::Join { me, server, servers, .. } => {
+                f.debug_struct("Join").field("me", me).field("code", &HIDDEN).field("server", server).field("servers", servers).finish()
             }
             TogetherEvent::Derived { tag, keys } => f.debug_struct("Derived").field("tag", tag).field("keys", keys).finish(),
             TogetherEvent::RoomsAnswered { tag, body } => f.debug_struct("RoomsAnswered").field("tag", tag).field("body", body).finish(),
@@ -583,6 +608,19 @@ impl fmt::Debug for Live {
 impl fmt::Debug for HostPlan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HostPlan").field("me", &self.me).field("relay", &self.relay).field("secret", &HIDDEN).field("tag", &self.tag).field("visible", &self.visible).finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for HostFind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("HostFind")
+            .field("me", &self.me)
+            .field("secret", &HIDDEN)
+            .field("server", &self.server)
+            .field("visible", &self.visible)
+            .field("search", &self.search)
+            .field("asked", &self.asked)
+            .finish_non_exhaustive()
     }
 }
 
@@ -726,14 +764,14 @@ impl TogetherSession {
     pub fn view(&self) -> Option<View> {
         match &self.phase {
             Phase::Live(live) => Some(view_of(live)),
-            Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => None,
+            Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => None,
         }
     }
 
     /// A host start or a join is under way.
     pub fn busy(&self) -> bool {
         match &self.phase {
-            Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => true,
+            Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => true,
             Phase::Idle | Phase::Live(_) => false,
         }
     }
@@ -789,27 +827,37 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                     on_tick(&mut live, dt_us, desk, fx);
                     (Phase::Live(live), Handled::Yes)
                 }
-                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::Yes),
+                other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::Yes),
             }
         }
-        TogetherEvent::Host { me, relay, server, item, random, visible, servers } => {
+        TogetherEvent::Host { me, server, item, random, visible, servers } => {
             leave(phase, desk, fx);
-            let relay = relay_url(&relay);
-            let secret = secret_from_bytes(&random);
-            let (false, Some(secret)) = (relay.is_empty(), secret) else {
-                fx.push(TogetherFx::Notice(Notice::HostFailed));
+            let Some(secret) = secret_from_bytes(&random) else {
+                fx.push(TogetherFx::Notice(Notice::HostFailed(HostError::Failed)));
                 return (Phase::Idle, Handled::Yes);
             };
-            let tag = desk.tag();
             let server = server.unwrap_or_default();
-            fx.push(TogetherFx::Derive { tag, secret: secret.clone(), server: server.clone(), iterations: INVITE_ITERATIONS });
+            // The relay is the session's server's: searched on that server's public names, exactly
+            // where a friend or a code without a relay looks for it (`relay_candidates`).
+            let own: Vec<ServerInfo> = servers.iter().filter(|s| !server.is_empty() && s.id == server).cloned().collect();
+            let search = RelaySearch::new(&relay_candidates(&own), None, &desk.known, &desk.backoff);
+            if search.relays().is_empty() {
+                fx.push(TogetherFx::Notice(Notice::HostFailed(HostError::NoRelay)));
+                return (Phase::Idle, Handled::Yes);
+            }
+            let mut asked = Vec::with_capacity(search.relays().len());
+            for relay in search.relays() {
+                let tag = desk.tag();
+                asked.push(tag);
+                fx.push(TogetherFx::HttpRooms { tag, url: rooms_url(relay, &[]), timeout_ms: ROOMS_TIMEOUT_MS });
+            }
             // The web: visible only with a server to salt (and so to list on).
             let visible = visible && !server.is_empty();
-            (Phase::Deriving(HostPlan { me, relay, secret, item, tag, server, visible, servers }), Handled::Yes)
+            (Phase::Finding(HostFind { me, secret, item, server, visible, servers, search, asked }), Handled::Yes)
         }
-        TogetherEvent::Join { me, code, relay, server, servers } => {
+        TogetherEvent::Join { me, code, server, servers } => {
             leave(phase, desk, fx);
-            join(me, &code, &relay, server, &servers, desk, fx)
+            join(me, &code, server, &servers, desk, fx)
         }
         TogetherEvent::Derived { tag, keys } => match phase {
             Phase::Deriving(plan) if plan.tag == tag => {
@@ -871,13 +919,20 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 plan.search = Some(search);
                 (settle_join(plan, desk, fx), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::RoomsAnswered { tag, body } if listing_asked(desk, tag) => {
             list_rooms_answered(tag, body.as_deref(), desk);
             (settle_listing(phase, desk, fx), Handled::Yes)
         }
         TogetherEvent::RoomsAnswered { tag, body } => match phase {
+            Phase::Finding(mut find) => {
+                let Some(index) = find.asked.iter().position(|t| *t == tag) else {
+                    return (Phase::Finding(find), Handled::No);
+                };
+                find.search.answer(index, body.as_deref(), &mut desk.known, &mut desk.backoff);
+                (settle_find(find, desk, fx), Handled::Yes)
+            }
             Phase::Live(mut live) if live.announce == Announce::Rooms(tag) => {
                 on_announce_rooms(&mut live, body.as_deref(), desk, fx);
                 (Phase::Live(live), Handled::Yes)
@@ -907,7 +962,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 announce(&mut live, false, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::SocketClosed { conn } => match phase {
             Phase::Live(mut live) if live.conn == conn && live.reconnect_in_us.is_none() => {
@@ -920,7 +975,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 live.reconnect_in_us = Some(delay);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::SocketBinary { conn, bytes } => match phase {
             Phase::Live(live) if live.conn == conn => {
@@ -929,7 +984,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 fx.push(TogetherFx::Open { tag, key: live.keys.key, bytes });
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::Opened { tag, plain } => {
             let from = desk.opens.remove(&tag);
@@ -941,7 +996,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                     }
                     (Phase::Live(live), Handled::Yes)
                 }
-                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, if from.is_some() { Handled::Yes } else { Handled::No }),
+                other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, if from.is_some() { Handled::Yes } else { Handled::No }),
             }
         }
         TogetherEvent::Sealed { tag, bytes } => {
@@ -973,7 +1028,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 send(&live, Message::Tick(tick), desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::No),
         },
         TogetherEvent::Player(obs) => match phase {
             Phase::Live(mut live) if live.sync.attached() => {
@@ -996,7 +1051,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 }
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::Detach => match phase {
             Phase::Live(mut live) if live.sync.attached() => {
@@ -1006,7 +1061,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 send(&live, Message::Tick(tick), desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::ShareTitle(item) => match phase {
             Phase::Live(mut live) if live.host => {
@@ -1017,11 +1072,11 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 announce(&mut live, false, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::Leave => match phase {
             Phase::Idle => (Phase::Idle, Handled::No),
-            other @ (Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => {
+            other @ (Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => {
                 leave(other, desk, fx);
                 (Phase::Idle, Handled::Yes)
             }
@@ -1035,7 +1090,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                     withdraw(&mut live, fx);
                     (Phase::Live(live), Handled::Yes)
                 }
-                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::Yes),
+                other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::Yes),
             }
         }
         TogetherEvent::Forget => {
@@ -1058,7 +1113,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 set_visible(&mut live, on, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_)) => (other, Handled::No),
         },
         TogetherEvent::SocketText { conn, text } => match phase {
             Phase::Live(mut live) if live.conn == conn => {
@@ -1067,7 +1122,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 }
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::FriendsAnswered { tag, answer } if desk.listing.iter().any(|l| matches!(&l.stage, ListStage::Asking(t, _) if *t == tag)) => {
             list_friends_answered(tag, answer, desk);
@@ -1078,7 +1133,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 on_announce_friends(&mut live, answer, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::FriendIdsRead { tag, ids } => match phase {
             // Kept only when it is the read the announce waits for: a stale one (a previous
@@ -1090,7 +1145,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 on_friend_ids(&mut live, ids, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
         TogetherEvent::GrantSealed { tag, sealed } => {
             let Some((conn, peer)) = desk.grants.remove(&tag) else { return (phase, Handled::No) };
@@ -1122,7 +1177,7 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                     (Phase::Idle, Handled::Yes)
                 }
             },
-            other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
+            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
         },
     }
 }
@@ -1472,7 +1527,7 @@ fn settle_listing(phase: Phase, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Ph
     }
     let current = match &phase {
         Phase::Live(live) => Some(live.keys.room.clone()),
-        Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => None,
+        Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => None,
     };
     let mut found = Vec::new();
     for l in std::mem::take(&mut desk.listing) {
@@ -1484,7 +1539,7 @@ fn settle_listing(phase: Phase, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Ph
     fx.push(TogetherFx::Notice(Notice::FriendSessions(found)));
     match phase {
         Phase::FriendJoin(plan) if plan.stage == FriendStage::Refresh => enter_friend(plan, desk, fx),
-        other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => other,
+        other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => other,
     }
 }
 
@@ -1533,7 +1588,21 @@ fn leave(phase: Phase, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
     fx.push(TogetherFx::Notice(Notice::Left));
 }
 
-fn join(me: Me, code: &str, relay_setting: &str, server: Option<String>, servers: &[ServerInfo], desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> (Phase, Handled) {
+/// A host start whose relay search may have an outcome: derive the session on the relay found, or
+/// say none was found (the web asks for a typed relay; on a TV the server's own relay is the one).
+fn settle_find(find: HostFind, desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> Phase {
+    let Some(outcome) = find.search.outcome() else { return Phase::Finding(find) };
+    let Some(found) = outcome else {
+        fx.push(TogetherFx::Notice(Notice::HostFailed(HostError::NoRelay)));
+        return Phase::Idle;
+    };
+    let HostFind { me, secret, item, server, visible, servers, .. } = find;
+    let tag = desk.tag();
+    fx.push(TogetherFx::Derive { tag, secret: secret.clone(), server: server.clone(), iterations: INVITE_ITERATIONS });
+    Phase::Deriving(HostPlan { me, relay: found.relay, secret, item, tag, server, visible, servers })
+}
+
+fn join(me: Me, code: &str, server: Option<String>, servers: &[ServerInfo], desk: &mut Desk, fx: &mut Vec<TogetherFx>) -> (Phase, Handled) {
     let Some(invite) = parse_invite(code) else {
         fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::Code)));
         return (Phase::Idle, Handled::Yes);
@@ -1558,7 +1627,7 @@ fn join(me: Me, code: &str, relay_setting: &str, server: Option<String>, servers
     let mut ids: Vec<String> = server.into_iter().chain(servers.iter().map(|s| s.id.clone())).filter(|id| !id.is_empty()).collect();
     ids = dedupe(&ids);
     ids.truncate(MAX_ROOM_LOOKUP);
-    let relays: Vec<String> = given.into_iter().chain([relay_url(relay_setting)]).chain(relay_candidates(servers)).filter(|r| !r.is_empty()).collect();
+    let relays: Vec<String> = given.into_iter().chain(relay_candidates(servers)).filter(|r| !r.is_empty()).collect();
     if relays.is_empty() {
         fx.push(TogetherFx::Notice(Notice::JoinFailed(JoinError::Relay)));
         return (Phase::Idle, Handled::Yes);
@@ -1891,14 +1960,14 @@ mod tests {
         fn key(&self) -> [u8; 32] {
             match &self.s.phase {
                 Phase::Live(l) => l.keys.key,
-                Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!("not live"),
+                Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!("not live"),
             }
         }
 
         fn conn(&self) -> u32 {
             match &self.s.phase {
                 Phase::Live(l) => l.conn,
-                Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!("not live"),
+                Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!("not live"),
             }
         }
 
@@ -1932,13 +2001,32 @@ mod tests {
         out.iter().filter_map(|f| if let TogetherFx::Notice(n) = f { Some(n.clone()) } else { None }).collect()
     }
 
-    /// A host on `wss://relais.exemple.fr`, its socket open. Returns the device and its code.
+    /// A relay's `/rooms` answer (no room asked).
+    const A_RELAY: &str = r#"{"multiplex":"relay","found":[]}"#;
+
+    /// `srv-1`, published at `https://{name}`.
+    fn published(name: &str) -> ServerInfo {
+        ServerInfo { id: "srv-1".into(), connections: vec![PlexConnection { uri: format!("https://{name}"), local: false, relay: false }] }
+    }
+
+    /// `Host` on `srv-1` as `id`, its relay found where `servers` publish it: the best-ranked
+    /// candidate answers as a relay. What the host emitted before that answer is dropped.
+    fn host_found(h: &mut Device, id: &str, name: &str, visible: bool, servers: Vec<ServerInfo>) {
+        h.step(TogetherEvent::Host { me: me(id, name), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible, servers });
+        let out = h.take();
+        let rooms = find(&out, |f| if let TogetherFx::HttpRooms { tag, .. } = f { Some(*tag) } else { None });
+        assert!(!rooms.is_empty() && notices(&out).is_empty(), "{out:?}");
+        assert!(h.s.busy(), "a relay is being searched");
+        h.step(TogetherEvent::RoomsAnswered { tag: rooms[0], body: Some(A_RELAY.into()) });
+    }
+
+    /// A host on the relay found at `relais.exemple.fr`, its socket open. Returns the device and its code.
     fn hosting(id: &str) -> (Device, String) {
         let mut h = Device::new();
-        h.step(TogetherEvent::Host { me: me(id, "Hôte"), relay: "relais.exemple.fr".into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: false, servers: Vec::new() });
+        host_found(&mut h, id, "Hôte", false, vec![published("relais.exemple.fr")]);
         let out = h.take();
         let Some(Notice::Opened { code, full_code, host: true }) = notices(&out).first().cloned() else { panic!("{out:?}") };
-        assert_eq!(full_code.as_deref(), Some(format!("{code}@relais.exemple.fr").as_str()));
+        assert_eq!(full_code.as_deref(), Some(format!("{code}@relais.exemple.fr/multiplex-relay").as_str()));
         let conn = h.conn();
         h.step(TogetherEvent::SocketOpened { conn });
         (h, code)
@@ -1947,7 +2035,7 @@ mod tests {
     /// A participant joined through the code the host printed with its relay.
     fn joining(id: &str, code: &str) -> Device {
         let mut g = Device::new();
-        g.step(TogetherEvent::Join { me: me(id, "Ami"), code: format!("{code}@relais.exemple.fr"), relay: String::new(), server: Some("srv-1".into()), servers: Vec::new() });
+        g.step(TogetherEvent::Join { me: me(id, "Ami"), code: format!("{code}@relais.exemple.fr"), server: Some("srv-1".into()), servers: Vec::new() });
         let out = g.take();
         let rooms: Vec<(u32, String)> = out.iter().filter_map(|f| if let TogetherFx::HttpRooms { tag, url, .. } = f { Some((*tag, url.clone())) } else { None }).collect();
         assert_eq!(rooms.len(), 1, "{out:?}");
@@ -1992,13 +2080,69 @@ mod tests {
         assert!(v.host && v.status == Status::Open && v.peers.is_empty());
     }
 
+    /// The relay of a hosted session is found on the public names of its server, best-ranked first
+    /// (`/multiplex-relay`, then the root; the connection's port, then 443), as a friend finds it:
+    /// nothing is derived before one answers as a relay, a worse-ranked hit waits for the better
+    /// one, and no `local`, Plex-relay, IP or `plex.direct` connection is ever asked.
     #[test]
-    fn a_host_needs_a_relay_and_randomness() {
+    fn a_host_finds_its_relay_on_its_servers_public_names() {
+        let mut h = Device::new();
+        let server = ServerInfo {
+            id: "srv-1".into(),
+            connections: vec![
+                PlexConnection { uri: "https://192-168-1-10.0123456789abcdef.plex.direct:32400".into(), local: true, relay: false },
+                PlexConnection { uri: "https://203.0.113.9:32400".into(), local: false, relay: false },
+                PlexConnection { uri: "https://146-0-0-1.0123456789abcdef.plex.direct:8443".into(), local: false, relay: true },
+                PlexConnection { uri: "https://plex.exemple.fr:32400".into(), local: false, relay: false },
+            ],
+        };
+        let other = ServerInfo { id: "srv-2".into(), connections: vec![PlexConnection { uri: "https://ailleurs.exemple.fr".into(), local: false, relay: false }] };
+        h.step(TogetherEvent::Host { me: me("m", "H"), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: false, servers: vec![other, server] });
+        let out = h.take();
+        let asks = find(&out, |f| if let TogetherFx::HttpRooms { tag, url, .. } = f { Some((*tag, url.clone())) } else { None });
+        assert_eq!(
+            asks.iter().map(|(_, u)| u.as_str()).collect::<Vec<_>>(),
+            [
+                "https://plex.exemple.fr:32400/multiplex-relay/rooms?ids=",
+                "https://plex.exemple.fr:32400/rooms?ids=",
+                "https://plex.exemple.fr/multiplex-relay/rooms?ids=",
+                "https://plex.exemple.fr/rooms?ids="
+            ],
+            "only the session's server's public name"
+        );
+        assert!(h.s.busy() && h.derives.is_empty() && notices(&out).is_empty());
+        h.step(TogetherEvent::RoomsAnswered { tag: asks[2].0, body: Some(A_RELAY.into()) });
+        assert!(h.derives.is_empty(), "a worse-ranked hit waits for the better-ranked answers");
+        h.step(TogetherEvent::RoomsAnswered { tag: asks[0].0, body: None });
+        h.step(TogetherEvent::RoomsAnswered { tag: asks[1].0, body: Some("<html>not a relay</html>".into()) });
+        let out = h.take();
+        assert_eq!(h.derives.len(), 1);
+        assert!(matches!(notices(&out).first(), Some(Notice::Opened { full_code: Some(full), host: true, .. }) if full.ends_with("@plex.exemple.fr/multiplex-relay")), "{out:?}");
+        assert!(matches!(find(&out, |f| if let TogetherFx::OpenSocket { url, .. } = f { Some(url.clone()) } else { None }).first(), Some(u) if u.starts_with("wss://plex.exemple.fr/multiplex-relay/r/")), "{out:?}");
+        assert_eq!(h.step(TogetherEvent::RoomsAnswered { tag: asks[3].0, body: Some(A_RELAY.into()) }), Handled::No, "a late answer finds no search");
+    }
+
+    /// No relay to host on is a typed failure the UI names, never a silent one: no server, a server
+    /// with no public name, no candidate that answers as a relay. Bad randomness is the other one.
+    #[test]
+    fn a_host_without_a_relay_or_randomness_fails_and_says_why() {
         let mut d = Device::new();
-        d.step(TogetherEvent::Host { me: me("m", "H"), relay: String::new(), server: None, item: None, random: vec![1; 32], visible: false, servers: Vec::new() });
-        assert_eq!(notices(&d.take()), [Notice::HostFailed]);
-        d.step(TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: vec![255; 64], visible: false, servers: Vec::new() });
-        assert_eq!(notices(&d.take()), [Notice::HostFailed]);
+        d.step(TogetherEvent::Host { me: me("m", "H"), server: None, item: None, random: vec![1; 32], visible: false, servers: vec![published("plex.exemple.fr")] });
+        assert_eq!(notices(&d.take()), [Notice::HostFailed(HostError::NoRelay)]);
+        let lan = ServerInfo { id: "srv-1".into(), connections: vec![PlexConnection { uri: "https://192-168-1-10.0123456789abcdef.plex.direct:32400".into(), local: true, relay: false }] };
+        d.step(TogetherEvent::Host { me: me("m", "H"), server: Some("srv-1".into()), item: None, random: vec![1; 32], visible: false, servers: vec![lan] });
+        let out = d.take();
+        assert_eq!(notices(&out), [Notice::HostFailed(HostError::NoRelay)], "no request: {out:?}");
+        assert!(find(&out, |f| matches!(f, TogetherFx::HttpRooms { .. }).then_some(())).is_empty());
+        d.step(TogetherEvent::Host { me: me("m", "H"), server: Some("srv-1".into()), item: None, random: vec![1; 32], visible: false, servers: vec![published("r.exemple.fr")] });
+        let asks = find(&d.take(), |f| if let TogetherFx::HttpRooms { tag, .. } = f { Some(*tag) } else { None });
+        assert_eq!(asks.len(), 2);
+        d.step(TogetherEvent::RoomsAnswered { tag: asks[1], body: Some("{}".into()) });
+        d.step(TogetherEvent::RoomsAnswered { tag: asks[0], body: None });
+        assert_eq!(notices(&d.take()), [Notice::HostFailed(HostError::NoRelay)]);
+        assert!(!d.s.busy() && d.derives.is_empty());
+        d.step(TogetherEvent::Host { me: me("m", "H"), server: Some("srv-1".into()), item: None, random: vec![255; 64], visible: false, servers: vec![published("plex.exemple.fr")] });
+        assert_eq!(notices(&d.take()), [Notice::HostFailed(HostError::Failed)]);
         assert!(d.s.view().is_none());
     }
 
@@ -2022,13 +2166,13 @@ mod tests {
     #[test]
     fn join_failures_are_named() {
         let mut g = Device::new();
-        g.step(TogetherEvent::Join { me: me("z", "A"), code: "bonjour".into(), relay: String::new(), server: None, servers: Vec::new() });
+        g.step(TogetherEvent::Join { me: me("z", "A"), code: "bonjour".into(), server: None, servers: Vec::new() });
         assert_eq!(notices(&g.take()), [Notice::JoinFailed(JoinError::Code)]);
-        g.step(TogetherEvent::Join { me: me("z", "A"), code: "MPX-K7Q2-9XFD".into(), relay: String::new(), server: Some("srv-1".into()), servers: Vec::new() });
+        g.step(TogetherEvent::Join { me: me("z", "A"), code: "MPX-K7Q2-9XFD".into(), server: Some("srv-1".into()), servers: Vec::new() });
         assert_eq!(notices(&g.take()), [Notice::JoinFailed(JoinError::Relay)]);
         // Two relays from the server's address; neither has the room.
         let servers = vec![ServerInfo { id: "srv-1".into(), connections: vec![PlexConnection { uri: "https://r.exemple.fr".into(), local: false, relay: false }] }];
-        g.step(TogetherEvent::Join { me: me("z", "A"), code: "MPX-K7Q2-9XFD".into(), relay: String::new(), server: None, servers });
+        g.step(TogetherEvent::Join { me: me("z", "A"), code: "MPX-K7Q2-9XFD".into(), server: None, servers });
         let asks: Vec<u32> = g.take().iter().filter_map(|f| if let TogetherFx::HttpRooms { tag, .. } = f { Some(*tag) } else { None }).collect();
         assert_eq!(asks.len(), 2);
         assert!(g.s.busy());
@@ -2043,7 +2187,7 @@ mod tests {
     #[test]
     fn an_old_code_opens_its_room_directly() {
         let mut g = Device::new();
-        g.step(TogetherEvent::Join { me: me("z", "A"), code: "MPX-q3Vb8xK2mT0wZr5L@relais.exemple.fr".into(), relay: String::new(), server: None, servers: Vec::new() });
+        g.step(TogetherEvent::Join { me: me("z", "A"), code: "MPX-q3Vb8xK2mT0wZr5L@relais.exemple.fr".into(), server: None, servers: Vec::new() });
         let out = g.take();
         assert!(g.derives.is_empty());
         assert!(matches!(&out[0], TogetherFx::OpenSocket { url, .. } if url.starts_with("wss://relais.exemple.fr/r/")), "{out:?}");
@@ -2218,16 +2362,21 @@ mod tests {
     #[test]
     fn debug_output_never_carries_a_secret_or_a_key() {
         let random: Vec<u8> = (0u8..32).collect();
-        let host = TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random: random.clone(), visible: false, servers: Vec::new() };
+        let host = TogetherEvent::Host { me: me("m", "H"), server: Some("srv-1".into()), item: None, random: random.clone(), visible: false, servers: vec![published("r.fr")] };
         let mut d = TogetherSession::new();
         let mut fx = Vec::new();
         d.step(host, &mut fx);
+        let finding = format!("{:?}", d.phase);
+        let TogetherFx::HttpRooms { tag, .. } = fx[0].clone() else { panic!("{fx:?}") };
+        fx.clear();
+        d.step(TogetherEvent::RoomsAnswered { tag, body: Some(A_RELAY.into()) }, &mut fx);
         let TogetherFx::Derive { secret, .. } = fx[0].clone() else { panic!("{fx:?}") };
         let key = [0xab; 32];
         let code = format_invite(&secret, None);
         let dumps = [
-            format!("{:?}", TogetherEvent::Host { me: me("m", "H"), relay: "wss://r.fr".into(), server: None, item: None, random, visible: false, servers: Vec::new() }),
-            format!("{:?}", TogetherEvent::Join { me: me("m", "H"), code: code.clone(), relay: String::new(), server: None, servers: Vec::new() }),
+            format!("{:?}", TogetherEvent::Host { me: me("m", "H"), server: None, item: None, random, visible: false, servers: Vec::new() }),
+            format!("{:?}", TogetherEvent::Join { me: me("m", "H"), code: code.clone(), server: None, servers: Vec::new() }),
+            finding,
             format!("{fx:?}"),
             format!("{:?}", d.phase),
             format!("{:?}", TogetherFx::Seal { tag: 1, key, plain: "{}".into() }),
@@ -2283,7 +2432,7 @@ mod tests {
     /// A visible host whose socket just opened: returns the device and the tag of its `/rooms` ask.
     fn visible_host() -> (Device, u32) {
         let mut h = Device::new();
-        h.step(TogetherEvent::Host { me: me("m", "Hôte"), relay: RELAY.into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        host_found(&mut h, "m", "Hôte", true, vec![srv1()]);
         h.take();
         let conn = h.conn();
         h.step(TogetherEvent::SocketOpened { conn });
@@ -2313,7 +2462,7 @@ mod tests {
         assert_eq!(sent.len(), 1, "{out:?}");
         let proof = match &h.s.phase {
             Phase::Live(l) => l.keys.owner.clone().unwrap(),
-            Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!(),
+            Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) => panic!(),
         };
         assert_eq!(sent[0]["t"], "announce");
         assert_eq!(sent[0]["ticket"], "TICKET-1");
@@ -2352,16 +2501,16 @@ mod tests {
         }
     }
 
+    /// The host's relay is found on another server's name only if that is its own server's: a
+    /// relay this account found for another server is never the session's, so it is not asked.
     #[test]
-    fn a_relay_not_on_the_servers_public_names_gets_nothing() {
+    fn a_host_never_takes_another_servers_relay() {
         let mut h = Device::new();
-        h.step(TogetherEvent::Host { me: me("m", "H"), relay: "wss://ailleurs.exemple.fr".into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
-        h.take();
-        let conn = h.conn();
-        h.step(TogetherEvent::SocketOpened { conn });
+        let other = ServerInfo { id: "srv-2".into(), connections: vec![PlexConnection { uri: "https://ailleurs.exemple.fr".into(), local: false, relay: false }] };
+        h.step(TogetherEvent::Host { me: me("m", "H"), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![other] });
         let out = h.take();
         assert!(find(&out, |f| matches!(f, TogetherFx::HttpRooms { .. } | TogetherFx::AskFriends { .. }).then_some(())).is_empty(), "{out:?}");
-        assert!(notices(&out).contains(&Notice::Listed(Some(Listed::No))));
+        assert_eq!(notices(&out), [Notice::HostFailed(HostError::NoRelay)]);
     }
 
     #[test]
@@ -2684,7 +2833,7 @@ mod tests {
         h.step(TogetherEvent::JoinFriend { me: me("f", "Ami"), relay: RELAY.into(), room: room.clone() });
         assert_eq!(notices(&h.take()), [Notice::JoinFailed(JoinError::NotFound)]);
         // No announce before the new identity's own permission.
-        h.step(TogetherEvent::Host { me: me("n", "Nouveau"), relay: RELAY.into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        host_found(&mut h, "n", "Nouveau", true, vec![srv1()]);
         let conn = h.conn();
         h.step(TogetherEvent::SocketOpened { conn });
         assert!(find(&h.take(), |f| matches!(f, TogetherFx::HttpRooms { .. }).then_some(())).is_empty());
@@ -2719,7 +2868,7 @@ mod tests {
     fn nothing_is_announced_or_handed_over_without_permission() {
         let mut h = Device::new();
         h.step(TogetherEvent::Permit { announce: false });
-        h.step(TogetherEvent::Host { me: me("m", "Hôte"), relay: RELAY.into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        host_found(&mut h, "m", "Hôte", true, vec![srv1()]);
         let conn = h.conn();
         h.step(TogetherEvent::SocketOpened { conn });
         let out = h.take();

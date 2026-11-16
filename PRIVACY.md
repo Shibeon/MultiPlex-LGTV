@@ -91,7 +91,10 @@ one MultiPlex finds on the public addresses plex.tv publishes for the Plex serve
 sees: at `/multiplex-relay` on such an address, then at its root, on the address's own port and then
 on port 443 (for a server published as `https://plex.exemple.fr:32400`, for example,
 `wss://plex.exemple.fr:32400/multiplex-relay` first). Home-network addresses, IP addresses,
-`*.plex.direct` names and Plex's own relay are never tried. Whoever runs the service at that address
+`*.plex.direct` names and Plex's own relay are never tried. A session you start uses the relay found
+this way on the public addresses of the server it belongs to (that of the title you share, or else
+the one you are browsing): no relay address is typed, and when none answers there the session is not
+started and the app says so. Whoever runs the service at that address
 — normally the owner of that Plex server — operates the relay; MultiPlex's developer does not, and
 receives nothing it handles.
 
@@ -115,6 +118,10 @@ described above.
   the invitation's secret and never sent to the relay. The relay sees the session's room identifier
   (derived from that secret, from which the secret cannot be recovered), when and how much is sent,
   and nothing else of it. Looking a session up by code sends the relay only such room identifiers.
+- *Starting a session.* MultiPlex first asks each candidate address on the public names of the
+  server the session belongs to, in the order above, whether it is a MultiPlex relay: the same
+  question as below, with no token and nothing about you beyond the request itself. The session
+  opens on the first-ranked address that answers as one.
 - *Listing your friends' sessions.* For each Plex server your account sees (at most 16), MultiPlex
   first asks each candidate address on that server's own public names, in the order above, whether
   it is a MultiPlex relay, whether it lists sessions to their host's Plex friends only, and which
@@ -129,8 +136,8 @@ described above.
 - *A session you host, visible to your Plex friends.* Settings → Video & playback → Watch together →
   **Visible to my Plex friends** (on by default) makes a new session visible, and the player's menu
   turns it off or on for each session. While a session you host is visible, MultiPlex announces it
-  to the relay found on the public addresses of the server the session belongs to (the one you are
-  browsing), after the same checks: in clear, since the relay must show it to your friends, your
+  to the relay found on the public addresses of the server the session belongs to (that of the title
+  you share, or else the one you are browsing), after the same checks: in clear, since the relay must show it to your friends, your
   profile name, the title (with its season, episode and episode title, or its year), its type, Plex
   catalog identifier and item number on that server, the position and whether it is playing, with
   the plex.tv account numbers of your Plex friends (no names, at most 1,000), read from plex.tv as

@@ -16,6 +16,10 @@
 //!   detached or signed out. Holding the seated identity's friends' sessions or friend list does
 //!   not keep the pump running: the frame the scope moves pumps once, and that is the frame the
 //!   store forgets the previous identity.
+//! - **The settings are the seated profile's own rows**, read every frame before anything else (so
+//!   a seat change or a pick in Settings reaches the next pump): "visible to friends" is the store's
+//!   [`TogetherSettings`], "friends' session alerts" the UI's. No relay is typed: a hosted
+//!   session's is found on the public names of its server, as a friend finds it.
 //! - **A server's relay is found on what plex.tv publishes for it** (`SourceRef::published`, written
 //!   by discovery), not only on the address that answered, which at home is a LAN or `plex.direct`
 //!   name no relay can sit behind.
@@ -101,9 +105,11 @@ pub(crate) fn together_servers(session: &plx_plex::plex::session::Session) -> Ve
 }
 
 impl Bridge {
-    /// Once a frame: pump the together store when it has anything to do, and start its jobs.
+    /// Once a frame: the seated profile's Watch Together rows, then the together store's pump when
+    /// it has anything to do, and its jobs started.
     pub(crate) fn together_feed(&mut self) {
         let together = &mut self.together;
+        together.set_preferences(plx_media::route::together_visible(), plx_media::route::together_notify());
         let profile = Self::seated_profile();
         if !together.store.due(profile.generation) {
             return;
@@ -155,12 +161,6 @@ impl TogetherFeed {
         plx_machine::idle::invalidate();
     }
 
-    /// The settings the store reads (the relay, a hosted session's default visibility, the notices).
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn set_settings(&mut self, settings: TogetherSettings) {
-        self.settings = settings;
-    }
-
     /// What the player plays, for the session to follow (`player` hands it each frame).
     pub(crate) fn set_player(&mut self, snapshot: Option<PlayerSnapshot>) {
         self.player = snapshot;
@@ -182,10 +182,10 @@ impl TogetherFeed {
         self.store.view()
     }
 
-    /// The viewer's two Watch Together settings: a hosted session's default visibility to their
-    /// friends and the friends' session alerts.
-    pub(crate) fn set_preferences(&mut self, visible_default: bool, friend_alerts: bool) {
-        self.settings.visible_default = visible_default;
+    /// The viewer's two Watch Together settings (the seated profile's rows, `together_feed`): a
+    /// hosted session's default visibility to their friends, and the friends' session alerts.
+    fn set_preferences(&mut self, visible_default: bool, friend_alerts: bool) {
+        self.settings = TogetherSettings { visible_default };
         self.friend_alerts = friend_alerts;
     }
 
@@ -336,8 +336,8 @@ mod tests {
         assert!(!feed.store.due(0));
         feed.command(TogetherCmd::Leave);
         assert!(feed.store.due(0), "a queued command makes the next frame pump");
-        feed.set_settings(TogetherSettings { relay: "relais.exemple.fr".into(), ..TogetherSettings::default() });
-        assert_eq!(feed.settings.relay, "relais.exemple.fr");
+        feed.set_preferences(false, false);
+        assert_eq!((feed.settings.visible_default, feed.friend_alerts), (false, false));
         feed.set_player(None);
         feed.notices.push(Notice::Left);
         feed.requests.push(TogetherPlayerRequest::Pause);
@@ -345,6 +345,162 @@ mod tests {
         assert_eq!(feed.take_player_requests(), [TogetherPlayerRequest::Pause]);
         assert!(feed.take_notices().is_empty());
         assert!(feed.view().is_none());
+    }
+
+    /// A relay on the server's public name, as the production IO would reach it: every `/rooms` is
+    /// answered as a relay answers it; nothing else is asked before the session opens.
+    struct PublicRelay;
+
+    impl plx_data::stores::together::TogetherIo for PublicRelay {
+        fn random(&self, n: usize) -> Option<Vec<u8>> {
+            Some((0..n).map(|i| (i as u8).wrapping_mul(13).wrapping_add(1)).collect())
+        }
+        fn get(&self, url: &str, _: u32) -> Option<String> {
+            assert!(url.starts_with("https://plex.exemple.fr/multiplex-relay/rooms"), "only the server's public name is asked: {url}");
+            Some(r#"{"multiplex":"relay","found":[]}"#.into())
+        }
+        fn post_text(&self, url: &str, _: &str, _: u32) -> Option<String> {
+            panic!("nothing is posted before the session opens: {url}");
+        }
+        fn delegation(&self, _: &str, _: &str) -> Option<String> {
+            None
+        }
+        fn friends_xml(&self, _: &plx_data::stores::together::TogetherAuth) -> Option<String> {
+            None
+        }
+        fn exchange(&self, url: &str, _: &str, _: &mut dyn FnMut(plx_data::stores::together::SocketNews) -> Option<Result<plx_data::together::friends::GrantPayload, plx_data::together::session::JoinError>>)
+            -> Result<plx_data::together::friends::GrantPayload, plx_data::together::session::JoinError> {
+            panic!("no key exchange: {url}");
+        }
+    }
+
+    /// The server as discovery wrote it down: reached on its LAN, publishing its public name.
+    fn published_session() -> plx_plex::plex::session::Session {
+        let source: plx_plex::plex::session::SourceRef = serde_json::from_value(serde_json::json!({
+            "machine_id": "srv-1", "name": "nas", "owned": true, "address": "192.168.1.10", "port": 32400, "token": "server-token",
+            "origin": "https://192-168-1-10.0123456789abcdef.plex.direct:32400",
+            "published": [
+                {"uri": "https://192-168-1-10.0123456789abcdef.plex.direct:32400", "local": true, "relay": false},
+                {"uri": "https://plex.exemple.fr:443", "local": false, "relay": false}
+            ]
+        }))
+        .unwrap();
+        plx_plex::plex::session::Session { sources: vec![source], ..Default::default() }
+    }
+
+    /// *Create a session* with `settings` as the feed holds them: the store's jobs run through
+    /// [`PublicRelay`] until the session opens. Its view says whether it is visible to friends;
+    /// `None`: it never opened.
+    fn hosted_visible(settings: &TogetherSettings) -> Option<bool> {
+        use plx_data::stores::together::{finish_together_job, TogetherJob};
+        let servers = together_servers(&published_session());
+        let mut store = TogetherStore::new();
+        store.command(TogetherCmd::Host { item: None });
+        for frame in 0..16u32 {
+            let input = TogetherInput {
+                profile: None,
+                auth: None,
+                guest: true,
+                managed: false,
+                writes_permitted: false,
+                settings,
+                server: Some("srv-1"),
+                servers: &servers,
+                player: None,
+                now_ms: frame * 16,
+                scope: 0,
+            };
+            store.pump(&input);
+            for job in store.take_jobs() {
+                if let TogetherJob::Work(plx_machine::job::Job { addr, req }, port) = job {
+                    finish_together_job(&port, addr, req, &PublicRelay);
+                }
+            }
+            if let Some(view) = store.view() {
+                return Some(view.visible);
+            }
+        }
+        None
+    }
+
+    /// Frames of the Bridge's `together_feed`, the jobs it started run through [`PublicRelay`] between
+    /// them, until nothing is in flight.
+    fn settle(rig: &mut Bridge) {
+        use plx_data::stores::together::{finish_together_job, TogetherJob};
+        for _ in 0..4 {
+            rig.together_feed();
+            let crate::app::adapters::together::TogetherRunner::Held { parked } = &mut rig.together.runner else { panic!("a held runner") };
+            for job in std::mem::take(parked) {
+                if let TogetherJob::Work(plx_machine::job::Job { addr, req }, port) = job {
+                    finish_together_job(&port, addr, req, &PublicRelay);
+                }
+            }
+        }
+    }
+
+    /// Whether the feed asks the friends' listing on its own (off the Friends page, past the first
+    /// poll's delay): the "Friends' session alerts" row's behaviour.
+    fn polls_friends(feed: &mut TogetherFeed, scope: u32) -> bool {
+        assert!(!feed.store.due(scope), "nothing queued before");
+        feed.ui_clock = None;
+        feed.ui_frame(0, false, false);
+        feed.ui_frame(ui::FIRST_POLL_MS + 1, false, false);
+        feed.store.due(scope)
+    }
+
+    /// **The Watch Together rows reach the store through the app's wiring** (a docs audit found the
+    /// store's settings were only ever set by tests, so *Create a session* never started): the seated
+    /// profile's own picks, saved through the rows' write door (`route::confirm`, what
+    /// `preferences::execute` runs for their `PreferenceCmd::Choose`) and restored per profile at a seat change
+    /// (`restore_profile_rows`), are what the Bridge's frame (`together_feed`) hands the store; and
+    /// they change what it does: whether a hosted session is visible to friends, and whether the
+    /// friends' listing is polled. Hosting needs no relay setting: it is found on the server.
+    #[test]
+    fn the_per_profile_together_rows_reach_the_store_and_change_what_it_does() {
+        use plx_plex::plex::session;
+        /// Puts the cells and the profile mirror back even when an assertion fails mid-test.
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                plx_media::route::unseed_profile_prefs_for_test();
+                plx_media::route::restore_together_visible(true);
+                plx_media::route::restore_together_notify(true);
+            }
+        }
+        let _g = plx_base::testlock::serial();
+        let temp = session::TempSession::new("together-rows");
+        session::save(&session::Session { client_id: "cid-1".into(), account_token: "acct".into(), ..Default::default() });
+        let _restore = Restore;
+        let stamp = temp.seated("u-a", "acct");
+        let seat = session::Seat::Seated { user: "u-a".into(), stamp };
+        plx_media::route::seed_profile_prefs_for_test(&session::peek());
+        plx_media::route::restore_profile_rows(&session::peek(), &seat, plx_media::route::Overrides::default());
+        // The rows' pick as the Settings executor runs it (`preferences::execute` ->
+        // `route::choose` -> the `Confirm` write door, `route::confirm`), here on the test's thread:
+        // the worker that runs it in the app holds no test lock.
+        assert!(plx_media::route::confirm::<session::TogetherVisiblePref>(false), "the seated profile's pick is saved");
+        assert!(plx_media::route::confirm::<session::TogetherNotifyPref>(false), "the seated profile's pick is saved");
+
+        let mut rig = Bridge::for_test(|| 0);
+        rig.together.runner = crate::app::adapters::together::TogetherRunner::Held { parked: Vec::new() };
+        let scope = session::current_snapshot().generation;
+        settle(&mut rig);
+        assert!(!rig.together.settings.visible_default, "the profile's 'visible to friends' OFF reaches the store");
+        assert!(!rig.together.friend_alerts, "the profile's 'friends' session alerts' OFF reaches the feed");
+        assert_eq!(hosted_visible(&rig.together.settings), Some(false), "a session hosted now is private");
+        assert!(!polls_friends(&mut rig.together, scope), "no alerts: the friends' listing is not polled");
+
+        // Nobody seated: the install's values (ON)…
+        plx_media::route::restore_profile_rows(&session::peek(), &session::Seat::Unseated, plx_media::route::Overrides::default());
+        settle(&mut rig);
+        assert!(rig.together.settings.visible_default && rig.together.friend_alerts, "the seat's values reach the store");
+        assert_eq!(hosted_visible(&rig.together.settings), Some(true), "a session hosted now is visible to friends");
+        assert!(polls_friends(&mut rig.together, scope), "alerts on: the friends' listing is polled");
+
+        // …and the profile again: its own picks.
+        plx_media::route::restore_profile_rows(&session::peek(), &seat, plx_media::route::Overrides::default());
+        settle(&mut rig);
+        assert!(!rig.together.settings.visible_default && !rig.together.friend_alerts, "the profile's own picks again");
     }
 
     /// The usual home: the server answers on its LAN address through a `plex.direct` name, which

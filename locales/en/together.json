@@ -180,7 +180,11 @@
   },
   "together.error.host": {
     "value": "Couldn’t start the session",
-    "description": "Notice: starting a session failed (no relay configured or found)."
+    "description": "Notice: starting a session failed for another reason than a missing relay."
+  },
+  "together.error.no_relay": {
+    "value": "No “Watch Together” relay found on this server",
+    "description": "Notice: starting a session failed because no Watch Together relay answers on the public addresses of the Plex server the session belongs to (nothing is typed: the relay is found on the server)."
   },
   "together.left": {
     "value": "You left the session",

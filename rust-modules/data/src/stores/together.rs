@@ -58,7 +58,7 @@ use crate::together::friends::{
 };
 use crate::together::keys::{derive_session, open_message, seal_message, SessionKeys};
 use crate::together::relay::{http_base, ServerInfo};
-use crate::together::session::{FriendSession, JoinError, Me, Notice, TogetherEvent, TogetherFx, TogetherSession, View};
+use crate::together::session::{FriendSession, HostError, JoinError, Me, Notice, TogetherEvent, TogetherFx, TogetherSession, View};
 use crate::together::sync::{PlayerCmd, PlayerObs};
 use crate::together::wire::SharedItem;
 
@@ -147,20 +147,19 @@ pub struct TogetherProfile {
     pub thumb: Option<String>,
 }
 
-/// The settings the store reads.
+/// The settings the store reads: the seated profile's own Settings rows, as the Bridge reads them
+/// each frame. No relay is among them: a hosted session's relay is found on the public names of
+/// its server, and a joined one's in its code or on the servers' names (`relay_candidates`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TogetherSettings {
-    /// The relay as typed in Settings (may be empty: found on the servers' names).
-    pub relay: String,
-    /// A new hosted session is visible to the host's friends (default on).
+    /// A new hosted session is visible to the host's friends (Settings, "visible to friends";
+    /// default on).
     pub visible_default: bool,
-    /// Tell the user when another participant plays, pauses or seeks (default on).
-    pub notify: bool,
 }
 
 impl Default for TogetherSettings {
     fn default() -> TogetherSettings {
-        TogetherSettings { relay: String::new(), visible_default: true, notify: true }
+        TogetherSettings { visible_default: true }
     }
 }
 
@@ -517,7 +516,7 @@ pub fn finish_together_job(port: &TogetherPort, addr: Addr, req: TogetherReq, io
 /// What a request in flight owes the session when it lands.
 enum Pending {
     Me,
-    Host { item: Option<SharedItem>, relay: String, server: Option<String>, visible: bool, servers: Vec<ServerInfo> },
+    Host { item: Option<SharedItem>, server: Option<String>, visible: bool, servers: Vec<ServerInfo> },
     Derive(u32),
     Seal(u32),
     Open(u32),
@@ -701,10 +700,13 @@ impl TogetherStore {
         let me = self.me(input)?;
         match cmd {
             TogetherCmd::Host { item } => {
+                // The session belongs to the server of what is shared (the player's title when the
+                // UI names none yet), else to the server being browsed.
+                let shared = item.as_ref().or(input.player.map(|p| &p.item));
+                let server = shared.and_then(|i| i.server.clone()).filter(|s| !s.is_empty()).or_else(|| input.server.map(str::to_string));
                 let pending = Pending::Host {
                     item,
-                    relay: input.settings.relay.clone(),
-                    server: input.server.map(str::to_string),
+                    server,
                     visible: input.settings.visible_default,
                     servers: input.infos(),
                 };
@@ -712,7 +714,7 @@ impl TogetherStore {
                 None
             }
             TogetherCmd::Join { code } => {
-                Some(TogetherEvent::Join { me, code, relay: input.settings.relay.clone(), server: input.server.map(str::to_string), servers: input.infos() })
+                Some(TogetherEvent::Join { me, code, server: input.server.map(str::to_string), servers: input.infos() })
             }
             TogetherCmd::Leave => Some(TogetherEvent::Leave),
             TogetherCmd::SetVisible(on) => Some(TogetherEvent::SetVisible(on)),
@@ -780,18 +782,18 @@ impl TogetherStore {
                 self.me_asked = false;
                 None
             }
-            (Pending::Host { item, relay, server, visible, servers }, outcome) => {
+            (Pending::Host { item, server, visible, servers }, outcome) => {
                 let random = match outcome {
                     Outcome::Random(Some(b)) => b,
                     _ => Vec::new(),
                 };
                 let me = Me { id: self.me_id.clone()?, name: String::new(), thumb: None };
-                Some(TogetherEvent::Host { me, relay, server, item, random, visible, servers })
+                Some(TogetherEvent::Host { me, server, item, random, visible, servers })
             }
             (Pending::Derive(tag), Outcome::Derived(keys)) => Some(TogetherEvent::Derived { tag, keys }),
             (Pending::Derive(_), _) => {
                 // A derivation that did not run leaves the session that waits on it.
-                self.notices.push(Notice::HostFailed);
+                self.notices.push(Notice::HostFailed(HostError::Failed));
                 Some(TogetherEvent::Leave)
             }
             (Pending::Seal(tag), Outcome::Sealed(Some(bytes))) => Some(TogetherEvent::Sealed { tag, bytes }),
@@ -856,7 +858,7 @@ impl TogetherStore {
                 PlayerCmd::Play => TogetherPlayerRequest::Play,
                 PlayerCmd::Pause => TogetherPlayerRequest::Pause,
             }),
-            TogetherFx::Notice(n) => self.notice(n, input),
+            TogetherFx::Notice(n) => self.notice(n),
             // An announce's ask is shown a credential only when this identity may announce, a
             // listing's only when it may list: the machine checks the same, this is the wall.
             TogetherFx::AskFriends { tag, relay, server, announce } => {
@@ -876,18 +878,17 @@ impl TogetherStore {
         None
     }
 
-    fn notice(&mut self, n: Notice, input: &TogetherInput<'_>) {
+    fn notice(&mut self, n: Notice) {
         match &n {
             Notice::Item(item) => {
                 let position = self.session.view().and_then(|v| v.position);
                 self.player.push(TogetherPlayerRequest::Follow { item: item.clone(), position });
             }
-            Notice::Action { .. } if !input.settings.notify => return,
             Notice::Opened { .. }
             | Notice::Status(_)
             | Notice::Action { .. }
             | Notice::HostChanged { .. }
-            | Notice::HostFailed
+            | Notice::HostFailed(_)
             | Notice::JoinFailed(_)
             | Notice::Left
             | Notice::Visible(_)

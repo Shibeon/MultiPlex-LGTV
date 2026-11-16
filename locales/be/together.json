@@ -42,6 +42,7 @@
   "together.error.no_host": "Вядучы не адказаў. Паспрабуйце крыху пазней",
   "together.error.failed": "Не ўдалося адкрыць сеанс",
   "together.error.host": "Не ўдалося пачаць сеанс",
+  "together.error.no_relay": "На гэтым серверы не знойдзены рэтранслятар «Глядзець разам»",
   "together.left": "Вы выйшлі з сеанса",
   "together.host_now": "Цяпер вы вядучы",
   "together.count": {

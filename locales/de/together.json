@@ -40,6 +40,7 @@
   "together.error.no_host": "Der Gastgeber hat nicht geantwortet. Versuche es gleich noch einmal",
   "together.error.failed": "Sitzung konnte nicht geöffnet werden",
   "together.error.host": "Sitzung konnte nicht gestartet werden",
+  "together.error.no_relay": "Kein „Gemeinsam ansehen“-Relay auf diesem Server gefunden",
   "together.left": "Du hast die Sitzung verlassen",
   "together.host_now": "Du bist jetzt Gastgeber",
   "together.count": {

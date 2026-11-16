@@ -41,6 +41,7 @@
   "together.error.no_host": "L’hôte n’a pas répondu. Réessayez dans un instant",
   "together.error.failed": "Impossible d’ouvrir la séance",
   "together.error.host": "Impossible de créer la séance",
+  "together.error.no_relay": "Aucun relais « Regarder ensemble » trouvé sur ce serveur",
   "together.left": "Vous avez quitté la séance",
   "together.host_now": "Vous êtes maintenant l’hôte",
   "together.count": {

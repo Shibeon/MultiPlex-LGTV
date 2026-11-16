@@ -41,6 +41,7 @@
   "together.error.no_host": "L’amfitrió no ha respost. Torna-ho a provar d’aquí a un moment",
   "together.error.failed": "No s’ha pogut obrir la sessió",
   "together.error.host": "No s’ha pogut crear la sessió",
+  "together.error.no_relay": "No s’ha trobat cap relé «Mirar junts» en aquest servidor",
   "together.left": "Has sortit de la sessió",
   "together.host_now": "Ara ets l’amfitrió",
   "together.count": {

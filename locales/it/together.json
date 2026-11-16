@@ -41,6 +41,7 @@
   "together.error.no_host": "L’host non ha risposto. Riprova tra un momento",
   "together.error.failed": "Impossibile aprire la sessione",
   "together.error.host": "Impossibile creare la sessione",
+  "together.error.no_relay": "Nessun relay «Guarda insieme» trovato su questo server",
   "together.left": "Sei uscito dalla sessione",
   "together.host_now": "Ora sei tu l’host",
   "together.count": {

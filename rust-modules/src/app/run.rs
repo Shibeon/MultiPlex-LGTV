@@ -3071,7 +3071,6 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         {
             let friends_page = app.pages.top_arg() == Some(&AppArg::Friends);
             let player_page = (app.pages.top_arg() == Some(&AppArg::Player)).then(|| app.pages.top_page()).flatten();
-            app.bridge.together.set_preferences(plx_media::route::together_visible(), plx_media::route::together_notify());
             app.bridge.together.ui_frame(fr.now, friends_page, player_page.is_some());
             let top = notice_top(&app.pages);
             app.bridge.together_notice_frame(&mut app.pages, top);

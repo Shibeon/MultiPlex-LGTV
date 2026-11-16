@@ -41,6 +41,7 @@
   "together.error.no_host": "El anfitrión no respondió. Inténtalo de nuevo en un momento",
   "together.error.failed": "No se pudo abrir la sesión",
   "together.error.host": "No se pudo crear la sesión",
+  "together.error.no_relay": "No se encontró ningún relé de «Ver juntos» en este servidor",
   "together.left": "Has salido de la sesión",
   "together.host_now": "Ahora eres el anfitrión",
   "together.count": {

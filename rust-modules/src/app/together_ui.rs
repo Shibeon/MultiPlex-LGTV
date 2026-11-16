@@ -23,7 +23,7 @@
 use std::collections::BTreeSet;
 
 use plx_data::together::player::{FollowAnswer, FollowState};
-use plx_data::together::session::{FriendSession, JoinError, Notice};
+use plx_data::together::session::{FriendSession, HostError, JoinError, Notice};
 use plx_data::together::wire::SyncAction;
 use plx_platform::i18n::msg;
 use plx_ui::action_notice::{ActionNotice, Notice as Card};
@@ -135,6 +135,14 @@ pub(crate) fn join_error_text(e: JoinError) -> &'static str {
     }
 }
 
+/// The words of a host failure: no relay on the session's server is named as such.
+pub(crate) fn host_error_text(e: HostError) -> &'static str {
+    match e {
+        HostError::NoRelay => msg::together_error_no_relay(),
+        HostError::Failed => msg::together_error_host(),
+    }
+}
+
 /// A title as the notices name it.
 pub(crate) fn title_of(item: &plx_data::together::wire::SharedItem) -> &str {
     if item.title.is_empty() {
@@ -172,7 +180,7 @@ impl TogetherUi {
             Notice::Action { action: None, .. } => {}
             Notice::HostChanged { host: true } => self.post(Card::passive(ID_HAND, msg::together_host_now()).mark(Icon::Crowd), None),
             Notice::HostChanged { host: false } => {}
-            Notice::HostFailed => self.post(Card::passive(ID_ERROR, msg::together_error_host()), None),
+            Notice::HostFailed(e) => self.post(Card::passive(ID_ERROR, host_error_text(*e)), None),
             Notice::JoinFailed(e) => self.post(Card::passive(ID_ERROR, join_error_text(*e)), None),
             Notice::Left => {
                 self.withdraw(ID_FOLLOW);
@@ -331,6 +339,20 @@ mod tests {
         assert_eq!(cur.id, ID_ACTION);
         assert_eq!(cur.text, msg::together_action_seeked("Camille"));
         assert!(cur.action.is_none(), "passive: nothing to reach");
+    }
+
+    /// *Create a session* with no relay on the server is said, in the viewer's words, never silent.
+    #[test]
+    fn a_host_that_found_no_relay_says_so() {
+        let mut ui = TogetherUi::default();
+        ui.on_notice(&Notice::HostFailed(HostError::NoRelay), &ctx());
+        ui.notice.step(16);
+        let cur = ui.notice.current().unwrap();
+        assert_eq!((cur.id, cur.text.as_str()), (ID_ERROR, msg::together_error_no_relay()));
+        assert_ne!(msg::together_error_no_relay(), msg::together_error_host());
+        ui.on_notice(&Notice::HostFailed(HostError::Failed), &ctx());
+        ui.notice.step(16);
+        assert_eq!(ui.notice.current().unwrap().text, msg::together_error_host());
     }
 
     #[test]
