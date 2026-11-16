@@ -194,6 +194,13 @@ pub fn announce_live_writes() {
     }
 }
 
+/// Is the owner's live switch on ([`live_armed`])? Watch Together's write gate reads it too
+/// (`super::together::together_write_gate`): one switch for every write a debug build could send
+/// on the account's behalf.
+pub(super) fn live_writes_armed() -> bool {
+    live_armed()
+}
+
 /// The dev-build failsafe: a `devtriggers` build must never write to the real service unasked, so
 /// a `PUT` is refused unless the loopback stand-in is armed (which then takes the write: it is
 /// [`discover`]'s base) or the owner's live switch is on ([`live_armed`]). Release builds always write.

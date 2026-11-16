@@ -17,7 +17,8 @@
     "machine/src/lib.rs": "1b12901e3f544c1721ee7e0f526ffa9851f075f97f5924c726374148955ee2f4",
     "machine/src/machine.rs": [
       "571415d64a9885248f852b402153feedd4660acbe03606e4796c59659726049f",
-      "03a6e18f576dcbaff66c3d7405923b155302bfb2996bb373dac115ece055a5bf"
+      "03a6e18f576dcbaff66c3d7405923b155302bfb2996bb373dac115ece055a5bf",
+      "f0b1f58d46c74ddbb4466bc01c52cac244ed4c02ddeea9ea037405a5d16b58d4"
     ]
   },
   "text_hashing": "sha256-utf8-bytes-crlf-to-lf-local-root-version-v1",

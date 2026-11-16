@@ -701,6 +701,9 @@ pub(crate) struct Bridge {
     watchlist: watchlist::Feed,
     /// What the Friends page was last handed from the community store (`friends::Feed`).
     friends: friends::Feed,
+    /// Watch Together: the store, its runner and what the UI and the player have not taken
+    /// (`together::TogetherFeed`).
+    together: together::TogetherFeed,
     /// The catalog page instance the store was last opened for (`watchlist::catalog_feed`).
     catalog_seat: Option<InstanceId>,
     /// The scratch session a Watchlist rig seated for the account it scripts ([`Bridge::seat_watchlist_account_for_test`]).
@@ -967,6 +970,7 @@ impl Bridge {
             watchlist_reqs: Vec::new(),
             watchlist: watchlist::Feed::default(),
             friends: friends::Feed::default(),
+            together: together::TogetherFeed::default(),
             catalog_seat: None,
             #[cfg(test)]
             watchlist_session: None,
@@ -3567,6 +3571,8 @@ fn frame_ingest(
     // The Friends page's community store, for the same reason: reads only while the page is on
     // top, nothing for a managed profile, and the page handed what moved before it ticks.
     rig.friends_feed(d);
+    // Watch Together: the session's socket events and job answers land before the page ticks.
+    rig.together_feed();
     // Library used to be the only route that pumped Browse. Onboard schedules the roster-only
     // owner work from its Tick, but Tick runs after views are captured; land the roster first so
     // a discovery result and the directory publication are observed in one frame. Controlled
@@ -5436,6 +5442,8 @@ mod watchlist;
 
 #[path = "friends.rs"]
 mod friends;
+#[path = "together.rs"]
+mod together;
 
 #[cfg(test)]
 #[path = "friends_route_tests.rs"]

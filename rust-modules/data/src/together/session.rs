@@ -32,6 +32,7 @@
 //! | `FriendsAnswered`, `FriendIdsRead`, `GrantSealed` | the request that asked (by `tag`) | the announce, the listing, `SendText` |
 //! | `RefreshFriends` | any | `HttpRooms` per candidate relay of each server, `AskFriends` per relay found; `Notice::FriendSessions` |
 //! | `JoinFriend` | any (leaves the current one) | `RequestKey`, then `Derive`; `Live` when the room is the one listed |
+//! | `Permit` | any | may announce or not (off from construction); turned off: `release` |
 //!
 //! A pair not listed (a stale `tag` or `conn`, a player event outside a session) is
 //! [`Handled::No`] and changes nothing. Volume, subtitles, audio and quality have no field in any
@@ -231,6 +232,10 @@ pub enum TogetherEvent {
     JoinFriend { me: Me, relay: String, room: String },
     /// The host's key hand-over for a `RequestKey`.
     FriendKey { tag: u32, answer: Result<GrantPayload, JoinError> },
+    /// Whether this device may announce a session at all (an account that is neither a Guest boot
+    /// nor a managed profile, and a build allowed to write there). Off until said: a session is
+    /// never announced, nor a key handed over, before a `Permit { announce: true }`.
+    Permit { announce: bool },
 }
 
 #[derive(Clone, PartialEq)]
@@ -504,6 +509,7 @@ impl fmt::Debug for TogetherEvent {
             TogetherEvent::FriendKey { tag, answer } => {
                 f.debug_struct("FriendKey").field("tag", tag).field("answer", &answer.as_ref().map(|_| HIDDEN)).finish()
             }
+            TogetherEvent::Permit { announce } => f.debug_struct("Permit").field("announce", announce).finish(),
         }
     }
 }
@@ -597,6 +603,7 @@ struct Desk {
     listing: Vec<ListServer>,
     list_servers: Vec<ServerInfo>,
     sessions: Vec<FriendSession>,
+    may_announce: bool,
 }
 
 impl Desk {
@@ -634,6 +641,8 @@ pub struct TogetherSession {
     list_servers: Vec<ServerInfo>,
     /// The friends' sessions the last listing found.
     sessions: Vec<FriendSession>,
+    /// [`TogetherEvent::Permit`]: off until said.
+    may_announce: bool,
 }
 
 impl Default for TogetherSession {
@@ -658,6 +667,7 @@ impl TogetherSession {
             listing: Vec::new(),
             list_servers: Vec::new(),
             sessions: Vec::new(),
+            may_announce: false,
         }
     }
 
@@ -677,6 +687,7 @@ impl TogetherSession {
             listing: std::mem::take(&mut self.listing),
             list_servers: std::mem::take(&mut self.list_servers),
             sessions: std::mem::take(&mut self.sessions),
+            may_announce: self.may_announce,
         };
         let phase = std::mem::replace(&mut self.phase, Phase::Idle);
         let (phase, handled) = reduce(phase, ev, &mut desk, fx);
@@ -693,6 +704,7 @@ impl TogetherSession {
         self.listing = desk.listing;
         self.list_servers = desk.list_servers;
         self.sessions = desk.sessions;
+        self.may_announce = desk.may_announce;
         handled
     }
 
@@ -993,6 +1005,18 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 (Phase::Idle, Handled::Yes)
             }
         },
+        TogetherEvent::Permit { announce: on } => {
+            desk.may_announce = on;
+            match phase {
+                Phase::Live(mut live) if !on && matches!(live.announce, Announce::On(_)) && live.status == Status::Open => {
+                    fx.push(TogetherFx::SendText { conn: live.conn, text: control_text("release") });
+                    live.announce = Announce::Off;
+                    set_listed(&mut live, None, fx);
+                    (Phase::Live(live), Handled::Yes)
+                }
+                other @ (Phase::Idle | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::Yes),
+            }
+        }
         TogetherEvent::SetVisible(on) => match phase {
             Phase::Live(mut live) => {
                 set_visible(&mut live, on, desk, fx);
@@ -1119,7 +1143,7 @@ fn not_listed(live: &mut Live, now_us: u64, fx: &mut Vec<TogetherFx>) {
 /// `refresh`, with the friend list re-read (cached 2 min) and sent when it changed or was re-read.
 fn announce(live: &mut Live, refresh: bool, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
     let Some((_, server)) = live.grant.clone() else { return };
-    if !live.host || !live.visible || live.keys.owner.is_none() || live.status != Status::Open {
+    if !desk.may_announce || !live.host || !live.visible || live.keys.owner.is_none() || live.status != Status::Open {
         return;
     }
     let Some(card) = card_of(live) else { return };
@@ -1284,7 +1308,7 @@ fn on_control(live: &mut Live, c: Control, desk: &mut Desk, fx: &mut Vec<Togethe
 /// stands, sealed for its ephemeral key alone. Once per requester, a few per 10 s.
 fn hand_over(live: &mut Live, peer: String, public: String, desk: &mut Desk, fx: &mut Vec<TogetherFx>) {
     let Some((secret, server)) = live.grant.clone() else { return };
-    if !live.host || !live.visible || !matches!(live.announce, Announce::On(_)) {
+    if !desk.may_announce || !live.host || !live.visible || !matches!(live.announce, Announce::On(_)) {
         return;
     }
     let now = desk.now_us;
@@ -1765,7 +1789,9 @@ mod tests {
 
     impl Device {
         fn new() -> Device {
-            Device { s: TogetherSession::new(), out: Vec::new(), ivs: 0, derives: Vec::new() }
+            let mut d = Device { s: TogetherSession::new(), out: Vec::new(), ivs: 0, derives: Vec::new() };
+            d.step(TogetherEvent::Permit { announce: true });
+            d
         }
 
         fn step(&mut self, ev: TogetherEvent) -> Handled {
@@ -2500,5 +2526,24 @@ mod tests {
         list(&mut f);
         let out = f.take();
         assert_eq!(find(&out, |x| matches!(x, TogetherFx::RequestKey { .. }).then_some(())).len(), 1, "{out:?}");
+    }
+
+    #[test]
+    fn nothing_is_announced_or_handed_over_without_permission() {
+        let mut h = Device::new();
+        h.step(TogetherEvent::Permit { announce: false });
+        h.step(TogetherEvent::Host { me: me("m", "Hôte"), relay: RELAY.into(), server: Some("srv-1".into()), item: Some(movie()), random: (0u8..32).collect(), visible: true, servers: vec![srv1()] });
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketOpened { conn });
+        let out = h.take();
+        assert!(find(&out, |f| matches!(f, TogetherFx::HttpRooms { .. } | TogetherFx::AskFriends { .. }).then_some(())).is_empty(), "{out:?}");
+        // Permission withdrawn from an announced host: released.
+        let mut h = announced();
+        h.step(TogetherEvent::Permit { announce: false });
+        let out = h.take();
+        assert_eq!(texts(&out), [serde_json::json!({"t": "release"})]);
+        let conn = h.conn();
+        h.step(TogetherEvent::SocketText { conn, text: r#"{"t":"key-request","peer":"sid-1","pub":"PUB-1"}"#.into() });
+        assert!(h.take().is_empty());
     }
 }

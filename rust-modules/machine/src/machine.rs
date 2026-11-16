@@ -824,6 +824,9 @@ pub enum MachineId {
     Cache,
     /// The player-HUD package store (`plx_data::hudpacks`), owned by the Bridge: the address its commands are delivered to.
     Huds,
+    /// The Watch Together store (`plx_data::stores::together`), owned by the Bridge: the address its
+    /// jobs answer to.
+    Together,
 }
 
 impl MachineId {
@@ -840,6 +843,7 @@ impl MachineId {
             Self::Instance(id) => { c.u32(7).u32(id.0); }
             Self::Cache => { c.u32(8); }
             Self::Huds => { c.u32(9); }
+            Self::Together => { c.u32(10); }
         }
     }
 }

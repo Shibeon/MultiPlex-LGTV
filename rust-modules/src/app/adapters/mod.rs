@@ -10,3 +10,4 @@ pub(crate) mod huds;
 pub(crate) mod poster;
 pub(crate) mod session;
 pub(crate) mod stores;
+pub(crate) mod together;
