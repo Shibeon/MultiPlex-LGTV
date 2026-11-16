@@ -53,6 +53,9 @@ pub(crate) struct TogetherFeed {
     item: Option<((plx_plex::plex::ServerId, String), SharedItem)>,
     /// The session drives the player: the last unheld frame handed it a snapshot (`player`).
     drives: bool,
+    /// The player side's last frame saw a live session (`player`): a Follow's wait opens nothing
+    /// without one.
+    live: bool,
 }
 
 /// The servers this identity sees, as the together store needs them: identity, the connections

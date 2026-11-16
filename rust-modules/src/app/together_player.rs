@@ -11,18 +11,19 @@
 //!   Play from Start leaves that reset owed.
 //! - **Follow** opens the session's title through the launch-link wait (`MenuPlayAwait::for_together`):
 //!   the detail request, the play door, `request_loaded_hero` and `start_playback`, as a normal play
-//!   does, at the session's position. Nothing plays: it opens. The same title plays: nothing to do.
+//!   does, at the session's position now (`View::position`, else the Follow's own). Nothing plays: it opens. The same title plays: nothing to do.
 //!   The session's previous title plays: it is replaced in place. The person's own title plays, or
 //!   their own play waits for its page (a card's or a link's wait, never overwritten): the gate
 //!   holds the Follow as a question (`FollowState::Asking`) for the UI, answered with
 //!   [`TogetherFeed::answer_follow`]. The wait carries what the gate let it replace, and the gate
 //!   decides again when the page lands ([`Bridge::together_still_opens`]): a playback the person
-//!   started meanwhile is asked about, never stopped. A title on no server this device reaches is
-//!   not opened (`FollowState::Missing`); the gate fails closed.
+//!   started meanwhile is asked about, never stopped. The session ending takes the opening with it,
+//!   and a landing with no session opens nothing. A title on no server this device reaches is not
+//!   opened (`FollowState::Missing`); the gate fails closed.
 //! - **Held** while the app is hidden or the foreground lifecycle brings its parked playback back
 //!   (the launch link's own predicates, `window_activity.allow_present` and `awaiting_load`): the
 //!   session's requests stay queued, a Follow's opening in flight goes back to the queue to be
-//!   gated afresh, and no snapshot is handed, so the session neither drives a parked playback nor
+//!   gated afresh (and opened at the session's place then), and no snapshot is handed, so the session neither drives a parked playback nor
 //!   reads its clock.
 //! - **The snapshot** is the playing title (identified once per playback, `SharedItem` as the web's
 //!   `sharedOf` builds it) and the player's observation (`plx_media::player::together::facts`). A
@@ -146,7 +147,12 @@ impl Bridge {
     pub(crate) fn together_player_step(&mut self, view: Option<&View>, side: PlayerSide<'_>) {
         let PlayerSide { player, pa, pages, menu_play_await, now, held } = side;
         let Some(view) = view else {
+            // The session is over: so is a Follow's opening in flight (its title is no one's now).
+            if menu_play_await.as_ref().is_some_and(crate::app::input::MenuPlayAwait::is_together) {
+                *menu_play_await = None;
+            }
             let together = &mut self.together;
+            together.live = false;
             let _ = together.take_player_requests();
             together.answer = None;
             together.follow = FollowState::Idle;
@@ -155,6 +161,7 @@ impl Bridge {
             together.set_player(None);
             return;
         };
+        self.together.live = true;
         if held {
             self.together_hold(menu_play_await);
             return;
@@ -167,6 +174,9 @@ impl Bridge {
                 TogetherPlayerRequest::Play => PlayerCmd::Play,
                 TogetherPlayerRequest::Pause => PlayerCmd::Pause,
                 TogetherPlayerRequest::Follow { item, position } => {
+                    // The session's place now: a Follow held through a hide is not opened at the
+                    // place it came with (a stale start costs a second seek, a reload on a transcode).
+                    let position = view.position.or(position);
                     match gate::follow_verdict(&item, playing_item, self.together.driving()) {
                         FollowVerdict::Already => self.together.follow = FollowState::Idle,
                         FollowVerdict::Start | FollowVerdict::Switch => {
@@ -278,12 +288,18 @@ impl Bridge {
         plx_machine::idle::invalidate();
     }
 
-    /// The gate again, as a Follow's page lands (`input::play_loaded_hero`): the wait may play only
-    /// over what the gate let it replace (or over nothing). The same title playing by now ends the
+    /// The gate again, as a Follow's page lands (`input::play_loaded_hero`): nothing opens once the
+    /// session is over, and the wait may play only over what the gate let it replace (or over
+    /// nothing). The same title playing by now ends the
     /// opening (`Already`); any other playback (the person started their own while the page loaded)
     /// holds the Follow as the gate's question, and nothing is stopped.
     pub(crate) fn together_still_opens(&mut self, ps: &plx_media::route::PlaybackSession,
         pages: &plx_ui::dispatch::Dispatcher<AppHost>, open: &crate::app::input::TogetherOpen) -> bool {
+        if !self.together.live {
+            plx_base::eventlog::log(&format!("together: {} not opened: the session is over", open.item.identity()));
+            self.together.follow = FollowState::Idle;
+            return false;
+        }
         let playing = self.together_playing(ps, pages);
         let now = playing.as_ref().map(|p| &p.item);
         let replaced = match (now, open.replaces.as_ref()) {
@@ -426,6 +442,30 @@ mod tests {
                 now: self.now,
                 held,
             });
+            if self.wait.is_some() {
+                unsafe {
+                    crate::app::input::menu_play_tick(&mut self.player.session, &mut self.pa, &mut self.pages, &mut self.bridge, &mut self.wait, self.now);
+                }
+            }
+        }
+
+        /// A frame with no live session (the person left, or the host ended it).
+        fn frame_without_session(&mut self) {
+            let _frame = plx_base::task::FrameScope::enter();
+            self.now += 16;
+            self.bridge.together_player_step(None, PlayerSide {
+                player: &mut self.player,
+                pa: &mut self.pa,
+                pages: &mut self.pages,
+                menu_play_await: &mut self.wait,
+                now: self.now,
+                held: false,
+            });
+            self.tick_wait();
+        }
+
+        /// The launch wait's tick alone.
+        fn tick_wait(&mut self) {
             if self.wait.is_some() {
                 unsafe {
                     crate::app::input::menu_play_tick(&mut self.player.session, &mut self.pa, &mut self.pages, &mut self.bridge, &mut self.wait, self.now);
@@ -676,8 +716,9 @@ mod tests {
         // Hidden again while it loads: the opening goes back to the queue, to be gated afresh.
         rig.frame_as(&session, true);
         assert!(rig.wait.is_none(), "no opening runs behind the foreground lifecycle");
+        // (It was opened at the session's place then, 600 s; the next opening reads the place anew.)
         assert!(matches!(rig.bridge.together.requests.as_slice(),
-            [TogetherPlayerRequest::Follow { item, position: Some(p) }] if *item == next && *p == 30.0));
+            [TogetherPlayerRequest::Follow { item, position: Some(p) }] if *item == next && *p == 600.0));
         assert_eq!(rig.bridge.together.follow_state(), &FollowState::Idle);
         assert_eq!(rig.requested(), Some((rig.sid, FILM.to_owned())));
     }
@@ -702,5 +743,46 @@ mod tests {
         }
         assert_eq!(rig.player.session.readout().pending_seek(), Some(1_200_000_000_000), "the session's seek was performed");
         assert!(!plx_media::route::resume_reset_waived(&rig.player.session), "the host's Play from Start still owes its reset");
+    }
+
+    /// The session ends (the person left, or the host ended it) while the Follow's page loads: the
+    /// opening goes with it, and a together wait that outlived it opens nothing when its page
+    /// lands, so no playback is started, or waived its reset, for someone no longer in a session.
+    #[test]
+    fn a_follow_whose_session_ends_while_its_page_loads_opens_nothing() {
+        let mut rig = Rig::new();
+        plx_data::metadata::set_current_for_test(rig.bridge.metadata_mut().state_mut(), None);
+        let session = view(false, Some(film()), Some(600.0));
+        rig.follow(film(), Some(600.0));
+        rig.frame(&session);
+        assert!(rig.wait.as_ref().is_some_and(|w| w.is_together()), "the film's page is loading");
+        rig.frame_without_session();
+        assert!(rig.wait.is_none(), "the opening went with the session");
+
+        // A together wait that outlived its session (armed, then the session went): its landing
+        // asks the gate, which finds no session.
+        let open = crate::app::input::TogetherOpen { at_ns: 600_000_000_000, item: film(), position: Some(600.0), replaces: None };
+        rig.wait = Some(crate::app::input::MenuPlayAwait::for_together(rig.sid, FILM.into(), open, rig.now));
+        plx_data::metadata::set_current_for_test(rig.bridge.metadata_mut().state_mut(), Some(film_page(rig.sid)));
+        rig.tick_wait();
+        assert!(rig.wait.is_none(), "the landing ended the wait");
+        assert!(rig.requested().is_none(), "nothing was opened");
+        assert!(!plx_media::route::resume_reset_waived(&rig.player.session), "and nothing waived");
+    }
+
+    /// A Follow held while the app was hidden opens, once shown again, at the session's position
+    /// then, not at the one it came with: a stale start would cost a second seek.
+    #[test]
+    fn a_follow_held_while_hidden_opens_at_the_sessions_position_on_return() {
+        let mut rig = Rig::new();
+        let session = view(true, Some(film()), Some(600.0));
+        rig.host_plays_the_film(&session);
+        let next = SharedItem { key: Some("film-43".into()), guid: String::new(), title: "La Suite".into(), ..film() };
+        rig.follow(next.clone(), Some(30.0));
+        rig.frame_as(&view(true, Some(next.clone()), Some(30.0)), true);
+        assert!(rig.wait.is_none());
+        rig.frame(&view(true, Some(next.clone()), Some(95.0)));
+        let open = rig.wait.clone().and_then(crate::app::input::MenuPlayAwait::into_together).expect("its page is loading");
+        assert_eq!(open.at_ns, 95_000_000_000, "at the session's place now");
     }
 }
