@@ -23,7 +23,7 @@
 //! | `Derived`, `RoomsAnswered` | the plan that asked (by `tag`) | as above |
 //! | `SocketOpened` / `SocketClosed` | `Live`, its `conn` | send a `want` tick / reconnect after 1, 2, 4 … 15 s |
 //! | `SocketBinary` → `Opened` | `Live`, its `conn` | `Open`, then the message: peers, `sync`, host step-down, `Player` commands, `Notice::Action` |
-//! | `Tick` | any | every 3 s a tick; peers silent for 12 s leave; the first participant takes the hand when the host is gone; reconnect timer |
+//! | `Tick` | any | every 3 s a tick; peers silent for 12 s leave; the first participant takes the hand when the host is gone; reconnect timer; in any phase, a friend allow-list past `FRIENDS_TTL_US` is dropped |
 //! | `Attach`, `Player`, `Detach`, `ShareTitle` | `Live` | `sync.poll`, an `intent` for a gesture, a tick |
 //! | `Sealed` | the send that asked | `SendBinary` (and `CloseSocket` after the farewell `bye`) |
 //! | `Leave` | `Live` | `release` (an announced host), `bye`, then `CloseSocket`; `Idle` |
@@ -749,7 +749,8 @@ impl TogetherSession {
     }
 
     /// Holds something of the seated identity's own (its friend allow-list, the friends' sessions
-    /// it listed, a listing under way): its owner must see an identity change at once.
+    /// it listed, a listing under way): what [`TogetherEvent::Forget`] drops. Its owner is pumped
+    /// on the frame another identity is seated (`TogetherStore::due`), not for as long as it holds.
     pub fn remembers(&self) -> bool {
         self.friend_ids.is_some() || !self.sessions.is_empty() || !self.listing.is_empty() || !self.list_servers.is_empty()
     }
@@ -779,6 +780,10 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
         TogetherEvent::Tick { dt_us } => {
             desk.now_us = desk.now_us.saturating_add(dt_us);
             desk.backoff.advance(dt_us / 1000);
+            // A friend list past its two minutes is never read again (`fresh_friends`): not kept.
+            if desk.friend_ids.as_ref().is_some_and(|(_, at)| desk.now_us.saturating_sub(*at) >= FRIENDS_TTL_US) {
+                desk.friend_ids = None;
+            }
             match phase {
                 Phase::Live(mut live) => {
                     on_tick(&mut live, dt_us, desk, fx);
@@ -2632,6 +2637,21 @@ mod tests {
             f.step(TogetherEvent::RoomsAnswered { tag: *t, body: None });
         }
         assert_eq!(find(&f.take(), |x| if let TogetherFx::AskFriends { announce, .. } = x { Some(*announce) } else { None }), [false]);
+    }
+
+    /// The friend allow-list is not kept past its [`FRIENDS_TTL_US`]: a tick past it drops it, so
+    /// a machine left idle does not hold the previous read for the rest of the run.
+    #[test]
+    fn the_friend_list_is_dropped_once_its_two_minutes_are_past() {
+        let mut h = announced();
+        assert!(h.s.friend_ids.is_some());
+        h.step(TogetherEvent::Leave);
+        h.take();
+        h.tick(FRIENDS_TTL_US - 1);
+        assert!(h.s.friend_ids.is_some(), "still fresh");
+        h.tick(1);
+        assert!(h.s.friend_ids.is_none(), "expired");
+        assert!(!h.s.remembers());
     }
 
     /// Another identity seated: the session is left and everything of the previous one is

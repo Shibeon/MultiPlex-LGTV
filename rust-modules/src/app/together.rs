@@ -10,10 +10,12 @@
 //!   as on the web); it may still host or join by code.
 //! - **The debug-build write gate** (`plex::together::together_write_gate`): announcing, and the
 //!   owner's delegation token, need a loopback server, an armed stand-in or the owner's live switch.
-//! - **Nothing runs while nothing is asked**: with no session, no request in flight, no command and
-//!   nothing of the seated identity's held (its friends' sessions, its friend list), the pump is
-//!   skipped and nothing is read. While something of it is held the pump runs, so the frame another
-//!   identity is seated is the frame the store forgets it.
+//! - **Nothing runs while nothing is asked**: with no session, no request in flight and no command,
+//!   the pump is skipped (`TogetherStore::due`), and only the seated profile's snapshot is read for
+//!   its scope counter (`CurrentProfile::generation`), which moves when a profile is seated,
+//!   detached or signed out. Holding the seated identity's friends' sessions or friend list does
+//!   not keep the pump running: the frame the scope moves pumps once, and that is the frame the
+//!   store forgets the previous identity.
 //! - **A server's relay is found on what plex.tv publishes for it** (`SourceRef::published`, written
 //!   by discovery), not only on the address that answered, which at home is a LAN or `plex.direct`
 //!   name no relay can sit behind.
@@ -72,10 +74,10 @@ impl Bridge {
     /// Once a frame: pump the together store when it has anything to do, and start its jobs.
     pub(crate) fn together_feed(&mut self) {
         let together = &mut self.together;
-        if !together.store.busy() && together.store.view().is_none() {
+        let profile = Self::seated_profile();
+        if !together.store.due(profile.generation) {
             return;
         }
-        let profile = Self::seated_profile();
         let session = plx_plex::plex::session::peek();
         let user = profile.user.as_ref();
         let seated = matches!(profile.seat(), plx_plex::plex::session::Seat::Seated { .. });
@@ -98,6 +100,7 @@ impl Bridge {
             servers: &servers,
             player: together.player.as_ref(),
             now_ms: crate::app::clock::now(),
+            scope: profile.generation,
         };
         {
             let _step = plx_base::step::StepScope::enter();
@@ -161,9 +164,9 @@ mod tests {
     #[test]
     fn the_seam_queues_a_command_and_hands_out_what_it_holds() {
         let mut feed = TogetherFeed::default();
-        assert!(!feed.store.busy());
+        assert!(!feed.store.due(0));
         feed.command(TogetherCmd::Leave);
-        assert!(feed.store.busy(), "a queued command makes the next frame pump");
+        assert!(feed.store.due(0), "a queued command makes the next frame pump");
         feed.set_settings(TogetherSettings { relay: "relais.exemple.fr".into(), ..TogetherSettings::default() });
         assert_eq!(feed.settings.relay, "relais.exemple.fr");
         feed.set_player(None);

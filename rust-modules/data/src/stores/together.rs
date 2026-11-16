@@ -33,7 +33,9 @@
 //! - **One identity at a time.** When another account or profile is seated, the session is left
 //!   and the machine forgets the previous identity (`TogetherEvent::Forget`: its friend
 //!   allow-list, the friends' sessions and their tickets, the listing); the requests still in
-//!   flight for it are dropped (their answers land nowhere), and so are its queued commands.
+//!   flight for it are dropped (their answers land nowhere), and so are its queued commands. An
+//!   idle store is not pumped ([`TogetherStore::due`]) except on the frame the seated profile's
+//!   scope ([`TogetherInput::scope`]) moves, which is the frame it forgets.
 //! - **The player** is read from a snapshot and driven through [`TogetherPlayerRequest`]s that the
 //!   Bridge takes ([`TogetherStore::take_player_requests`]).
 //!
@@ -188,6 +190,10 @@ pub struct TogetherInput<'a> {
     pub player: Option<&'a PlayerSnapshot>,
     /// The app's logical clock (ms, wrapping).
     pub now_ms: u32,
+    /// The seated profile's scope counter (the Session owner's `current_gen`): it moves when a
+    /// profile is seated, detached or signed out, never on a same-profile token refresh. Each pump
+    /// records it, and [`TogetherStore::due`] asks for one pump when it has moved.
+    pub scope: u32,
 }
 
 impl TogetherInput<'_> {
@@ -540,6 +546,8 @@ pub struct TogetherStore {
     me_asked: bool,
     permit: Option<bool>,
     identity: Option<Identity>,
+    /// The scope the last pump was handed ([`TogetherInput::scope`]).
+    scope: Option<u32>,
     last_ms: Option<u32>,
     attached: Option<SharedItem>,
     since_obs_us: u64,
@@ -566,6 +574,7 @@ impl TogetherStore {
             me_asked: false,
             permit: None,
             identity: None,
+            scope: None,
             last_ms: None,
             attached: None,
             since_obs_us: 0,
@@ -603,17 +612,26 @@ impl TogetherStore {
         self.session.friend_sessions()
     }
 
-    /// Anything to do without a frame's input changing (a landing waiting, a command queued), or
-    /// something of the seated identity held (its friends' sessions, its friend list) that must be
-    /// forgotten the frame another identity is seated.
+    /// Anything to do without a frame's input changing: a host start or a join under way, a
+    /// command queued, a request in flight (its landing).
     pub fn busy(&self) -> bool {
-        self.session.busy() || !self.cmds.is_empty() || !self.inflight.is_empty() || self.session.remembers()
+        self.session.busy() || !self.cmds.is_empty() || !self.inflight.is_empty()
+    }
+
+    /// Does this frame need a pump, the seated profile's scope being `scope`? Yes while busy or a
+    /// session is live, and once when the scope differs from the one the last pump was handed: the
+    /// frame another identity is seated is the frame the store forgets the previous one (its
+    /// friends' sessions, its friend list), though nothing else is under way. An idle store that
+    /// merely holds them is not pumped.
+    pub fn due(&self, scope: u32) -> bool {
+        self.busy() || self.view().is_some() || self.scope.is_some_and(|s| s != scope)
     }
 
     /// One frame: the clock, the identity, the permission, the landings, the commands, the player.
     pub fn pump(&mut self, input: &TogetherInput<'_>) {
         let dt_ms = self.last_ms.map_or(0, |last| input.now_ms.wrapping_sub(last));
         self.last_ms = Some(input.now_ms);
+        self.scope = Some(input.scope);
         let mut events = VecDeque::new();
 
         let identity = Identity { account: input.auth.map(|a| a.account_id.clone().unwrap_or_else(|| a.client_id.clone())), profile: input.profile.map(|p| p.name.clone()) };

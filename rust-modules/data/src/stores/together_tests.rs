@@ -92,6 +92,7 @@ struct World {
     servers: Vec<TogetherServer>,
     player: Option<PlayerSnapshot>,
     now_ms: u32,
+    scope: u32,
 }
 
 impl World {
@@ -107,6 +108,7 @@ impl World {
             servers: vec![TogetherServer::new(info, true, Some("http://127.0.0.1:32400".into()), Some("account-token".into()))],
             player: None,
             now_ms: 1000,
+            scope: 1,
         }
     }
 
@@ -122,6 +124,7 @@ impl World {
             servers: &self.servers,
             player: self.player.as_ref(),
             now_ms: self.now_ms,
+            scope: self.scope,
         }
     }
 
@@ -131,6 +134,18 @@ impl World {
             store.pump(&self.input());
             held.run(store, io);
         }
+    }
+
+    /// One frame as the Bridge's `together_feed` makes it: the store is pumped only when it says
+    /// the frame needs it, and its jobs are started. Returns whether it was pumped.
+    fn frame(&mut self, store: &mut TogetherStore, held: &mut Held, io: &Script) -> bool {
+        self.now_ms += 16;
+        if !store.due(self.scope) {
+            return false;
+        }
+        store.pump(&self.input());
+        held.run(store, io);
+        true
     }
 }
 
@@ -379,6 +394,50 @@ fn another_identity_reads_its_own_friends_and_never_sees_the_previous_ones() {
     assert!(io.asked().contains(&"FRIENDS other-token".to_string()), "B's list is read: {:?}", io.asked());
     let announce = texts(&held).into_iter().find(|t| t["t"] == "announce").expect("B announces");
     assert_eq!(announce["friends"], serde_json::json!(["7"]), "B's friends, never A's");
+}
+
+/// Frames as production makes them (`World::frame`, the Bridge's gate): once the friends' sessions
+/// are listed and nothing is under way, the store is not pumped, though it holds them. The frame
+/// another identity is seated, it is pumped once: the previous identity's sessions are gone (the UI
+/// is told), and the next listing is asked afresh, with the new identity's own token.
+#[test]
+fn an_idle_store_is_not_pumped_yet_sees_another_identity_on_its_first_frame() {
+    let mut world = World::new();
+    let io = Script::default();
+    *io.rooms.lock().unwrap() = Some(r#"{"multiplex":"relay","found":[],"friends":true,"friendsOnly":true,"server":"srv-1"}"#.into());
+    *io.friends.lock().unwrap() = Some(FRIENDS_WITH_A_SESSION.into());
+    // A server shared with A, shown A's own token for it.
+    world.servers[0] = TogetherServer::new(world.servers[0].info.clone(), false, None, Some("share-a".into()));
+    let (mut store, mut held) = (TogetherStore::new(), Held::default());
+    store.command(TogetherCmd::RefreshFriends);
+    for _ in 0..8 {
+        world.frame(&mut store, &mut held, &io);
+    }
+    assert_eq!(store.friend_sessions().len(), 1, "A lists a friend's session: {:?}", io.asked());
+    store.take_notices();
+    // Settled: holding A's friends' sessions does not make every frame pump.
+    assert!(!world.frame(&mut store, &mut held, &io), "an idle store is not pumped");
+    assert!(!store.due(world.scope));
+
+    // B is seated: the Session owner's scope moves.
+    let posts = io.asked().iter().filter(|a| a.starts_with("POST ")).count();
+    world.auth = Some(TogetherAuth::new("client", Some("3"), "other-token"));
+    world.profile.name = "B".into();
+    world.servers[0] = TogetherServer::new(world.servers[0].info.clone(), false, None, Some("share-b".into()));
+    world.scope += 1;
+    assert!(world.frame(&mut store, &mut held, &io), "the frame B is seated pumps");
+    assert!(store.friend_sessions().is_empty(), "A's friends' sessions are not B's");
+    assert!(store.take_notices().contains(&Notice::FriendSessions(Vec::new())), "the UI is told at once");
+    assert!(!world.frame(&mut store, &mut held, &io), "and then the store is idle again");
+
+    // B's listing is asked anew, with B's own token.
+    store.command(TogetherCmd::RefreshFriends);
+    for _ in 0..8 {
+        world.frame(&mut store, &mut held, &io);
+    }
+    let asked = io.asked();
+    let after: Vec<&String> = asked.iter().filter(|a| a.starts_with("POST ")).skip(posts).collect();
+    assert_eq!(after, [r#"POST https://relais.exemple.fr:32400/multiplex-relay/friends {"token":"share-b"}"#], "{asked:?}");
 }
 
 /// The store refuses a credential to an announce this identity may not make, whatever the

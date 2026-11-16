@@ -169,6 +169,7 @@ impl Device {
             servers: &self.servers,
             player: self.player.as_ref(),
             now_ms,
+            scope: 1,
         };
         self.store.pump(&input);
         for job in self.store.take_jobs() {
