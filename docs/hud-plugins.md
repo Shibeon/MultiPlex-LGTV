@@ -1116,7 +1116,7 @@ opener, through ONE shared placer.
   its row is 764 - 54 = 710. The track menu's cap moves from `bottom - 60` (704) to the room (710), and
   More's from `bottom * 0.86` (657) to 710: settled classic frames change only when a list is taller than
   the old cap, which the More menu's tallest page (about 600) is not. A More root that lists folded rows is
-  taller than that page from the third row on (the root's own height is 404 px, its Audio mode row counted whether or not the playback offers it, plus 24 and 60 a row; `more_menu::need_h(folded)` is that or 600, whichever is taller), so
+  taller than that page from the second row on (the root's own height is 464 px, its Audio mode row counted whether or not the playback offers it and its Watch Together row always there, plus 24 and 60 a row; `more_menu::need_h(folded)` is that or 600, whichever is taller), so
   its `need_h` grows with the fold count and M2 asks the placer at every count the package can reach.
 - Motion and scrim stay app-owned and unchanged. Both menus keep `OpenStyle::Appear` (switching to `Morph`
   would be a visible change, and these panels stand over the video plane, not on glass); the container's

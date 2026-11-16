@@ -64,6 +64,9 @@ pub(crate) struct TogetherFeed {
     friend_alerts: bool,
     /// The clock of the last UI frame (`ui_frame`).
     ui_clock: Option<u32>,
+    /// The live session's view as this frame's publication (`ui_frame`), which the screens read
+    /// (`AppViews::together`).
+    published: Option<plx_data::together::session::View>,
     /// What the player page was last told of the gate's question, and which page (`player_ask`).
     ask_told: Option<(plx_machine::machine::InstanceId, Option<String>)>,
 }
@@ -193,7 +196,12 @@ impl TogetherFeed {
     pub(crate) fn ui_frame(&mut self, now_ms: u32, friends_page: bool, player_page: bool) {
         let elapsed = self.ui_clock.map_or(0, |t| now_ms.wrapping_sub(t));
         self.ui_clock = Some(now_ms);
-        let ctx = ui::UiCtx { in_session: self.store.view().is_some(), friend_alerts: self.friend_alerts, friends_page, player_page };
+        let view = self.store.view();
+        if view != self.published {
+            self.published = view;
+            plx_machine::idle::invalidate();
+        }
+        let ctx = ui::UiCtx { in_session: self.published.is_some(), friend_alerts: self.friend_alerts, friends_page, player_page };
         for n in std::mem::take(&mut self.notices) {
             self.ui.on_notice(&n, &ctx);
         }
@@ -221,6 +229,18 @@ impl TogetherFeed {
         }
         self.ask_told = Some((page, want.clone()));
         Some((page, want))
+    }
+
+    /// The live session's view as this frame's publication.
+    pub(crate) fn published(&self) -> Option<&plx_data::together::session::View> {
+        self.published.as_ref()
+    }
+
+    /// Host a session on what plays (the More menu's *Create a session*): the title as the
+    /// player side identified it, else the store takes the player's snapshot.
+    pub(crate) fn host_playing(&mut self) {
+        let item = self.item.as_ref().map(|(_, item)| item.clone());
+        self.command(TogetherCmd::Host { item });
     }
 
     /// What an answered notice asked.

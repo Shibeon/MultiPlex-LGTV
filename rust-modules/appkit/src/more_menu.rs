@@ -52,6 +52,13 @@
 //! [`Action::Hud`], and the container closes the menu and hands the command to the app's one performer. Classic
 //! folds nothing, so its root has none.
 //!
+//! **Watch Together** closes the drill-ins: one row reading out the session (how many watch, or
+//! nothing) onto its page ([`MorePage::Together`]), which shows only what the session's view says
+//! ([`TogetherMenu`]): with no session, *Create a session*; in one, the relay's state, the
+//! invitation code, the host's *Visible to my Plex friends* switch with where its announce stands,
+//! the participants (who hosts, who plays, who is away) and *Leave*. Volume, subtitles, quality and
+//! audio are each viewer's own and appear nowhere on it.
+//!
 //! `docs/parity-gaps.md`'s standing decision is that this app has **no full-screen menu sheets** —
 //! the reference clients put playback quality in one and we do not. Quality drills in INSIDE the
 //! popover instead, on the same [`plx_ui::page_stack::PageStack`] the Subtitles tab of
@@ -116,6 +123,12 @@ pub enum Action {
     /// `app::playback::perform_hud_command`) after closing the menu, so a row can never mean something a
     /// control does not. Never produced by [`rows_for`]: [`FoldedRow`]s carry it.
     Hud(HudCommand),
+    /// Watch Together: host a session on what plays ([`MorePage::Together`] with no session).
+    TogetherHost,
+    /// Watch Together: the host's *Visible to my Plex friends* switch, to this value.
+    TogetherVisible(bool),
+    /// Watch Together: leave the session (this playback goes on).
+    TogetherLeave,
 }
 
 /// **One row of More's root for a folded command**, with the label it reads: the label is chosen in
@@ -193,6 +206,8 @@ pub enum MorePage {
     /// The audio modes (Off, Night, Clear voices), the current one checked ([`MoreRow::Act`] of a
     /// [`Action::SetAudioMode`]). There is no such page while the TV or a receiver decodes the sound.
     AudioMode,
+    /// Watch Together: the session as its view says ([`TogetherMenu`]), or *Create a session*.
+    Together,
 }
 
 impl MorePage {
@@ -202,6 +217,7 @@ impl MorePage {
             Self::Quality => plx_platform::i18n::msg::widgets_menu_quality().to_string(),
             Self::Speed => plx_platform::i18n::msg::widgets_menu_speed().to_string(),
             Self::AudioMode => plx_platform::i18n::msg::settings_playback_audio_mode().to_string(),
+            Self::Together => plx_platform::i18n::msg::together_title().to_string(),
         }
     }
 
@@ -211,6 +227,7 @@ impl MorePage {
             Self::Quality => 1,
             Self::Speed => 2,
             Self::AudioMode => 3,
+            Self::Together => 4,
         }
     }
 }
@@ -225,6 +242,11 @@ pub enum MoreRow {
     OpenSpeed,
     /// The root's Audio mode row ([`MorePage::AudioMode`]): reads out the current mode.
     OpenAudioMode,
+    /// The root's Watch Together row ([`MorePage::Together`]): reads out how many watch.
+    OpenTogether,
+    /// A read-only line of the Watch Together page: its status (0), the invitation code (1), a
+    /// participant (2 + their place). OK on it does nothing.
+    TogetherLine(u32),
     Act(Action),
 }
 
@@ -236,6 +258,8 @@ pub enum MoreOk {
     Action(Action),
     /// A Nav row opened a page: the panel stays, with its rows replaced.
     Navigated,
+    /// A read-only line: nothing happens and the panel stays.
+    Stay,
 }
 
 type MoreForm = Form<MoreRow, Action, MorePage>;
@@ -272,6 +296,9 @@ pub struct MoreMenuState {
     /// Whether the app decodes this playback's sound itself ([`plx_media::player::audio_mode_offered`]):
     /// false hides the Audio mode row entirely (no greyed row, no note), and it follows the path live.
     audio_offered: bool,
+    /// What the Watch Together row and page show, as the container last handed it
+    /// ([`Self::set_together`]).
+    together: TogetherMenu,
     /// The folded rows listed between Speed and Options ([`folded_rows`]), fixed when the menu opened: a
     /// command's predicate holds for the item playing, which does not change under an open menu.
     folded: Vec<FoldedRow>,
@@ -298,7 +325,7 @@ pub struct MoreMenuState {
 pub(crate) const NEED_H: f32 = 600.0;
 
 /// **The height the root asks of its room when it lists `folded` rows**: the root at its tallest standard shape
-/// (Quality, Speed and Audio mode, Options with Stats for nerds and Send diagnostics) plus the folded section, which is
+/// (Quality, Speed, Audio mode and Watch Together, Options with Stats for nerds and Send diagnostics) plus the folded section, which is
 /// [`FOLDED_SECTION_H`] and a [`FOLDED_ROW_H`] per row. Never below [`NEED_H`], the tallest page, so a menu with
 /// no folded rows (classic) asks what it always asked and opens where it always opened. A fixed function of
 /// the count, not of what is on screen: the side must not change between pages or with the rows a language or
@@ -309,8 +336,9 @@ pub(crate) fn need_h(folded: usize) -> f32 {
     NEED_H.max(root)
 }
 
-/// The root's height with Quality, Speed, Audio mode, Stats for nerds and Send diagnostics and no folded row.
-const ROOT_BASE_H: f32 = 404.0;
+/// The root's height with Quality, Speed, Audio mode, Watch Together, Stats for nerds and Send
+/// diagnostics and no folded row.
+const ROOT_BASE_H: f32 = 464.0;
 /// One folded row: a compact table row.
 const FOLDED_ROW_H: f32 = 60.0;
 /// The gap the folded section adds between Speed and Options.
@@ -370,6 +398,10 @@ impl FormId for Action {
             }
             // 50..=52 by the mode's place in its ladder
             Action::SetAudioMode(m) => 50 + m.index() as u32,
+            // 60..=63: Watch Together's actions
+            Action::TogetherHost => 60,
+            Action::TogetherVisible(_) => 61,
+            Action::TogetherLeave => 62,
         })
     }
 }
@@ -377,10 +409,13 @@ impl FormId for Action {
 impl FormId for MoreRow {
     fn key(&self) -> RowKey {
         match self {
-            // free in `Action`'s key space (0..=2, 10..=16, 20..=29, 30..=44 and 50..=52)
+            // free in `Action`'s key space (0..=2, 10..=16, 20..=29, 30..=44, 50..=52 and 60..=62)
             MoreRow::OpenQuality => RowKey(3),
             MoreRow::OpenSpeed => RowKey(4),
             MoreRow::OpenAudioMode => RowKey(5),
+            MoreRow::OpenTogether => RowKey(6),
+            // 70.. past every action
+            MoreRow::TogetherLine(i) => RowKey(70 + i),
             MoreRow::Act(a) => a.key(),
         }
     }
@@ -405,6 +440,7 @@ fn root_form(
     speeds: &[i32],
     audio: (plx_media::route::AudioMode, bool),
     folded: &[FoldedRow],
+    together: &TogetherMenu,
 ) -> MoreForm {
     let mut options = FormSection::new(plx_platform::i18n::msg::widgets_menu_options());
     for a in rows.iter().copied().filter(|a| !matches!(a, Action::SetQuality(_))) {
@@ -436,6 +472,13 @@ fn root_form(
         RowKind::Nav(MorePage::AudioMode),
         Action::None,
         Row::new(plx_platform::i18n::msg::settings_playback_audio_mode()).value(audio_mode_label(audio.0)),
+    )
+    // Always offered: with no session it is where one is created.
+    .item(
+        MoreRow::OpenTogether,
+        RowKind::Nav(MorePage::Together),
+        Action::None,
+        Row::new(plx_platform::i18n::msg::together_title()).value(together.readout()),
     );
     let mut form = Form::new().section(quality);
     // The commands the package places nowhere: after Quality and Speed, before Options, in the compiler's order.
@@ -549,7 +592,7 @@ impl MoreMenuState {
         let mut form = FormTable::new(plx_ui::table_screen::BAND_BASE);
         form.table.compact = true; // a short action list — BODY labels, like the profile menu
         form.table.min_panel_w = theme::layout::PLAYER_MENU_MIN_W;
-        form.set_or_open(root_form(ps, &rows, forced, current, speed, &speeds, (audio_mode, audio_offered), &folded), None);
+        form.set_or_open(root_form(ps, &rows, forced, current, speed, &speeds, (audio_mode, audio_offered), &folded, &TogetherMenu::default()), None);
         let mut st = MoreMenuState {
             form,
             rows,
@@ -559,6 +602,7 @@ impl MoreMenuState {
             speeds,
             audio_mode,
             audio_offered,
+            together: TogetherMenu::default(),
             folded,
             pages: PageStack::new(),
             motion: PanelMotion::new(),
@@ -574,6 +618,7 @@ impl MoreMenuState {
             Some(MorePage::Quality) => quality_offered(&st.rows, st.forced),
             Some(MorePage::Speed) => st.speeds.len() > 1,
             Some(MorePage::AudioMode) => st.audio_offered,
+            Some(MorePage::Together) => true,
         };
         if let Some(page) = page.filter(|_| offered) {
             // the page is pushed from its opener's row, so BACK lands where a viewer would have
@@ -581,6 +626,7 @@ impl MoreMenuState {
             let opener = match page {
                 MorePage::Speed => Some(MoreRow::OpenSpeed),
                 MorePage::AudioMode => Some(MoreRow::OpenAudioMode),
+                MorePage::Together => Some(MoreRow::OpenTogether),
                 MorePage::Quality => None,
             };
             if let Some(row) = opener {
@@ -610,6 +656,7 @@ impl MoreMenuState {
             MorePage::Quality => quality_form(ps, &self.rows, self.current),
             MorePage::Speed => speed_form(ps, self.speed, &self.speeds),
             MorePage::AudioMode => audio_mode_form(ps, self.audio_mode),
+            MorePage::Together => together_form(&self.together),
         }
     }
 
@@ -620,6 +667,8 @@ impl MoreMenuState {
             MorePage::Quality => Some(MoreRow::Act(Action::SetQuality(self.current))),
             MorePage::Speed => Some(MoreRow::Act(Action::SetSpeed(self.speed))),
             MorePage::AudioMode => Some(MoreRow::Act(Action::SetAudioMode(self.audio_mode))),
+            // the first row that does something: Create, else the visibility switch or Leave
+            MorePage::Together => together_initial(&self.together),
         }
     }
 
@@ -643,7 +692,7 @@ impl MoreMenuState {
         let Some(saved) = self.pages.pop() else { return false };
         let leaving = page_stack::leave_page(&mut self.form);
         self.motion.begin_slide(leaving, -1.0);
-        let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded);
+        let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded, &self.together);
         self.form.restore(form, Some(&saved.return_id), saved.scroll);
         self.form.table.set_title(None);
         true
@@ -691,6 +740,28 @@ impl MoreMenuState {
         )
     }
 
+    /// **What the Watch Together row and page show**, handed by the container each frame from the
+    /// session's view ([`TogetherMenu::of`]). A change rebuilds the page showing in place (focus
+    /// kept by id) or the root's read-out. Returns whether it rebuilt.
+    pub fn set_together(&mut self, ps: &plx_media::route::PlaybackSession, together: TogetherMenu) -> bool {
+        if together == self.together {
+            return false;
+        }
+        self.together = together;
+        match self.pages.top() {
+            Some(MorePage::Together) => {
+                let fallback = together_initial(&self.together);
+                self.form.refresh_with(together_form(&self.together), None, fallback.as_ref());
+            }
+            Some(_) => {}
+            None => {
+                let keep = self.form.selected_id().copied();
+                self.form.set_or_open(root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded, &self.together), keep.as_ref());
+            }
+        }
+        true
+    }
+
     /// [`Self::refresh`] against explicit answers (what a test or a probe supplies in place of the
     /// live route).
     fn refresh_to(
@@ -726,6 +797,7 @@ impl MoreMenuState {
                 MorePage::Speed => self.speeds.len() > 1,
                 MorePage::AudioMode => self.audio_offered,
                 MorePage::Quality => quality_offered(&self.rows, self.forced),
+                MorePage::Together => true,
             };
             if still_offered {
                 let page = self.pages.top().unwrap_or(first.page);
@@ -736,14 +808,14 @@ impl MoreMenuState {
                 // the ladder is gone under the viewer: back to the root, restoring the opener and
                 // scroll the stack saved at its first push
                 self.pages.clear();
-                let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded);
+                let form = root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded, &self.together);
                 self.form.restore(form, Some(&first.return_id), first.scroll);
                 self.form.table.set_title(None);
                 self.motion.cancel_slide();
             }
         } else {
             let keep = self.form.selected_id().copied();
-            self.form.set_or_open(root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded), keep.as_ref());
+            self.form.set_or_open(root_form(ps, &self.rows, self.forced, self.current, self.speed, &self.speeds, (self.audio_mode, self.audio_offered), &self.folded, &self.together), keep.as_ref());
         }
         true
     }
@@ -824,6 +896,7 @@ impl MoreMenuState {
     /// afterward), or a Nav row that opened its page.
     pub fn on_ok(&mut self, ps: &plx_media::route::PlaybackSession) -> MoreOk {
         match self.form.selected_id().and_then(|id| self.form.index_of(id)).and_then(|i| self.form.activate(i)) {
+            Some(Activation::Action(Action::None)) if matches!(self.form.selected_id(), Some(MoreRow::TogetherLine(_))) => MoreOk::Stay,
             Some(Activation::Action(act)) => MoreOk::Action(act),
             Some(Activation::Push(page)) => {
                 self.push(ps, page);
@@ -1021,6 +1094,9 @@ fn label(a: Action) -> std::borrow::Cow<'static, str> {
         Action::None => "".into(),
         // a folded row is labelled by its `FoldedRow`, which knows the content
         Action::Hud(_) => "".into(),
+        Action::TogetherHost => plx_platform::i18n::msg::together_create().into(),
+        Action::TogetherVisible(_) => plx_platform::i18n::msg::together_visible().into(),
+        Action::TogetherLeave => plx_platform::i18n::msg::together_leave().into(),
     }
 }
 
@@ -1052,6 +1128,8 @@ fn is_on(a: Action) -> bool {
         Action::ToggleStats => stats_on(),
         // a rung is not a switch — see `row_for`, which gives it the leading mark instead
         Action::SetQuality(_) | Action::SetSpeed(_) | Action::SetAudioMode(_) | Action::SendDiagnostics | Action::Hud(_) | Action::None => false,
+        // the visibility switch states the session's value (`together_form`), not the action's target
+        Action::TogetherHost | Action::TogetherVisible(_) | Action::TogetherLeave => false,
     }
 }
 
@@ -1096,6 +1174,114 @@ fn row_for(ps: &plx_media::route::PlaybackSession, a: Action) -> Row {
         Action::SetSpeed(_) | Action::SetAudioMode(_) => Row::new(label(a)),
         _ => Row::new(label(a)).toggle(is_on(a)),
     }
+}
+
+/// **What the Watch Together row and page show** — a digest of the session's view
+/// (`plx_data::together::session::View`), built by [`Self::of`]. `Default` is no session.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TogetherMenu {
+    live: Option<TogetherLive>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct TogetherLive {
+    code: String,
+    connecting: bool,
+    host: bool,
+    visible: bool,
+    listed: Option<plx_data::together::session::Listed>,
+    /// The viewer first, then the others as the session heard them.
+    people: Vec<TogetherPerson>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct TogetherPerson {
+    name: String,
+    me: bool,
+    host: bool,
+    /// What they are doing; `None` for the viewer (their own player says it).
+    state: Option<&'static str>,
+}
+
+impl TogetherMenu {
+    /// The digest of `view` (`None`: no session).
+    pub fn of(view: Option<&plx_data::together::session::View>) -> TogetherMenu {
+        use plx_platform::i18n::msg;
+        let Some(v) = view else { return TogetherMenu::default() };
+        let mut people = vec![TogetherPerson { name: msg::together_me().to_owned(), me: true, host: v.host, state: None }];
+        people.extend(v.peers.iter().map(|p| TogetherPerson {
+            name: p.name.clone(),
+            me: false,
+            host: p.host,
+            state: Some(if !p.live {
+                msg::together_state_away()
+            } else if p.playing {
+                msg::together_state_playing()
+            } else {
+                msg::together_state_paused()
+            }),
+        }));
+        TogetherMenu {
+            live: Some(TogetherLive {
+                code: v.code.clone(),
+                connecting: v.status == plx_data::together::session::Status::Connecting,
+                host: v.host,
+                visible: v.visible,
+                listed: v.listed,
+                people,
+            }),
+        }
+    }
+
+    /// The root row's read-out: how many watch, or nothing with no session.
+    fn readout(&self) -> String {
+        self.live.as_ref().map_or_else(String::new, |l| plx_platform::i18n::msg::together_count(l.people.len() as i64))
+    }
+}
+
+/// The Watch Together PAGE: *Create a session* with none; in one, the status, the invitation, the
+/// host's visibility switch, the participants and *Leave*.
+fn together_form(t: &TogetherMenu) -> MoreForm {
+    use plx_platform::i18n::msg;
+    let Some(l) = &t.live else {
+        let a = Action::TogetherHost;
+        return Form::new().section(FormSection::new("").item(MoreRow::Act(a), RowKind::Button, a, Row::new(label(a))));
+    };
+    let status = if l.connecting { msg::together_status_connecting() } else { msg::together_status_connected() };
+    let mut head = FormSection::new("")
+        .item(MoreRow::TogetherLine(0), RowKind::Button, Action::None, Row::new(msg::together_title()).value(status))
+        .item(MoreRow::TogetherLine(1), RowKind::Button, Action::None, Row::new(msg::together_code()).value(&l.code));
+    if l.host {
+        // the switch states the session's value; OK asks for the other one
+        let a = Action::TogetherVisible(!l.visible);
+        let listed = match (l.visible, l.listed) {
+            (true, Some(plx_data::together::session::Listed::Pending)) => msg::together_listed_pending(),
+            (true, Some(plx_data::together::session::Listed::Yes)) => msg::together_listed_yes(),
+            (true, Some(plx_data::together::session::Listed::No)) => msg::together_listed_no(),
+            _ => "",
+        };
+        head = head.item(MoreRow::Act(a), RowKind::Toggle, a, Row::new(label(a)).toggle(l.visible).detail(listed));
+    }
+    let mut people = FormSection::new(msg::together_participants());
+    // everyone, the viewer first: past the room the panel's table scrolls
+    for (i, p) in l.people.iter().enumerate() {
+        let name = if p.host { format!("{} · {}", p.name, msg::together_host()) } else { p.name.clone() };
+        people = people.item(MoreRow::TogetherLine(2 + i as u32), RowKind::Button, Action::None, Row::new(name).value(p.state.unwrap_or("")));
+    }
+    if l.people.len() == 1 {
+        people = people.item(MoreRow::TogetherLine(2 + l.people.len() as u32), RowKind::Button, Action::None, Row::new(msg::together_alone()));
+    }
+    let leave = Action::TogetherLeave;
+    Form::new().section(head).section(people).section(FormSection::new("").item(MoreRow::Act(leave), RowKind::Button, leave, Row::new(label(leave))))
+}
+
+/// The row the Watch Together page opens on.
+fn together_initial(t: &TogetherMenu) -> Option<MoreRow> {
+    Some(match &t.live {
+        None => MoreRow::Act(Action::TogetherHost),
+        Some(l) if l.host => MoreRow::Act(Action::TogetherVisible(!l.visible)),
+        Some(_) => MoreRow::Act(Action::TogetherLeave),
+    })
 }
 
 /// The panel at its WIDEST ([`plx_ui::table::MENU_MAX_W`]) and TALLEST, for the overscan audit
@@ -1206,8 +1392,8 @@ mod tests {
         let rows = rows_for(forced);
         let mut form = FormTable::new(plx_ui::table_screen::BAND_BASE);
         form.table.compact = true;
-        form.set_or_open(root_form(&ps, &rows, forced, current, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, NO_AUDIO, &[]), None);
-        MoreMenuState { form, rows, forced, current, speed: plx_media::player::RATE_NORMAL, speeds: plx_media::player::PLAY_RATES.to_vec(), audio_mode: plx_media::route::AudioMode::Off, audio_offered: false, folded: Vec::new(), pages: PageStack::new(), motion: PanelMotion::new(), anchor: crate::player_hud::classic::ctrl_row_hit_rect(), side: std::cell::Cell::new(plx_ui::popover::Side::Above) }
+        form.set_or_open(root_form(&ps, &rows, forced, current, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, NO_AUDIO, &[], &TogetherMenu::default()), None);
+        MoreMenuState { form, rows, forced, current, speed: plx_media::player::RATE_NORMAL, speeds: plx_media::player::PLAY_RATES.to_vec(), audio_mode: plx_media::route::AudioMode::Off, audio_offered: false, together: TogetherMenu::default(), folded: Vec::new(), pages: PageStack::new(), motion: PanelMotion::new(), anchor: crate::player_hud::classic::ctrl_row_hit_rect(), side: std::cell::Cell::new(plx_ui::popover::Side::Above) }
     }
 
     /// The same menu with the Quality page pushed (and its slide skipped).
@@ -1386,7 +1572,7 @@ mod tests {
         let ps = plx_media::route::PlaybackSession::default();
         for forced in [false, true] {
             let mut root = MoreMenuState::new(&ps);
-            let form = root_form(&ps, &rows_for(forced), forced, plx_media::route::Quality::Auto, 1000, &plx_media::player::PLAY_RATES, NO_AUDIO, &[]);
+            let form = root_form(&ps, &rows_for(forced), forced, plx_media::route::Quality::Auto, 1000, &plx_media::player::PLAY_RATES, NO_AUDIO, &[], &TogetherMenu::default());
             root.form.set(form, None);
             assert!(
                 root.form.index_of(&MoreRow::OpenSpeed).is_some(),
@@ -1450,7 +1636,7 @@ mod tests {
         let rows = rows_for(false);
         for offer in [vec![], vec![1000]] {
             let mut root = MoreMenuState::new(&ps);
-            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &offer, NO_AUDIO, &[]), None);
+            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &offer, NO_AUDIO, &[], &TogetherMenu::default()), None);
             assert!(root.form.index_of(&MoreRow::OpenSpeed).is_none(), "offer {offer:?}");
         }
         let mut st = MoreMenuState::new(&ps);
@@ -1476,9 +1662,9 @@ mod tests {
         let rows = rows_for(false);
         for mode in AudioMode::LADDER {
             let mut root = MoreMenuState::new(&ps);
-            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &plx_media::player::PLAY_RATES, (mode, false), &[]), None);
+            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &plx_media::player::PLAY_RATES, (mode, false), &[], &TogetherMenu::default()), None);
             assert!(root.form.index_of(&MoreRow::OpenAudioMode).is_none(), "not offered, {mode:?}: no row");
-            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &plx_media::player::PLAY_RATES, (mode, true), &[]), None);
+            root.form.set(root_form(&ps, &rows, false, Quality::Auto, 1000, &plx_media::player::PLAY_RATES, (mode, true), &[], &TogetherMenu::default()), None);
             assert!(root.form.index_of(&MoreRow::OpenAudioMode).is_some(), "offered, {mode:?}: the row");
         }
         // a default session plays nothing through the app: the menu opens without the row, and a
@@ -1554,6 +1740,7 @@ mod tests {
             speeds: plx_media::player::PLAY_RATES.to_vec(),
             audio_mode: plx_media::route::AudioMode::Off,
             audio_offered: false,
+            together: TogetherMenu::default(),
             folded: Vec::new(),
             pages: PageStack::new(),
             motion: PanelMotion::new(),
@@ -1861,6 +2048,7 @@ mod focus_tests {
             speeds: plx_media::player::PLAY_RATES.to_vec(),
             audio_mode: plx_media::route::AudioMode::Off,
             audio_offered: false,
+            together: TogetherMenu::default(),
             folded: Vec::new(),
             pages: PageStack::new(),
             motion: PanelMotion::new(),
@@ -1969,7 +2157,7 @@ mod focus_tests {
             let _guard = language_on_this_thread_for_test(language);
             for q in plx_media::route::QUALITY_LADDER {
                 let mut root = MoreMenuState::new(&ps);
-                root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[]), None);
+                root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[], &TogetherMenu::default()), None);
                 check(language.tag(), &root.form);
                 let mut page = MoreMenuState::new(&ps);
                 page.current = q;
@@ -1984,7 +2172,7 @@ mod focus_tests {
             // the Speed page, and the root reading out the longest speed name
             for r in plx_media::player::PLAY_RATES {
                 let mut root = MoreMenuState::new(&ps);
-                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, r, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[]), None);
+                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, r, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &[], &TogetherMenu::default()), None);
                 check(language.tag(), &root.form);
             }
             let mut page = MoreMenuState::new(&ps);
@@ -1994,12 +2182,12 @@ mod focus_tests {
             // the Audio mode page, and the root reading out each mode's name
             for m in plx_media::route::AudioMode::LADDER {
                 let mut root = MoreMenuState::new(&ps);
-                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (m, true), &[]), None);
+                root.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (m, true), &[], &TogetherMenu::default()), None);
                 check(language.tag(), &root.form);
                 let mut page = MoreMenuState::new(&ps);
                 page.audio_offered = true;
                 page.audio_mode = m;
-                page.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (m, true), &[]), None);
+                page.form.set(root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (m, true), &[], &TogetherMenu::default()), None);
                 page.focus_key(MoreRow::OpenAudioMode.key().0);
                 page.push(&ps, MorePage::AudioMode);
                 check(language.tag(), &page.form);
@@ -2029,7 +2217,7 @@ mod focus_tests {
                 folded[6].label = go;
                 for q in plx_media::route::QUALITY_LADDER {
                     let mut root = MoreMenuState::new(&ps);
-                    root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &folded), None);
+                    root.form.set(root_form(&ps, &rows, false, q, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &folded, &TogetherMenu::default()), None);
                     check(language.tag(), &root.form);
                 }
             }
@@ -2180,7 +2368,8 @@ mod classic_placement_tests {
         assert_eq!(
             settled(),
             [
-                ("root", [1824.0, 764.0, 470.0, 284.0]),
+                // the root grew one row, Watch Together's drill-in (60 px); nothing else moved
+                ("root", [1824.0, 764.0, 470.0, 344.0]),
                 ("quality page", [1824.0, 764.0, 440.0, 536.0]),
                 ("quality entry", [1824.0, 764.0, 440.0, 536.0]),
             ],
@@ -2511,11 +2700,108 @@ mod folded_tests {
             let folded: Vec<FoldedRow> = all[..n].iter().map(|&command| FoldedRow { command, label: "Previous Episode" }).collect();
             let mut form = FormTable::new(plx_ui::table_screen::BAND_BASE);
             form.table.compact = true;
-            let root = root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &folded);
+            let root = root_form(&ps, &rows, false, plx_media::route::Quality::Auto, plx_media::player::RATE_NORMAL, &plx_media::player::PLAY_RATES, (plx_media::route::AudioMode::Off, true), &folded, &TogetherMenu::default());
             form.set_or_open(root, None);
             let formula = if n == 0 { ROOT_BASE_H } else { ROOT_BASE_H + FOLDED_SECTION_H + FOLDED_ROW_H * n as f32 };
             assert_eq!(form.table.measured_height(), formula, "{n} folded rows");
             assert_eq!(need_h(n), NEED_H.max(formula), "{n}");
         }
+    }
+}
+
+#[cfg(test)]
+mod together_tests {
+    use super::*;
+    use plx_data::together::session::{Listed, Status, View};
+    use plx_platform::i18n::msg;
+
+    fn view(host: bool, visible: bool) -> View {
+        View { code: "ABCD-1234".into(), full_code: None, host, status: Status::Open, item: None, peers: Vec::new(), position: None, visible, listed: Some(Listed::Yes) }
+    }
+
+    fn ids(st: &MoreMenuState) -> Vec<MoreRow> {
+        (0..st.form.table.n_rows().max(0) as usize).filter_map(|i| st.form.id_at(i).copied()).collect()
+    }
+
+    fn on_together_page(t: TogetherMenu) -> MoreMenuState {
+        let ps = plx_media::route::PlaybackSession::IDLE;
+        let mut st = MoreMenuState::new(&ps);
+        st.set_together(&ps, t);
+        st.focus_key(MoreRow::OpenTogether.key().0);
+        assert_eq!(st.on_ok(&ps), MoreOk::Navigated);
+        assert_eq!(st.page(), Some(MorePage::Together));
+        st
+    }
+
+    #[test]
+    fn with_no_session_the_page_offers_to_create_one_and_the_root_reads_nothing() {
+        let _g = plx_base::testlock::serial();
+        let t = TogetherMenu::of(None);
+        assert_eq!(t.readout(), "");
+        let mut st = on_together_page(t);
+        assert_eq!(ids(&st), [MoreRow::Act(Action::TogetherHost)]);
+        assert_eq!(st.on_ok(&plx_media::route::PlaybackSession::IDLE), MoreOk::Action(Action::TogetherHost));
+    }
+
+    #[test]
+    fn the_host_sees_the_code_the_visibility_switch_the_people_and_leave() {
+        let _g = plx_base::testlock::serial();
+        let t = TogetherMenu::of(Some(&view(true, true)));
+        assert_eq!(t.readout(), msg::together_count(1));
+        let mut st = on_together_page(t);
+        assert_eq!(
+            ids(&st),
+            [
+                MoreRow::TogetherLine(0),
+                MoreRow::TogetherLine(1),
+                MoreRow::Act(Action::TogetherVisible(false)),
+                MoreRow::TogetherLine(2),
+                MoreRow::TogetherLine(3),
+                MoreRow::Act(Action::TogetherLeave),
+            ]
+        );
+        assert_eq!(st.sel_id(), Some(MoreRow::Act(Action::TogetherVisible(false))), "opens on the switch");
+        assert_eq!(st.on_ok(&plx_media::route::PlaybackSession::IDLE), MoreOk::Action(Action::TogetherVisible(false)), "OK turns it off");
+        // a read-only line does nothing and keeps the panel
+        st.focus_key(MoreRow::TogetherLine(1).key().0);
+        assert_eq!(st.on_ok(&plx_media::route::PlaybackSession::IDLE), MoreOk::Stay);
+    }
+
+    #[test]
+    fn a_guest_has_no_switch_and_the_people_state_who_hosts_and_what_they_do() {
+        let _g = plx_base::testlock::serial();
+        let _en = plx_platform::i18n::language_on_this_thread_for_test(plx_platform::i18n::Preference::En);
+        let mut t = TogetherMenu::of(Some(&view(false, true)));
+        if let Some(l) = t.live.as_mut() {
+            l.people.push(TogetherPerson { name: "Camille".into(), me: false, host: true, state: Some(msg::together_state_paused()) });
+        }
+        let st = on_together_page(t);
+        let rows = ids(&st);
+        assert!(!rows.iter().any(|r| matches!(r, MoreRow::Act(Action::TogetherVisible(_)))), "only the host decides who sees the session");
+        assert_eq!(st.sel_id(), Some(MoreRow::Act(Action::TogetherLeave)));
+        let i = st.form.index_of(&MoreRow::TogetherLine(3)).expect("Camille's line");
+        let row = st.form.table.sections.iter().flat_map(|s| s.rows.iter()).nth(i).expect("the row");
+        assert_eq!(row.label, format!("Camille · {}", msg::together_host()));
+        assert_eq!(row.value.as_deref(), Some(msg::together_state_paused()));
+    }
+
+    #[test]
+    fn a_change_of_the_session_rebuilds_the_page_in_place_and_its_end_returns_to_create() {
+        let _g = plx_base::testlock::serial();
+        let ps = plx_media::route::PlaybackSession::IDLE;
+        let mut st = on_together_page(TogetherMenu::of(Some(&view(true, true))));
+        assert!(!st.set_together(&ps, TogetherMenu::of(Some(&view(true, true)))), "the same digest rebuilds nothing");
+        assert!(st.set_together(&ps, TogetherMenu::of(Some(&view(true, false)))));
+        assert!(ids(&st).contains(&MoreRow::Act(Action::TogetherVisible(true))), "the switch now turns it back on");
+        assert!(st.set_together(&ps, TogetherMenu::of(None)));
+        assert_eq!(ids(&st), [MoreRow::Act(Action::TogetherHost)]);
+        assert_eq!(st.page(), Some(MorePage::Together), "the page stays");
+    }
+
+    #[test]
+    fn per_viewer_settings_are_never_on_the_page() {
+        let _g = plx_base::testlock::serial();
+        let st = on_together_page(TogetherMenu::of(Some(&view(true, true))));
+        assert!(ids(&st).iter().all(|r| !matches!(r, MoreRow::Act(Action::SetQuality(_) | Action::SetSpeed(_) | Action::SetAudioMode(_)))));
     }
 }

@@ -17,7 +17,7 @@
 //!
 //! **The panel's size** is `(MENU_MAX_W, need_h)`: the widest a menu hugs its rows (the track menu and More
 //! between `PLAYER_MENU_MIN_W` and `MENU_MAX_W`) and the menu's own room: `track_menu::NEED_H`, and for More
-//! `more_menu::need_h(folds)`, which is the tallest page up to three folded rows and grows past it from four. The
+//! `more_menu::need_h(folds)`, which is the tallest page up to one folded row and grows past it from two. The
 //! side is decided by `need_h` alone (that is the placer's contract) and a side to the left or right
 //! must hold the panel's WIDTH, so the widest width is the conservative one: a side that holds it holds any
 //! narrower panel. The numbers are the menus' own, copied nowhere.
@@ -580,16 +580,16 @@ mod tests {
     }
 
     /// **A folded root asks for the room its rows need, and only a package that folds them is asked.** The case
-    /// above is clean at every count of folded rows below its four (the root, counted with its Audio mode row, asks
-    /// 600 up to two rows and 608 at three, and 655 px is room enough), and the fourth makes it 668. Classic folds
-    /// nothing, so its More menu asks 600 as it always did.
+    /// above is clean at every count of folded rows below three (the root, counted with its Audio mode and Watch
+    /// Together rows, asks 600 up to one row and 608 at two, and 655 px is room enough), and the third makes it
+    /// 668. Classic folds nothing, so its More menu asks 600 as it always did.
     #[test]
     fn a_folded_root_asks_for_the_room_its_rows_need() {
         assert_eq!(more_menu::need_h(0), more_menu::NEED_H, "no folded row: the tallest page decides, as before");
-        assert_eq!(more_menu::need_h(2), more_menu::NEED_H, "two rows still fit the 600 the Quality page asks");
-        assert_eq!(more_menu::need_h(3), 608.0);
-        assert_eq!(more_menu::need_h(4), 668.0);
-        assert_eq!(more_menu::need_h(7), 848.0);
+        assert_eq!(more_menu::need_h(1), more_menu::NEED_H, "one row still fits the 600 the Quality page asks");
+        assert_eq!(more_menu::need_h(2), 608.0);
+        assert_eq!(more_menu::need_h(3), 668.0);
+        assert_eq!(more_menu::need_h(7), 908.0);
         let text = super::super::lint::testing::apply(Base::Minimal, INVALID[3].edits);
         with_cx(&text, |cx| {
             assert_eq!(cx.compiled.folds().len(), 5, "the package folds five commands");
@@ -597,7 +597,7 @@ mod tests {
             for folds in 0..=5 {
                 let found = openers(state.state, folds);
                 let more = found.iter().find(|o| o.menu == Menu::More).expect("the gear");
-                assert_eq!(m2(cx, &state, more).is_some(), folds >= 4, "{folds} folded rows: {:?}", more.placed);
+                assert_eq!(m2(cx, &state, more).is_some(), folds >= 3, "{folds} folded rows: {:?}", more.placed);
             }
         });
         with_cx(CLASSIC_HUD, |cx| {

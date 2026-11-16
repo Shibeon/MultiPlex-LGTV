@@ -1396,6 +1396,13 @@ pub trait PlayerLike: AppLike<Memory = PageMemory> + Sized {
     fn session<'a>(cx: &Cx<'a, Self>) -> &'a plx_media::route::PlaybackSession;
     /// Viewer pause intent sampled by the host at this frame's Tick boundary.
     fn transport_paused(cx: &Cx<'_, Self>) -> bool;
+    /// **The live Watch Together session, as this frame's publication**: what the More menu's
+    /// Watch Together page and the HUD's participants indicator show. PROVIDED, defaulting to
+    /// `None` (no session), so a test host owes nothing; the production host publishes the store's
+    /// view.
+    fn together<'a>(_cx: &Cx<'a, Self>) -> Option<&'a plx_data::together::session::View> {
+        None
+    }
 }
 
 pub trait SearchLike: AppLike<Memory = PageMemory> + Sized {

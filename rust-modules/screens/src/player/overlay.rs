@@ -200,6 +200,7 @@ impl LogicalState for PlayerOverlayArg {
                     Some(plx_appkit::more_menu::MorePage::Quality) => 1,
                     Some(plx_appkit::more_menu::MorePage::Speed) => 2,
                     Some(plx_appkit::more_menu::MorePage::AudioMode) => 3,
+                    Some(plx_appkit::more_menu::MorePage::Together) => 4,
                 });
             }
             OverlayKind::Timing => {}
@@ -561,6 +562,8 @@ impl PlayerOverlayScreen {
                 }
                 // the Quality row opened its page: the panel stays with its rows replaced
                 MoreOk::Navigated => self.moved(fx),
+                // a read-only line of the Watch Together page
+                MoreOk::Stay => {}
             },
             // Unreachable in practice: Timing publishes no focus group and no `ElemKind::Bare`
             // row (`Focusable::groups` answers empty, `key()` returns `Handled::Yes` for every
@@ -849,7 +852,10 @@ impl<H: crate::registry::PlayerLike + crate::registry::MetadataLike> Machine<H> 
                         }
                         p.update(dt, cx.measure, ps, H::metadata(cx))
                     }
-                    Panel::More(p) => p.update(dt, cx.measure, ps),
+                    Panel::More(p) => {
+                        p.set_together(ps, plx_appkit::more_menu::TogetherMenu::of(H::together(cx)));
+                        p.update(dt, cx.measure, ps)
+                    }
                     Panel::Timing(p) => p.update(dt),
                 }
                 // The transport must not auto-hide out from under a panel a viewer is reading —

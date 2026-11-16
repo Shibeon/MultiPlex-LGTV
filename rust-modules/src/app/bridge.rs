@@ -197,6 +197,8 @@ pub(crate) struct AppViews<'a> {
     pub(crate) session: &'a plx_media::route::PlaybackSession,
     /// Viewer pause intent captured with the screen's current frame, including Tick input.
     pub(crate) transport_paused: bool,
+    /// The live Watch Together session as this frame's publication (`together::TogetherFeed`).
+    pub(crate) together: Option<&'a plx_data::together::session::View>,
     /// **Today's calendar date as this frame's publication**, `[year, month, day]` in the viewer's
     /// time zone: published by the loop once per iteration ([`Bridge::publish_today`]) the way the
     /// playback session is, so a screen RECEIVES the date it words ("Today", "27 Oct") and fetches
@@ -223,7 +225,7 @@ impl Bridge {
             directory: self.directory.view(), section_hubs: self.section_hubs.view(),
             search: self.search.view(), metadata: self.stores.metadata_view(),
             person: self.stores.person_view(), collection: self.stores.collection_view(), subtitle_search: self.stores.subtitle_search_view(), session,
-            transport_paused: self.transport_paused,
+            transport_paused: self.transport_paused, together: self.together.published(),
             today: self.today, beneath: None }
     }
 }
@@ -330,6 +332,7 @@ fn execute_endpoint_outcomes_with(
 impl plx_screens::registry::PlayerLike for AppHost {
     fn session<'a>(cx: &Cx<'a, Self>) -> &'a plx_media::route::PlaybackSession { cx.views.session }
     fn transport_paused(cx: &Cx<'_, Self>) -> bool { cx.views.transport_paused }
+    fn together<'a>(cx: &Cx<'a, Self>) -> Option<&'a plx_data::together::session::View> { cx.views.together }
 }
 
 impl plx_screens::registry::SearchLike for AppHost {
@@ -2883,7 +2886,7 @@ impl Bridge {
             let cx = parts.cx::<AppHost>(AppViews { inputs: &self.screen_inputs, clock: &self.clock_facts, marker_prefs: self.marker_prefs, auth: publication.read(),
                 hubs: self.hubs.view(), listing: self.listing.view(), directory: self.directory.view(),
                 section_hubs: self.section_hubs.view(), search: self.search.view(), metadata: self.stores.metadata_view(), person: self.stores.person_view(), collection: self.stores.collection_view(), subtitle_search: self.stores.subtitle_search_view(), session: &self.playback,
-                transport_paused: self.transport_paused,
+                transport_paused: self.transport_paused, together: self.together.published(),
                 today: self.today, beneath: None,
             }, &self.measure);
             let handled = self.session.step(event, &cx, fx);
@@ -3090,7 +3093,7 @@ impl Rig<AppHost> for Bridge {
                 listing: self.listing.view(),
                 directory: self.directory.view(),
                 section_hubs: self.section_hubs.view(), search: self.search.view(), metadata: self.stores.metadata_view(), person: self.stores.person_view(), collection: self.stores.collection_view(), subtitle_search: self.stores.subtitle_search_view(), session: &self.playback,
-                transport_paused: self.transport_paused,
+                transport_paused: self.transport_paused, together: self.together.published(),
                 today: self.today, beneath: None,
             },
             measure: &self.measure,
