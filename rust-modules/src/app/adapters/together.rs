@@ -84,7 +84,14 @@ pub(crate) struct LiveTogetherIo<'a> {
 }
 
 fn timeouts(total_ms: u32) -> Timeouts {
-    Timeouts { connect_s: 4, total_s: 0, total_ms: total_ms.into(), ..plx_net::net::API }
+    // `c_long` is 32 bits on the armv7 target: no lossless `From<u32>` there, so
+    // clamp to the widest value both widths hold (as curlio does).
+    Timeouts {
+        connect_s: 4,
+        total_s: 0,
+        total_ms: total_ms.min(i32::MAX as u32) as std::ffi::c_long,
+        ..plx_net::net::API
+    }
 }
 
 fn body_of(resp: Result<plx_net::net::Resp, plx_net::net::RequestFailure>) -> Option<String> {
