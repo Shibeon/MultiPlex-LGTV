@@ -776,5 +776,8 @@ difference counter at zero at the CI window (`--window 960x540`) and at 1920x108
 (`1-boot-home-chip-grid` 350 frames, `6-settings-family` 955, `12-filmography-detail-return` 920). A
 first take at the default 0.9 s step recorded twice the frames (`1-boot-home-chip-grid` 983, 1.0 MB)
 and was refused by `Recording::parse`'s decode budget (`record JSON/budget` at line 10772) before any
-replay, so recording timing on a fast unpaced host is not free. The macOS replay gate
-(`make check-replay`) was not run on these recordings.
+replay, so recording timing on a fast unpaced host is not free. The macOS replay gate itself
+(`make check-replay`, which builds `sim-macos`) cannot run on the Linux host these were made on; its
+script, `tests/replay_fixtures.py`, was run against the Linux debug simulator at `--window 960x540`
+after the transient notice became the dispatcher's focus group (the notice is not hashed, and none
+stands in these flows): all six replays SAME, every difference counter zero (350, 955 and 920 frames).
