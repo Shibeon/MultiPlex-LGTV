@@ -82,6 +82,8 @@ const PILL_H: f32 = 44.0;
 const PILL_PAD: f32 = 20.0;
 /// Space between the key cap and the action's name.
 const CAP_GAP: f32 = 12.0;
+/// The longest step a spring takes at once (a long idle gap is not one huge integration step).
+const MAX_SPRING_DT_MS: u32 = 50;
 /// Below this opacity nothing is drawn.
 const VISIBLE: f32 = 0.004;
 /// The opacity at which the entrance counts as complete and the life starts counting.
@@ -228,9 +230,11 @@ impl ActionNotice {
         self.engaged = false;
     }
 
-    /// Advance one frame by `dt_ms` (the frame's own `Tick`).
+    /// Advance by `dt_ms`, the time since the previous step (the owner's clock difference, so an
+    /// idle loop that steps rarely still counts the whole life; the springs take at most
+    /// [`MAX_SPRING_DT_MS`] of it per step).
     pub fn step(&mut self, dt_ms: u32) {
-        let dt = dt_ms as f32 / 1000.0;
+        let dt = dt_ms.min(MAX_SPRING_DT_MS) as f32 / 1000.0;
         if self.current.is_none() {
             match self.queue.pop_front() {
                 Some(n) => {

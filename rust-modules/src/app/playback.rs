@@ -822,6 +822,10 @@ pub(crate) fn player_requests(
             PlayerReq::PlayAutomatically => {
                 play_automatically(&mut player.session, pa, bridge.metadata_mut());
             }
+            PlayerReq::TogetherFollow { join } => {
+                let answer = if join { plx_data::together::player::FollowAnswer::Join } else { plx_data::together::player::FollowAnswer::Leave };
+                bridge.together.answer_follow(answer);
+            }
             PlayerReq::RepairSandbox => {
                 if player.session.jail_load_blocked {
                     pa.repair_sandbox(&mut player.repair, plx_platform::tv::sandbox::blocks_native_video());

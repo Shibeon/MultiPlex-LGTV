@@ -50,5 +50,7 @@
   "settings.together.visible": "Látható a Plex-barátaimnak",
   "settings.together.visible_detail": "Az általad indított munkamenetek láthatók a szerverhez hozzáférő Plex-barátaidnak. Munkamenetenként módosíthatod.",
   "settings.together.notify": "Barátok munkamenetei",
-  "settings.together.notify_detail": "Értesítés kínálja a csatlakozást, ha egy Plex-barátod látható munkamenetet indít."
+  "settings.together.notify_detail": "Értesítés kínálja a csatlakozást, ha egy Plex-barátod látható munkamenetet indít.",
+  "settings.together.on": "Be",
+  "settings.together.off": "Ki"
 }

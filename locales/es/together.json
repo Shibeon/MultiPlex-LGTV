@@ -52,5 +52,7 @@
   "settings.together.visible": "Visible para mis amigos de Plex",
   "settings.together.visible_detail": "Las sesiones que creas se muestran a tus amigos de Plex con acceso al servidor. Puedes cambiarlo en cada sesión.",
   "settings.together.notify": "Avisos de sesiones de amigos",
-  "settings.together.notify_detail": "Un aviso te propone unirte cuando uno de tus amigos de Plex inicia una sesión que puedes ver."
+  "settings.together.notify_detail": "Un aviso te propone unirte cuando uno de tus amigos de Plex inicia una sesión que puedes ver.",
+  "settings.together.on": "Activado",
+  "settings.together.off": "Desactivado"
 }

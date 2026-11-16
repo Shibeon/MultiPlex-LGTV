@@ -221,6 +221,9 @@ pub enum PlayerReq {
     CancelAutoSkip(plx_appkit::skip_policy::OfferId),
     /// Accepted only after the owned player confirmation. Never emitted by boot or Play.
     RepairSandbox,
+    /// The player page's answer to Watch Together's question (`AppMsg::TogetherAsk`): `join`
+    /// leaves this playback for the session's title, else the viewer keeps it and leaves the session.
+    TogetherFollow { join: bool },
     /// The failure read-out's *Try again*: resolve the failed item again, unchanged, at the
     /// position the viewer was at (`app::playback::retry_failed_playback`).
     RetryPlayback,
@@ -1498,6 +1501,9 @@ pub enum AppMsg {
     Consent(ConsentCmd),
     /// A command of the player-HUD package store, delivered to [`MachineId::Huds`].
     Huds(HudCmd),
+    /// Watch Together's gate, to the player page: it holds a question about this title (`Some`),
+    /// asked on the page's decision card, or no longer does (`None`).
+    TogetherAsk(Option<String>),
     RestartReply { correlation: u32, accepted: bool },
     SelectionReply { correlation: u32, accepted: bool, flow_epoch: u64 },
     BackReply { correlation: u32, resumed: bool },

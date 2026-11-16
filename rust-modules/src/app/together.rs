@@ -35,6 +35,8 @@ use super::*;
 
 #[path = "together_player.rs"]
 pub(crate) mod player;
+#[path = "together_ui.rs"]
+pub(crate) mod ui;
 
 /// The together store, its runner, and what the UI and the player have not taken yet.
 #[derive(Default)]
@@ -56,6 +58,14 @@ pub(crate) struct TogetherFeed {
     /// The player side's last frame saw a live session (`player`): a Follow's wait opens nothing
     /// without one.
     live: bool,
+    /// What the session tells the viewer, on the application's one transient notice ([`ui`]).
+    pub(crate) ui: ui::TogetherUi,
+    /// The viewer's "Friends' session alerts" setting (default on).
+    friend_alerts: bool,
+    /// The clock of the last UI frame (`ui_frame`).
+    ui_clock: Option<u32>,
+    /// What the player page was last told of the gate's question, and which page (`player_ask`).
+    ask_told: Option<(plx_machine::machine::InstanceId, Option<String>)>,
 }
 
 /// The servers this identity sees, as the together store needs them: identity, the connections
@@ -167,6 +177,100 @@ impl TogetherFeed {
     /// The live session's view, for the UI and the player's side.
     pub(crate) fn view(&self) -> Option<plx_data::together::session::View> {
         self.store.view()
+    }
+
+    /// The viewer's two Watch Together settings: a hosted session's default visibility to their
+    /// friends and the friends' session alerts.
+    pub(crate) fn set_preferences(&mut self, visible_default: bool, friend_alerts: bool) {
+        self.settings.visible_default = visible_default;
+        self.friend_alerts = friend_alerts;
+    }
+
+    /// Once a frame, after the player side: the notices and the gate's standing onto the
+    /// notice, the friends' listing asked on its cadence, and the notice stepped. `friends_page`:
+    /// the Friends page is on top; `player_page`: a player page is mounted (it asks the gate's
+    /// question itself).
+    pub(crate) fn ui_frame(&mut self, now_ms: u32, friends_page: bool, player_page: bool) {
+        let elapsed = self.ui_clock.map_or(0, |t| now_ms.wrapping_sub(t));
+        self.ui_clock = Some(now_ms);
+        let ctx = ui::UiCtx { in_session: self.store.view().is_some(), friend_alerts: self.friend_alerts, friends_page, player_page };
+        for n in std::mem::take(&mut self.notices) {
+            self.ui.on_notice(&n, &ctx);
+        }
+        let follow = self.follow.clone();
+        self.ui.on_follow(&follow, &ctx);
+        if self.ui.poll_due(elapsed, &ctx) {
+            self.command(TogetherCmd::RefreshFriends);
+        }
+        if self.ui.notice.busy() {
+            self.ui.notice.step(elapsed);
+            plx_machine::idle::invalidate();
+        }
+    }
+
+    /// The gate's question as the player page `page` should be asking it (`Some(title)`) or not,
+    /// when that differs from what this page was last told: the page's `AppMsg::TogetherAsk`.
+    pub(crate) fn player_ask(&mut self, page: Option<plx_machine::machine::InstanceId>) -> Option<(plx_machine::machine::InstanceId, Option<String>)> {
+        let page = page?;
+        let want = match &self.follow {
+            FollowState::Asking(ask) => Some(ui::title_of(&ask.item).to_owned()),
+            _ => None,
+        };
+        if self.ask_told.as_ref().is_some_and(|(p, w)| *p == page && *w == want) {
+            return None;
+        }
+        self.ask_told = Some((page, want.clone()));
+        Some((page, want))
+    }
+
+    /// What an answered notice asked.
+    pub(crate) fn perform(&mut self, action: ui::NoticeAction) {
+        match action {
+            ui::NoticeAction::JoinFriend { relay, room } => self.command(TogetherCmd::JoinFriend { relay, room }),
+            ui::NoticeAction::Follow(answer) => self.answer_follow(answer),
+        }
+    }
+
+    /// The UP overshoot this frame's focus model reported: it reaches a notice that offers an action.
+    pub(crate) fn overshoot(&mut self, dir: Option<plx_ui::screen::Dir>) {
+        if dir == Some(plx_ui::screen::Dir::Up) && self.ui.notice.engage() {
+            plx_machine::idle::invalidate();
+        }
+    }
+
+    /// A key, offered to the notice before anything else: `true` when the notice took it (its
+    /// key-up is then the notice's too).
+    pub(crate) fn notice_key(&mut self, sym: u32, down: bool, key: plx_ui::consts::Key) -> bool {
+        use plx_ui::action_notice::{Answer, NoticeKey};
+        if !down {
+            if self.ui.swallow_sym == Some(sym) {
+                self.ui.swallow_sym = None;
+                return true;
+            }
+            return false;
+        }
+        if !self.ui.notice.engaged() {
+            return false;
+        }
+        let k = match key {
+            plx_ui::consts::Key::Ok => NoticeKey::Ok,
+            plx_ui::consts::Key::Back => NoticeKey::Back,
+            plx_ui::consts::Key::Up => NoticeKey::Up,
+            plx_ui::consts::Key::Down => NoticeKey::Down,
+            plx_ui::consts::Key::Left { .. } => NoticeKey::Left,
+            plx_ui::consts::Key::Right { .. } => NoticeKey::Right,
+            _ => NoticeKey::Other,
+        };
+        let (answer, action) = self.ui.key(k);
+        if answer == Answer::Ignored {
+            return false;
+        }
+        self.ui.swallow_sym = Some(sym);
+        if let Some(a) = action {
+            self.perform(a);
+        }
+        plx_machine::idle::invalidate();
+        true
     }
 }
 

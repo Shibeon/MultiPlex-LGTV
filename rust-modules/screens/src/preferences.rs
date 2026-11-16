@@ -58,6 +58,8 @@ impl PickerKind {
         Self::DolbyVision => plx_platform::i18n::msg::settings_playback_dolby_vision(),
         Self::IntroSkip => plx_platform::i18n::msg::settings_playback_intro_skip(),
         Self::CreditsSkip => plx_platform::i18n::msg::settings_playback_credits_skip(),
+        Self::TogetherVisible => plx_platform::i18n::msg::settings_together_visible(),
+        Self::TogetherNotify => plx_platform::i18n::msg::settings_together_notify(),
         Self::UiResolution => plx_platform::i18n::msg::settings_resolution_title(),
         Self::AudioLanguage => plx_platform::i18n::msg::settings_audio_language(), Self::SubtitleMode => plx_platform::i18n::msg::settings_audio_subtitles(),
         Self::SubtitleLanguage => plx_platform::i18n::msg::settings_audio_subtitle_language(), Self::ForcedSubtitles => plx_platform::i18n::msg::settings_audio_forced_subtitles(),
@@ -81,13 +83,15 @@ impl PickerKind {
         Self::DolbyVision => plx_platform::i18n::msg::settings_playback_dolby_vision_copy(),
         Self::IntroSkip => plx_platform::i18n::msg::settings_playback_intro_skip_copy(),
         Self::CreditsSkip => plx_platform::i18n::msg::settings_playback_credits_skip_copy(),
+        Self::TogetherVisible => plx_platform::i18n::msg::settings_together_visible_detail(),
+        Self::TogetherNotify => plx_platform::i18n::msg::settings_together_notify_detail(),
         Self::UiResolution => plx_platform::i18n::msg::settings_resolution_detail(),
         Self::AudioLanguage | Self::SubtitleMode | Self::SubtitleLanguage | Self::ForcedSubtitles => plx_platform::i18n::msg::settings_audio_account_note(),
     }}
     /// The field-list page this field belongs to; `None` for a field the Settings root lists itself.
     fn kind(self) -> Option<Kind> {
         match self {
-            Self::Quality | Self::DirectPlay | Self::HdrOverlay | Self::NextEpisode | Self::DeckPress | Self::SkipInterval | Self::InstantDpadSeeking | Self::UriEngine | Self::AudioMode | Self::AudioModeDecode | Self::DolbyVision | Self::IntroSkip | Self::CreditsSkip => Some(Kind::Playback),
+            Self::Quality | Self::DirectPlay | Self::HdrOverlay | Self::NextEpisode | Self::DeckPress | Self::SkipInterval | Self::InstantDpadSeeking | Self::UriEngine | Self::AudioMode | Self::AudioModeDecode | Self::DolbyVision | Self::IntroSkip | Self::CreditsSkip | Self::TogetherVisible | Self::TogetherNotify => Some(Kind::Playback),
             Self::AudioLanguage | Self::SubtitleMode | Self::SubtitleLanguage | Self::ForcedSubtitles | Self::SubtitleSize | Self::SubtitlePosition | Self::SubtitleColor => Some(Kind::AudioSubtitles),
             Self::UiResolution => None,
         }
@@ -113,7 +117,7 @@ impl Kind {
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Value { IntroSkip(MarkerSkipMode, u64), CreditsSkip(MarkerSkipMode, u64), InstantDpadSeeking(InstantDpadSeeking), UriEngine(UriEngine), AudioMode(AudioMode), AudioModeDecode(AudioModeDecode), DolbyVision(DolbyVisionMode), Quality(Quality), DirectPlay(DirectPlayMode), SubtitleSize(SubtitleSize), SubtitlePosition(SubtitlePosition), SubtitleTone(SubtitleTone), HdrOverlay(HdrOverlayBrightness), NextEpisode(NextEpisodeMode), DeckPress(DeckPress), SkipInterval(SkipInterval), UiResolution(UiResolution), Language(String), Mode(i64), Forced(i64) }
+enum Value { IntroSkip(MarkerSkipMode, u64), CreditsSkip(MarkerSkipMode, u64), InstantDpadSeeking(InstantDpadSeeking), UriEngine(UriEngine), AudioMode(AudioMode), AudioModeDecode(AudioModeDecode), DolbyVision(DolbyVisionMode), Quality(Quality), DirectPlay(DirectPlayMode), SubtitleSize(SubtitleSize), SubtitlePosition(SubtitlePosition), SubtitleTone(SubtitleTone), HdrOverlay(HdrOverlayBrightness), NextEpisode(NextEpisodeMode), DeckPress(DeckPress), SkipInterval(SkipInterval), UiResolution(UiResolution), TogetherVisible(bool), TogetherNotify(bool), Language(String), Mode(i64), Forced(i64) }
 
 /// The hashed half of a transaction: what the page shows while a load or save is in flight.
 struct Io { busy: bool, status: String }
@@ -291,6 +295,8 @@ impl Txn {
             Value::AudioModeDecode(v) => PreferenceCmd::Choose(Choice::AudioModeDecode(v), reply),
             Value::DolbyVision(mode) => PreferenceCmd::Choose(Choice::DolbyVision(mode), reply),
             Value::SkipInterval(interval) => PreferenceCmd::Choose(Choice::SkipInterval(interval), reply),
+            Value::TogetherVisible(on) => PreferenceCmd::Choose(Choice::TogetherVisible(on), reply),
+            Value::TogetherNotify(on) => PreferenceCmd::Choose(Choice::TogetherNotify(on), reply),
             // Install-wide, not a seated profile's live setting, so it has no `Choice`.
             Value::UiResolution(mode) => PreferenceCmd::UiResolution { mode, reply },
             _ => return,
@@ -382,6 +388,8 @@ impl FormId for RowId {
             Self::PlayerHud => 12,
             Self::Field(PickerKind::IntroSkip) => 13,
             Self::Field(PickerKind::CreditsSkip) => 14,
+            Self::Field(PickerKind::TogetherVisible) => 21,
+            Self::Field(PickerKind::TogetherNotify) => 22,
             Self::Retry => 6,
         })
     }
@@ -523,15 +531,17 @@ impl PreferencesPage {
 /// **The groups of a field-list page** (Settings v2), in the order the page draws them: each is its
 /// header and the fields it can show. Video & playback is Video, Player and Up next; Audio &
 /// subtitles is Audio and Subtitles (both from the Plex account) and Look (this app's own).
-fn groups_of(kind: Kind) -> [(&'static str, &'static [PickerKind]); 3] {
+fn groups_of(kind: Kind) -> Vec<(&'static str, &'static [PickerKind])> {
     use plx_platform::i18n::msg;
     match kind {
-        Kind::Playback => [
+        Kind::Playback => vec![
             (msg::settings_playback_group_video(), &[PickerKind::Quality, PickerKind::DirectPlay, PickerKind::DolbyVision, PickerKind::UriEngine]),
             (msg::settings_playback_group_player(), &[PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::HdrOverlay, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::AudioMode, PickerKind::AudioModeDecode]),
             (msg::settings_playback_group_up_next(), &[PickerKind::NextEpisode, PickerKind::DeckPress]),
+            // Watch Together's two switches, this profile's own (the session's state is never here).
+            (msg::settings_together_section(), &[PickerKind::TogetherVisible, PickerKind::TogetherNotify]),
         ],
-        Kind::AudioSubtitles => [
+        Kind::AudioSubtitles => vec![
             (msg::settings_audio_group_audio(), &[PickerKind::AudioLanguage]),
             (msg::settings_audio_group_subtitles(), &[PickerKind::SubtitleMode, PickerKind::SubtitleLanguage, PickerKind::ForcedSubtitles]),
             (msg::settings_audio_group_look(), &[PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor]),
@@ -601,6 +611,8 @@ fn resolve_value(field: PickerKind, quality: Quality, direct_play: DirectPlayMod
         PickerKind::AudioMode => Value::AudioMode(plx_media::route::audio_mode()),
         PickerKind::AudioModeDecode => Value::AudioModeDecode(plx_media::route::audio_mode_decode_choice()),
         PickerKind::DolbyVision => Value::DolbyVision(plx_media::route::dolby_vision_mode()),
+        PickerKind::TogetherVisible => Value::TogetherVisible(plx_media::route::together_visible()),
+        PickerKind::TogetherNotify => Value::TogetherNotify(plx_media::route::together_notify()),
         PickerKind::UiResolution => unreachable!("resolution requires the retained inputs"),
         // A deprecated code (`pb`) resolves to its replacement so the picker checks that entry.
         PickerKind::AudioLanguage => Value::Language(prefs.and_then(|p| p.stated_language.as_deref()).map(plx_plex::plex::languages::canonical).unwrap_or_default().to_string()),
@@ -643,6 +655,10 @@ fn field_options(field: PickerKind, quality: Quality, direct_play: DirectPlayMod
             .map(|i| (skip_interval_label(i), Value::SkipInterval(i))).collect(),
         PickerKind::UiResolution => UiResolution::LADDER.into_iter()
             .map(|m| (resolution_label(m), Value::UiResolution(m))).collect(),
+        PickerKind::TogetherVisible => [true, false].into_iter()
+            .map(|on| (on_off_label(on).into(), Value::TogetherVisible(on))).collect(),
+        PickerKind::TogetherNotify => [true, false].into_iter()
+            .map(|on| (on_off_label(on).into(), Value::TogetherNotify(on))).collect(),
         PickerKind::SubtitleMode => [(plx_platform::i18n::msg::settings_audio_manual(), 0), (plx_platform::i18n::msg::settings_audio_foreign(), 1), (plx_platform::i18n::msg::settings_audio_always(), 2)]
             .into_iter().map(|(label, mode)| (label.into(), Value::Mode(mode))).collect(),
         PickerKind::ForcedSubtitles => [plx_platform::i18n::msg::settings_audio_prefer_regular(), plx_platform::i18n::msg::settings_audio_prefer_forced(), plx_platform::i18n::msg::settings_audio_only_forced(), plx_platform::i18n::msg::settings_audio_only_regular()]
@@ -750,6 +766,10 @@ fn next_episode_label(mode: NextEpisodeMode) -> &'static str {
         NextEpisodeMode::AfterCredits => plx_platform::i18n::msg::settings_playback_next_episode_after_credits(),
         NextEpisodeMode::Off => plx_platform::i18n::msg::settings_playback_next_episode_off(),
     }
+}
+/// A Watch Together switch's two answers.
+fn on_off_label(on: bool) -> &'static str {
+    if on { plx_platform::i18n::msg::settings_together_on() } else { plx_platform::i18n::msg::settings_together_off() }
 }
 fn deck_press_label(mode: DeckPress) -> &'static str {
     match mode {

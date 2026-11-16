@@ -1297,6 +1297,12 @@ unsafe fn ingest_sdl_event_with_window(app: &mut App, fr: &mut Frame,
             (state & 0xff) == 1,
             state & 0x100 != 0,
         ));
+        // Watch Together's notice, reached by an UP overshoot (`action_notice`): while it is
+        // engaged it answers the remote before the page does, and the key-up of a press it took is
+        // its own too (the page never saw that key go down).
+        if app.bridge.together.notice_key(sym, (state & 0xff) == 1, key) {
+            return;
+        }
         // **Does the TREE own this key?** (phase 5b, `app/bridge.rs`'s coexistence
         // contract.) Asked once, here, above all three edges — because the dispatcher's
         // press machine wants ALL of them: `Edge::Down` arms, `Edge::Repeat` is the
@@ -3051,6 +3057,22 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
             now: fr.now,
             held: together_held,
         });
+        // …then what the session tells the viewer (`bridge::together::ui`): its notices and the
+        // gate's standing on the one transient notice, the friends' listing on its cadence, and an
+        // UP overshoot the focus model reported reaching a notice that offers an action.
+        {
+            let friends_page = app.pages.top_arg() == Some(&AppArg::Friends);
+            let player_page = (app.pages.top_arg() == Some(&AppArg::Player)).then(|| app.pages.top_page()).flatten();
+            app.bridge.together.set_preferences(plx_media::route::together_visible(), plx_media::route::together_notify());
+            app.bridge.together.ui_frame(fr.now, friends_page, player_page.is_some());
+            app.bridge.together.overshoot(app.pages.take_overshoot());
+            // The gate's question, asked on the player page's own decision card.
+            if let Some((page, ask)) = app.bridge.together.player_ask(player_page) {
+                let page = plx_machine::machine::MachineId::Instance(page);
+                app.pages.emit(page, plx_machine::machine::Fx::Deliver(page,
+                    plx_machine::machine::Delivery::Screen(plx_ui::screen::ScreenEvent::App(plx_screens::registry::AppMsg::TogetherAsk(ask)))));
+            }
+        }
         let stands = link_session_stands(app);
         super::deeplink::frame(&mut app.pages, &mut app.deeplink, &mut app.menu_play_await,
             app.window_activity.allow_present(true), stands, fr.now);
@@ -3406,6 +3428,12 @@ pub(crate) unsafe fn draw(app: &mut App, fr: &mut Frame) -> (i32, i32, i32, i32)
                     plx_ui::anim::draw_overlay(); // dev diagnostic overlay (all routes)
                                                      // The lab upload read-out, over everything, on every route — including the
                                                      // player, where the two branches above diverge and this one must not.
+                    // Watch Together's notice, over every route and every surface but the lab
+                    // read-out: it takes no focus, so nothing under it is ever hidden for long.
+                    {
+                        static TTF: plx_gfx::text::TtfMeasure = plx_gfx::text::TtfMeasure;
+                        app.bridge.together.ui.notice.draw(plx_ui::Painter::root(), &TTF);
+                    }
                     crate::lab::draw(app.diagnostics.frame_if_shown());
                     #[cfg(feature = "threadcheck")]
                     plx_ui::runtime_warning::draw(app.boot_initial.is_some());

@@ -219,5 +219,13 @@
   "settings.together.notify_detail": {
     "value": "A notice offers to join when one of your Plex friends starts a session you can see.",
     "description": "Settings: the sentence explaining the switch above."
+  },
+  "settings.together.on": {
+    "value": "On",
+    "description": "Settings: the read-out of a Watch Together switch that is on."
+  },
+  "settings.together.off": {
+    "value": "Off",
+    "description": "Settings: the read-out of a Watch Together switch that is off."
   }
 }

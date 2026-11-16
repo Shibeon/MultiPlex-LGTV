@@ -54,5 +54,7 @@
   "settings.together.visible": "Бачны маім сябрам у Plex",
   "settings.together.visible_detail": "Вашы сеансы бачныя сябрам у Plex, якія маюць доступ да сервера. Гэта можна змяніць у кожным сеансе.",
   "settings.together.notify": "Сеансы сяброў",
-  "settings.together.notify_detail": "Апавяшчэнне прапануе далучыцца, калі сябар у Plex пачне даступны вам сеанс."
+  "settings.together.notify_detail": "Апавяшчэнне прапануе далучыцца, калі сябар у Plex пачне даступны вам сеанс.",
+  "settings.together.on": "Укл.",
+  "settings.together.off": "Выкл."
 }

@@ -50,5 +50,7 @@
   "settings.together.visible": "Für meine Plex-Freunde sichtbar",
   "settings.together.visible_detail": "Deine Sitzungen werden deinen Plex-Freunden mit Zugriff auf den Server angezeigt. Du kannst das in jeder Sitzung ändern.",
   "settings.together.notify": "Hinweise zu Sitzungen",
-  "settings.together.notify_detail": "Ein Hinweis bietet das Beitreten an, wenn ein Plex-Freund eine für dich sichtbare Sitzung startet."
+  "settings.together.notify_detail": "Ein Hinweis bietet das Beitreten an, wenn ein Plex-Freund eine für dich sichtbare Sitzung startet.",
+  "settings.together.on": "Ein",
+  "settings.together.off": "Aus"
 }

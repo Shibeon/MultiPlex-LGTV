@@ -70,7 +70,7 @@ pub const WORD: &str = "player";
 pub const SHAPE: &str =
     "PlayerScreen{hud:{focus:i32,btn:i32,tab:i32,until:u32,dismissed:bool,visible_at_press:bool,\
      exit_armed:bool,back_leaves_at_press:bool,offer:Option<(u32,i64)>,was_standin:bool},back_motion:{position:Option<(f32,f32)>,anchor:Option<Option<(f32,f32)>>},scrub:{dir:i32,hold:bool,reveal:bool,drag:bool,\
-     ns:i64},seek_burst:Option<(i64,u32)>,auto_skip:{elapsed:u32,consumed:bool,presented:bool,in_flight:bool,offer:Option<(u64,u32,u32,u32,i64,i64,bool)>,drawn:Option<(u64,u32,u32,u32,i64,i64,bool)>,declined_pair:Option<(u64,u32,u32,u32,i64,i64,bool)>},transport_tap:bool,origin:Option<u32>,repair_alert:{open:bool,confirm:bool,scroll:u32}}";
+     ns:i64},seek_burst:Option<(i64,u32)>,auto_skip:{elapsed:u32,consumed:bool,presented:bool,in_flight:bool,offer:Option<(u64,u32,u32,u32,i64,i64,bool)>,drawn:Option<(u64,u32,u32,u32,i64,i64,bool)>,declined_pair:Option<(u64,u32,u32,u32,i64,i64,bool)>},transport_tap:bool,origin:Option<u32>,repair_alert:{open:bool,confirm:bool,scroll:u32,together:bool}}";
 
 /// **The page this playback was launched from**, as the container's own identity.
 ///
@@ -187,9 +187,11 @@ pub struct PlayerScreen {
     /// Where this playback returns to — see [`Origin`].
     pub origin: Option<Origin>,
     render: PlayerRender,
-    /// The page's one decision card: the sandbox repair's confirmation.
+    /// The page's one decision card: the sandbox repair's confirmation, or Watch Together's
+    /// question (leave this playback to join the session's title?), as [`AlertFor`] says.
     repair_alert: plx_ui::decision_alert::DecisionAlert,
     repair_scroll: u32,
+    alert_for: AlertFor,
     /// Which control of the failure read-out's row holds focus — an index into
     /// `player_hud::FailureReadout::actions`, reset to the primary each time a failure takes the
     /// frame. The screen owns it the way `HudNav` owns the transport's highlight.
@@ -236,6 +238,7 @@ impl PlayerScreen {
                 alert
             },
             repair_scroll: 0,
+            alert_for: AlertFor::Repair,
             failure_sel: 0,
             failure_up: false,
             clock_warm: Default::default(),
@@ -654,6 +657,14 @@ impl PlayerScreen {
 /// [`player_hud::ELEM_SECTION_BASE`]/[`player_hud::ELEM_CHAPTER_BASE`]. `PlayerScreen::groups_in` is the source.
 /// The sandbox-repair confirmation's group is this page's alone.
 const GROUP_REPAIR: GroupId = GroupId(6);
+/// What the page's decision card asks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AlertFor {
+    /// The sandbox repair's confirmation (Cancel / Repair).
+    Repair,
+    /// Watch Together's "leave this playback to join?" (Stay / Join).
+    Together,
+}
 const REPAIR_CANCEL: u32 = 40_000;
 const REPAIR_CONFIRM: u32 = REPAIR_CANCEL + 1;
 
@@ -719,7 +730,7 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Machine<H> for PlayerScreen 
                 ScreenEvent::PressCommit(_) => {
                     if let Some(key) = cx.focus.current {
                         if matches!(key.elem, REPAIR_CANCEL | REPAIR_CONFIRM) {
-                            self.repair_answer(key.elem == REPAIR_CONFIRM, fx);
+                            self.alert_answer(key.elem == REPAIR_CONFIRM, fx);
                         }
                     }
                     return Handled::Yes;
@@ -730,7 +741,7 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Machine<H> for PlayerScreen 
                     return match input.kind {
                         InputKind::Key { key, sym, wcode, edge, .. } => match consts::classify_input(key, sym, wcode) {
                             consts::Key::Back | consts::Key::Stop if edge == Edge::Down => {
-                                self.repair_answer(false, fx); Handled::Yes
+                                self.alert_answer(false, fx); Handled::Yes
                             }
                             direction @ (consts::Key::Up | consts::Key::Down) if edge != Edge::Up => {
                                 self.repair_scroll = self.repair_alert.scroll_by(cx.measure,
@@ -759,6 +770,10 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Machine<H> for PlayerScreen 
             }
             ScreenEvent::App(AppMsg::HudSection(section)) => {
                 self.toggle_section(*section, cx, fx);
+                Handled::Yes
+            }
+            ScreenEvent::App(AppMsg::TogetherAsk(ask)) => {
+                self.together_ask(ask.as_deref(), fx);
                 Handled::Yes
             }
             ScreenEvent::App(AppMsg::HudSectionsClose) => {
@@ -846,7 +861,7 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Machine<H> for PlayerScreen 
                     Self::repair_focus(fx, GROUP_SCRUB);
                 }
                 let stale = !H::session(cx).jail_load_blocked;
-                if self.repair_alert.visible() && stale { self.repair_alert.close(); }
+                if self.repair_alert.visible() && stale && self.alert_for == AlertFor::Repair { self.repair_alert.close(); }
                 self.repair_alert.update(tick.dt());
                 // The control row's springs and the resume clock are stepped once per FRAME and
                 // never from `draw_hud` — this row is not drawn on every frame of the route, so a
@@ -1112,6 +1127,7 @@ impl PlayerScreen {
             A::Repair => {
                 if ps.repair_status == plx_platform::tv::sandbox::State::Idle && !self.repair_alert.visible() {
                     self.repair_scroll = 0;
+                    self.alert_for = AlertFor::Repair;
                     self.repair_alert.open_with_body(plx_platform::i18n::msg::widgets_repair_question_c(), plx_platform::i18n::msg::widgets_repair_body());
                     Self::repair_focus(fx, GROUP_REPAIR);
                 }
@@ -1119,11 +1135,47 @@ impl PlayerScreen {
             A::Back => Self::ask(fx, PlayerReq::Exit),
         }
     }
-    fn repair_answer<H: AppLike>(&mut self, confirm: bool, fx: &mut Effects<'_, H>) {
+    /// The card's answer, for what it asked.
+    fn alert_answer<H: AppLike>(&mut self, confirm: bool, fx: &mut Effects<'_, H>) {
         if !self.repair_alert.is_open() { return; }
         self.repair_alert.dismiss();
-        if confirm { Self::ask(fx, PlayerReq::RepairSandbox); }
-        Self::repair_focus(fx, GROUP_FAILURE);
+        match self.alert_for {
+            AlertFor::Repair => {
+                if confirm { Self::ask(fx, PlayerReq::RepairSandbox); }
+                Self::repair_focus(fx, GROUP_FAILURE);
+            }
+            AlertFor::Together => {
+                Self::ask(fx, PlayerReq::TogetherFollow { join: confirm });
+                Self::repair_focus(fx, GROUP_SCRUB);
+            }
+        }
+    }
+    /// Watch Together's gate holds a question (`Some(title)`: the session moved to that title while
+    /// this playback is the viewer's own) or no longer does (`None`). The card asks it; its answer
+    /// leaves as [`PlayerReq::TogetherFollow`]. A repair confirmation standing is not displaced: the
+    /// question waits on the gate and comes again on the next change.
+    fn together_ask<H: AppLike>(&mut self, ask: Option<&str>, fx: &mut Effects<'_, H>) {
+        use plx_platform::i18n::msg;
+        match ask {
+            Some(title) => {
+                if self.repair_alert.visible() && self.alert_for == AlertFor::Repair { return; }
+                let body = std::borrow::Cow::Owned(msg::together_ask_body(title));
+                if self.repair_alert.is_open() && self.alert_for == AlertFor::Together {
+                    self.repair_alert.reconcile_card(msg::together_ask_title_c(), vec![body], plx_ui::decision_alert::Answers::Two);
+                    return;
+                }
+                self.alert_for = AlertFor::Together;
+                self.repair_scroll = 0;
+                self.repair_alert.open_card(msg::together_ask_title_c(), vec![body], plx_ui::decision_alert::Answers::Two);
+                Self::repair_focus(fx, GROUP_REPAIR);
+            }
+            None => {
+                if self.repair_alert.is_open() && self.alert_for == AlertFor::Together {
+                    self.repair_alert.dismiss();
+                    Self::repair_focus(fx, GROUP_SCRUB);
+                }
+            }
+        }
     }
     fn repair_rect(&self, confirm: bool, measure: &dyn plx_machine::machine::Measure) -> Rect {
         let (cancel, repair) = self.repair_alert.frames(measure);
@@ -2736,7 +2788,8 @@ impl LogicalState for PlayerScreen {
         c.option(self.origin.as_ref(), |c, o| {
             c.u32(o.entry.0);
         });
-        c.bool(self.repair_alert.is_open()).bool(self.repair_alert.choice() == plx_ui::decision_alert::Choice::Destructive).u32(self.repair_scroll);
+        c.bool(self.repair_alert.is_open()).bool(self.repair_alert.choice() == plx_ui::decision_alert::Choice::Destructive).u32(self.repair_scroll)
+            .bool(self.alert_for == AlertFor::Together);
     }
     fn probe(&self, out: &mut String) {
         out.push_str(WORD);
@@ -2846,7 +2899,11 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Screen<H> for PlayerScreen {
         plx_appkit::player_hud::classic::draw_readout(ps, self.busy, now, self.failure_sel, f.measure);
         if self.repair_alert.visible() {
             self.repair_alert.draw_scrim();
-            self.repair_alert.draw(plx_platform::i18n::msg::settings_cancel_c(), plx_platform::i18n::msg::widgets_repair_action_c(), f.measure);
+            let (cancel, answer) = match self.alert_for {
+                AlertFor::Repair => (plx_platform::i18n::msg::settings_cancel_c(), plx_platform::i18n::msg::widgets_repair_action_c()),
+                AlertFor::Together => (plx_platform::i18n::msg::together_ask_stay_c(), plx_platform::i18n::msg::together_join_c()),
+            };
+            self.repair_alert.draw(cancel, answer, f.measure);
         }
         self.record_stops(f, hud_drawn);
     }

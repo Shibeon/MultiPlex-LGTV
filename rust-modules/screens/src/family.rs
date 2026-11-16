@@ -105,6 +105,10 @@ pub enum PickerKind {
     DolbyVision,
     IntroSkip,
     CreditsSkip,
+    /// Watch Together: a hosted session starts visible to the host's Plex friends (On / Off), per profile.
+    TogetherVisible,
+    /// Watch Together: a notice when a Plex friend starts a session (On / Off), per profile.
+    TogetherNotify,
 }
 
 impl SettingsPage {
@@ -166,7 +170,7 @@ impl PickerKind {
     /// The page that lists this field (its picker is pushed from there and returns there).
     pub fn parent(self) -> SettingsPage {
         match self {
-            PickerKind::Quality | PickerKind::DirectPlay | PickerKind::HdrOverlay | PickerKind::NextEpisode | PickerKind::DeckPress | PickerKind::SkipInterval | PickerKind::InstantDpadSeeking | PickerKind::UriEngine | PickerKind::AudioMode | PickerKind::AudioModeDecode | PickerKind::DolbyVision | PickerKind::IntroSkip | PickerKind::CreditsSkip => SettingsPage::Playback,
+            PickerKind::Quality | PickerKind::DirectPlay | PickerKind::HdrOverlay | PickerKind::NextEpisode | PickerKind::DeckPress | PickerKind::SkipInterval | PickerKind::InstantDpadSeeking | PickerKind::UriEngine | PickerKind::AudioMode | PickerKind::AudioModeDecode | PickerKind::DolbyVision | PickerKind::IntroSkip | PickerKind::CreditsSkip | PickerKind::TogetherVisible | PickerKind::TogetherNotify => SettingsPage::Playback,
             PickerKind::AudioLanguage | PickerKind::SubtitleMode | PickerKind::SubtitleLanguage | PickerKind::ForcedSubtitles | PickerKind::SubtitleSize | PickerKind::SubtitlePosition | PickerKind::SubtitleColor => SettingsPage::AudioSubtitles,
             PickerKind::UiResolution => SettingsPage::Root,
         }

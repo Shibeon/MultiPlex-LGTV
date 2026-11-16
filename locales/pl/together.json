@@ -51,8 +51,10 @@
     "other": "{count} widza"
   },
   "settings.together.section": "Oglądaj razem",
-  "settings.together.visible": "Widoczna dla moich znajomych z Plex",
+  "settings.together.visible": "Widoczna dla znajomych z Plex",
   "settings.together.visible_detail": "Twoje sesje są widoczne dla znajomych z Plex z dostępem do serwera. Możesz to zmienić w każdej sesji.",
   "settings.together.notify": "Sesje znajomych",
-  "settings.together.notify_detail": "Powiadomienie zaproponuje dołączenie, gdy znajomy z Plex rozpocznie widoczną dla Ciebie sesję."
+  "settings.together.notify_detail": "Powiadomienie zaproponuje dołączenie, gdy znajomy z Plex rozpocznie widoczną dla Ciebie sesję.",
+  "settings.together.on": "Włączone",
+  "settings.together.off": "Wyłączone"
 }

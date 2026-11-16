@@ -703,7 +703,7 @@ pub(crate) struct Bridge {
     friends: friends::Feed,
     /// Watch Together: the store, its runner and what the UI and the player have not taken
     /// (`together::TogetherFeed`).
-    together: together::TogetherFeed,
+    pub(crate) together: together::TogetherFeed,
     /// The catalog page instance the store was last opened for (`watchlist::catalog_feed`).
     catalog_seat: Option<InstanceId>,
     /// The scratch session a Watchlist rig seated for the account it scripts ([`Bridge::seat_watchlist_account_for_test`]).

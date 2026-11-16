@@ -50,5 +50,7 @@
   "settings.together.visible": "Zichtbaar voor mijn Plex-vrienden",
   "settings.together.visible_detail": "Sessies die je start, zijn zichtbaar voor je Plex-vrienden met toegang tot de server. Je kunt het per sessie wijzigen.",
   "settings.together.notify": "Meldingen van vriendensessies",
-  "settings.together.notify_detail": "Een melding biedt aan mee te doen wanneer een Plex-vriend een sessie start die je kunt zien."
+  "settings.together.notify_detail": "Een melding biedt aan mee te doen wanneer een Plex-vriend een sessie start die je kunt zien.",
+  "settings.together.on": "Aan",
+  "settings.together.off": "Uit"
 }

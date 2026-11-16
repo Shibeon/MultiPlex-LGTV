@@ -150,7 +150,7 @@ fn every_picker_level_fits_its_column_in_every_language() {
         for kind in [Kind::Playback, Kind::AudioSubtitles] {
             let prefs = AudioPreferences::default();
             let fields: &[PickerKind] = match kind {
-                Kind::Playback => &[PickerKind::Quality, PickerKind::DirectPlay, PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor, PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::UriEngine, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::DolbyVision, PickerKind::IntroSkip, PickerKind::CreditsSkip],
+                Kind::Playback => &[PickerKind::Quality, PickerKind::DirectPlay, PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor, PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::UriEngine, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::DolbyVision, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::TogetherVisible, PickerKind::TogetherNotify],
                 Kind::AudioSubtitles => &[PickerKind::AudioLanguage, PickerKind::SubtitleMode, PickerKind::SubtitleLanguage, PickerKind::ForcedSubtitles],
             };
             // The Interface resolution picker is opened from the Settings root, not a field list.
@@ -264,7 +264,7 @@ fn every_explanation_under_a_title_fits_the_column_in_every_language() {
     let _serial = plx_base::testlock::serial();
     let layout = RouteLayout::settings_page();
     let all_fields = [PickerKind::Quality, PickerKind::DirectPlay, PickerKind::SubtitleSize, PickerKind::SubtitlePosition, PickerKind::SubtitleColor,
-        PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::UriEngine, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::DolbyVision, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::UiResolution, PickerKind::AudioLanguage, PickerKind::SubtitleMode,
+        PickerKind::NextEpisode, PickerKind::DeckPress, PickerKind::SkipInterval, PickerKind::InstantDpadSeeking, PickerKind::UriEngine, PickerKind::AudioMode, PickerKind::AudioModeDecode, PickerKind::DolbyVision, PickerKind::IntroSkip, PickerKind::CreditsSkip, PickerKind::TogetherVisible, PickerKind::TogetherNotify, PickerKind::UiResolution, PickerKind::AudioLanguage, PickerKind::SubtitleMode,
         PickerKind::SubtitleLanguage, PickerKind::ForcedSubtitles];
     let mut out = Vec::new();
     for language in SHIPPED {

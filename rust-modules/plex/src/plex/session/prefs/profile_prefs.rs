@@ -35,7 +35,7 @@
 use super::{
     Fallback, Parse, ProfileKeyed, ProfileRecords, Preferences, Row, Scope, Setting, SettingsWrite,
     IntroSkipPref, CreditsSkipPref, DolbyVisionModePref, InstantDpadSeekingPref, UriEnginePref, AudioModePref, AudioModeDecodePref, AudioEnhancementsPref, DeckPressPref, DirectPlayModePref, HdrOverlayBrightnessPref, NextEpisodeModePref, QualityPref, SkipIntervalPref,
-    HudSelectionPref, SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, UnderPostersPref,
+    HudSelectionPref, SubtitlePositionPref, SubtitleSizePref, SubtitleTonePref, TrailerAutoplayPref, HudEndTimePref, TogetherNotifyPref, TogetherVisiblePref, UnderPostersPref,
 };
 use crate::plex::session::{
     MarkerSkipMode, DolbyVisionMode, InstantDpadSeeking, UriEngine, AudioMode, AudioModeDecode, DeckPress, DirectPlayMode, HdrOverlayBrightness, NextEpisodeMode, PlaybackQuality, Seat, Session, SkipInterval, SubtitlePosition,
@@ -91,6 +91,12 @@ pub struct ProfilePrefs {
     /// The profile's own estimated playback end-time HUD switch; absent reads the default ON.
     #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "super::de_soft_opt")]
     pub hud_end_time: Option<bool>,
+    /// The profile's own Watch Together visibility default; absent reads the default ON.
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "super::de_soft_opt")]
+    pub together_visible: Option<bool>,
+    /// The profile's own friends' session alerts switch; absent reads the default ON.
+    #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "super::de_soft_opt")]
+    pub together_notify: Option<bool>,
     /// The chosen player HUD's package id ([`HudSelectionPref`]); `None` reads the legacy install-wide key.
     #[serde(skip_serializing_if = "Option::is_none", deserialize_with = "super::de_soft_opt")]
     pub hud_selection: Option<String>,
@@ -186,6 +192,8 @@ profile_setting!(
     AudioEnhancementsPref = audio_enhancements,
     TrailerAutoplayPref = trailer_autoplay,
     HudEndTimePref = hud_end_time,
+    TogetherVisiblePref = together_visible,
+    TogetherNotifyPref = together_notify,
 );
 
 const _: () = assert!(matches!(<HudSelectionPref as Row>::FALLBACK, Fallback::LegacyInstallKey));

@@ -54,5 +54,7 @@
   "settings.together.visible": "Виден моим друзьям в Plex",
   "settings.together.visible_detail": "Ваши сеансы видны друзьям в Plex, у которых есть доступ к серверу. Это можно изменить в каждом сеансе.",
   "settings.together.notify": "Сеансы друзей",
-  "settings.together.notify_detail": "Уведомление предложит присоединиться, когда друг в Plex начнёт доступный вам сеанс."
+  "settings.together.notify_detail": "Уведомление предложит присоединиться, когда друг в Plex начнёт доступный вам сеанс.",
+  "settings.together.on": "Вкл.",
+  "settings.together.off": "Выкл."
 }
