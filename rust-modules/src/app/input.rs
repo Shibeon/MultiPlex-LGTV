@@ -369,6 +369,9 @@ pub(crate) struct MenuPlayAwait {
     /// A miss logs and leaves the stack as it is instead of opening the page: a launch link's key
     /// came from outside the app, so a page for it may not exist (`app::deeplink`).
     stay_on_miss: bool,
+    /// A Watch Together Follow's wait ([`MenuPlayAwait::for_together`]): the session's position
+    /// (ns) the title plays from, in place of the item's own resume point.
+    together_at_ns: Option<i64>,
 }
 
 /// Which asynchronous load a [`MenuPlayAwait`] is waiting on. Both phases are polled by the one
@@ -391,13 +394,28 @@ impl MenuPlayAwait {
     fn new(sid: plx_plex::plex::ServerId, expect: String, season_index: Option<i64>, hud_ms: u32, now: u32) -> Self {
         Self {
             sid, expect, season_index, hud_ms, deadline: now.wrapping_add(12_000), phase: MenuPlayPhase::Detail,
-            open: false, stay_on_miss: false,
+            open: false, stay_on_miss: false, together_at_ns: None,
         }
     }
 
     /// The wait for a launch link's item (`app::deeplink`), its detail request just issued.
     pub(crate) fn for_link(sid: plx_plex::plex::ServerId, rk: String, open: bool, now: u32) -> Self {
         Self { open, stay_on_miss: true, ..Self::new(sid, rk, None, plx_screens::player::input::HUD_LINGER_MS, now) }
+    }
+
+    /// The wait for a Watch Together Follow's title (`bridge::together_player`), its detail request
+    /// just issued: a launch link's wait (a miss logs and opens nothing) that plays the title at the
+    /// session's position `at_ns`, not at the item's own resume point, and owes the server no resume
+    /// reset when it stops (`route::waive_resume_reset`). With the player up (the session's previous
+    /// title, or the person's own that they chose to leave) it replaces that playback in place, as
+    /// the queue's Next does, rather than giving way to it.
+    pub(crate) fn for_together(sid: plx_plex::plex::ServerId, rk: String, at_ns: i64, now: u32) -> Self {
+        Self { together_at_ns: Some(at_ns.max(0)), ..Self::for_link(sid, rk, false, now) }
+    }
+
+    /// A Watch Together Follow's wait ([`MenuPlayAwait::for_together`]).
+    pub(crate) fn is_together(&self) -> bool {
+        self.together_at_ns.is_some()
     }
 }
 
@@ -544,10 +562,11 @@ pub(crate) unsafe fn menu_play_tick(
     let Some(wait) = menu_play_await.clone() else {
         return;
     };
-    let MenuPlayAwait { sid, ref expect, season_index, hud_ms, deadline, phase, open, stay_on_miss } = wait;
+    let MenuPlayAwait { sid, ref expect, season_index, hud_ms, deadline, phase, open, stay_on_miss, together_at_ns } = wait;
     // Something else already moved the app onto the player this frame (a different press, an
-    // auto-advance) — the wait is moot and must not fire a second Play on top of it.
-    if super::bridge::player(pages).is_some() {
+    // auto-advance) — the wait is moot and must not fire a second Play on top of it. A Watch
+    // Together wait is the exception: the session's gate already decided it replaces what plays.
+    if super::bridge::player(pages).is_some() && together_at_ns.is_none() {
         *menu_play_await = None;
         return;
     }
@@ -582,7 +601,7 @@ pub(crate) unsafe fn menu_play_tick(
             return;
         }
         *menu_play_await = None;
-        play_loaded_hero(ps, pa, pages, bridge, sid, expect, hud_ms);
+        play_loaded_hero(ps, pa, pages, bridge, sid, expect, hud_ms, together_at_ns);
         return;
     }
     let landed = bridge.metadata_view().current()
@@ -641,7 +660,7 @@ pub(crate) unsafe fn menu_play_tick(
         return;
     }
     *menu_play_await = None;
-    play_loaded_hero(ps, pa, pages, bridge, sid, expect, hud_ms);
+    play_loaded_hero(ps, pa, pages, bridge, sid, expect, hud_ms, together_at_ns);
 }
 
 /// **The play door of a [`MenuPlayAwait`]:** the landing may play only through the one door every
@@ -675,6 +694,11 @@ unsafe fn play_door_open(
 
 /// The end of a settled [`MenuPlayAwait`]: play the loaded item's hero (a show's next episode, or
 /// `episodes[0]` of the selected season), or open its page when nothing is playable.
+///
+/// A Watch Together wait (`together_at_ns`) plays from the session's position, waives the resume
+/// reset the request just cleared, and, with the player up, retires that playback first through
+/// the queue's own in-place replacement (`stop_for_replacement`), keeping the player's origin.
+#[allow(clippy::too_many_arguments)]
 unsafe fn play_loaded_hero(
     ps: &mut plx_media::route::PlaybackSession,
     pa: &mut plx_media::player::adapter::PlayerAdapter,
@@ -683,9 +707,24 @@ unsafe fn play_loaded_hero(
     sid: plx_plex::plex::ServerId,
     expect: &str,
     hud_ms: u32,
+    together_at_ns: Option<i64>,
 ) {
+    let mounted = super::bridge::player(pages).is_some();
+    if together_at_ns.is_some() && mounted {
+        super::playback::close_player_overlays(pages);
+        if !plx_media::player::stop_for_replacement(ps, pa) {
+            plx_base::eventlog::log(&format!("together: not opened, rk={expect} (the playing title would not stop)"));
+            return;
+        }
+    }
     if let Some(resume_ns) = super::playback::request_loaded_hero(ps, bridge.metadata_mut()) {
-        start_playback(ps, pa, resume_ns, Origin::Here, hud_ms, None, pages, bridge);
+        let from = if mounted { Origin::Unchanged } else { Origin::Here };
+        if together_at_ns.is_some() {
+            plx_media::route::waive_resume_reset(ps);
+        }
+        start_playback(ps, pa, together_at_ns.unwrap_or(resume_ns), from, hud_ms, None, pages, bridge);
+    } else if together_at_ns.is_some() {
+        plx_base::eventlog::log(&format!("together: not opened, rk={expect} (nothing playable)"));
     } else {
         super::bridge::open_detail(pages, bridge, sid, expect, None, None);
     }

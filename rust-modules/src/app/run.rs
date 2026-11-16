@@ -3037,6 +3037,16 @@ pub(crate) unsafe fn update(app: &mut App, fr: &mut Frame) {
         // from Home while a different page is up by the time the landing (or its settled
         // failure, or the ceiling) says the wait is over. A title the launch asked for
         // (`deeplink`) arms the same wait once Home is up.
+        // Watch Together's player side: the session's requests, its Follows through the one gate
+        // (a Follow arms the same wait, so it runs first and the wait ticks this frame) and the
+        // player's snapshot for the next pump (`bridge::together::player`).
+        app.bridge.together_player_frame(super::bridge::together::player::PlayerSide {
+            player: &mut app.player,
+            pa: &mut app.adapters.player,
+            pages: &mut app.pages,
+            menu_play_await: &mut app.menu_play_await,
+            now: fr.now,
+        });
         let stands = link_session_stands(app);
         super::deeplink::frame(&mut app.pages, &mut app.deeplink, &mut app.menu_play_await,
             app.window_activity.allow_present(true), stands, fr.now);

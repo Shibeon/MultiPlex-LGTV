@@ -239,7 +239,8 @@ pub enum TogetherCmd {
     JoinFriend { relay: String, room: String },
 }
 
-/// What the store asks of the player (lane 4 wires them).
+/// What the store asks of the player (the application performs them, `app/together_player.rs`;
+/// a Follow goes through the one gate of `together::player`).
 #[derive(Clone, Debug, PartialEq)]
 pub enum TogetherPlayerRequest {
     Seek(f64),

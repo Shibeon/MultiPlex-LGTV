@@ -75,9 +75,13 @@ pub(crate) fn frames(ps: &plx_media::route::PlaybackSession) -> Option<i32> {
 pub(crate) fn seek_pending(ps: &plx_media::route::PlaybackSession) -> Option<i64> {
     plx_media::player::seek_pending(ps)
 }
+/// The viewer's seek: every scrub commit, step, chapter, From Beginning and Skip goes through here,
+/// so it is the one place a seek is counted as the person's gesture (`route::note_gesture`, which
+/// a Watch Together session sends to the others; its own seeks go around this door).
 #[inline]
 pub(crate) fn request_seek(ps: &mut plx_media::route::PlaybackSession,
     pa: &mut plx_media::player::adapter::PlayerAdapter, x: i64) {
+    plx_media::route::note_gesture(ps);
     let _ = pa.request_seek(ps, x);
 }
 /// Commit a scrub to `target` and clear the preview. This is a bare seek: if the film is PAUSED
@@ -1494,6 +1498,7 @@ fn apply_transport(
     pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>,
 ) {
     let target = super::lifecycle::transport_target(play, super::lifecycle::viewer_paused_for(ps, pa));
+    plx_media::route::note_gesture(ps);
     set_transport_paused(ps, pa, target);
     if let Some(player) = super::bridge::player_mut(pages) {
         player.hud.extend(now, HUD_LINGER_MS);
@@ -1576,6 +1581,7 @@ pub(crate) fn key_pause(
     pages: &mut plx_ui::dispatch::Dispatcher<super::bridge::AppHost>,
 ) {
     if super::bridge::player(pages).is_some() && !super::lifecycle::viewer_paused_for(ps, pa) {
+        plx_media::route::note_gesture(ps);
         if set_transport_paused(ps, pa, true) {
             plx_telemetry::diag::event(plx_telemetry::diag::schema::DiagEvent::FeatureUsed {
                 feature: plx_telemetry::diag::schema::Feature::Pause,
@@ -1632,6 +1638,7 @@ pub(crate) unsafe fn key_play(
                 }
             }
         } else if super::lifecycle::viewer_paused_for(ps, pa) {
+            plx_media::route::note_gesture(ps);
             set_transport_paused(ps, pa, false);
         }
     }

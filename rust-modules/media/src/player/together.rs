@@ -13,22 +13,22 @@
 //!   commit takes: a paused film stays paused, the pump owns that) and `set_transport_paused` (the
 //!   one door every Play and Pause press goes through). No playback-rate nudging: the LG pipeline
 //!   cannot change rate without a reload, so a drift is left or sought (`together::sync`).
-//! - **A request is not a gesture.** Nothing here moves the gesture count the application keeps
-//!   (`PlayerFacts::gestures`): a change the session asked for is never sent back to it.
+//! - **A request is not a gesture.** The person's play, pause and seek presses are counted at the
+//!   application's own transport doors (`route::note_gesture`); [`perform`] goes around them, so a
+//!   change the session asked for never moves the count and is never sent back to it.
 
 use plx_data::together::player::PlayerFacts;
 use plx_data::together::sync::PlayerCmd;
 
-/// What the player says about itself now, `gestures` being the count the application keeps of the
-/// person's play, pause and seek requests on this playback.
-pub fn facts(ps: &crate::route::PlaybackSession, pa: &super::adapter::PlayerAdapter, gestures: u32) -> PlayerFacts {
+/// What the player says about itself now, with the person's gesture count (`route::note_gesture`).
+pub fn facts(ps: &crate::route::PlaybackSession, pa: &super::adapter::PlayerAdapter) -> PlayerFacts {
     PlayerFacts {
         state: super::state(ps),
         position_ns: super::observed_position_ns(ps),
         viewer_paused: super::transport::viewer_paused_for(ps, pa),
         seek_pending: super::seek_pending(ps).is_some(),
         seen_frame: super::seen_frame(ps),
-        gestures,
+        gestures: crate::route::transport_gestures(ps),
     }
 }
 

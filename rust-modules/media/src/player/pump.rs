@@ -4999,6 +4999,10 @@ mod flight_tests {
 /// URL is ignored), so each call is read off `engine::RELOAD_AT_LOG`; the rig stands in for the
 /// reload's EFFECT (a new Engine) where the next seek needs one.
 #[cfg(all(test, feature = "hostsim"))]
+#[path = "together_pump_tests.rs"]
+mod together_pump_tests;
+
+#[cfg(all(test, feature = "hostsim"))]
 mod native_seek_pump_tests {
     use std::sync::atomic::Ordering::Relaxed;
     use super::*;

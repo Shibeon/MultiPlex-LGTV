@@ -117,6 +117,22 @@ pub enum FollowAnswer {
     Leave,
 }
 
+/// Where the gate stands with the session's last Follow, for the UI to show: nothing to say, the
+/// title being opened, the question it holds, or a title it could not find.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum FollowState {
+    #[default]
+    Idle,
+    /// The session's title is being opened at the session's place (its page loads, then it plays).
+    Opening { item: SharedItem },
+    /// Held until the person answers ([`FollowAnswer`]): their own playback plays.
+    Asking(FollowAsk),
+    /// The session's title is on no server this device reaches, so nothing was opened (the web's
+    /// `tog.missing`). A participant reaching the title only through another server's copy is not
+    /// matched by guid: it is told the title is missing rather than shown a guess.
+    Missing { item: SharedItem },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

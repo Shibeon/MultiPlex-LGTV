@@ -20,15 +20,21 @@
 //!   by discovery), not only on the address that answered, which at home is a LAN or `plex.direct`
 //!   name no relay can sit behind.
 //!
-//! The UI (commands, notices, the friends' sessions) and the player (its snapshot, the requests the
-//! session makes of it) are wired by the lanes that build them; this is their seam.
+//! The UI (commands, notices, the friends' sessions) is wired by the lane that builds it; this is its
+//! seam. The player's side (its snapshot, the requests the session makes of it, the one gate every
+//! Follow goes through) is [`player`], run once a frame beside the launch wait.
 use plx_data::stores::together::{
     PlayerSnapshot, TogetherAuth, TogetherCmd, TogetherInput, TogetherPlayerRequest, TogetherProfile, TogetherServer, TogetherSettings, TogetherStore,
 };
+use plx_data::together::player::{FollowAnswer, FollowState};
 use plx_data::together::relay::{PlexConnection, ServerInfo};
 use plx_data::together::session::Notice;
+use plx_data::together::wire::SharedItem;
 
 use super::*;
+
+#[path = "together_player.rs"]
+pub(crate) mod player;
 
 /// The together store, its runner, and what the UI and the player have not taken yet.
 #[derive(Default)]
@@ -39,6 +45,12 @@ pub(crate) struct TogetherFeed {
     player: Option<PlayerSnapshot>,
     notices: Vec<Notice>,
     requests: Vec<TogetherPlayerRequest>,
+    /// The gate's standing with the last Follow (`player`), for the UI.
+    follow: FollowState,
+    /// The UI's answer to the gate's question, performed on the next frame.
+    answer: Option<FollowAnswer>,
+    /// The playing title as the session names it, identified once per playback.
+    item: Option<((plx_plex::plex::ServerId, String), SharedItem)>,
 }
 
 /// The servers this identity sees, as the together store needs them: identity, the connections
@@ -117,10 +129,9 @@ impl Bridge {
     }
 }
 
-/// The seam the UI and the player lanes wire: commands in, notices and player requests out.
+/// The seam the UI and the player side ([`player`]) wire: commands in, notices and player requests out.
 impl TogetherFeed {
     /// The UI's command to the together store, applied on the next frame's pump.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn command(&mut self, cmd: TogetherCmd) {
         self.store.command(cmd);
         plx_machine::idle::invalidate();
@@ -132,8 +143,7 @@ impl TogetherFeed {
         self.settings = settings;
     }
 
-    /// What the player plays, for the session to follow (lane 4 hands it each frame).
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// What the player plays, for the session to follow (`player` hands it each frame).
     pub(crate) fn set_player(&mut self, snapshot: Option<PlayerSnapshot>) {
         self.player = snapshot;
     }
@@ -145,13 +155,11 @@ impl TogetherFeed {
     }
 
     /// What the session asked of the player and the player has not taken yet.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn take_player_requests(&mut self) -> Vec<TogetherPlayerRequest> {
         std::mem::take(&mut self.requests)
     }
 
-    /// The live session's view, for the UI.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// The live session's view, for the UI and the player's side.
     pub(crate) fn view(&self) -> Option<plx_data::together::session::View> {
         self.store.view()
     }

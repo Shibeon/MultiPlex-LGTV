@@ -206,6 +206,11 @@ pub struct PlaybackSession {
     /// still goes out, exactly as a normal play's. Carried across the plan's landing and a retry of
     /// the same playback, cleared by every new request.
     resume_reset_waived: bool,
+    /// The viewer's own play, pause and seek requests on the player so far ([`note_gesture`]):
+    /// a count only ever moves forward, carried across a plan's landing and every new request, so a
+    /// Watch Together session tells the person's gesture from a change it asked for itself (which
+    /// never counts) by its moving. Wraps.
+    transport_gestures: u32,
     /// Read-only publication of Player.repair for the HUD. Never authorizes a resource effect.
     pub repair_status: plx_platform::tv::sandbox::State,
     /// The request which produced this attempt, retained for terminal Retry / Choose quality.
@@ -1703,6 +1708,7 @@ impl PlaybackSession {
         finished: false,
         presented: false,
         resume_reset_waived: false,
+        transport_gestures: 0,
         repair_status: plx_platform::tv::sandbox::State::Idle,
         request: None,
         requested_resume_ns: 0,
@@ -1813,6 +1819,7 @@ impl PlaybackSession {
             finished,
             presented,
             resume_reset_waived,
+            transport_gestures,
             repair_status,
             request,
             requested_resume_ns,
@@ -1905,6 +1912,7 @@ impl PlaybackSession {
             finished: *finished,
             presented: *presented,
             resume_reset_waived: *resume_reset_waived,
+            transport_gestures: *transport_gestures,
             repair_status: *repair_status,
             request: request.clone(),
             requested_resume_ns: *requested_resume_ns,
@@ -7081,6 +7089,21 @@ pub fn waive_resume_reset(ps: &mut PlaybackSession) {
 pub fn resume_reset_waived(ps: &PlaybackSession) -> bool {
     ps.resume_reset_waived
 }
+/// The viewer asked the player to play, pause or seek ([`PlaybackSession::transport_gestures`]).
+/// Called by the application's own transport doors, never by a change a session asked for.
+pub fn note_gesture(ps: &mut PlaybackSession) {
+    ps.transport_gestures = ps.transport_gestures.wrapping_add(1);
+}
+/// See [`note_gesture`].
+pub fn transport_gestures(ps: &PlaybackSession) -> u32 {
+    ps.transport_gestures
+}
+/// The item this playback was asked for ([`request_play`]), `(server, ratingKey)`: known from the
+/// request on, before the plan lands and names it [`cur_rk`]. `None` with no request, or for a
+/// hero preview's.
+pub fn requested_item(ps: &PlaybackSession) -> Option<(ServerId, &str)> {
+    ps.request.as_ref().filter(|r| !r.preview).map(|r| (r.sid, r.rk.as_str()))
+}
 /// The playing version's `mediaIndex` — see [`PlaybackSession::cur_media_index`].
 fn cur_media_index(ps: &PlaybackSession) -> usize {
     ps.cur_media_index
@@ -11724,6 +11747,7 @@ fn apply_plan(ps: &mut PlaybackSession, meta: &mut plx_data::stores::metadata::M
             finished: false,
             presented: false,
             resume_reset_waived: s.resume_reset_waived,
+            transport_gestures: s.transport_gestures,
             repair_status: plx_platform::tv::sandbox::State::Idle,
             request,
             requested_resume_ns,

@@ -2172,6 +2172,15 @@ pub fn set_playing_markers_for_test(state: &mut MetadataState, markers: Vec<Mark
     state.playing = Some(PlayingItem { markers, ..PlayingItem::with_subs(Vec::new()) });
 }
 
+/// TEST-ONLY installer for the playing leaf's identity (`sid`, `rk`, Plex `kind`), what a played
+/// item's detail landing installs, for a rig that names the playing title without a fetch.
+/// Crate-global, so callers hold [`plx_base::testlock::serial`].
+#[cfg(any(test, feature = "test-support"))]
+pub fn set_playing_for_test(state: &mut MetadataState, sid: plx_plex::plex::ServerId, rk: &str, kind: &str) {
+    plx_base::testlock::assert_held("the playing store (set_playing_for_test)");
+    state.playing = Some(PlayingItem { sid, rk: rk.into(), kind: kind.into(), ..PlayingItem::with_subs(Vec::new()) });
+}
+
 /// TEST-ONLY installer for the playing item's chapters: lets a rig put a Chapters strip under the HUD (the
 /// PLAYING leaf's `Chapter[]`, which `playing_chapters` reads) without a fetch. Crate-global, so callers hold
 /// [`plx_base::testlock::serial`].
