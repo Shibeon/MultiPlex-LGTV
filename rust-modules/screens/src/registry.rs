@@ -1179,6 +1179,10 @@ pub enum ContentReq {
     /// BACK on a top-bar page that is not Home: the loop returns to Home (a bar page is a root,
     /// so there is nothing under it to pop to).
     LeaveToHome,
+    /// **A Watch Together command from a page** (the Friends page's *Join* on a friend's session and
+    /// its *Join with a code*): the application's session owner (`app/together.rs`) takes it; the
+    /// page performs nothing itself.
+    Together(plx_data::stores::together::TogetherCmd),
     Play { play: PlayIntent, resume_ns: i64 },
     /// Start a hero preview. Does not push the player route.
     PreviewStart {
@@ -2876,7 +2880,10 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // the replay anchors.
 // Watch Together's question on the player page: the repair alert's state gains `together` (whose
 // question it holds). Previous pin: 0xaffa_778c_f4f5_f3dc; re-record the replay anchors.
-const SCREEN_SHAPES_PIN: u64 = 0x38b0_f603_015a_eb6e;
+// The Friends page's Watch Together: `FriendsScreen::SHAPE` gains the friends' sessions' cards and
+// the invitation field (`together:[u32],editing:bool,code:str`). Previous pin: 0x38b0_f603_015a_eb6e;
+// re-record the replay anchors.
+const SCREEN_SHAPES_PIN: u64 = 0x1e31_0b96_f394_5e01;
 
 #[cfg(test)]
 mod arg_tests {

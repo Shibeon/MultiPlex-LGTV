@@ -610,6 +610,8 @@ pub(crate) fn content_requests(app: &mut App, fr: &mut Frame) {
                 }
             }
             ContentReq::PreviewStop => halt_preview(app),
+            // the Friends page's Join and Join with a code: the session owner takes them
+            ContentReq::Together(command) => app.bridge.together.command(command),
             // Full-trailer mode's transport. Unlike every neighbour here it does NOT halt the
             // preview — it is the one request whose whole point is that the session survives it.
             ContentReq::PreviewTransport(play) => {

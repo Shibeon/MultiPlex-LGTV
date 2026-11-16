@@ -47,6 +47,9 @@ const ID_FRIEND: u64 = 1 << 32;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FriendRoom {
     pub(crate) relay: String,
+    /// The relay's Plex server (`machineIdentifier`), where `key` is the title's rating key.
+    pub(crate) server: String,
+    pub(crate) key: Option<String>,
     pub(crate) room: String,
     pub(crate) name: String,
     pub(crate) title: String,
@@ -59,6 +62,8 @@ impl FriendRoom {
     pub(crate) fn of(f: &FriendSession) -> FriendRoom {
         FriendRoom {
             relay: f.relay.clone(),
+            server: f.server.clone(),
+            key: f.card.key.clone(),
             room: f.room.clone(),
             name: f.card.name.clone(),
             title: f.card.title.clone(),
@@ -298,7 +303,7 @@ mod tests {
     }
 
     fn session(room: &str, name: &str, title: &str) -> FriendRoom {
-        FriendRoom { relay: "wss://relais.exemple.fr".into(), room: room.into(), name: name.into(), title: title.into(), sub: None, count: 2, playing: true }
+        FriendRoom { relay: "wss://relais.exemple.fr".into(), server: String::new(), key: None, room: room.into(), name: name.into(), title: title.into(), sub: None, count: 2, playing: true }
     }
 
     #[test]
