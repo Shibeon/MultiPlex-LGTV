@@ -3248,7 +3248,8 @@ pub mod keypin {
         }
     }
 
-    /// At most this many relay hosts are ever admitted to the bundled roots ([`admit_relay_host`]).
+    /// At most this many relay hosts are admitted to the bundled roots at once ([`admit_relay_host`]:
+    /// the least recently admitted leaves first).
     pub const MAX_RELAY_HOSTS: usize = 16;
 
     fn relay_hosts() -> MutexGuard<'static, Vec<String>> {
@@ -3271,13 +3272,18 @@ pub mod keypin {
     /// for no other: a relay is a public HTTPS service whose certificate may chain to a root a 2020
     /// firmware lacks, the same failure `*.plex.direct` has. Admission changes nothing else: the
     /// bundle is still offered only after a strict failure for a missing issuer, and the chain,
-    /// dates and name are all still checked. Bounded ([`MAX_RELAY_HOSTS`], first come), and a name
-    /// that is not a clean DNS name is not admitted.
+    /// dates and name are all still checked. Bounded ([`MAX_RELAY_HOSTS`]) by recency: the runner
+    /// admits a host right before each dial, so admitting one makes it the newest, and past the
+    /// bound the least recently admitted host leaves. Many candidate relays probed in turn can
+    /// therefore never shut out the one being dialled now. A name that is not a clean DNS name is
+    /// not admitted.
     pub fn admit_relay_host(host: &str) {
         let Some(host) = clean_host(host) else { return };
         let mut hosts = relay_hosts();
-        if !hosts.contains(&host) && hosts.len() < MAX_RELAY_HOSTS {
-            hosts.push(host);
+        hosts.retain(|h| *h != host);
+        hosts.push(host);
+        if hosts.len() > MAX_RELAY_HOSTS {
+            hosts.remove(0);
         }
     }
 

@@ -24,8 +24,13 @@
 //!   by discovery), not only on the address that answered, which at home is a LAN or `plex.direct`
 //!   name no relay can sit behind.
 //!
-//! The UI (commands, notices, the friends' sessions) is wired by the lane that builds it; this is its
-//! seam. The player's side (its snapshot, the requests the session makes of it, the one gate every
+//! The UI side is wired here and in its two callers: [`ui`] holds the notice card and the friends'
+//! listing cadence, which [`TogetherFeed::ui_frame`] steps once a frame, [`TogetherFeed::notice_frame`]
+//! publishes to the dispatcher and [`TogetherFeed::perform`] answers; [`TogetherFeed::player_ask`]
+//! puts the follow gate's question on the player page. `app/run.rs` calls them each frame; the
+//! commands ([`TogetherFeed::command`]) come from the player's More menu (`app/playback.rs`) and the
+//! screens' `ContentReq::Together` (`app/content.rs`); `app/friends.rs` builds the Friends page from
+//! the published listing. The player's side (its snapshot, the requests the session makes of it, the one gate every
 //! Follow goes through) is [`player`], run once a frame beside the launch wait.
 use plx_data::stores::together::{
     PlayerSnapshot, TogetherAuth, TogetherCmd, TogetherInput, TogetherPlayerRequest, TogetherProfile, TogetherServer, TogetherSettings, TogetherStore,

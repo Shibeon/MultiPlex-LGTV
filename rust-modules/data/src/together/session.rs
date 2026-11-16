@@ -25,7 +25,7 @@
 //! | `SocketOpened` / `SocketClosed` | `Live`, its `conn` | send a `want` tick / reconnect after 1, 2, 4 … 15 s |
 //! | `SocketBinary` → `Opened` | `Live`, its `conn` | `Open`, then the message: peers, `sync`, host step-down, `Player` commands, `Notice::Action` |
 //! | `Tick` | any | every 3 s a tick; peers silent for 12 s leave; the first participant takes the hand when the host is gone; reconnect timer; in any phase, a friend allow-list past `FRIENDS_TTL_US` is dropped |
-//! | `Attach`, `Player`, `Detach`, `ShareTitle` | `Live` | `sync.poll`, an `intent` for a gesture, a tick |
+//! | `Attach`, `Player`, `Detach` | `Live` | `sync.poll`, an `intent` for a gesture, a tick |
 //! | `Sealed` | the send that asked | `SendBinary` (and `CloseSocket` after the farewell `bye`) |
 //! | `Leave` | `Live` | `release` (an announced host), `bye`, then `CloseSocket`; `Idle` |
 //! | `SetVisible` | `Live` | host: announce or `unlist`; a tick |
@@ -224,8 +224,6 @@ pub enum TogetherEvent {
     /// An observation of the attached player (every 500 ms).
     Player(PlayerObs),
     Detach,
-    /// Host: the session moves to this title.
-    ShareTitle(SharedItem),
     Leave,
     /// Host: list the session to its Plex friends, or not.
     SetVisible(bool),
@@ -529,7 +527,6 @@ impl fmt::Debug for TogetherEvent {
             TogetherEvent::Attach { item, obs } => f.debug_struct("Attach").field("item", item).field("obs", obs).finish(),
             TogetherEvent::Player(o) => f.debug_tuple("Player").field(o).finish(),
             TogetherEvent::Detach => f.write_str("Detach"),
-            TogetherEvent::ShareTitle(i) => f.debug_tuple("ShareTitle").field(i).finish(),
             TogetherEvent::Leave => f.write_str("Leave"),
             TogetherEvent::SetVisible(v) => f.debug_tuple("SetVisible").field(v).finish(),
             TogetherEvent::SocketText { conn, text } => f.debug_struct("SocketText").field("conn", conn).field("bytes", &text.len()).finish(),
@@ -1059,17 +1056,6 @@ fn reduce(phase: Phase, ev: TogetherEvent, desk: &mut Desk, fx: &mut Vec<Togethe
                 live.playing_item = None;
                 let tick = tick_of(&live, false);
                 send(&live, Message::Tick(tick), desk, fx);
-                (Phase::Live(live), Handled::Yes)
-            }
-            other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),
-        },
-        TogetherEvent::ShareTitle(item) => match phase {
-            Phase::Live(mut live) if live.host => {
-                live.item = Some(item.clone());
-                fx.push(TogetherFx::Notice(Notice::Item(item)));
-                let tick = tick_of(&live, false);
-                send(&live, Message::Tick(tick), desk, fx);
-                announce(&mut live, false, desk, fx);
                 (Phase::Live(live), Handled::Yes)
             }
             other @ (Phase::Idle | Phase::Finding(_) | Phase::Deriving(_) | Phase::Joining(_) | Phase::FriendJoin(_) | Phase::Live(_)) => (other, Handled::No),

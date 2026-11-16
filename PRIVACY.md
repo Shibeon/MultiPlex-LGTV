@@ -155,8 +155,8 @@ messages are then still encrypted end to end as described above. When the televi
 certificate store does not hold the root a relay's certificate chains to (a 2020 firmware lacks
 Let's Encrypt's 2025 roots), MultiPlex retries that connection once against the four Let's Encrypt
 root certificates it ships (ISRG Root X1, X2, YR and YE) — for the relay hosts it is about to
-contact, at most 16 of them, as it already does for `*.plex.direct` server names — with the chain,
-dates and host name still checked.
+contact, the 16 most recently contacted at most, as it already does for `*.plex.direct` server
+names — with the chain, dates and host name still checked.
 
 Watch Together stores nothing on the television but its two settings, Friends' session alerts and
 Visible to my Plex friends: invitation codes, session keys, tokens and the friends list are held in

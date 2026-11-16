@@ -233,7 +233,6 @@ pub enum TogetherCmd {
     Join { code: String },
     Leave,
     SetVisible(bool),
-    ShareTitle(SharedItem),
     RefreshFriends,
     JoinFriend { relay: String, room: String },
 }
@@ -718,7 +717,6 @@ impl TogetherStore {
             }
             TogetherCmd::Leave => Some(TogetherEvent::Leave),
             TogetherCmd::SetVisible(on) => Some(TogetherEvent::SetVisible(on)),
-            TogetherCmd::ShareTitle(item) => Some(TogetherEvent::ShareTitle(item)),
             // A managed profile reads no friends' sessions (it has no Friends page, as on the web).
             TogetherCmd::RefreshFriends => input.may_list().then(|| TogetherEvent::RefreshFriends { servers: input.infos() }),
             TogetherCmd::JoinFriend { relay, room } => input.may_list().then_some(TogetherEvent::JoinFriend { me, relay, room }),
