@@ -2069,6 +2069,27 @@ mod sections {
         assert_eq!((run.group(), run.held()), (GROUP_TABS.0, Some(ELEM_TAB_BASE)));
     }
 
+    /// **An actionable card does not take the page's own Up.** With the tabs above the page, Up off the page's top
+    /// row is the page's word (it puts the page away, `answer_edge`); a card standing over the player must not turn
+    /// that press into a jump to Join. Only the transport's top group opts in to the card (`PlayerScreen::links`).
+    #[test]
+    fn rising_tabs_up_off_the_page_puts_it_away_with_an_actionable_notice_standing() {
+        use plx_ui::dispatch::NOTICE_ELEM;
+        let _g = plx_base::testlock::serial();
+        assert_idle_playhead();
+        let _chapters = Chaptered::install();
+        let mut run = rising_tabs_run();
+        run.d.set_notice(Some(plx_ui::Rect::new(1200.0, plx_ui::action_notice::PLAYER_TOP, 560.0, 116.0)), true);
+        run.open_from_tab(0);
+        run.step('D');
+        run.step('U');
+        assert_eq!(run.held(), Some(ELEM_SECTION_BASE), "Up inside the page walks it");
+        run.step('U');
+        assert_ne!(run.held(), Some(NOTICE_ELEM), "the page's Up is not the card's");
+        assert_eq!(run.open_sections(), Vec::<Section>::new(), "Up off the page puts it away");
+        assert_eq!((run.group(), run.held()), (GROUP_TABS.0, Some(ELEM_TAB_BASE)));
+    }
+
     /// **Tabs above the page: Down off the page stays put.** The far edge is a wall: nothing closes, focus does not
     /// move, nothing is asked. It does not raise the linger either, and needs no more: an open page holds the
     /// transport up by itself (`HudState::visible`), and closing it extends the linger from there (`close_section`).

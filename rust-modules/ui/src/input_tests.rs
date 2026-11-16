@@ -409,6 +409,64 @@ fn an_up_off_the_pages_top_reaches_the_actionable_notice() {
     assert_eq!(elem(&d), Some(NOTICE_ELEM), "then the card, off the bar");
 }
 
+/// **Only an Up the page has nowhere to take reaches the card on its own.** A `Stop`, a `Nav` and a
+/// `Screen` edge are the page's own word for Up (the player's Screen edge puts its page away), so an
+/// actionable card does not take them; a page that wants the card off such a group declares the link
+/// (`Screen::links`, to `tabs::NOTICE`) and gets it.
+#[test]
+fn only_a_geometric_up_or_a_declared_link_reaches_the_notice() {
+    use super::dispatch::NOTICE_ELEM;
+    for (page, reaches) in [(820, false), (821, false), (822, false), (823, true)] {
+        let (mut d, mut rig) = boot(FixtureArg::Page(page));
+        let e = d.nav.top_page().unwrap().id;
+        d.set_focus(Some(FocusKey { entry: e, elem: 1 }));
+        d.set_notice(Some(CARD), true);
+        d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16)), key_up(Key::Up, tick(16))], vec![], &mut NoTap);
+        assert_eq!(d.notice_focused(), reaches, "Page({page}): Up off its row reaches the card");
+        if reaches {
+            assert_eq!(elem(&d), Some(NOTICE_ELEM));
+            d.frame(&mut rig, tick(32), vec![key(Key::Down, tick(32)), key_up(Key::Down, tick(32))], vec![], &mut NoTap);
+            assert_eq!(elem(&d), Some(1), "Page({page}): DOWN gives the focus back");
+        }
+    }
+}
+
+/// **A lost key-up does not swallow the next press** (pr-reviewer, second pass #2). The notice
+/// swallows the rest of a press it answered until that key's Up edge; the system keyboard can eat a
+/// key-up, and the next press of the same key on the page must still get its repeats. A Down edge the
+/// notice does not take ends the swallow, and so does the focus leaving the card by itself.
+#[test]
+fn a_lost_key_up_does_not_swallow_the_pages_next_press() {
+    use super::dispatch::NOTICE_ELEM;
+    let repeat = |k: Key, at: Tick| ev(InputKind::Key { key: k, sym: 0, wcode: 0, edge: Edge::Repeat, at_edge: false }, at);
+    // DOWN gives the focus back; its key-up never comes.
+    let (mut d, mut rig) = boot(FixtureArg::Page(801));
+    let e = d.nav.top_page().unwrap().id;
+    d.set_focus(Some(FocusKey { entry: e, elem: 1 }));
+    d.set_notice(Some(CARD), true);
+    d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16)), key_up(Key::Up, tick(16))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(NOTICE_ELEM));
+    d.frame(&mut rig, tick(32), vec![key(Key::Down, tick(32))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(1));
+    let heard = events_of(&d, 0).matches("entry_owner").count();
+    d.frame(&mut rig, tick(48), vec![key(Key::Down, tick(48)), repeat(Key::Down, tick(64))], vec![], &mut NoTap);
+    assert_eq!(events_of(&d, 0).matches("entry_owner").count(), heard + 2, "the page hears the new press and its repeat");
+
+    // RIGHT held at the card's wall when the card goes: the held key's repeats are the page's.
+    let (mut d, mut rig) = boot(FixtureArg::Page(801));
+    let e = d.nav.top_page().unwrap().id;
+    d.set_focus(Some(FocusKey { entry: e, elem: 0 }));
+    d.set_notice(Some(CARD), true);
+    d.frame(&mut rig, tick(16), vec![key(Key::Up, tick(16)), key_up(Key::Up, tick(16))], vec![], &mut NoTap);
+    d.frame(&mut rig, tick(32), vec![key(Key::Right, tick(32))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(NOTICE_ELEM), "RIGHT stops at the card's wall");
+    d.set_notice(None, false);
+    d.frame(&mut rig, tick(48), vec![], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(0), "the card went and gave the focus back");
+    d.frame(&mut rig, tick(64), vec![repeat(Key::Right, tick(64))], vec![], &mut NoTap);
+    assert_eq!(elem(&d), Some(1), "the held RIGHT's repeat moves the page");
+}
+
 /// OK on the notice takes its action and gives the focus back where it came from; BACK and DOWN give
 /// it back without the action; LEFT, RIGHT and UP stop at its walls; and the page never sees any of
 /// those keys, nor the key-ups of the presses the notice answered.

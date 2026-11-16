@@ -2436,6 +2436,18 @@ impl PlayerScreen {
             .map(|(i, _, _)| i)
     }
 
+    /// **Up off the transport's top group reaches the application's notice** (`plx_ui::containers::tabs::NOTICE`),
+    /// declared here because the dispatcher leaves a `Screen` edge to the screen: Up off the transport would hide it,
+    /// and the card, while one offers an action, is what stands above it. Only from a TRANSPORT group (the bar, the
+    /// row, the tabs, the head): an open page's own top edge (the strip, a section's buttons, with the tabs above it)
+    /// keeps its word, which puts the page away (`answer_edge`). Pushed LAST, so a link the order declared from the
+    /// same group wins; with no card standing the group is not composed, the link is not taken and the edge answers.
+    fn notice_link(order: &player_hud::travel::Order, out: &mut Vec<Link>) {
+        if let Some(top) = order.top().filter(|g| [GROUP_SCRUB, GROUP_ROW, GROUP_TABS, GROUP_HEAD].contains(g)) {
+            out.push(Link { from: top, dir: Dir::Up, to: plx_ui::containers::tabs::NOTICE });
+        }
+    }
+
     /// **The group the HUD's ring is drawn on**: the one it holds, except while the engine holds the
     /// focus on the application's transient notice (`dispatch::NOTICE_ELEM`, reached UP off the
     /// topmost transport group): then no HUD control is focused, so the card's pill is the ONE ring
@@ -2821,7 +2833,8 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Screen<H> for PlayerScreen {
     /// is drawn under. Where a link lands is the destination group's `seat`. What no link covers is the group's
     /// edge rule: Up off the top group and Down off the bottom one are `EdgeRule::Screen`, which the dispatcher
     /// re-delivers to [`PlayerScreen::step`] as the key with `at_edge` set — [`PlayerScreen::answer_edge`] is the
-    /// screen's answer.
+    /// screen's answer — unless the application's notice offers an action: the transport's top group links Up to it
+    /// ([`PlayerScreen::notice_link`]).
     ///
     /// **A MODAL section changes it** (D6/D8): it has taken the middle, so the one way into it is from the tab
     /// that opened it, in the direction the page lies from the tabs ([`player_hud::travel::Order::toward_page`]:
@@ -2839,9 +2852,11 @@ impl<H: PlayerLike + crate::registry::MetadataLike> Screen<H> for PlayerScreen {
             // The head beside the title (format 1.2) stays on screen over a modal page, and so do the tabs: they
             // still reach each other (MultiPlex's ⓘ disc, Down, to its More pill with the panel open, and Up back).
             order.link_pair(GROUP_HEAD, GROUP_TABS, out);
+            Self::notice_link(&order, out);
             return;
         }
         order.links(out);
+        Self::notice_link(&order, out);
     }
     /// The transport's clocks, queued for the presenting side to rasterise before the draw's
     /// back-buffer wait (`player_hud::motion::ClockWarm`). Only while the playbar is drawn: the gate is

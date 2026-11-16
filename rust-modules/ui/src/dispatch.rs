@@ -73,12 +73,15 @@ where
         key.index() == Some(NOTICE_ELEM)
     }
 
-    /// **The one way into the notice**: a declared `Link` UP from the group the focus is in, when the
-    /// page's own model has nowhere to take that UP — a group whose UP edge is `Geometric` with
-    /// nothing above it (the top of a bar page is the strip; of a page without one, its first row),
-    /// or `Screen` (the player's transport, whose answer would hide it). A `Stop` edge (a decision
-    /// card, a wall the page declared) and a `Nav` edge are the page's own word and are kept, and so
-    /// is a link the page declared itself. Asked only after the page's own move answered nothing.
+    /// **The way into the notice the page does not declare**: a `Link` UP from the group the focus is
+    /// in, when the page's own model has nowhere to take that UP — a group whose UP edge is
+    /// `Geometric` with nothing above it (the top of a bar page is the strip; of a page without one,
+    /// its first row). A `Stop` edge (a decision card, a wall the page declared), a `Nav` edge and a
+    /// `Screen` edge (the screen answers it: the player puts its page away, or hides its transport)
+    /// are the page's own word and are kept. A page that wants the card off such a group declares the
+    /// link to `tabs::NOTICE` in its own `Screen::links` (the player does, from its transport's top
+    /// group), and that link is taken by the page's own move. Asked only after that move answered
+    /// nothing.
     fn notice_link(&self, cur: FocusKey<H::Elem>, links: &[super::screen::Link], cx: &Cx<'_, H>)
         -> Option<super::screen::Link> {
         self.notice?;
@@ -92,7 +95,7 @@ where
         let mut groups = Vec::new();
         self.groups(cx, &mut groups);
         let spec = groups.iter().find(|s| s.id == g)?;
-        matches!(spec.edge[0], EdgeRule::Geometric | EdgeRule::Screen)
+        matches!(spec.edge[0], EdgeRule::Geometric)
             .then_some(super::screen::Link { from: g, dir: Dir::Up, to: super::containers::tabs::NOTICE })
     }
 }
@@ -2404,6 +2407,11 @@ where
                 true
             }
             ScreenEvent::Input(InputEvent { kind: InputKind::Key { key, edge, .. }, .. }) => {
+                // A new press ends the last one's swallow, whose key-up may never have come (the
+                // system keyboard eats key-ups): the notice sets it again below if it takes this one.
+                if *edge == Edge::Down {
+                    self.notice_swallow = None;
+                }
                 if *edge != Edge::Down && self.notice_swallow == Some(*key) {
                     if *edge == Edge::Up {
                         self.notice_swallow = None;
@@ -2480,6 +2488,8 @@ where
     /// Give the focus back from the notice to where it came from (the notice timed out, or went).
     pub fn release_notice(&mut self) {
         if let Some(st) = self.restore_from_notice() {
+            // The focus left the card without a press: a key held on it is the page's again.
+            self.notice_swallow = None;
             self.queue.push_back(st);
         }
     }
@@ -2566,9 +2576,9 @@ where
                         view.page.links(&mut links);
                         let outcome = engine.move_dir(owner, view, &links, dir, cx);
                         // An UP the page's own model has nowhere to take goes on to the notice, by
-                        // the one link `PageWithStrip::notice_link` declares (never a Stop or Nav edge).
-                        let off_the_top = dir == Dir::Up
-                            && matches!(outcome, Outcome::Nothing | Outcome::Edge(EdgeRule::Screen));
+                        // the link `PageWithStrip::notice_link` declares (never a Stop, Nav or Screen
+                        // edge: those are the page's word, and a page's own link was taken above).
+                        let off_the_top = dir == Dir::Up && matches!(outcome, Outcome::Nothing);
                         match engine.current(owner).filter(|_| off_the_top).and_then(|cur| view.notice_link(cur, &links, cx)) {
                             Some(link) => {
                                 links.push(link);
