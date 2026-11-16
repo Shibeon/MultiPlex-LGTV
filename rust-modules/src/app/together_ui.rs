@@ -108,6 +108,8 @@ pub(crate) struct TogetherUi {
     on_friends_page: bool,
     /// The gate's standing last shown.
     follow: FollowState,
+    /// …and whether a player page was up when it was (it asks the question itself).
+    follow_on_player: bool,
     /// The friends' sessions last listed, for the Friends page.
     pub(crate) sessions: Vec<FriendRoom>,
     /// A key-down the engaged notice took: its key-up is the notice's too.
@@ -214,11 +216,21 @@ impl TogetherUi {
     }
 
     /// The gate's standing, each frame; only a change posts.
+    ///
+    /// The question has ONE place, re-decided whenever the gate's standing OR the player page's
+    /// presence changes: the player page's decision card while a page is up (`player_ask`), this
+    /// card otherwise. So a page that mounts over a standing card takes the question from it, and
+    /// a page that leaves with the question unanswered hands it back.
     pub(crate) fn on_follow(&mut self, f: &FollowState, ctx: &UiCtx) {
-        if *f == self.follow {
+        if *f == self.follow && ctx.player_page == self.follow_on_player {
             return;
         }
+        let moved_only = *f == self.follow;
         self.follow = f.clone();
+        self.follow_on_player = ctx.player_page;
+        if moved_only && !matches!(f, FollowState::Asking(_)) {
+            return;
+        }
         match f {
             FollowState::Idle => {
                 self.withdraw(ID_FOLLOW);
@@ -235,7 +247,9 @@ impl TogetherUi {
             }
             FollowState::Asking(ask) => {
                 self.withdraw(ID_FOLLOW);
-                if !ctx.player_page {
+                if ctx.player_page {
+                    self.withdraw(ID_ASK);
+                } else {
                     let text = format!("{} {}", msg::together_ask_title(), msg::together_ask_body(title_of(&ask.item)));
                     self.post(Card::actionable(ID_ASK, text, msg::together_join()).mark(Icon::Crowd).sticky(), Some(NoticeAction::Follow(FollowAnswer::Join)));
                 }
@@ -270,6 +284,11 @@ impl TogetherUi {
                 false
             }
         }
+    }
+
+    #[cfg(test)]
+    fn activate_peek(&self, id: u64) -> bool {
+        self.actions.iter().any(|(a, _)| *a == id)
     }
 
     /// The card OK answered: what to do.
@@ -392,6 +411,35 @@ mod tests {
         assert_eq!(ui.key(NoticeKey::Ok).1, Some(NoticeAction::Follow(FollowAnswer::Join)));
         ui.on_follow(&FollowState::Idle, &ctx());
         assert!(ui.activate(ID_ASK).is_none());
+    }
+
+    /// The question is asked in ONE place: the player page's decision card while a player page is
+    /// up, the notice card otherwise, and the place follows the player page as it comes and goes
+    /// while the gate keeps asking.
+    #[test]
+    fn the_question_moves_between_the_card_and_the_player_page_as_the_page_comes_and_goes() {
+        let ask = FollowState::Asking(FollowAsk { item: item("Dune"), position: None, playing: item("Mine") });
+        let on_card = |ui: &TogetherUi| ui.notice.current().is_some_and(|c| c.id == ID_ASK) && ui.activate_peek(ID_ASK);
+        let settle = |ui: &mut TogetherUi| for _ in 0..80 { ui.notice.step(16); };
+
+        // Asked with no player page: the card asks. A player page mounts: the page asks, the card goes.
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&ask, &ctx());
+        ui.notice.step(16);
+        assert!(on_card(&ui), "no player page: the card asks");
+        ui.on_follow(&ask, &UiCtx { player_page: true, ..ctx() });
+        settle(&mut ui);
+        assert!(!ui.notice.busy(), "the player page asks now: no second question over its card");
+        assert!(!ui.activate_peek(ID_ASK), "and the card's Join went with it");
+
+        // Asked while the player page is up: nothing on the card. The page goes, the gate still asks:
+        // the card asks.
+        let mut ui = TogetherUi::default();
+        ui.on_follow(&ask, &UiCtx { player_page: true, ..ctx() });
+        assert!(!ui.notice.busy());
+        ui.on_follow(&ask, &ctx());
+        ui.notice.step(16);
+        assert!(on_card(&ui), "the player page left with the question unanswered: the card asks it");
     }
 
     #[test]
