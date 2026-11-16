@@ -920,8 +920,9 @@ fn head_index(state: &CompiledState, c: &crate::hud_format::compile::ControlRect
 }
 
 /// **A disc's caption** (`caption: true`, format 1.2): the app's short read-out under the glyph. A `seek` names its
-/// interval: the viewer's Skip interval under `by: "setting"`, the literal seconds otherwise. `None` for any other
-/// control and for a disc that asked for none.
+/// interval: the viewer's Skip interval under `by: "setting"`, the literal seconds otherwise; an `open_more` disc on
+/// Watch Together's page (format 1.3) names how many watch together, and nothing outside a session. `None` for any
+/// other control and for a disc that asked for none.
 fn caption_of(c: &crate::hud_format::compile::ControlRect, m: &HudModel) -> Option<String> {
     use super::command::SeekDir;
     if !c.caption {
@@ -930,6 +931,7 @@ fn caption_of(c: &crate::hud_format::compile::ControlRect, m: &HudModel) -> Opti
     let (back, secs) = match c.act? {
         HudCommand::Seek(SeekBy::Setting(dir)) => (dir == SeekDir::Back, i64::from(m.skip_secs)),
         HudCommand::Seek(SeekBy::Secs(n)) => (n.get() < 0, i64::from(n.get()).abs()),
+        HudCommand::OpenMore(super::command::MorePage::Together) => return (m.together > 0).then(|| m.together.to_string()),
         _ => return None,
     };
     Some(if back {
@@ -966,14 +968,18 @@ fn draw_control(
         // the model cannot disagree); its glyph is its `face` at the command's state, else the command's
         // own; its rest and focus faces are the widget's.
         Widget::Disc => {
-            // a head disc stands outside the row, so it draws whatever occupies the row
+            // a head disc stands outside the row, so it draws whatever occupies the row; so does a tab disc
+            // (Watch Together's, format 1.3)
             let head = head_index(state, c).filter(|_| !c.is_action && row_index.is_none());
+            let tab = state.tab_slot(c).and_then(|i| i32::try_from(i).ok());
             let controls = match f.slot {
                 ControlSlot::Discs(controls) => controls,
-                _ if head.is_some() => f.model.controls,
+                _ if head.is_some() || tab.is_some() => f.model.controls,
                 _ => return,
             };
-            let (i, focused, scale) = if c.is_action {
+            let (i, focused, scale) = if let Some(i) = tab {
+                (i, f.focus == super::geometry::GROUP_TABS && f.tab == i, 1.0)
+            } else if c.is_action {
                 let Some(i) = super::geometry::section_buttons(state).position(|k| k.id == c.id) else { return };
                 let Ok(index) = i32::try_from(i) else { return };
                 (index, (f.focus == GROUP_SECTION && f.btn == index) || row.held_button() == Some(i), row.section_scale(i))

@@ -474,7 +474,7 @@ logical resource ids. Icon and face roles validate their resources as the existi
 Identity and resource inventory have one owner in the manifest. Strict parsing rejects unknown and
 duplicate keys in both documents, using the shared duplicate-preserving JSON reader. The schema URLs
 are `https://plxnative.com/hud/schema/manifest/1.0.json` and
-`https://plxnative.com/hud/schema/hud/1.0.json`, `https://plxnative.com/hud/schema/hud/1.1.json` or `https://plxnative.com/hud/schema/hud/1.2.json`. Each optional `$schema` must agree with its document.
+`https://plxnative.com/hud/schema/hud/1.0.json`, `https://plxnative.com/hud/schema/hud/1.1.json`, `https://plxnative.com/hud/schema/hud/1.2.json` or `https://plxnative.com/hud/schema/hud/1.3.json`. Each optional `$schema` must agree with its document.
 
 The initial archive profile is STORE-only. Entries and central records are in ascending ASCII path order.
 ZIP flags, compression, disk numbers, comments, extras and internal attributes are zero. Version-needed
@@ -647,7 +647,7 @@ Each maps to an action the app already performs; the performer is shared with th
 | `seek` | `by`: a nonzero integer of seconds, whose sign is the direction (then `dir` is forbidden), or `"setting"`, which requires `dir`: `back` or `forward` | `commit_jump`'s `SeekBurst` and `CommitSeek`, extracted with the signed step in ns as a parameter (today `signed_step(forward)` = `scrub_step_ns() x +-1`, `seek_jump.rs:16-18`; a literal `by` passes `by x 10^9`) and a keep-HUD flag (today `self.hud.hide(false)`, `:43`): a control press keeps the HUD up and extends its linger, the hidden-HUD tap still hides it (F14) | duration known (`seek_jump.rs:39-40`) | Left/Right, FF/REW, hold |
 | `previous`, `next` | - | `queue_transport::step` (F15) | `Controls::for_item` (`player_hud.rs:749-752`): the pair is absent for a non-episode or with neither neighbour; Previous is enabled by `previous` alone (the playing row has a predecessor in the play queue; there is no restart target any more), Next by `next` (F6) | none |
 | `open_tracks` | `tab`: `subtitles`, `audio` | `OverlayKind::Tracks { tab: 1 | 0 }` (F15) | always (F6) | none |
-| `open_more` | `page`: `root` (default), `quality`, `speed` | `OverlayKind::More { page }`; `quality` is what was `More { quality: true }` (F18); `speed` is the address PR3 added by turning that bool into `page: Option<MorePage>` (F16) | always | none |
+| `open_more` | `page`: `root` (default), `quality`, `speed`, `together` (1.3) | `OverlayKind::More { page }`; `quality` is what was `More { quality: true }` (F18); `speed` is the address PR3 added by turning that bool into `page: Option<MorePage>` (F16); `together` is Watch Together's page | always | none |
 | `toggle_section` | `section`: `chapters`, `info` | opens or closes the section (D6) | chapters: the playing item has chapters (`chapters_panel::has_chapters`) | none |
 | `from_beginning` | - | seeks to 0 and resumes (F17) | always | none |
 | `go_to_detail` | - | leaves playback and opens the item's page (`info_panel::detail_rk`, F17) | the playing item has a ratingKey | none |
@@ -816,9 +816,10 @@ seconds on the primary button instead of the legacy ten-second clock.
 3. `version` is the plugin's semver and orders updates of one id.
 4. Optional `app.min` and `app.max` constrain the app release.
 
-Package format remains at 1.0. The runtime supports HUD formats 1.0, 1.1 and 1.2. HUD 1.1 adds
+Package format remains at 1.0. The runtime supports HUD formats 1.0, 1.1, 1.2 and 1.3. HUD 1.1 adds
 `playbar.end_time_width` and Classic declares 1.1. HUD 1.2 adds what the MultiPlex web player's layout needs
-(section "HUD format 1.2 and the MultiPlex default", below) and `builtin:multiplex` declares it. The published HUD
+(section "HUD format 1.2 and the MultiPlex default", below). HUD 1.3 adds Watch Together's participants element
+(section "HUD format 1.3: Watch Together", below) and `builtin:multiplex` declares it. The published HUD
 1.0 and 1.1 schemas stay frozen.
 The SDK/report/catalog protocols remain at integer 1, and plugin semver is independent.
 
@@ -884,6 +885,24 @@ What format 1.2 adds, each refused with `E0107` in a 1.0 or 1.1 package:
 - `playbar.remaining`: the remaining clock's ink (keyable), the secondary text ink when omitted;
 - the label of `open_more`: "More" (`player_hud_more`) in a 1.2 package, the web player's "+ More" pill. A 1.0 or 1.1
   package keeps "Options" (`widgets_menu_options`), so its fitted widths do not move.
+
+## HUD format 1.3: Watch Together
+
+What format 1.3 adds, each refused with `E0107` in an older package (and absent from the older schemas):
+
+- `open_more`'s page `together` (`schema::ENUM_VALUES_SINCE`): the More menu opened on Watch Together's page, which
+  lists the session (its state and invitation code), the host's "Visible to my Plex friends" switch, every participant
+  (the viewer first, the host marked, what each is doing; the panel's table scrolls past its room) and Leave; with no
+  session it offers *Create a session*. The page is also the root's "Watch Together" row, so a package without this
+  disc still reaches it;
+- the icon `builtin:crowd`;
+- a `caption` on that disc: how many watch together, the viewer included (`HudModel::together`, which the app fills
+  each frame from the session it owns); outside a session it draws no caption.
+
+`builtin:multiplex` places it as a 72 px `plate` disc beside the "+ More" pill in the tabs band at the bottom
+centre: that band never shares a row with the head, so it cannot cover the clock (head, end-aligned) nor the
+finish-time lane under the bar. No condition was added for it, so the disc stands outside a session too (it opens
+*Create a session*); a condition would have added a dimension to every state's valuation (`reach.rs`).
 
 Head controls (an item that is not in the transport row and not a tab: the back and Info discs) form their own
 focus group, `GROUP_HEAD`, which the shared `FocusEngine` reaches with Up from the bar, seated on the head control

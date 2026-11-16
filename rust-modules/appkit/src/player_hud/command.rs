@@ -70,6 +70,8 @@ pub enum MorePage {
     Root,
     Quality,
     Speed,
+    /// Watch Together's page (format 1.3).
+    Together,
 }
 
 impl MorePage {
@@ -79,6 +81,7 @@ impl MorePage {
             MorePage::Root => None,
             MorePage::Quality => Some(crate::more_menu::MorePage::Quality),
             MorePage::Speed => Some(crate::more_menu::MorePage::Speed),
+            MorePage::Together => Some(crate::more_menu::MorePage::Together),
         }
     }
 }
@@ -215,6 +218,7 @@ impl HudCommand {
                 "root" => MorePage::Root,
                 "quality" => MorePage::Quality,
                 "speed" => MorePage::Speed,
+                "together" => MorePage::Together,
                 _ => return None,
             }),
             "toggle_section" => HudCommand::ToggleSection(match p.section? {

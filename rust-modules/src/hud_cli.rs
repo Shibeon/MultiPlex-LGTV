@@ -729,7 +729,7 @@ mod tests {
 
     #[test]
     fn each_document_schema_uses_the_native_emitter_without_loading_files_or_fonts() {
-        for (kind, version, expected) in [("manifest", "1.0", schema_emit::emit_manifest(bundle::CURRENT)), ("hud", "1.0", schema_emit::emit((1, 0))), ("hud", "1.1", schema_emit::emit((1, 1))), ("hud", "1.2", schema_emit::emit((1, 2)))] {
+        for (kind, version, expected) in [("manifest", "1.0", schema_emit::emit_manifest(bundle::CURRENT)), ("hud", "1.0", schema_emit::emit((1, 0))), ("hud", "1.1", schema_emit::emit((1, 1))), ("hud", "1.2", schema_emit::emit((1, 2))), ("hud", "1.3", schema_emit::emit((1, 3)))] {
             let (code, out, err) = go(&["--hud-schema", kind, "--version", version], &|_| panic!("schema read input"), &never);
             assert_eq!((code, err.as_str()), (0, ""));
             assert_eq!(out, format!("{expected:#}\n"));

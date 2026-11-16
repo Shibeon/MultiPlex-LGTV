@@ -72,7 +72,7 @@
 pub mod address;
 
 /// Latest HUD document version this runtime reads.
-pub const HUD_FORMAT: (u8, u8) = (1, 2);
+pub const HUD_FORMAT: (u8, u8) = (1, 3);
 
 /// Whether `text` is a HUD format this runtime reads: `HUD_FORMAT`'s major, at any minor up to its own.
 pub fn hud_format_supported(text: &str) -> bool {

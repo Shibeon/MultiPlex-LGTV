@@ -136,6 +136,9 @@ pub const V1_0: Since = (1, 0);
 /// `title.subtitle` and `clock.now` binds, a `facts` cell's `stream` pills and hugging `w`, the playback details
 /// binds `label.video`, `label.audio` and `stream.*`, and a control's `caption`).
 pub const V1_2: Since = (1, 2);
+/// The version Watch Together arrived in: `open_more`'s `together` page, the `crowd` glyph, and a disc
+/// `caption` on that page (how many watch together).
+pub const V1_3: Since = (1, 3);
 
 /// The one `id` that is not reverse-DNS: the built-in HUD (D2). [`Pattern::ReverseDns`] accepts exactly this
 /// string besides reverse-DNS names, so the built-in's own file parses like any package. That the id parses
@@ -501,8 +504,8 @@ pub static COMMANDS: &[Cmd] = &[
         since: V1_0,
         params: &[Field::opt(
             "page",
-            Ty::Enum(&["root", "quality", "speed"]),
-            "Which page of the More menu opens.",
+            Ty::Enum(&["root", "quality", "speed", "together"]),
+            "Which page of the More menu opens. `together` (format 1.3) is Watch Together's page: the session, its invitation code and who watches.",
         )
         .default("\"root\"")],
         rules: &[],
@@ -689,6 +692,7 @@ pub static BUILTIN_ICONS: &[(&str, Icon, Since)] = &[
     ("plus", Icon::Plus, V1_2),
     ("skip-back", Icon::SkipBack, V1_2),
     ("skip-forward", Icon::SkipForward, V1_2),
+    ("crowd", Icon::Crowd, V1_3),
 ];
 
 /// What precedes a built-in glyph's name in a face: `builtin:play`. The parser reads it from here.
@@ -848,7 +852,7 @@ const RESTS: Ty = Ty::Enum(&["film", "bare", "solid", "plate"]);
 /// **Enum values newer than their key.** A minor can add a value to a closed list; naming it in an older
 /// package is `E0107`, as a newer key is, and the older formats' schemas do not list it. A value is
 /// named here once, so no two lists may hold one of these names (a test pins it).
-pub static ENUM_VALUES_SINCE: &[(&str, Since)] = &[("plate", V1_2)];
+pub static ENUM_VALUES_SINCE: &[(&str, Since)] = &[("plate", V1_2), ("together", V1_3)];
 
 /// The format an enum value arrived in: its [`ENUM_VALUES_SINCE`] entry, else 1.0.
 pub fn enum_value_since(name: &str) -> Since {
@@ -1628,7 +1632,7 @@ pub static ITEM: Node = Node {
         Field::opt(
             "caption",
             Ty::Bool,
-            "A `disc`'s app-owned read-out under its glyph, inside the disc: a `seek` names its interval (\"-30 s\", the viewer's Skip interval under `by: \"setting\"`). Only a `seek` disc has one; any other control ignores the key.",
+            "A `disc`'s app-owned read-out under its glyph, inside the disc: a `seek` names its interval (\"-30 s\", the viewer's Skip interval under `by: \"setting\"`); from format 1.3 an `open_more` disc on the `together` page names how many watch together, and draws none outside a session. Only those discs have one; any other control ignores the key.",
         )
         .default("false")
         .at(V1_2),
@@ -2319,7 +2323,7 @@ mod tests {
         }
         let en = |c: &str, p: &str| names_of(&command(c).unwrap().param(p).unwrap().ty).unwrap();
         assert_eq!(en("open_tracks", "tab"), ["subtitles", "audio"]);
-        assert_eq!(en("open_more", "page"), ["root", "quality", "speed"]);
+        assert_eq!(en("open_more", "page"), ["root", "quality", "speed", "together"]);
         assert_eq!(en("toggle_section", "section"), ["chapters", "info"]);
         assert_eq!(en("seek", "dir"), ["back", "forward"]);
         let by = command("seek").unwrap().param("by").unwrap();

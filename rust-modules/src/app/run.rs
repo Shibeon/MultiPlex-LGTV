@@ -713,6 +713,8 @@ fn hud_model(
         bitmap_by_key: plx_media::player::bitmap_by_key,
         // the wall clock is the caller's to fill (`publish_player_model`), only for a HUD that shows one
         now: None,
+        // so is the Watch Together count, from the session the bridge owns
+        together: 0,
     }
 }
 
@@ -747,6 +749,7 @@ fn publish_player_model(app: &mut App) {
     model.now = if live_clock { clock::unix_ms().and_then(|ms| clock::local_minute(ms.div_euclid(1000))) } else { None };
     model.marker_prefs = app.bridge.marker_preferences();
     model.covered = app.pages.surface_up();
+    model.together = app.bridge.together.watching();
     if let Some(screen) = super::bridge::player_mut(&mut app.pages) { screen.set_model(model); }
 }
 

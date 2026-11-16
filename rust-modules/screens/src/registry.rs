@@ -2874,7 +2874,9 @@ pub const SCREEN_SHAPES: &[&str] = &[
 // The Friends page (the web app's *Amis*): `ARG_SHAPE` gains `Friends` (canon page tag 14, screen
 // id 31) and `FriendsScreen::SHAPE` joins the array. Previous pin: 0x1097_dde4_cf49_0664; re-record
 // the replay anchors.
-const SCREEN_SHAPES_PIN: u64 = 0xaffa_778c_f4f5_f3dc;
+// Watch Together's question on the player page: the repair alert's state gains `together` (whose
+// question it holds). Previous pin: 0xaffa_778c_f4f5_f3dc; re-record the replay anchors.
+const SCREEN_SHAPES_PIN: u64 = 0x38b0_f603_015a_eb6e;
 
 #[cfg(test)]
 mod arg_tests {

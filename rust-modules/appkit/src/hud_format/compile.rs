@@ -164,6 +164,7 @@ impl AppLabels {
                 ("exit", msg::player_hud_exit_in(cx).to_owned()),
                 ("more_quality", msg::widgets_menu_quality_in(cx).to_owned()),
                 ("more_speed", msg::widgets_menu_speed_in(cx).to_owned()),
+                ("more_together", msg::together_title_in(cx).to_owned()),
                 ("toggle_stats", msg::widgets_menu_stats_in(cx).to_owned()),
             ],
             clock_samples: (0..24)
@@ -845,8 +846,19 @@ impl CompiledState {
     /// 0, Chapters 1), or an `open_more` pill outside the replaced row (More 2, format 1.2). A section a DISC opens
     /// (the reference's) has no tab: that disc is a stop of the row group (or of the head) and is pressed as one, so
     /// reporting it here too would register a second stop at the same rect for the hit map to prefer.
+    ///
+    /// Watch Together's opener (`open_more` on the `together` page, format 1.3) outside the row is tab 3 whether it
+    /// is a pill or a disc: it stands with the More pill in the tabs band, never in the head, so the captions'
+    /// band keeps clear of it and it is walked with the tabs.
     pub fn tab_slot(&self, c: &ControlRect) -> Option<usize> {
-        if c.is_action || c.widget != Widget::Pill {
+        use crate::player_hud::command::{HudCommand, MorePage};
+        if c.is_action {
+            return None;
+        }
+        if c.act == Some(HudCommand::OpenMore(MorePage::Together)) {
+            return (!self.in_row(c) && matches!(c.widget, Widget::Pill | Widget::Disc)).then_some(3);
+        }
+        if c.widget != Widget::Pill {
             return None;
         }
         match (c.command.as_str(), c.section.as_deref()) {
@@ -1646,6 +1658,7 @@ impl<'e, 'p> Env<'e, 'p> {
             Some(crate::player_hud::command::HudCommand::OpenTracks(crate::player_hud::command::TrackTab::Subtitles)) => "tracks_subtitles",
             Some(crate::player_hud::command::HudCommand::OpenMore(crate::player_hud::command::MorePage::Quality)) => "more_quality",
             Some(crate::player_hud::command::HudCommand::OpenMore(crate::player_hud::command::MorePage::Speed)) => "more_speed",
+            Some(crate::player_hud::command::HudCommand::OpenMore(crate::player_hud::command::MorePage::Together)) => "more_together",
             _ if command == "open_more" && self.package.format >= super::schema::V1_2 => OPEN_MORE_1_2,
             _ => command,
         };

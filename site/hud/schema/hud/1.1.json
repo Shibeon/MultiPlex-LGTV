@@ -1071,7 +1071,7 @@
             },
             "page": {
               "default": "root",
-              "description": "Which page of the More menu opens.",
+              "description": "Which page of the More menu opens. `together` (format 1.3) is Watch Together's page: the session, its invitation code and who watches.",
               "enum": [
                 "root",
                 "quality",

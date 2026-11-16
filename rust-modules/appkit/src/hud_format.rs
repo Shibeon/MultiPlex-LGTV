@@ -63,9 +63,9 @@ pub const CLASSIC_PACKAGE: &[u8] = include_bytes!("hud_format/fixtures/classic.p
 #[cfg(any(test, feature = "test-support"))]
 pub const CLASSIC_HUD: &str = include_str!("hud_format/fixtures/classic/hud.json");
 
-/// **`builtin:multiplex`, as the bytes the app ships** (format 1.2, the default HUD): the MultiPlex web player's
+/// **`builtin:multiplex`, as the bytes the app ships** (format 1.3, the default HUD): the MultiPlex web player's
 /// layout, the title, stream pills and clock at the top and the skip-back / play-pause / skip-forward row with a
-/// More pill at the bottom. The file `fixtures/multiplex.plxhud`, packed from `fixtures/multiplex/` by
+/// More pill and the Watch Together disc (its caption: how many watch together) at the bottom. The file `fixtures/multiplex.plxhud`, packed from `fixtures/multiplex/` by
 /// `multiplex-sim --hud-pack` (a test pins the two equal).
 pub const MULTIPLEX_PACKAGE: &[u8] = include_bytes!("hud_format/fixtures/multiplex.plxhud");
 

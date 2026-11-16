@@ -979,8 +979,12 @@ pub fn restore_hud_end_time(v: bool) { restore_live::<HudEndTimePref>(v) }
 
 /// Whether a Watch Together session the seated profile hosts starts visible to its Plex friends.
 pub fn together_visible() -> bool { TogetherVisiblePref::live() }
+/// Restore the Watch Together visibility cell from the active profile without writing it back.
+pub fn restore_together_visible(v: bool) { restore_live::<TogetherVisiblePref>(v) }
 /// Whether the seated profile is told when a Plex friend starts a Watch Together session.
 pub fn together_notify() -> bool { TogetherNotifyPref::live() }
+/// Restore the friends' session alerts cell from the active profile without writing it back.
+pub fn restore_together_notify(v: bool) { restore_live::<TogetherNotifyPref>(v) }
 
 /// What sits under the focused poster, for the seated profile. Safe from any thread; a reader takes
 /// no lock.

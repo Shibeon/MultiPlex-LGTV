@@ -236,6 +236,11 @@ impl TogetherFeed {
         self.published.as_ref()
     }
 
+    /// How many watch together, the viewer included: the HUD's participants caption. 0 with no session.
+    pub(crate) fn watching(&self) -> u32 {
+        self.published.as_ref().map_or(0, |v| u32::try_from(v.peers.len() + 1).unwrap_or(u32::MAX))
+    }
+
     /// Host a session on what plays (the More menu's *Create a session*): the title as the
     /// player side identified it, else the store takes the player's snapshot.
     pub(crate) fn host_playing(&mut self) {

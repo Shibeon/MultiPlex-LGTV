@@ -307,7 +307,7 @@ mod tests {
         let reference = reference();
         for open in [0, CHAPTERS, INFO, CHAPTERS | INFO] {
             let geo = geometry(&reference, open, slot, true, false);
-            assert_eq!(geo.tabs, [None, None, None], "open {open}: the reference's openers are discs of the row");
+            assert_eq!(geo.tabs, [None, None, None, None], "open {open}: the reference's openers are discs of the row");
             let want = Some(HudCommand::ToggleSection(Section::Info));
             let (state, _) = frame_state(&reference, open, slot, true, false).expect("the reference has the state");
             let info = state.controls.iter().find(|c| c.act == want).expect("the Info disc");

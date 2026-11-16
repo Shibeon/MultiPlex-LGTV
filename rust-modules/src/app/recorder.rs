@@ -220,8 +220,12 @@ const RESOLUTION_SHAPE: &str = "ProductResolutionV1{fo:Option<(entry:u32,elem:u3
 /// **The Friends page** (the web app's *Amis*) joins the top bar: `ARG_SHAPE` gains
 /// `AppArg::Friends` and `SCREEN_SHAPES` gains `FriendsScreen::SHAPE`, so both frozen vectors and
 /// both numbers were re-derived once more and the replay anchors re-recorded.
-pub(crate) const FP_PRIOR: u64 = 7524794596150345573;
-pub(crate) const FP_V6: u64 = 14417121799567616615;
+///
+/// **Watch Together's question on the player page**: `SCREEN_SHAPES`' player state's repair alert
+/// gains `together` (whose question the card holds), so both frozen vectors and both numbers were
+/// re-derived again.
+pub(crate) const FP_PRIOR: u64 = 16200878024355148659;
+pub(crate) const FP_V6: u64 = 9378700837553817645;
 
 pub(crate) fn state_fp() -> u64 {
     let mut shapes: Vec<&str> = APP_SHAPES.to_vec();

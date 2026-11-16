@@ -79,6 +79,9 @@ pub struct HudModel {
     pub skip_secs: u32,
     /// Stats for nerds is up (`app::diagnostics::enabled()`): the `on` of a `toggle_stats` face.
     pub stats: bool,
+    /// How many watch together, the viewer included (`TogetherFeed::watching`); 0 outside a session.
+    /// The caption of an `open_more` disc on the `together` page reads it.
+    pub together: u32,
     /// `plx_media::player::bitmap_by_key`: the lookup `draw_subtitle_bitmap` calls when the key
     /// changes. Injected so this module never names the player.
     pub bitmap_by_key: BitmapLookup,
@@ -114,6 +117,7 @@ impl Default for HudModel {
             detail: false,
             skip_secs: 10,
             stats: false,
+            together: 0,
             bitmap_key: None,
             bitmap_by_key: no_bitmap,
         }
