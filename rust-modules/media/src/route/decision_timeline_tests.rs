@@ -446,7 +446,7 @@ fn a_session_resolved_for_a_preview_never_reports_a_timeline() {
     let _g = plx_base::testlock::serial();
     reset_player_control_for_test(&ps);
     reset_session(&mut ps);
-    ps.request = Some(PlaybackRequest {
+    ps.request = Some(PlaybackRequest { shuffle: ShuffleState::Off,
         sid: ServerId::from_raw(0),
         rk: "trailer".into(),
         part: "/library/parts/1/file.mp4".into(),

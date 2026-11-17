@@ -592,7 +592,7 @@ fn cold_start_plan_lands_as_client_over_remux_with_a_reader_target() {
     apply_plan(&mut ps, r.plan, "rk-enh");
     // The play request (`request_play`) is what names the Part the reader reads; a plan landing
     // alone does not carry it.
-    ps.request = Some(PlaybackRequest {
+    ps.request = Some(PlaybackRequest { shuffle: ShuffleState::Off,
         sid: ps.cur_sid,
         rk: "rk-enh".into(),
         part: MKV.into(),

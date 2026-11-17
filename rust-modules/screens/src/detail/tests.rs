@@ -630,7 +630,9 @@ fn a_spot_round_trips_through_the_page_it_describes() {
     let measure = plx_ui::fixture::FixtureMeasure;
     for (elem, section, col, text) in [
         (hero::ELEM_PLAY, 0, 0, false),
-        (hero::ELEM_MORE, 0, 1, false),
+        // a show's row: Play, Shuffle, More
+        (hero::ELEM_SHUFFLE, 0, 1, false),
+        (hero::ELEM_MORE, 0, 2, false),
         (season::elem(1).unwrap(), 1, 1, false),
         (
             episodes::elem(1, episodes::Row::Still).unwrap(),
@@ -2702,6 +2704,56 @@ fn play_item(effects: &[plx_machine::machine::Stamped<TestHost>]) -> Option<(&Pl
     })
 }
 
+/// The container a Shuffle press asks the loop to play, from its `PlayIntent::Shuffle`; a shuffle
+/// always starts at the drawn episode's own position, so the press carries no resume point.
+fn shuffle_req(effects: &[plx_machine::machine::Stamped<TestHost>]) -> Option<(ServerId, &str)> {
+    match play_item(effects)? {
+        (PlayIntent::Shuffle { sid, rk, .. }, 0) => Some((*sid, rk.as_str())),
+        _ => None,
+    }
+}
+
+/// **Shuffle sits beside Play on a show's and a season's page**, and its press is a Play of THAT
+/// container (the show, or the season itself) as a shuffle, never of an episode the page happens to
+/// show. A movie has nothing to shuffle.
+#[test]
+fn a_show_and_a_season_offer_shuffle_beside_play_and_a_movie_does_not() {
+    let sid = ServerId::from_raw(4);
+    let guard = install(detail(sid, "show"));
+    let mut screen = bare(&guard, sid, "show");
+    let set = screen.hero_set(test_store().view());
+    assert!(set.shuffle);
+    let (row, n) = hero::hero_ctls(set);
+    assert_eq!(&row[..n], &[hero::HeroCtl::Play, hero::HeroCtl::Shuffle, hero::HeroCtl::More]);
+    let (_, effects) = step(&mut screen, &ScreenEvent::Activate(hero::ELEM_SHUFFLE), Some(hero::ELEM_SHUFFLE));
+    assert_eq!(shuffle_req(&effects), Some((sid, "show")), "a shuffle names no episode");
+    clear();
+    drop(guard);
+
+    let guard = install(Detail {
+        sid,
+        rk: "s2".into(),
+        kind: "season".into(),
+        parent_rk: "show".into(),
+        episodes: vec![episode("e1", 1)].into(),
+        ..Default::default()
+    });
+    let mut screen = bare(&guard, sid, "s2");
+    assert!(screen.hero_set(test_store().view()).shuffle);
+    let (_, effects) = step(&mut screen, &ScreenEvent::Activate(hero::ELEM_SHUFFLE), Some(hero::ELEM_SHUFFLE));
+    assert_eq!(shuffle_req(&effects), Some((sid, "s2")), "a season shuffles itself, not its show");
+    clear();
+    drop(guard);
+
+    let guard = install(Detail { sid, rk: "movie".into(), kind: "movie".into(), part: "/library/parts/1".into(), ..Default::default() });
+    let screen = bare(&guard, sid, "movie");
+    let set = screen.hero_set(test_store().view());
+    assert!(!set.shuffle);
+    assert_eq!(hero::index_of(set, hero::HeroCtl::Shuffle), None);
+    clear();
+    drop(guard);
+}
+
 #[test]
 fn a_movie_trailer_disc_plays_the_extra_from_the_start() {
     let extra = trailer_extra();
@@ -2812,6 +2864,7 @@ fn a_show_trailer_disc_plays_the_extra_not_the_on_deck_episode() {
             assert_ne!(context.as_str(), plx_data::metadata::TRAILER_CONTEXT);
         }
         (PlayIntent::Movie { .. }, _) => {}
+        (PlayIntent::Shuffle { .. }, _) => panic!("Play is not a shuffle"),
     }
     clear();
 }
@@ -5494,6 +5547,7 @@ fn a_picked_version_plays_it_resuming_like_play() {
                 assert_eq!(*version, Some(pick), "{kind}");
             }
             PlayIntent::Movie { .. } => panic!("{kind}: the loaded item, not a hub row"),
+            PlayIntent::Shuffle { .. } => panic!("{kind}: a version pick is not a shuffle"),
         }
         assert_eq!(resume_ns, plx_data::metadata::resume_ns(600_000, 6_000_000), "{kind} resumes");
         let (_, effects) = step(&mut screen, &ScreenEvent::Activate(hero::ELEM_PLAY), Some(hero::ELEM_PLAY));

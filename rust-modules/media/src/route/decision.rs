@@ -71,6 +71,32 @@ struct PlaybackRequest {
     /// ([`ResolveEnv::queue_show_rk`]), so a retry or a quality change of this playback builds the
     /// same queue.
     show_rk: String,
+    /// Whether this playback is a show's or a season's Shuffle, and which half of it
+    /// ([`ShuffleState`]). [`ShuffleState::Off`] for every other play.
+    shuffle: ShuffleState,
+}
+
+/// **A Shuffle's two halves, on the one request** ([`super::shuffle::request_play_shuffle`]).
+///
+/// The episode a Shuffle plays is the row the server's shuffled queue starts on, which nobody
+/// knows before the server has drawn it. So the request starts as a [`Self::Draw`] of the show or
+/// season (`rk` names the CONTAINER, there is no Part yet): its resolve worker POSTs the shuffled
+/// queue first and resolves that queue's first row ([`super::shuffle::draw`]). The landing rewrites
+/// the request to that episode and to [`Self::Walk`] ([`super::shuffle::land`]), and from then on it
+/// is an ordinary queue play whose queue happens to be the server's draw.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum ShuffleState {
+    /// Not a Shuffle.
+    #[default]
+    Off,
+    /// `rk` is the show or season to shuffle; the resolve draws the queue and plays its first row.
+    /// A re-resolve before the landing (a contract change in flight) draws again.
+    Draw,
+    /// This playback walks a drawn queue: a retry or a quality change of it continues that queue
+    /// instead of POSTing a fresh (ordered) one, a queue handoff (Previous, Next, Up Next) stays in
+    /// it, and the queue's windows leave the specials out
+    /// ([`super::queue_navigation::numbered_episodes`]).
+    Walk,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -655,6 +681,162 @@ mod source_selection_tests {
 }
 
 #[cfg(test)]
+mod shuffled_queue_tests {
+    use super::*;
+    use super::super::queue_navigation::QueueContinuation;
+
+    fn row(item_id: i64, rk: &str, sid: ServerId) -> plx_plex::plex::QueueRow {
+        plx_plex::plex::QueueRow { item_id, sid, rk: rk.into(), kind: "episode".into(), season: 1, ..Default::default() }
+    }
+
+    fn playing(shuffled: bool) -> PlaybackSession {
+        let sid = ServerId::from_raw(1);
+        let mut ps = PlaybackSession::IDLE;
+        let shuffle = if shuffled { ShuffleState::Walk } else { ShuffleState::Off };
+        ps.request = Some(PlaybackRequest { shuffle, sid, rk: "b".into(), part: "/library/parts/2".into(),
+            vcodec: "h264".into(), acodec: "aac".into(), title: "Show".into(), ctx: String::new(),
+            preview: false, version: None, show_rk: "50".into() });
+        ps.queue = vec![row(1, "c", sid), row(2, "b", sid), row(3, "a", sid)];
+        ps.pq_id = "9".into();
+        ps.pq_item_id = "2".into();
+        ps.cur_rk = "b".into();
+        ps.cur_sid = sid;
+        ps
+    }
+
+    /// **A retry of a shuffled playback continues the drawn queue** on the row now playing: the
+    /// same queue id, the same item, the same successor, where a fresh POST would have built the
+    /// show's ORDERED queue around the episode. Only the row now playing is continued.
+    #[test]
+    fn a_retry_of_a_shuffled_play_continues_the_drawn_queue() {
+        let ps = playing(true);
+        assert!(request_shuffled(&ps));
+        let sid = ServerId::from_raw(1);
+        let landed = QueueContinuation::current(&ps, sid, "b").expect("the playing row continues").resolve();
+        assert_eq!((landed.id.as_str(), landed.item_id.as_str()), ("9", "2"));
+        assert_eq!(landed.up_next.map(|next| next.rk), Some("a".to_owned()));
+        let order: Vec<&str> = landed.rows.iter().map(|row| row.rk.as_str()).collect();
+        assert_eq!(order, ["c", "b", "a"], "the server's draw, untouched");
+        assert!(QueueContinuation::current(&ps, sid, "a").is_none(), "not the row now playing");
+        assert!(QueueContinuation::current(&ps, ServerId::from_raw(2), "b").is_none(), "another server's item");
+        assert!(!request_shuffled(&playing(false)));
+    }
+
+    /// **A Shuffle's request resolves the CONTAINER as a draw**: its environment draws first, and
+    /// carries nothing cached or measured for the show (a show page's bitrate is its on-deck
+    /// episode's, which is not the episode the draw will play). An ordinary request never draws.
+    #[test]
+    fn a_shuffle_request_resolves_as_a_draw_with_nothing_cached_for_the_container() {
+        let env = shuffle_test_env();
+        assert!(env.shuffle_draw);
+        assert!(env.cached_item.is_none());
+        assert_eq!(env.src_kbps, 0);
+        assert!(env.queue_continuation.is_none());
+        let ps = playing(true);
+        let meta = plx_data::stores::metadata::MetadataStore::default();
+        assert!(!request_env(&ps, meta.view(), ps.request.as_ref().unwrap(), None).shuffle_draw);
+    }
+
+    /// **The landing makes the request the drawn episode's, walking the draw**: a retry or a
+    /// quality change then resolves that episode inside the drawn queue. A request that is not a
+    /// draw (a play that superseded it) is left alone.
+    #[test]
+    fn a_landed_draw_becomes_the_drawn_episodes_request_walking_the_queue() {
+        let mut ps = PlaybackSession::IDLE;
+        ps.request = Some(draw_request());
+        let drawn = plx_plex::plex::QueueRow { rk: "7".into(), part: "/library/parts/70".into(),
+            vcodec: "hevc".into(), acodec: "eac3".into(), show_rk: "50".into(), ..row(3, "7", ServerId::from_raw(1)) };
+        land_drawn_request(&mut ps, &drawn);
+        let request = ps.request.as_ref().unwrap();
+        assert_eq!(request.shuffle, ShuffleState::Walk);
+        assert_eq!((request.rk.as_str(), request.part.as_str(), request.show_rk.as_str()), ("7", "/library/parts/70", "50"));
+        assert_eq!((request.vcodec.as_str(), request.acodec.as_str()), ("hevc", "eac3"));
+        assert!(request_shuffled(&ps));
+        let mut other = playing(false);
+        land_drawn_request(&mut other, &drawn);
+        assert_eq!(other.request.as_ref().unwrap().rk, "b");
+    }
+
+    /// **A Shuffle press is a resolve like any other Play**: the common request door accepts it,
+    /// its resolve worker POSTs the CONTAINER's queue with `shuffle=1` before anything else, and a
+    /// draw with nothing to play lands through the play mailbox as a failed resolve (the player's
+    /// own failure read-out), never as a silent no-op.
+    #[test]
+    fn a_shuffle_press_is_a_resolve_that_draws_the_containers_queue_first() {
+        let mut ps = PlaybackSession::IDLE;
+        let _g = super::test_support::fresh_registry(&mut ps);
+        let mut meta = plx_data::stores::metadata::MetadataStore::default();
+        let (port, rx, _server) = super::test_support::recording_pms(4);
+        let sid = plx_plex::plex::register_for_test("shuffle-draw", "127.0.0.1", port, "tok", "shuffle-client");
+        // the registry files the server under its machine id: no `/identity` round trip first
+        assert!(request_shuffle_draw(&mut ps, &mut meta, plx_platform::devcaps::caps(), sid, "50", "Show", ""));
+        assert!(play_pending(), "the draw is the resolve in flight");
+        assert!(wait_resolve_workers_for_test(std::time::Duration::from_secs(10)));
+        let first = rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the draw's POST");
+        assert!(first.starts_with("POST /playQueues?"), "{first}");
+        assert!(first.contains("shuffle=1"), "{first}");
+        assert!(first.contains("server%3A%2F%2Fshuffle-draw%2F") && first.contains("metadata%2F50"), "the container's queue: {first}");
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(300)).is_err(), "no queue, nothing else asked");
+        assert!(pump_play(&mut ps, &mut meta).is_none(), "nothing to play is no start");
+        assert!(!play_pending(), "the failed draw landed");
+        assert_eq!(ps.request.as_ref().map(|r| (r.shuffle, r.rk.as_str())), Some((ShuffleState::Draw, "50")),
+            "an undrawn request stays the container's, so a retry draws again");
+        cancel_play(&mut ps);
+        reset_player_control_for_test(&ps);
+        reset_session(&mut ps);
+    }
+
+    /// A drawn queue the server just answered for one episode.
+    const DRAWN_QUEUE: &str = r#"{"MediaContainer":{"size":1,"playQueueID":77,"playQueueSelectedItemID":701,
+        "playQueueSelectedItemOffset":0,"playQueueTotalCount":1,"Metadata":[{"playQueueItemID":701,
+        "ratingKey":"71","type":"episode","title":"E","grandparentRatingKey":"50","grandparentTitle":"Show",
+        "parentIndex":1,"index":1,"duration":1200000,"Media":[{"videoCodec":"h264","audioCodec":"aac",
+        "Part":[{"key":"/library/parts/71/file.mkv"}]}]}]}}"#;
+
+    /// **A fresh draw is not re-read**: the POST's answer IS the queue's window, so the resolve
+    /// plans the drawn row without the `GET /playQueues/{id}` a handoff makes, and the landing
+    /// makes the request the drawn episode's.
+    #[test]
+    fn a_successful_draw_plans_the_drawn_row_without_re_reading_the_queue() {
+        let mut ps = PlaybackSession::IDLE;
+        let _g = super::test_support::fresh_registry(&mut ps);
+        let mut meta = plx_data::stores::metadata::MetadataStore::default();
+        let (port, rx, _server) = super::test_support::recording_pms_answering(8, DRAWN_QUEUE);
+        let sid = plx_plex::plex::register_for_test("shuffle-drawn", "127.0.0.1", port, "tok", "shuffle-client");
+        assert!(request_shuffle_draw(&mut ps, &mut meta, plx_platform::devcaps::caps(), sid, "50", "Show", ""));
+        assert!(wait_resolve_workers_for_test(std::time::Duration::from_secs(20)));
+        let mut lines = Vec::new();
+        while let Ok(line) = rx.recv_timeout(std::time::Duration::from_millis(300)) {
+            lines.push(line);
+        }
+        assert!(lines.first().is_some_and(|l| l.starts_with("POST /playQueues?") && l.contains("shuffle=1")), "{lines:#?}");
+        assert!(!lines.iter().any(|l| l.starts_with("GET /playQueues/")), "no re-read of the drawn queue: {lines:#?}");
+        assert!(lines.iter().skip(1).all(|l| !l.starts_with("POST /playQueues")), "one queue only: {lines:#?}");
+        let _ = pump_play(&mut ps, &mut meta);
+        assert_eq!(ps.request.as_ref().map(|r| (r.shuffle, r.rk.as_str())), Some((ShuffleState::Walk, "71")));
+        cancel_play(&mut ps);
+        let _ = wait_resolve_workers_for_test(std::time::Duration::from_secs(10));
+        reset_player_control_for_test(&ps);
+        reset_session(&mut ps);
+    }
+}
+
+#[cfg(test)]
+fn draw_request() -> PlaybackRequest {
+    PlaybackRequest { shuffle: ShuffleState::Draw, sid: ServerId::from_raw(1), rk: "50".into(),
+        part: String::new(), vcodec: String::new(), acodec: String::new(), title: "Show".into(),
+        ctx: String::new(), preview: false, version: None, show_rk: String::new() }
+}
+
+/// TEST ONLY. The environment a Shuffle's request hands its resolve worker.
+#[cfg(test)]
+pub(super) fn shuffle_test_env() -> ResolveEnv {
+    let ps = PlaybackSession::IDLE;
+    let meta = plx_data::stores::metadata::MetadataStore::default();
+    request_env(&ps, meta.view(), &draw_request(), None)
+}
+
+#[cfg(test)]
 mod uri_failure_recovery_tests {
     use super::*;
     use super::super::backend_policy::{BackendPolicy, OfferId, Qualification};
@@ -664,7 +846,7 @@ mod uri_failure_recovery_tests {
     fn prospect_requires_the_current_uri_attempt_exact_offer_and_runtime_clock() {
         let mut session = PlaybackSession::IDLE;
         session.install_backends(plx_playback_contract::BackendSet::BOTH);
-        session.request = Some(PlaybackRequest { sid: ServerId::UNSET, rk: "42".into(),
+        session.request = Some(PlaybackRequest { shuffle: ShuffleState::Off, sid: ServerId::UNSET, rk: "42".into(),
             part: "/library/parts/7".into(), vcodec: "h264".into(), acodec: "aac".into(),
             title: "Film".into(), ctx: String::new(), preview: false, version: None,
             show_rk: String::new() });
@@ -974,7 +1156,7 @@ mod backend_offer_session_tests {
         session.begin_attempt_view(RouteStartAttempt::fixture(),
             crate::player::attempt_view::Backend::Uri);
         session.cur_source_decodable = true;
-        session.request = Some(PlaybackRequest {
+        session.request = Some(PlaybackRequest { shuffle: ShuffleState::Off,
             sid: session.cur_sid, rk: "42".into(), part: "/library/parts/7".into(),
             vcodec: "h264".into(), acodec: "ac3".into(), title: "Film".into(),
             ctx: String::new(), preview: false, version: None, show_rk: String::new(),
@@ -989,7 +1171,7 @@ mod backend_offer_session_tests {
         let _serial = plx_base::testlock::serial();
         let mut session = PlaybackSession::IDLE;
         session.install_backends(plx_playback_contract::BackendSet::BOTH);
-        session.request = Some(PlaybackRequest {
+        session.request = Some(PlaybackRequest { shuffle: ShuffleState::Off,
             sid: ServerId::UNSET, rk: "42".into(), part: "/library/parts/7".into(),
             vcodec: "h264".into(), acodec: "ac3".into(), title: "Film".into(),
             ctx: String::new(), preview: false, version: None, show_rk: String::new(),
@@ -10211,26 +10393,12 @@ pub(super) fn resolve_playqueue(
     cached: &str,
     continuous: bool,
 ) -> QueueInfo {
-    let known = c.machine_id();
-    // `mid` is the FETCHED id and nothing else: apply_plan's "" means "leave the cache alone", and
-    // the first two rungs are already-known values with nothing to write back.
-    let mid = if known.is_empty() && cached.is_empty() {
-        c.machine_identity().unwrap_or_default()
-    } else {
-        String::new()
-    };
-    let effective = if !known.is_empty() {
-        known
-    } else if !mid.is_empty() {
-        &mid
-    } else {
-        cached
-    };
+    let (effective, mid) = queue_machine_id(c, cached);
     if effective.is_empty() {
         crate::player::log("playqueue: no machineIdentifier (skip)");
         return QueueInfo::default();
     }
-    match c.create_play_queue(effective, rk, show_rk, session, continuous) {
+    match c.create_play_queue(&effective, rk, show_rk, session, continuous) {
         Some(q) => {
             let up_next = q.next.as_ref().and_then(up_next_of);
             crate::player::log(&format!(
@@ -10268,6 +10436,29 @@ pub(super) fn resolve_playqueue(
             }
         }
     }
+}
+
+/// The machine id a `POST /playQueues` names, by [`resolve_playqueue`]'s three rungs (the
+/// registry's own id for this client, then `cached`, then `GET /identity`): `(effective, fetched)`,
+/// where `fetched` is non-empty only when the third rung ran and answered, which is the one value
+/// worth caching. `effective` is `""` when no rung knew it. Worker side: the last rung is a request.
+pub(super) fn queue_machine_id(c: &plx_plex::plex::Client, cached: &str) -> (String, String) {
+    let known = c.machine_id();
+    // `mid` is the FETCHED id and nothing else: apply_plan's "" means "leave the cache alone", and
+    // the first two rungs are already-known values with nothing to write back.
+    let mid = if known.is_empty() && cached.is_empty() {
+        c.machine_identity().unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let effective = if !known.is_empty() {
+        known.to_owned()
+    } else if !mid.is_empty() {
+        mid.clone()
+    } else {
+        cached.to_owned()
+    };
+    (effective, mid)
 }
 
 impl ResolveEnv {
@@ -10325,6 +10516,7 @@ impl ResolveEnv {
             omit_queue_continuous: false,
             queue_show_rk: String::new(),
             queue_continuation: None,
+            shuffle_draw: false,
             preview: false,
             audio_enhancements: crate::player::audio_enhancements(),
             pass: plx_plex::plex::serverinfo::subscription_of(sid),
@@ -10476,6 +10668,9 @@ struct PlayLanding {
     candidate_purpose: CandidatePurpose,
     plan: Plan,
     rk: String,
+    /// A Shuffle's drawn row ([`ShuffleState::Draw`]), the episode `plan` resolved; `None` for
+    /// every other play.
+    drawn: Option<plx_plex::plex::QueueRow>,
 }
 static PLAY_SLOT: Mutex<Option<PlayLanding>> = Mutex::new(None);
 /// Resume intents are tagged with the resolve generation that owns them.  A BACK/cancel or a
@@ -10603,7 +10798,7 @@ pub fn request_play(
         ps,
         meta,
         caps,
-        PlaybackRequest {
+        PlaybackRequest { shuffle: ShuffleState::Off,
             sid,
             rk: rk.to_owned(),
             part: part.to_owned(),
@@ -10632,17 +10827,61 @@ pub fn request_play_queue_item(
     row: &plx_plex::plex::QueueRow,
     ctx: &str,
 ) -> bool {
+    let queue = super::queue_navigation::QueueContinuation::capture(ps, row);
+    // A handoff inside a shuffled queue stays in it; a row the live queue does not hold POSTs a
+    // fresh, ordered queue, which is no longer the shuffle.
+    let shuffle = if queue.is_some() && request_shuffled(ps) { ShuffleState::Walk } else { ShuffleState::Off };
     let title = if row.show_title.is_empty() {
         &row.title
     } else {
         &row.show_title
     };
-    let queue = super::queue_navigation::QueueContinuation::capture(ps, row);
-    request_play_with_queue(ps, meta, caps, PlaybackRequest {
+    request_play_with_queue(ps, meta, caps, PlaybackRequest { shuffle,
         sid: row.sid, rk: row.rk.clone(), part: row.part.clone(), vcodec: row.vcodec.clone(),
         acodec: row.acodec.clone(), title: title.clone(), ctx: ctx.into(), preview: false, version: None,
         show_rk: row.show_rk.clone(),
     }, None, None, false, crate::player::report::AttemptOrigin::Fresh, queue, false, None)
+}
+
+/// Whether the playback this session holds walks a shuffled queue ([`ShuffleState::Walk`]).
+pub(super) fn request_shuffled(ps: &PlaybackSession) -> bool {
+    ps.request.as_ref().is_some_and(|request| request.shuffle == ShuffleState::Walk)
+}
+
+/// MAIN THREAD, NON-BLOCKING. The request a Shuffle press makes: a [`ShuffleState::Draw`] of the
+/// show or season `container_rk`, through the common request door ([`request_play_with_queue`]),
+/// so it is superseded, cancelled, retried and landed like every other play. Same contract as
+/// [`request_play`]. `title` is the HUD title until the drawn episode lands.
+pub(super) fn request_shuffle_draw(
+    ps: &mut PlaybackSession,
+    meta: &mut plx_data::stores::metadata::MetadataStore,
+    caps: std::sync::Arc<plx_platform::devcaps::Caps>,
+    sid: ServerId,
+    container_rk: &str,
+    title: &str,
+    ctx: &str,
+) -> bool {
+    if container_rk.is_empty() {
+        return false;
+    }
+    request_play_inner(ps, meta, caps, PlaybackRequest { shuffle: ShuffleState::Draw,
+        sid, rk: container_rk.to_owned(), part: String::new(), vcodec: String::new(),
+        acodec: String::new(), title: title.to_owned(), ctx: ctx.to_owned(), preview: false,
+        version: None, show_rk: String::new(),
+    }, None, None, false, crate::player::report::AttemptOrigin::Fresh)
+}
+
+/// The landing of a [`ShuffleState::Draw`]: the request becomes the drawn episode's, walking the
+/// drawn queue, so a retry, a quality change or a handoff of it is an ordinary queue play.
+/// MAIN THREAD, before `apply_plan` installs the request.
+pub(super) fn land_drawn_request(ps: &mut PlaybackSession, row: &plx_plex::plex::QueueRow) {
+    let Some(request) = ps.request.as_mut().filter(|request| request.shuffle == ShuffleState::Draw) else { return };
+    request.shuffle = ShuffleState::Walk;
+    request.rk = row.rk.clone();
+    request.part = row.part.clone();
+    request.vcodec = row.vcodec.clone();
+    request.acodec = row.acodec.clone();
+    request.show_rk = row.show_rk.clone();
 }
 
 /// Same resolve door as [`request_play`], flagged as a preview. Does not push a route. Resume is
@@ -10662,7 +10901,7 @@ pub fn request_preview(
         ps,
         meta,
         caps,
-        PlaybackRequest {
+        PlaybackRequest { shuffle: ShuffleState::Off,
             sid,
             rk: rk.to_owned(),
             part: part.to_owned(),
@@ -10703,6 +10942,13 @@ fn request_env(
     env.version = request.version;
     if env.version.is_some() {
         // Both describe the default version: a picked one is measured from its own fetch.
+        env.cached_item = None;
+        env.src_kbps = 0;
+    }
+    if request.shuffle == ShuffleState::Draw {
+        // `rk` is the show or season, not the episode that will play: nothing cached or measured
+        // for it describes the drawn row (a show page's bitrate is its on-deck episode's).
+        env.shuffle_draw = true;
         env.cached_item = None;
         env.src_kbps = 0;
     }
@@ -10856,6 +11102,21 @@ fn request_play_with_queue(
     same_episode_feed_retry: bool,
     viewer_reconfigure: Option<(ViewerReconfigure, bool)>,
 ) -> bool {
+    let mut request = request;
+    // A retry of a SHUFFLED playback continues the queue it is in: a fresh POST would build the
+    // show's ordered queue around the episode and lose the draw. Captured here, before the request
+    // below retires the live rows. With no live row for it (a retry of a play whose queue never
+    // landed) the retry POSTs the ordinary queue, which is no longer the shuffle.
+    let queue = match queue {
+        None if retry.is_some() && request.shuffle == ShuffleState::Walk => {
+            let current = super::queue_navigation::QueueContinuation::current(ps, request.sid, &request.rk);
+            if current.is_none() {
+                request.shuffle = ShuffleState::Off;
+            }
+            current
+        }
+        queue => queue,
+    };
     ps.finished = false; // a flag the previous stop never took must not mark THIS item
     ps.presented = false;
     if retry.is_none() {
@@ -11024,6 +11285,7 @@ fn request_play_with_queue(
     let worker = ResolveWorker::enter();
     let spawned = plx_base::task::spawn_off_frame("resolve", move |off| {
         let _worker = worker;
+        let (mut env, mut rk, mut part, mut vc, mut ac) = (env, rk, part, vc, ac);
         if drain_previous {
             // The old attempt's `state=stopped` and transcode `/stop` were intentionally moved off
             // the SDL thread.  A user Retry must nevertheless preserve their ordering relative to
@@ -11033,8 +11295,23 @@ fn request_play_with_queue(
         // catch_unwind OUTSIDE the mailbox write, like `metadata::finish_season_job`: a panicking
         // resolve must still land (as !ok) or PLAY_BUSY latches and the screen wedges on a spinner
         // forever.
-        let plan = std::panic::catch_unwind(|| build_stream(off, &rk, &part, &vc, &ac, &env))
-            .unwrap_or_else(|_| Plan { direct_play_mode: env.direct_play_mode, ..Default::default() });
+        // A Shuffle's draw comes first: the episode this resolve plays is the drawn queue's row.
+        // No row is a resolve with nothing to play, which lands as a failed one.
+        let drawn = if env.shuffle_draw {
+            let drawn = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| super::shuffle::draw(&mut env, &rk)))
+                .ok().flatten();
+            if let Some(row) = drawn.as_ref() {
+                (rk, part, vc, ac) = (row.rk.clone(), row.part.clone(), row.vcodec.clone(), row.acodec.clone());
+            }
+            Some(drawn)
+        } else {
+            None
+        };
+        let plan = match drawn {
+            Some(None) => Plan { sid: env.sid, direct_play_mode: env.direct_play_mode, ..Default::default() },
+            _ => std::panic::catch_unwind(|| build_stream(off, &rk, &part, &vc, &ac, &env))
+                .unwrap_or_else(|_| Plan { direct_play_mode: env.direct_play_mode, ..Default::default() }),
+        };
         let landing = PlayLanding {
             gen,
             trace_generation,
@@ -11042,6 +11319,7 @@ fn request_play_with_queue(
             candidate_purpose,
             plan,
             rk,
+            drawn: drawn.flatten(),
         };
         let abandoned = {
             let mut slot = PLAY_SLOT.lock().unwrap_or_else(|e| e.into_inner());
@@ -11431,6 +11709,7 @@ pub fn pump_play(ps: &mut PlaybackSession, meta: &mut plx_data::stores::metadata
         candidate_purpose,
         plan,
         rk,
+        drawn,
     }) = taken
     else {
         return None;
@@ -11501,10 +11780,13 @@ pub fn pump_play(ps: &mut PlaybackSession, meta: &mut plx_data::stores::metadata
         // session must not also install the encoder as an active stop owner.
         plan.tsession.clear();
     }
-    let resume_ns = {
+    let mut resume_ns = {
         let mut resume = PLAY_RESUME.lock().unwrap_or_else(|e| e.into_inner());
         take_resume_for(&mut resume, gen)
     };
+    if let Some(row) = drawn.as_ref() {
+        resume_ns = super::shuffle::land(ps, meta, row, resume_ns);
+    }
     // A preview's trace_generation is the placeholder 0 (request_play_inner never asked
     // report::requested() for a real one), so it must not overwrite the funnel's active
     // generation here — doing so would misattribute whatever telemetry a genuinely active,
@@ -14381,7 +14663,7 @@ pub(crate) fn resolve_refused_preview_for_test(ps: &mut PlaybackSession) {
     let plan = build_stream(&plx_base::task::OffFrame::for_test(), "trailer", "", "h264", "aac", &env);
     done.send(()).unwrap();
     let _ = server.join().unwrap();
-    ps.request = Some(PlaybackRequest {
+    ps.request = Some(PlaybackRequest { shuffle: ShuffleState::Off,
         sid,
         rk: "trailer".into(),
         part: String::new(),

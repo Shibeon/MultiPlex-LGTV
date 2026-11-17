@@ -150,21 +150,36 @@ pub(super) fn request_play_intent(
     meta: &mut plx_data::stores::metadata::MetadataStore,
     play: &plx_screens::registry::PlayIntent,
 ) -> bool {
-    match play {
+    let ok = match play {
         plx_screens::registry::PlayIntent::Item {
             sid, rk, part, vcodec, acodec, title, context, version, show_rk,
-        } => {
-            let ok = plx_media::route::request_play(
-                session, meta, super::playback::start_caps(), *sid, rk, part, vcodec, acodec, title, context, *version,
-                show_rk,
-            );
-            if ok {
-                note_extra_now_playing(meta, *sid, rk, context);
-            }
-            ok
-        }
+        } => plx_media::route::request_play(
+            session, meta, super::playback::start_caps(), *sid, rk, part, vcodec, acodec, title, context, *version,
+            show_rk,
+        ),
         plx_screens::registry::PlayIntent::Movie { item, version } =>
             plx_media::route::request_play_movie(session, meta, super::playback::start_caps(), item, &super::playback::movie_ctx(item), *version),
+        plx_screens::registry::PlayIntent::Shuffle { sid, rk, title } =>
+            plx_media::route::request_play_shuffle(session, meta, super::playback::start_caps(), *sid, rk, title),
+    };
+    if ok {
+        note_accepted_play(meta, play);
+    }
+    ok
+}
+
+/// The Info-card descriptor an ACCEPTED play leaves (a refused one must not wipe a leftover):
+/// an extra names itself ([`note_extra_now_playing`]); a Shuffle names nothing until its drawn
+/// episode lands (`route::shuffle::land` installs it), so the previous playback's episode is
+/// cleared and the HUD shows the request's own title meanwhile, and on a failed draw. A feature
+/// Play leaves it alone.
+fn note_accepted_play(meta: &mut plx_data::stores::metadata::MetadataStore, play: &plx_screens::registry::PlayIntent) {
+    match play {
+        plx_screens::registry::PlayIntent::Item { sid, rk, context, .. } => note_extra_now_playing(meta, *sid, rk, context),
+        plx_screens::registry::PlayIntent::Shuffle { .. } => {
+            meta.run(plx_data::stores::metadata::MetadataCmd::SetNowPlaying(None));
+        }
+        plx_screens::registry::PlayIntent::Movie { .. } => {}
     }
 }
 
@@ -376,9 +391,25 @@ mod held_feature_tests {
             return;
         }
         let Some(held) = HELD_FEATURE.with(|slot| slot.borrow_mut().take()) else { return };
-        if let PlayIntent::Item { sid, rk, context, .. } = &held.play {
-            note_extra_now_playing(test_store(), *sid, rk, context);
-        }
+        note_accepted_play(test_store(), &held.play);
+    }
+
+    /// Field report on the reviewed branch: Shuffle on show B kept the HUD on show A's last
+    /// episode ("Show, S1 · E1") through the draw and on a failed draw's read-out. An accepted
+    /// Shuffle clears the leftover descriptor; its landing installs the drawn episode's.
+    #[test]
+    fn an_accepted_shuffle_clears_the_previous_playbacks_now_playing() {
+        let _g = plx_base::testlock::serial();
+        test_store().run(
+            plx_data::stores::metadata::MetadataCmd::SetNowPlaying(Some(leftover_episode_now_playing())),
+        );
+        install_held(PlayIntent::Shuffle {
+            sid: plx_plex::plex::ServerId::UNSET,
+            rk: "showB".into(),
+            title: "Show B".into(),
+        });
+        drain_held_play_now_playing();
+        assert!(test_store().view().now_playing().is_none(), "no leftover episode over the shuffle");
     }
 
     #[test]

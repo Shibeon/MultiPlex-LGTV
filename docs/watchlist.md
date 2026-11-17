@@ -227,8 +227,8 @@ this id lives on another service with another token). `IntentLedger`:
   is a member (intents in flight included), **Off** when the list is `Ready` and it is absent,
   otherwise **Unknown**, which every surface draws as the Add face.
 
-**Surfaces.** The Detail hero's action row is Play/Resume and a round More disc; the Watchlist is a
-row of the More menu (`ELEM_WATCHLIST`, `hero::menu_rows`): `Add to Watchlist` while the title is off
+**Surfaces.** The Detail hero's action row is Play/Resume and a round More disc (with a Shuffle disc
+between them on a show's or a season's page); the Watchlist is a row of the More menu (`ELEM_WATCHLIST`, `hero::menu_rows`): `Add to Watchlist` while the title is off
 the list or its membership is unknown, a destructive `Remove from Watchlist` while it is on. It exists
 only for an item whose guid is `plex://movie|show/<hex>` (`HeroSet::watchlist`). Committing the row
 hands the page `AppMsg::HeroAction(ELEM_WATCHLIST)`, which asks the same write a press always did.

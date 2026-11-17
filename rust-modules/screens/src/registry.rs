@@ -1350,6 +1350,15 @@ pub enum PlayIntent {
         /// As [`PlayIntent::Item`]'s.
         version: Option<plx_plex::plex::MediaId>,
     },
+    /// **Shuffle a show or a season** (the Detail hero's Shuffle disc): `rk` is the container on
+    /// server `sid`, `title` the HUD title until the drawn episode lands. The episode that plays is
+    /// the row the server's shuffled queue starts on, which the resolve draws itself
+    /// (`plx_media::route::request_play_shuffle`), so this carries no Part.
+    Shuffle {
+        sid: plx_plex::plex::ServerId,
+        rk: String,
+        title: String,
+    },
 }
 
 pub trait ContentLike: AppLike<Memory = PageMemory> {}

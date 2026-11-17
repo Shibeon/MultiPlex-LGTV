@@ -1465,6 +1465,11 @@ pub struct ResolveEnv {
     pub queue_show_rk: String,
     /// An explicit queue-item handoff reuses the existing queue instead of POSTing a new tail.
     pub queue_continuation: Option<super::queue_navigation::QueueContinuation>,
+    /// A Shuffle's first resolve: `rk` is the show or season, and the worker draws its shuffled
+    /// queue before anything else, then resolves the drawn row against that queue
+    /// ([`super::shuffle::draw`]). Set only by `decision::request_env`, for a
+    /// `ShuffleState::Draw` request.
+    pub shuffle_draw: bool,
     /// Hero preview. Skip the PlayQueue entirely, and refuse anything that is not a direct play.
     pub preview: bool,
     /// The viewer's Plex Pass audio-DSP preference (`player::audio_enhancements`), captured at the

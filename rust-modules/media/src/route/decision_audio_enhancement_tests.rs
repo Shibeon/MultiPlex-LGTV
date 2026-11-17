@@ -4148,7 +4148,7 @@ fn subtitles_burned_false_only_for_client_over_remux() {
 fn admit_side_reader(ps: &mut PlaybackSession) {
     ps.auto_original.as_mut().expect("a candidate").probe_part = "/library/parts/960001/1/file.mkv".into();
     ps.cur_transport_kbps = 7_400;
-    ps.request = Some(PlaybackRequest {
+    ps.request = Some(PlaybackRequest { shuffle: ShuffleState::Off,
         sid: ps.cur_sid,
         rk: "5".into(),
         part: "/library/parts/960001/1/file.mkv".into(),

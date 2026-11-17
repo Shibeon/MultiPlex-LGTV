@@ -939,7 +939,7 @@ fn track_memory_is_read_only_for_the_seated_profile() {
 // ---- W4: fresh_play ----------------------------------------------------------------------------
 
 fn request(sid: ServerId, preview: bool) -> PlaybackRequest {
-    PlaybackRequest {
+    PlaybackRequest { shuffle: ShuffleState::Off,
         sid,
         rk: "rk-ep".into(),
         part: "/library/parts/1/1/file.mkv".into(),

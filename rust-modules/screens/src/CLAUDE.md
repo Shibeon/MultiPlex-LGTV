@@ -146,7 +146,8 @@ Every Settings drill-down is a family-stack push through `family::form_activate`
   the go row, and Remove is `destructive(true)`. `Action::has_subject()` (not `!rk().is_empty()`) is
   the activation guard, because `WatchlistAdd` has no ratingKey.
 - **Detail's Watchlist is a row of the hero's More menu** (`detail/hero.rs`: `ELEM_WATCHLIST`,
-  `HeroCtl::Watchlist`, `menu_rows`). The action row is Play/Resume and More only (`hero_ctls`);
+  `HeroCtl::Watchlist`, `menu_rows`). The action row is Play/Resume and More (`hero_ctls`), with the
+  Shuffle disc between them on a show's or a season's page (`HeroCtl::Shuffle`, a `ContentReq::Play` of `PlayIntent::Shuffle`);
   every other hero action (Play from Start, Trailer, Play Version, Go to Show, the watched toggle,
   the Watchlist, Also available) is a row of the shared item menu (`ItemMenuKind::Hero`, opened by
   `ContentReq::HeroMenu`), and committing one hands the page `AppMsg::HeroAction(elem)`, which

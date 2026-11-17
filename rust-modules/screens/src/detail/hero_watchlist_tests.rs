@@ -15,7 +15,7 @@ fn sets() -> Vec<HeroSet> {
                 for trailer in [false, true] {
                     for alt in [false, true] {
                         for go_show in [false, true] {
-                            v.push(HeroSet { watchlist: true, go_show, version, restart, trailer, alt, mark });
+                            v.push(HeroSet { watchlist: true, go_show, version, restart, trailer, alt, mark, shuffle: false });
                         }
                     }
                 }

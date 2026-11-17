@@ -218,6 +218,8 @@ POST /playQueues?type=video
 ```
 
 URL-encode the whole `uri` value. Keep `(playQueueID, playQueueItemID)` for the playback life.
+(A show's or a season's Shuffle, added later, POSTs the container with `shuffle=1` instead:
+[`pms-api.md`](pms-api.md), "A shuffled queue".)
 
 ### 3d. `/:/timeline` (POST — the spec verb)
 

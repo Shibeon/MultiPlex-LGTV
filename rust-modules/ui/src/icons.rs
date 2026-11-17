@@ -286,6 +286,11 @@ pub enum Icon {
     /// `apps/web/src/playerui.tsx`, same circle and arcs, moved 4 units down from its 24x16 box
     /// into the 24-unit square), so the pill reads alike on every MultiPlex client.
     Surround,
+    /// Two crossing arrows — the Detail hero's Shuffle disc (`screens::detail::hero::SHUFFLE_ICON`),
+    /// on a show's or a season's page. Original to this app: ONE stroked path (stroke 2.2, round
+    /// caps and joins, the [`Icon::Sort`] family's weight) whose subpaths are the falling stroke, the
+    /// rising stroke broken where it passes under the falling one, and the two arrowheads.
+    Shuffle,
 }
 
 /// **Where a mark's INK sits inside its 24-unit viewBox**, as `(left, right)` fractions — and
@@ -418,6 +423,7 @@ fn src(id: Icon) -> &'static str {
         Icon::Tv => include_str!("../../../assets/icons/tv.svg"),
         Icon::Tune => include_str!("../../../assets/icons/tune.svg"),
         Icon::Surround => include_str!("../../../assets/icons/surround.svg"),
+        Icon::Shuffle => include_str!("../../../assets/icons/shuffle.svg"),
     }
 }
 

@@ -50,6 +50,8 @@ pub const ELEM_VERSION: u32 = 7;
 /// `show_rk`), never on a show's page, whose hero is already about the show.
 pub const ELEM_GO_TO_SHOW: u32 = 8;
 pub const ELEM_MORE: u32 = 9;
+/// The Shuffle disc — present only on a show's or a season's page.
+pub const ELEM_SHUFFLE: u32 = 10;
 
 /// The hero's one focus group. Local to this screen — nothing outside `screens::detail` ever names
 /// it — so, like `screens::profiles`'s `ROSTER_GROUP`/`FOOTER_GROUP`, any small integer would do;
@@ -91,13 +93,17 @@ fn go_to_show_label() -> &'static CStr { plx_platform::i18n::msg::browse_menu_go
 /// in one row would make the only icon-only pair of controls indistinguishable at three metres.
 pub const VERSION_ICON: plx_ui::icons::Icon = plx_ui::icons::Icon::Collection;
 
+/// The Shuffle disc's mark: two crossing arrows ([`plx_ui::icons::Icon::Shuffle`]).
+pub const SHUFFLE_ICON: plx_ui::icons::Icon = plx_ui::icons::Icon::Shuffle;
+
 /// The Go to Show disc's mark: the same stack-of-episodes glyph the item menu's *Go to Show* row
 /// wears, so the row and the disc name one destination with one mark.
 pub const GO_TO_SHOW_ICON: plx_ui::icons::Icon = plx_ui::icons::Icon::Show;
 
-/// A hero control, named rather than numbered. The action ROW draws two of them ([`hero_ctls`]:
-/// Play/Resume and More); every other one is a row of the More menu ([`menu_ctls`]), performed by
-/// the same `DetailScreen::activate_hero` when the menu hands its identity back.
+/// A hero control, named rather than numbered. The action ROW draws Play/Resume, the Shuffle disc
+/// on a show's or a season's page, and More ([`hero_ctls`]); every other one is a row of the More
+/// menu ([`menu_ctls`]), performed by the same `DetailScreen::activate_hero` when the menu hands
+/// its identity back.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HeroCtl {
     /// the Play/Resume pill — always present, always first
@@ -122,6 +128,11 @@ pub enum HeroCtl {
     /// the Play Version disc, present only while the loaded movie or episode has two or more
     /// versions; it opens the list of them (`screens::versions_panel`)
     Version,
+    /// The Shuffle disc beside Play, on a show's or a season's page only: plays the show's numbered
+    /// seasons (or the season) in an order the server draws (`PlayIntent::Shuffle`,
+    /// `plx_media::route::request_play_shuffle`).
+    /// A row control, beside Play, not a row of the More menu.
+    Shuffle,
     /// The round ⋯ disc beside Play: the remaining actions ([`menu_ctls`]) through the shared item
     /// menu. Always present.
     More,
@@ -140,6 +151,7 @@ impl HeroCtl {
             HeroCtl::Watchlist => ELEM_WATCHLIST,
             HeroCtl::GoToShow => ELEM_GO_TO_SHOW,
             HeroCtl::Version => ELEM_VERSION,
+            HeroCtl::Shuffle => ELEM_SHUFFLE,
             HeroCtl::More => ELEM_MORE,
         }
     }
@@ -157,6 +169,7 @@ impl HeroCtl {
             ELEM_WATCHLIST => Some(HeroCtl::Watchlist),
             ELEM_GO_TO_SHOW => Some(HeroCtl::GoToShow),
             ELEM_VERSION => Some(HeroCtl::Version),
+            ELEM_SHUFFLE => Some(HeroCtl::Shuffle),
             ELEM_MORE => Some(HeroCtl::More),
             _ => None,
         }
@@ -183,15 +196,29 @@ pub struct HeroSet {
     pub trailer: bool,
     pub alt: bool,
     pub mark: PosterMark,
+    /// a show's or a season's page — the Shuffle disc exists only then
+    pub shuffle: bool,
 }
 
-/// The action row, in drawn order: the Play/Resume capsule and the More disc, whatever the item
-/// offers. A fixed [`MAX_CTLS`]-slot array plus a live count, so no per-frame allocation; `set` is
-/// taken so every enumeration of the row goes through one function.
-pub fn hero_ctls(_set: HeroSet) -> ([HeroCtl; MAX_CTLS], usize) {
+/// The action row, in drawn order: the Play/Resume capsule, the Shuffle disc when the page is a
+/// show's or a season's, and the More disc. A fixed [`MAX_CTLS`]-slot array plus a live count, so
+/// no per-frame allocation; `set` is taken so every enumeration of the row goes through one
+/// function.
+pub fn hero_ctls(set: HeroSet) -> ([HeroCtl; MAX_CTLS], usize) {
     let mut v = [HeroCtl::Play; MAX_CTLS];
-    v[1] = HeroCtl::More;
-    (v, 2)
+    let mut n = 1;
+    if set.shuffle {
+        v[n] = HeroCtl::Shuffle;
+        n += 1;
+    }
+    v[n] = HeroCtl::More;
+    (v, n + 1)
+}
+
+/// Whether `d` is a page the Shuffle disc belongs on: a show's or a season's (a container of
+/// episodes the server can draw a shuffled queue of).
+pub fn offers_shuffle(d: &Detail) -> bool {
+    d.is_show || d.kind == "season"
 }
 
 /// The More menu's rows, in order: the plays first (from the start, the trailer, a version), then
@@ -255,7 +282,7 @@ fn menu_icon(ctl: HeroCtl) -> Option<plx_ui::icons::Icon> {
         HeroCtl::GoToShow => GO_TO_SHOW_ICON,
         HeroCtl::Watchlist => Icon::Bookmark,
         HeroCtl::Alt => ALT_ICON,
-        HeroCtl::Play | HeroCtl::More => return None,
+        HeroCtl::Play | HeroCtl::Shuffle | HeroCtl::More => return None,
     })
 }
 
@@ -386,7 +413,7 @@ pub fn go_to_show_target(d: &Detail) -> Option<(&str, i64)> {
     (d.kind == "episode" && !d.show_rk.is_empty()).then_some((d.show_rk.as_str(), d.season))
 }
 
-/// The verb a More-menu row names — `None` for Play and More (the row's own two controls), for
+/// The verb a More-menu row names — `None` for Play, Shuffle and More (the row's own controls), for
 /// Also available (its own label, [`alt_label`]) and for the Watchlist (membership decides).
 pub fn menu_verb(ctl: HeroCtl, name_episode: bool) -> Option<&'static CStr> {
     match (ctl, name_episode) {
@@ -451,7 +478,8 @@ pub fn play_w(measure: &dyn Measure, has_restart: bool) -> f32 {
     hero_pill_w(measure, has_restart).max(theme::hero::DETAIL_PLAY_W)
 }
 
-/// The row's widths in drawn order: the capsule, then the More disc.
+/// The row's widths in drawn order ([`hero_ctls`]): the Play capsule, then a disc for each control
+/// after it — the Shuffle disc on a show's or a season's page, then the More disc.
 fn control_widths(set: HeroSet, play: f32) -> ([f32; MAX_CTLS], usize) {
     let (v, n) = hero_ctls(set);
     let mut widths = [0.0f32; MAX_CTLS];
@@ -993,6 +1021,7 @@ mod tests {
             trailer,
             alt,
             mark,
+            shuffle: false,
         }
     }
 
@@ -1517,8 +1546,9 @@ mod tests {
         assert_eq!(trailer_play(&untitled).unwrap().1, "Parent");
     }
 
-    /// The action row is the wide Play capsule and the More disc, whatever the item offers: every
-    /// other action is a row of the More menu.
+    /// The action row is the wide Play capsule and the More disc, whatever the item offers (and the
+    /// Shuffle disc between them on a show's or a season's page, below): every other action is a
+    /// row of the More menu.
     #[test]
     fn the_row_is_play_and_more_whatever_the_item_offers() {
         let full = HeroSet {
@@ -1529,6 +1559,7 @@ mod tests {
             trailer: true,
             alt: true,
             mark: PosterMark::InProgress,
+            shuffle: false,
         };
         for set in [HeroSet::default(), full] {
             let (row, n) = hero_ctls(set);
@@ -1538,6 +1569,13 @@ mod tests {
         }
         assert_eq!(index_of(full, HeroCtl::More), Some(1));
         assert_eq!(index_of(full, HeroCtl::Restart), None, "a menu action is not a row control");
+        let shuffled = HeroSet { shuffle: true, ..full };
+        let (row, n) = hero_ctls(shuffled);
+        assert_eq!(&row[..n], &[HeroCtl::Play, HeroCtl::Shuffle, HeroCtl::More]);
+        assert_eq!(index_of(shuffled, HeroCtl::More), Some(2));
+        let (menu, m) = menu_ctls(shuffled);
+        assert!(!menu[..m].contains(&HeroCtl::Shuffle), "Shuffle is a row control, not a menu row");
+        assert_eq!(HeroCtl::of_elem(ELEM_SHUFFLE), Some(HeroCtl::Shuffle));
     }
 
     /// The menu's order: the plays, then navigation, then the item's own state, then the other
@@ -1552,6 +1590,7 @@ mod tests {
             trailer: true,
             alt: true,
             mark: PosterMark::Watched,
+            shuffle: true,
         };
         let (v, n) = menu_ctls(full);
         assert_eq!(

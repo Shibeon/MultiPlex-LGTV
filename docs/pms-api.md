@@ -1046,6 +1046,44 @@ rows precede the selected one but the answer's window opens on it, the existing 
 (owner's TV or a mock-free read-only probe): play an episode from the middle of a season and read
 the `playQueueSelectedItemOffset` and the first row of the log's queue line.
 
+### A shuffled queue — Shuffle on a show or a season (spec-derived, NOT yet observed live)
+
+```
+POST /playQueues?type=video&uri=server://{machine}/com.plexapp.plugins.library/library/metadata/{showOrSeasonRk}
+                 &shuffle=1&repeat=0                                       (no `key`, no `continuous`)
+```
+
+`docs/plex-openapi.json` documents `shuffle` on `POST /playQueues` ("Whether to shuffle the
+playlist, defaults to 0", values 0/1) and a show or season `uri` as a valid source (`onDeck` "only
+applies to queues of type show or seasons"). That is the whole of what is documented: what a
+shuffled queue of a SHOW holds is not, in particular whether its Specials (season 0) are in it, and
+no server was probed for this change. The app therefore assumes neither answer
+(`plx_media::route::shuffle`, `queue_navigation::numbered_episodes`):
+
+- The POST is the first request of the play's own resolve (`ShuffleState::Draw`, `route::shuffle::draw`
+  on the resolve worker): the Shuffle press is an ordinary Play, superseded, cancelled, held behind
+  a preview and retried like any other, and a draw that yields nothing to play lands as a failed
+  resolve, with the player's failure read-out.
+- The episode that plays first is the row the answer SELECTS (`playQueueSelectedItemID`; with no
+  `key` the server selects the start of its draw), planned straight from the POST's answer with no
+  window re-read. The queue is then walked as the server ordered
+  it: Up Next, Previous and Next are its neighbouring rows, and each handoff, and a retry or a
+  quality change of a shuffled playback, CONTINUES that queue (window re-read,
+  `GET /playQueues/{id}`) instead of POSTing a new one, which would be the show's ordered queue.
+- Every window of a shuffled queue the app holds drops the season-0 episodes whenever it also holds
+  an episode of a numbered season; a draw selected on a special starts on the next numbered episode.
+  A queue of specials alone (a show that has nothing else, or the Specials season's own Shuffle) is
+  kept whole. The rows are dropped on the APP's side only: the server's queue (as another Plex
+  client sees it) is unchanged, and a window made of specials alone in the middle of a long show
+  would not be filtered.
+- The position is the row's own `viewOffset`, as for an Up Next handoff: a part-watched episode
+  resumes.
+
+To verify live: the POST alone writes no viewing record, so a read-only probe of a server the owner
+designates can send it and read the rows' `parentIndex`; pressing Shuffle on the TV starts playback,
+which does write one, so it needs the owner's go-ahead. The app logs the draw on its `shuffle:` line
+(the container and the first episode).
+
 ### Show chain (verified against a show, ratingKey 1857)
 
 ```

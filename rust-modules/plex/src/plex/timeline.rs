@@ -125,6 +125,27 @@ impl Client {
         ))
     }
 
+    /// POST /playQueues for a SHUFFLED play of a show or a season (`container_rk`): the container is
+    /// the `uri` and `shuffle=1` asks the server to order its episodes at random
+    /// ([`shuffle_queue_query`]). Nothing is chosen in advance, so there is no `key`: the episode
+    /// that plays is the row the answer SELECTS, and the queue it came in is the queue the playback
+    /// then walks (Up Next, Previous, Next), so the order is the server's one draw and every
+    /// remote-controlling client sees the same queue. `None` when the POST fails.
+    ///
+    /// The documented parameter (`docs/plex-openapi.json`, "Whether to shuffle the playlist") is
+    /// the whole contract the app leans on; what a show's shuffled queue holds (its specials
+    /// included or not) is not documented, so the caller does not assume it
+    /// (`plx_media::route`'s shuffle start drops season 0 itself, `docs/pms-api.md`, "A shuffled queue").
+    pub fn create_shuffled_play_queue(
+        &self,
+        machine_id: &str,
+        container_rk: &str,
+        session: &str,
+    ) -> Option<PlayQueueResult> {
+        let q = self.playback_identity(shuffle_queue_query(machine_id, container_rk, session));
+        Some(PlayQueueResult::of(self.post_json(&q.build())?, self.id(), ""))
+    }
+
     /// A queue the server says has rows before the selected one, but whose answer OPENS on the
     /// selected row (a window that starts where playback does), is read again around its selected
     /// item with the existing window read ([`Client::play_queue_window`]), so Previous is not lost
@@ -158,6 +179,18 @@ fn show_queue_query(machine_id: &str, show_rk: &str, rating_key: &str, session: 
         .str("uri", &item_uri(machine_id, show_rk))
         .str("key", &format!("/library/metadata/{rating_key}"))
         .int("shuffle", 0)
+        .int("repeat", 0)
+        .str("X-Plex-Session-Identifier", session)
+}
+
+/// The `POST /playQueues` of a shuffled play: the show or season is the `uri`, `shuffle=1`, no
+/// `key` and no `continuous` ([`Client::create_shuffled_play_queue`]). Its own function so the wire
+/// shape is graded without a server.
+fn shuffle_queue_query(machine_id: &str, container_rk: &str, session: &str) -> QueryBuilder {
+    QueryBuilder::new("/playQueues")
+        .str("type", "video")
+        .str("uri", &item_uri(machine_id, container_rk))
+        .int("shuffle", 1)
         .int("repeat", 0)
         .str("X-Plex-Session-Identifier", session)
 }
@@ -390,6 +423,25 @@ mod tests {
             .build();
         assert!(episode.contains("metadata%2F102") && !episode.contains("key="), "{episode}");
         assert!(episode.contains("continuous=1"), "{episode}");
+    }
+
+    /// **A shuffled play asks for the queue of the SHOW or the SEASON itself, with `shuffle=1`**
+    /// (`docs/plex-openapi.json`: "Whether to shuffle the playlist, defaults to 0"): the container
+    /// is the `uri`, and there is no `key` (nothing is chosen in advance: the episode that plays is
+    /// the one the server's shuffled order selects) and no `continuous` (the container's queue
+    /// already holds every episode).
+    #[test]
+    fn a_shuffled_play_asks_for_the_containers_queue_with_shuffle_on() {
+        let q = shuffle_queue_query("machine", "50", "sess").build();
+        assert!(q.starts_with("/playQueues?"), "{q}");
+        assert!(q.contains("type=video"), "{q}");
+        assert!(q.contains("uri=server%3A%2F%2Fmachine%2Fcom.plexapp.plugins.library%2Flibrary%2Fmetadata%2F50"), "{q}");
+        assert!(q.contains("shuffle=1"), "{q}");
+        assert!(q.contains("repeat=0"), "{q}");
+        assert!(!q.contains("?key=") && !q.contains("&key="), "nothing is keyed in advance: {q}");
+        assert!(!q.contains("continuous"), "{q}");
+        // the ordinary plays keep the server's order
+        assert!(show_queue_query("machine", "50", "102", "sess").build().contains("shuffle=0"));
     }
 
     /// A queue body whose selected row (`playQueueSelectedItemID`) is `selected` of rows

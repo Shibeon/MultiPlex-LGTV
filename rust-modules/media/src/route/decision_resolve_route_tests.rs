@@ -63,7 +63,7 @@ fn expired_uri_landing_retires_its_unstarted_logical_resource_once() {
     PLAY_BUSY.store(true, Ordering::SeqCst);
     *PLAY_SLOT.lock().unwrap_or_else(|e| e.into_inner()) = Some(PlayLanding {
         gen: 41, trace_generation: 0, contract_revision: desired_contract_revision(),
-        candidate_purpose: CandidatePurpose::NewCandidate, plan, rk: "rk-v".to_owned() });
+        candidate_purpose: CandidatePurpose::NewCandidate, plan, rk: "rk-v".to_owned(), drawn: None });
     assert!(pump_play(&mut ps, &mut plx_data::stores::metadata::MetadataStore::default()).is_none());
     scrobble_stop(&mut ps, None, None);
     drain_scrobble();
@@ -461,8 +461,7 @@ fn quality_changed_during_resolve_cannot_land_the_old_contract() {
             },
             ..Default::default()
         },
-        rk: "rk-old-contract".into(),
-    });
+        rk: "rk-old-contract".into(), drawn: None });
 
     // This is the reducer half of a quality edit after ResolveEnv was snapshotted.
     begin_user_contract_boundary();
@@ -1408,8 +1407,7 @@ fn abandoned_resolves_retire_the_streaming_resources_they_created() {
             url: "https://example.invalid/source.mkv".into(),
             ..Default::default()
         },
-        rk: "abandoned-rk".into(),
-    });
+        rk: "abandoned-rk".into(), drawn: None });
 
     assert!(pump_play(&mut ps, &mut plx_data::stores::metadata::MetadataStore::default()).is_none(),
         "the superseded plan may not be installed");
@@ -1426,8 +1424,7 @@ fn abandoned_resolves_retire_the_streaming_resources_they_created() {
             verdict: Some(PlayVerdict::Server("server refused this route".into(), DecisionCodes::default())),
             ..Default::default()
         },
-        rk: "refused-rk".into(),
-    });
+        rk: "refused-rk".into(), drawn: None });
     assert!(pump_play(&mut ps, &mut plx_data::stores::metadata::MetadataStore::default()).is_none(), "a refusal has no playable URL");
     assert!(
         play_refused(&ps),
@@ -1551,7 +1548,7 @@ fn a_refused_retry_keeps_its_position_and_full_request_for_the_next_quality() {
     let mut ps = crate::route::PlaybackSession::IDLE;
     let _g = plx_base::testlock::serial();
     reset_session(&mut ps);
-    let request = PlaybackRequest {
+    let request = PlaybackRequest { shuffle: ShuffleState::Off,
         sid: ServerId::UNSET,
         rk: "episode-42".into(),
         part: "/library/parts/987/1700000000/file.mkv".into(),

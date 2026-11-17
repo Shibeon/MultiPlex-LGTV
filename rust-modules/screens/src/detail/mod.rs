@@ -3203,7 +3203,7 @@ impl DetailScreen {
                 .scale(scale)
                 .draw(&Env::inert(), p),
                 _ => CircleButton::new(c"".as_ptr())
-                    .icon(plx_ui::icons::Icon::More)
+                    .icon(if ctl == hero::HeroCtl::Shuffle { hero::SHUFFLE_ICON } else { plx_ui::icons::Icon::More })
                     .frame(rect)
                     .focus_mix(fill)
                     .palette(palette)
@@ -4415,6 +4415,7 @@ impl DetailScreen {
             mark,
             watchlist: !self.no_watchlist
                 && self.detail(meta).is_some_and(|d| plx_plex::plex::catalog_hex_of_guid(&d.guid).is_some()),
+            shuffle: self.detail(meta).is_some_and(hero::offers_shuffle),
         }
     }
 
@@ -4556,6 +4557,18 @@ impl DetailScreen {
             }
             hero::HeroCtl::Restart => {
                 self.play_hero(true, None, fx, meta);
+            }
+            // The show (or the season) itself, an ordinary Play whose resolve has the server draw
+            // the order and plays the first row of the drawn queue (`PlayIntent::Shuffle`).
+            hero::HeroCtl::Shuffle => {
+                let Some(d) = self.detail(meta).filter(|d| hero::offers_shuffle(d)) else { return };
+                let title = if d.show_title.is_empty() { &d.title } else { &d.show_title };
+                let play = PlayIntent::Shuffle {
+                    sid: plx_media::route::item_sid(d.sid),
+                    rk: d.rk.clone(),
+                    title: title.clone(),
+                };
+                self.content(fx, ContentReq::Play { play, resume_ns: 0 });
             }
             hero::HeroCtl::Trailer => {
                 // Do not touch `NowPlaying` here. Extra/Detail live in `current()`, and a
